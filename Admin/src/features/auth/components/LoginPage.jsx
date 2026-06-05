@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Image1 from "@/assets/svg/device-sync.svg";
 import Image2 from "../../../assets/Logo1.jpg";
 
+// ── Bubble config ──────────────────────────────────────────
 const BUBBLES = [
     [110, '8%',  '6%',  'rgba(16,185,129,0.12)', 6,   0  ],
     [70,  '18%', '28%', 'rgba(99,102,241,0.11)',  8,   1  ],
@@ -18,64 +19,316 @@ const BUBBLES = [
     [75,  '88%', '30%', 'rgba(139,92,246,0.10)',  8,   1.2],
 ];
 
-// Fish config: [top%, startLeft%, size(px), duration(s), delay(s), color, verticalDrift]
+// ── Fish config ────────────────────────────────────────────
 const FISHES = [
-    ['8%',   '-5%',  18, 14, 0,   '#10b981'],
-    ['15%',  '-5%',  14, 18, 2,   '#6366f1'],
-    ['22%',  '-5%',  20, 12, 4,   '#f43f5e'],
-    ['30%',  '-5%',  16, 16, 1,   '#14b8a6'],
-    ['38%',  '-5%',  22, 20, 3,   '#f59e0b'],
-    ['45%',  '-5%',  15, 15, 5,   '#8b5cf6'],
-    ['52%',  '-5%',  19, 13, 0.5, '#10b981'],
-    ['60%',  '-5%',  13, 19, 2.5, '#6366f1'],
-    ['68%',  '-5%',  21, 11, 1.5, '#f43f5e'],
-    ['75%',  '-5%',  17, 17, 4,   '#14b8a6'],
-    ['82%',  '-5%',  14, 14, 3,   '#f59e0b'],
-    ['90%',  '-5%',  20, 22, 0.8, '#8b5cf6'],
-    ['12%',  '-5%',  16, 16, 6,   '#f59e0b'],
-    ['25%',  '-5%',  18, 13, 7,   '#10b981'],
-    ['48%',  '-5%',  12, 21, 1,   '#f43f5e'],
-    ['63%',  '-5%',  23, 12, 5,   '#6366f1'],
-    ['72%',  '-5%',  15, 18, 2,   '#14b8a6'],
-    ['85%',  '-5%',  17, 15, 3.5, '#10b981'],
-    ['35%',  '-5%',  19, 20, 4.5, '#8b5cf6'],
-    ['55%',  '-5%',  14, 17, 6,   '#f59e0b'],
+    ['8%',  18, 14, 0,   '#10b981'],
+    ['15%', 14, 18, 2,   '#6366f1'],
+    ['22%', 20, 12, 4,   '#f43f5e'],
+    ['30%', 16, 16, 1,   '#14b8a6'],
+    ['38%', 22, 20, 3,   '#f59e0b'],
+    ['45%', 15, 15, 5,   '#8b5cf6'],
+    ['52%', 19, 13, 0.5, '#10b981'],
+    ['60%', 13, 19, 2.5, '#6366f1'],
+    ['68%', 21, 11, 1.5, '#f43f5e'],
+    ['75%', 17, 17, 4,   '#14b8a6'],
+    ['82%', 14, 14, 3,   '#f59e0b'],
+    ['90%', 20, 22, 0.8, '#8b5cf6'],
 ];
 
-// SVG fish path — simple fish shape
+// ── Fish SVG ───────────────────────────────────────────────
 const FishSVG = ({ color, size }) => (
-    <svg width={size} height={size * 0.8} viewBox="0 0 40 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Tail */}
+    <svg width={size} height={size * 0.7} viewBox="0 0 40 24" fill="none">
         <path d="M32 12 L40 4 L40 20 Z" fill={color} opacity="0.7" />
-        {/* Body */}
         <ellipse cx="17" cy="12" rx="17" ry="9" fill={color} opacity="0.75" />
-        {/* Eye */}
         <circle cx="7" cy="10" r="2" fill="white" opacity="0.9" />
         <circle cx="7" cy="10" r="1" fill="#1a1a2e" />
-        {/* Fin */}
         <path d="M14 3 Q17 8 20 3" stroke={color} strokeWidth="1.5" fill="none" opacity="0.6" />
     </svg>
 );
 
+// ── Email Icon ─────────────────────────────────────────────
+const EmailIcon = ({ color = '#9ca3af' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0 1.1.9 2 2 2z" />
+        <polyline points="22,6 12,13 2,6" />
+    </svg>
+);
+
+// ── Phone Icon ─────────────────────────────────────────────
+const PhoneIcon = ({ color = '#9ca3af' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z" />
+    </svg>
+);
+
+// ── Regex helpers ──────────────────────────────────────────
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^[6-9]\d{9}$/;
+
+function detectInputType(val) {
+    const v = val.trim().replace(/\s/g, '');
+    if (EMAIL_RE.test(v)) return 'email';
+    if (PHONE_RE.test(v)) return 'phone';
+    return null;
+}
+
+function maskValue(val, type) {
+    if (type === 'email') {
+        return val.replace(/(.{2})(.*)(@)/, (m, a, b, c) => a + '*'.repeat(Math.max(2, b.length)) + c);
+    }
+    return val.slice(0, 3) + '****' + val.slice(-3);
+}
+
+// ── OTP Modal ──────────────────────────────────────────────
+function OtpModal({ open, onClose, inputType, maskedValue, onVerifySuccess }) {
+    const [otp, setOtp] = useState(['', '', '', '', '', '']);
+    const [error, setError] = useState('');
+    const [countdown, setCountdown] = useState(30);
+    const [canResend, setCanResend] = useState(false);
+    const [verified, setVerified] = useState(false);
+    const boxRefs = useRef([]);
+    const timerRef = useRef(null);
+
+    // Start countdown whenever modal opens
+    useEffect(() => {
+        if (!open) return;
+        setOtp(['', '', '', '', '', '']);
+        setError('');
+        setVerified(false);
+        startCountdown();
+        setTimeout(() => boxRefs.current[0]?.focus(), 100);
+        return () => clearInterval(timerRef.current);
+    }, [open]);
+
+    function startCountdown() {
+        setCountdown(30);
+        setCanResend(false);
+        clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    clearInterval(timerRef.current);
+                    setCanResend(true);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }
+
+    function handleBoxInput(idx, val) {
+        const digit = val.replace(/\D/g, '').slice(-1);
+        const next = [...otp];
+        next[idx] = digit;
+        setOtp(next);
+        setError('');
+        if (digit && idx < 5) boxRefs.current[idx + 1]?.focus();
+    }
+
+    function handleKeyDown(idx, e) {
+        if (e.key === 'Backspace' && !otp[idx] && idx > 0) {
+            const next = [...otp];
+            next[idx - 1] = '';
+            setOtp(next);
+            boxRefs.current[idx - 1]?.focus();
+        }
+    }
+
+    function handlePaste(e) {
+        e.preventDefault();
+        const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+        const next = ['', '', '', '', '', ''];
+        digits.split('').forEach((d, i) => { next[i] = d; });
+        setOtp(next);
+        const last = Math.min(digits.length, 5);
+        boxRefs.current[last]?.focus();
+    }
+
+    function handleVerify() {
+        const code = otp.join('');
+        if (code.length < 6) {
+            setError('Please enter the complete 6-digit OTP.');
+            return;
+        }
+        // 🔌 Replace with your real API call here:
+        // await verifyOtpApi({ value: inputValue, otp: code });
+        setVerified(true);
+        clearInterval(timerRef.current);
+        setTimeout(() => {
+            onVerifySuccess?.();
+            onClose();
+        }, 2000);
+    }
+
+    function handleResend() {
+        setOtp(['', '', '', '', '', '']);
+        setError('');
+        startCountdown();
+        boxRefs.current[0]?.focus();
+        // 🔌 Replace with your real resend API call here:
+        // await resendOtpApi({ value: inputValue, type: inputType });
+    }
+
+    const isEmail = inputType === 'email';
+    const accentColor = isEmail ? '#6366f1' : '#10b981';
+    const gradientBg = isEmail
+        ? 'linear-gradient(135deg,#6366f1,#8b5cf6)'
+        : 'linear-gradient(135deg,#10b981,#059669)';
+
+    if (!open) return null;
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', animation: 'fadeIn .25s' }}
+        >
+            <style>{`
+                @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+                @keyframes slideUp { from { transform:translateY(30px);opacity:0 } to { transform:translateY(0);opacity:1 } }
+            `}</style>
+
+            <div className="relative bg-white rounded-3xl p-9 w-full max-w-sm shadow-2xl"
+                style={{ animation: 'slideUp .3s ease' }}>
+
+                {/* Close */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none"
+                >✕</button>
+
+                {verified ? (
+                    /* ── Success state ── */
+                    <div className="flex flex-col items-center gap-3 py-4">
+                        <svg viewBox="0 0 24 24" fill="none" width="60" height="60">
+                            <circle cx="12" cy="12" r="11" fill="#ecfdf5" stroke="#10b981" strokeWidth="1.5" />
+                            <path d="M7 12.5l3.5 3.5 6-7" stroke="#10b981" strokeWidth="2.5"
+                                strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <p className="font-bold text-emerald-600 text-lg" style={{ fontFamily: 'Syne,sans-serif' }}>
+                            Verified Successfully!
+                        </p>
+                        <p className="text-gray-400 text-xs">Redirecting to admin dashboard…</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* Icon */}
+                        <div className="flex justify-center mb-4">
+                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+                                style={{ background: gradientBg }}>
+                                {isEmail
+                                    ? <EmailIcon color="white" />
+                                    : <PhoneIcon color="white" />}
+                            </div>
+                        </div>
+
+                        {/* Heading */}
+                        <h3 className="text-center font-bold text-gray-900 text-xl mb-1"
+                            style={{ fontFamily: 'Syne,sans-serif' }}>
+                            Verify Your {isEmail ? 'Email' : 'Mobile'}
+                        </h3>
+                        <p className="text-center text-xs text-gray-400 mb-6 leading-relaxed">
+                            We've sent a 6-digit OTP via {isEmail ? 'email' : 'SMS'} to<br />
+                            <strong className="text-gray-600">{maskedValue}</strong>
+                        </p>
+
+                        {/* OTP Boxes */}
+                        <div className="flex gap-2 justify-center mb-2">
+                            {otp.map((digit, idx) => (
+                                <input
+                                    key={idx}
+                                    ref={el => boxRefs.current[idx] = el}
+                                    type="text"
+                                    inputMode="numeric"
+                                    maxLength={1}
+                                    value={digit}
+                                    onChange={e => handleBoxInput(idx, e.target.value)}
+                                    onKeyDown={e => handleKeyDown(idx, e)}
+                                    onPaste={handlePaste}
+                                    className="w-12 h-14 text-center text-xl font-bold rounded-xl border-2 outline-none transition-all duration-200"
+                                    style={{
+                                        borderColor: digit ? accentColor : '#e5e7eb',
+                                        background: digit ? (isEmail ? '#eef2ff' : '#ecfdf5') : '#f9fafb',
+                                        color: digit ? accentColor : '#111827',
+                                        fontFamily: 'Syne,sans-serif',
+                                    }}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Error */}
+                        <p className="text-xs text-red-500 text-center mb-3 min-h-[16px]">{error}</p>
+
+                        {/* Verify button */}
+                        <button
+                            onClick={handleVerify}
+                            className="w-full py-3 rounded-xl text-white font-bold text-sm tracking-widest transition-all duration-200 active:scale-95"
+                            style={{
+                                background: gradientBg,
+                                fontFamily: 'Syne,sans-serif',
+                                boxShadow: `0 4px 14px ${accentColor}55`,
+                            }}
+                        >
+                            VERIFY OTP
+                        </button>
+
+                        {/* Resend */}
+                        <div className="flex items-center justify-center gap-2 mt-4 text-xs text-gray-400">
+                            <span>Didn't receive it?</span>
+                            <button
+                                onClick={handleResend}
+                                disabled={!canResend}
+                                className="font-semibold transition"
+                                style={{ color: canResend ? accentColor : '#9ca3af' }}
+                            >
+                                {canResend ? 'Resend OTP' : `Resend in ${countdown}s`}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Main Login Page ────────────────────────────────────────
 export default function LoginPage() {
-    const [phoneOrEmail, setPhoneOrEmail] = useState('');
+    const [value, setValue] = useState('');
+    const [inputType, setInputType] = useState(null); // 'email' | 'phone' | null
+    const [modalOpen, setModalOpen] = useState(false);
+    const [maskedValue, setMaskedValue] = useState('');
     const navigate = useNavigate();
 
-    const handleSendOTP = () => {
-        if (phoneOrEmail.trim()) {
-            console.log('Sending OTP to:', phoneOrEmail);
-        }
-    };
+    function handleChange(e) {
+        const v = e.target.value;
+        setValue(v);
+        setInputType(detectInputType(v));
+    }
+
+    function handleSendOTP() {
+        if (!inputType) return;
+        // 🔌 Replace with your real send-OTP API call:
+        // await sendOtpApi({ value: value.trim(), type: inputType });
+        setMaskedValue(maskValue(value.trim(), inputType));
+        setModalOpen(true);
+    }
+
+    function handleVerifySuccess() {
+        // 🔌 Navigate to your admin dashboard after verify:
+        navigate('/admin/dashboard');
+        console.log('Admin verified! Redirecting…');
+    }
+
+    const isEmail = inputType === 'email';
+    const isPhone = inputType === 'phone';
+    const iconColor = isEmail ? '#6366f1' : isPhone ? '#10b981' : '#9ca3af';
 
     return (
         <div className="min-h-screen flex flex-row relative overflow-hidden bg-white">
 
-            {/* Soft green gradient — bottom-left */}
-            <div className="absolute bottom-0 left-0 w-[500px] h-[500px] pointer-events-none"
-                style={{ background: 'radial-gradient(ellipse at bottom left, rgba(16,185,129,0.15) 0%, transparent 70%)' }}
-            />
-
             <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
                 .bubble {
                     position: absolute;
                     border-radius: 50%;
@@ -102,13 +355,20 @@ export default function LoginPage() {
                     75%  { transform: translateX(75vw)  translateY(-6px); }
                     100% { transform: translateX(105vw) translateY(0px); }
                 }
+                .otp-input-ring:focus {
+                    box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+                }
             `}</style>
 
-            {/* Bubbles */}
+            {/* ── Soft gradient blob ── */}
+            <div className="absolute bottom-0 left-0 w-[500px] h-[500px] pointer-events-none"
+                style={{ background: 'radial-gradient(ellipse at bottom left, rgba(16,185,129,0.15) 0%, transparent 70%)' }}
+            />
+
+            {/* ── Bubbles ── */}
             {BUBBLES.map(([size, top, left, bg, dur, delay], i) => (
                 <div key={i} className="bubble" style={{
-                    width: size, height: size,
-                    top, left,
+                    width: size, height: size, top, left,
                     background: bg,
                     boxShadow: `inset 0 0 ${size * 0.15}px ${bg}, 0 4px ${size * 0.2}px ${bg}`,
                     animationDuration: `${dur}s`,
@@ -116,11 +376,10 @@ export default function LoginPage() {
                 }} />
             ))}
 
-            {/* 20 Swimming Fish */}
-            {FISHES.map(([top, , size, dur, delay, color], i) => (
+            {/* ── Fish ── */}
+            {FISHES.map(([top, size, dur, delay, color], i) => (
                 <div key={`fish-${i}`} className="fish" style={{
-                    top,
-                    left: '-5%',
+                    top, left: '-5%',
                     animationDuration: `${dur}s`,
                     animationDelay: `-${delay}s`,
                 }}>
@@ -128,7 +387,9 @@ export default function LoginPage() {
                 </div>
             ))}
 
-            {/* ── Left Side — Illustration + Text ── */}
+            {/* ══════════════════════════════════════
+                LEFT — Illustration + tagline
+            ══════════════════════════════════════ */}
             <div className="w-1/2 flex flex-col items-center justify-center pl-10 pr-6 relative z-10 gap-6">
                 <img
                     src={Image1}
@@ -141,12 +402,15 @@ export default function LoginPage() {
                         <span className="text-emerald-500 font-bold">Trydood.</span>
                     </p>
                     <p className="text-gray-500 text-xs leading-relaxed mt-1">
-                        Enjoy low-cost thjsjbs subscriptions and easy access<br />to powerful business tools.
+                        Enjoy low-cost subscriptions and easy access<br />
+                        to powerful business tools.
                     </p>
                 </div>
             </div>
 
-            {/* ── Right Side — Login Form ── */}
+            {/* ══════════════════════════════════════
+                RIGHT — Login Card
+            ══════════════════════════════════════ */}
             <div className="w-1/2 flex items-center justify-center relative z-10">
                 <div className="w-full max-w-sm px-8 py-10 flex flex-col">
 
@@ -155,55 +419,93 @@ export default function LoginPage() {
                         <img src={Image2} alt="Trydood" className="w-36 h-24 object-contain" />
                     </div>
 
-                    {/* Welcome Text */}
+                    {/* Heading */}
                     <div className="text-center mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-1">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-1"
+                            style={{ fontFamily: 'Syne,sans-serif' }}>
                             Welcome <span className="text-emerald-500">Back!</span>
                         </h2>
-                        <p className="text-sm text-gray-400">Enter your whatsapp number to continue</p>
-                    </div>
-
-                    {/* Form */}
-                    <div className="flex flex-col gap-3">
-                        <input
-                            type="text"
-                            placeholder="Enter whatsapp number"
-                            value={phoneOrEmail}
-                            onChange={(e) => setPhoneOrEmail(e.target.value)}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition duration-200"
-                        />
-
-                        <div className="flex justify-center">
-                            <button
-                                onClick={handleSendOTP}
-                                className="w-3/4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm tracking-widest transition duration-200 active:scale-95 flex items-center justify-center gap-2"
-                            >
-                                SEND OTP <span>→</span>
-                            </button>
-                        </div>
-
-                        <div className="flex items-center gap-3 my-1">
-                            <div className="flex-1 h-px bg-gray-100" />
-                            <span className="text-xs text-gray-400">or</span>
-                            <div className="flex-1 h-px bg-gray-100" />
-                        </div>
-
-                        <p className="text-sm text-gray-600 text-center">
-                            Don't have an account?{' '}
-                            <button
-                                onClick={() => navigate('/register')}
-                                className="text-emerald-500 font-semibold hover:text-emerald-600 hover:underline transition"
-                            >
-                                Sign up
-                            </button>
+                        <p className="text-sm text-gray-400">
+                            Admin login — enter email or mobile number
                         </p>
                     </div>
+
+                    {/* ── Input ── */}
+                    <div className="flex flex-col gap-2 mb-3">
+
+                        {/* Input with left icon */}
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none transition-colors duration-200">
+                                {isEmail
+                                    ? <EmailIcon color={iconColor} />
+                                    : <PhoneIcon color={iconColor} />}
+                            </span>
+
+                            <input
+                                type="text"
+                                placeholder="Email address or mobile number"
+                                value={value}
+                                onChange={handleChange}
+                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition duration-200"
+                            />
+
+                            {/* Small type badge on right */}
+                            {inputType && (
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold px-2 py-0.5 rounded-md"
+                                    style={{
+                                        background: isEmail ? '#eef2ff' : '#ecfdf5',
+                                        color: isEmail ? '#6366f1' : '#10b981',
+                                    }}>
+                                    {isEmail ? 'EMAIL' : 'MOBILE'}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Helper label */}
+                        <p className="text-xs pl-1 min-h-[16px] transition-all duration-200"
+                            style={{ color: isEmail ? '#6366f1' : isPhone ? '#10b981' : '#9ca3af' }}>
+                            {isEmail && '✦ OTP will be sent to your email address'}
+                            {isPhone && '✦ OTP will be sent via SMS to your mobile'}
+                            {!inputType && value.length > 0 && 'Enter a valid email or 10-digit mobile number'}
+                        </p>
+                    </div>
+
+                    {/* Send OTP button */}
+                    <div className="flex justify-center mb-3">
+                        <button
+                            onClick={handleSendOTP}
+                            disabled={!inputType}
+                            className="w-3/4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm tracking-widest transition duration-200 active:scale-95 flex items-center justify-center gap-2"
+                            style={{ fontFamily: 'Syne,sans-serif' }}
+                        >
+                            SEND OTP <span>→</span>
+                        </button>
+                    </div>
+
+                    {/* Divider + signup */}
+                    <div className="flex items-center gap-3 my-1">
+                        <div className="flex-1 h-px bg-gray-100" />
+                        <span className="text-xs text-gray-400">or</span>
+                        <div className="flex-1 h-px bg-gray-100" />
+                    </div>
+
+                    <p className="text-sm text-gray-600 text-center">
+                        Don't have an account?{' '}
+                        <button
+                            onClick={() => navigate('/register')}
+                            className="text-emerald-500 font-semibold hover:text-emerald-600 hover:underline transition"
+                        >
+                            Sign up
+                        </button>
+                    </p>
 
                     {/* Footer */}
                     <div className="mt-8 pt-5 border-t border-gray-100 flex items-center justify-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-500"
+                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                             </svg>
                         </div>
                         <div className="text-center">
@@ -217,6 +519,16 @@ export default function LoginPage() {
 
                 </div>
             </div>
+
+            {/* ── OTP Modal ── */}
+            <OtpModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                inputType={inputType}
+                maskedValue={maskedValue}
+                onVerifySuccess={handleVerifySuccess}
+            />
+
         </div>
     );
 }

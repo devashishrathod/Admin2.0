@@ -141,7 +141,7 @@ export default function LoginPage() {
                         <span className="text-emerald-500 font-bold">Trydood.</span>
                     </p>
                     <p className="text-gray-500 text-xs leading-relaxed mt-1">
-                        Enjoy low-cost subscriptions and easy access<br />to powerful business tools.
+                        Enjoy low-cost thjsjbs subscriptions and easy access<br />to powerful business tools.
                     </p>
                 </div>
             </div>

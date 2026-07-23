@@ -3,48 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import Image1 from "@/assets/svg/device-sync.svg";
 import Image2 from "../../../assets/Logo1.jpg";
 
-// ── Bubble config ──────────────────────────────────────────
-const BUBBLES = [
-    [110, '8%',  '6%',  'rgba(16,185,129,0.12)', 6,   0  ],
-    [70,  '18%', '28%', 'rgba(99,102,241,0.11)',  8,   1  ],
-    [90,  '42%', '3%',  'rgba(244,63,94,0.10)',   7,   2  ],
-    [60,  '18%', '82%', 'rgba(20,184,166,0.12)',  9,   0.5],
-    [80,  '12%', '62%', 'rgba(245,158,11,0.10)',  7.5, 3  ],
-    [45,  '75%', '12%', 'rgba(16,185,129,0.13)',  5.5, 1.5],
-    [50,  '55%', '22%', 'rgba(139,92,246,0.11)',  10,  2.5],
-    [65,  '70%', '72%', 'rgba(99,102,241,0.10)',  8.5, 1  ],
-    [40,  '85%', '45%', 'rgba(244,63,94,0.10)',   6.5, 3.5],
-    [55,  '30%', '88%', 'rgba(16,185,129,0.11)',  7,   0.8],
-    [35,  '60%', '55%', 'rgba(245,158,11,0.09)',  9.5, 2  ],
-    [75,  '88%', '30%', 'rgba(139,92,246,0.10)',  8,   1.2],
-];
 
-// ── Fish config ────────────────────────────────────────────
-const FISHES = [
-    ['8%',  18, 14, 0,   '#10b981'],
-    ['15%', 14, 18, 2,   '#6366f1'],
-    ['22%', 20, 12, 4,   '#f43f5e'],
-    ['30%', 16, 16, 1,   '#14b8a6'],
-    ['38%', 22, 20, 3,   '#f59e0b'],
-    ['45%', 15, 15, 5,   '#8b5cf6'],
-    ['52%', 19, 13, 0.5, '#10b981'],
-    ['60%', 13, 19, 2.5, '#6366f1'],
-    ['68%', 21, 11, 1.5, '#f43f5e'],
-    ['75%', 17, 17, 4,   '#14b8a6'],
-    ['82%', 14, 14, 3,   '#f59e0b'],
-    ['90%', 20, 22, 0.8, '#8b5cf6'],
-];
 
-// ── Fish SVG ───────────────────────────────────────────────
-const FishSVG = ({ color, size }) => (
-    <svg width={size} height={size * 0.7} viewBox="0 0 40 24" fill="none">
-        <path d="M32 12 L40 4 L40 20 Z" fill={color} opacity="0.7" />
-        <ellipse cx="17" cy="12" rx="17" ry="9" fill={color} opacity="0.75" />
-        <circle cx="7" cy="10" r="2" fill="white" opacity="0.9" />
-        <circle cx="7" cy="10" r="1" fill="#1a1a2e" />
-        <path d="M14 3 Q17 8 20 3" stroke={color} strokeWidth="1.5" fill="none" opacity="0.6" />
-    </svg>
-);
+
+
 
 // ── Email Icon ─────────────────────────────────────────────
 const EmailIcon = ({ color = '#9ca3af' }) => (
@@ -316,7 +278,7 @@ export default function LoginPage() {
 
     function handleVerifySuccess() {
         // 🔌 Navigate to your admin dashboard after verify:
-        navigate('/admin/dashboard');
+        navigate('/dashboard');
         console.log('Admin verified! Redirecting…');
     }
 
@@ -365,27 +327,8 @@ export default function LoginPage() {
                 style={{ background: 'radial-gradient(ellipse at bottom left, rgba(16,185,129,0.15) 0%, transparent 70%)' }}
             />
 
-            {/* ── Bubbles ── */}
-            {BUBBLES.map(([size, top, left, bg, dur, delay], i) => (
-                <div key={i} className="bubble" style={{
-                    width: size, height: size, top, left,
-                    background: bg,
-                    boxShadow: `inset 0 0 ${size * 0.15}px ${bg}, 0 4px ${size * 0.2}px ${bg}`,
-                    animationDuration: `${dur}s`,
-                    animationDelay: `${delay}s`,
-                }} />
-            ))}
+          
 
-            {/* ── Fish ── */}
-            {FISHES.map(([top, size, dur, delay, color], i) => (
-                <div key={`fish-${i}`} className="fish" style={{
-                    top, left: '-5%',
-                    animationDuration: `${dur}s`,
-                    animationDelay: `-${delay}s`,
-                }}>
-                    <FishSVG color={color} size={size} />
-                </div>
-            ))}
 
             {/* ══════════════════════════════════════
                 LEFT — Illustration + tagline
@@ -482,22 +425,8 @@ export default function LoginPage() {
                         </button>
                     </div>
 
-                    {/* Divider + signup */}
-                    <div className="flex items-center gap-3 my-1">
-                        <div className="flex-1 h-px bg-gray-100" />
-                        <span className="text-xs text-gray-400">or</span>
-                        <div className="flex-1 h-px bg-gray-100" />
-                    </div>
 
-                    <p className="text-sm text-gray-600 text-center">
-                        Don't have an account?{' '}
-                        <button
-                            onClick={() => navigate('/register')}
-                            className="text-emerald-500 font-semibold hover:text-emerald-600 hover:underline transition"
-                        >
-                            Sign up
-                        </button>
-                    </p>
+                  
 
                     {/* Footer */}
                     <div className="mt-8 pt-5 border-t border-gray-100 flex items-center justify-center gap-3">
@@ -512,7 +441,7 @@ export default function LoginPage() {
                             <p className="text-xs text-gray-400 mb-0.5">In case of any queries, reach out to</p>
                             <a href="mailto:TrydoodTeam@gmail.com"
                                 className="text-sm text-emerald-500 hover:text-emerald-600 font-medium hover:underline transition">
-                                TrydoodTeam@gmail.com
+                                trydoodteam@gmail.com
                             </a>
                         </div>
                     </div>

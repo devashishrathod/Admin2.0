@@ -16,8 +16,16 @@ import CustomerPlanAnalytics from './features/plan/Customerplananalytics'
 import Settlement from './features/settlement/Settlement'
 import Customer from './features/customer/Customer'
 import Transaction from './features/transaction/Transaction'
-// import LoginPage from './features/auth/components/LoginPage'
 
+import VoucherDetails from './features/voucher/VoucherDetails'
+import VoucherListing from './features/voucher/VoucherList'
+import BrandDetailsPage from './features/brand/BrandDetailsPage'
+import { BrandProvider } from './features/brand/BrandContext'
+import FeatureCampaign from './features/featurecampaign/page/FeatureCampaign'
+import CouponCode from './features/coupon/Couponcode'
+import Banner from './features/banner/Banner'
+// import BrandPage from './features/BrandPage'
+// import LoginPage from './features/auth/components/LoginPage'
 
 
 
@@ -26,6 +34,7 @@ import Transaction from './features/transaction/Transaction'
 function App() {
   return (
     <BrowserRouter>
+      <BrandProvider>
       <Routes>
         {/* "/" khulte hi LoginPage dikhega */}
 
@@ -73,6 +82,8 @@ function App() {
           }
         />
 
+        
+
         <Route
           path="/new-onboarding"
           element={
@@ -82,11 +93,29 @@ function App() {
           }
         />
 
+         <Route
+          path="/brands/:id"
+          element={
+            <Layout>
+              < BrandDetailsPage />
+            </Layout>
+          }
+        />
+
         <Route
           path="/assebility"
           element={
             <Layout>
               <Voucher />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/banner"
+          element={
+            <Layout>
+              <Banner />
             </Layout>
           }
         />
@@ -155,6 +184,42 @@ function App() {
                 }
               />
 
+                  <Route
+                path="/vendor-listing"
+                element={
+                  <Layout>
+                    <VoucherListing />
+                  </Layout>
+                }
+              />
+
+                  <Route
+                path="/v"
+                element={
+                  <Layout>
+                    <VoucherDetails />
+                  </Layout>
+                }
+              />
+
+                   <Route
+                path="/feature_campaign"
+                element={
+                  <Layout>
+                    <FeatureCampaign />
+                  </Layout>
+                }
+              />
+
+                   <Route
+                path="/coupon"
+                element={
+                  <Layout>
+                    <CouponCode />
+                  </Layout>
+                }
+              />
+
 
 
 
@@ -162,6 +227,7 @@ function App() {
         {/* koi bhi unknown route → Login pe bhejo */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </BrandProvider>
     </BrowserRouter>
   )
 }

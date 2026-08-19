@@ -1,90 +1,46 @@
-import React, { useState, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, X, Image as ImageIcon, Layers } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  X,
+  Eye,
+  Image as ImageIcon,
+  Layers,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
-
-/* -------------------------------------------------------------------------
- * Mock data
- * ---------------------------------------------------------------------- */
-
-const CATEGORIES = [
-  { id: 1, name: "Electronics" },
-  { id: 2, name: "Fashion" },
-  { id: 3, name: "Groceries" },
-  { id: 4, name: "Beauty & Wellness" },
-];
-
-const INITIAL_SUBCATEGORIES = [
-  {
-    id: 101,
-    name: "Mobiles & Accessories",
-    image: "",
-    categoryId: 1,
-    voucherCount: 18,
-    status: "Active",
-  },
-  {
-    id: 102,
-    name: "Laptops & Computers",
-    image: "",
-    categoryId: 1,
-    voucherCount: 9,
-    status: "Active",
-  },
-  {
-    id: 103,
-    name: "Home Appliances",
-    image: "",
-    categoryId: 1,
-    voucherCount: 5,
-    status: "Inactive",
-  },
-  {
-    id: 201,
-    name: "Men's Wear",
-    image: "",
-    categoryId: 2,
-    voucherCount: 11,
-    status: "Active",
-  },
-  {
-    id: 202,
-    name: "Women's Wear",
-    image: "",
-    categoryId: 2,
-    voucherCount: 14,
-    status: "Active",
-  },
-  {
-    id: 401,
-    name: "Skincare",
-    image: "",
-    categoryId: 4,
-    voucherCount: 7,
-    status: "Active",
-  },
-];
-
+import {
+  createSubCategory,
+  getSubCategories,
+  getSubCategoryById,
+  updateSubCategory,
+  deleteSubCategory,
+} from "../../features/subcategory/services/SubCategoryApi";
+import { getCategories } from "../../features/category/services/CategoryApi";
 const EMPTY_FORM = {
   id: null,
   name: "",
-  image: "",
-  categoryId: CATEGORIES[0]?.id ?? "",
-  status: "Active",
+  description: "",
+  image: null,       // File object when a new image is picked
+  imagePreview: "",  // existing image URL (edit) or local object URL (new pick)
+  categoryId: "",
+  isActive: true,
 };
 
 /* -------------------------------------------------------------------------
  * Reusable image uploader (click to upload, preview, remove)
  * ---------------------------------------------------------------------- */
 
-function ImageUploader({ image, onChange, onRemove, label = "Image" }) {
+function ImageUploader({ imagePreview, hasImage, onPick, onRemove, label = "Image" }) {
   const inputRef = useRef(null);
 
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onChange(reader.result);
-    reader.readAsDataURL(file);
+    onPick(file);
     e.target.value = "";
   };
 
@@ -97,8 +53,8 @@ function ImageUploader({ image, onChange, onRemove, label = "Image" }) {
           onClick={() => inputRef.current?.click()}
           className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-700 bg-neutral-950 transition-colors hover:border-emerald-400/50"
         >
-          {image ? (
-            <img src={image} alt="preview" className="h-full w-full object-cover" />
+          {imagePreview ? (
+            <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
           ) : (
             <ImageIcon size={20} className="text-neutral-600" />
           )}
@@ -110,9 +66,9 @@ function ImageUploader({ image, onChange, onRemove, label = "Image" }) {
             onClick={() => inputRef.current?.click()}
             className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
           >
-            {image ? "Change Image" : "Upload Image"}
+            {hasImage ? "Change Image" : "Upload Image"}
           </button>
-          {image && (
+          {hasImage && (
             <button
               type="button"
               onClick={onRemove}
@@ -140,11 +96,11 @@ function ImageUploader({ image, onChange, onRemove, label = "Image" }) {
  * Add / Edit Sub-Category modal
  * ---------------------------------------------------------------------- */
 
-function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
+function SubCategoryFormModal({ open, initialData, categories, saving, onClose, onSave }) {
   const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) {
       setForm(initialData || EMPTY_FORM);
       setErrors({});
@@ -170,7 +126,7 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={onClose}
+      onClick={saving ? undefined : onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -187,8 +143,9 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
           </div>
           <button
             onClick={onClose}
+            disabled={saving}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50"
           >
             <X size={16} />
           </button>
@@ -197,9 +154,16 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
         <form onSubmit={handleSubmit} className="px-5 py-5">
           <div className="mb-5">
             <ImageUploader
-              image={form.image}
-              onChange={(image) => setForm((prev) => ({ ...prev, image }))}
-              onRemove={() => setForm((prev) => ({ ...prev, image: "" }))}
+              imagePreview={form.imagePreview}
+              hasImage={Boolean(form.imagePreview)}
+              onPick={(file) =>
+                setForm((prev) => ({
+                  ...prev,
+                  image: file,
+                  imagePreview: URL.createObjectURL(file),
+                }))
+              }
+              onRemove={() => setForm((prev) => ({ ...prev, image: null, imagePreview: "" }))}
               label="Sub-Category Image"
             />
           </div>
@@ -223,14 +187,32 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
           </div>
 
           <div className="mb-4">
+            <label
+              htmlFor="subcat-description"
+              className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
+            >
+              Description
+            </label>
+            <textarea
+              id="subcat-description"
+              value={form.description}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="Short description of this sub-category"
+              rows={3}
+              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+            />
+          </div>
+
+          <div className="mb-4">
             <label htmlFor="subcat-parent" className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
               Parent Category
             </label>
             <select
               id="subcat-parent"
               value={form.categoryId}
-              onChange={(e) => setForm((prev) => ({ ...prev, categoryId: Number(e.target.value) }))}
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 ${
+              onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value }))}
+              disabled={isEdit} // most APIs don't allow moving a sub-category to another parent on update
+              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 disabled:opacity-50 ${
                 errors.categoryId
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
                   : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
@@ -239,7 +221,7 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
               <option value="" disabled>
                 Select a category
               </option>
-              {CATEGORIES.map((cat) => (
+              {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
                 </option>
@@ -253,18 +235,21 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
           <div className="mb-6">
             <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Status</label>
             <div className="flex gap-2">
-              {["Active", "Inactive"].map((s) => (
+              {[
+                { label: "Active", value: true },
+                { label: "Inactive", value: false },
+              ].map((s) => (
                 <button
                   type="button"
-                  key={s}
-                  onClick={() => setForm((prev) => ({ ...prev, status: s }))}
+                  key={s.label}
+                  onClick={() => setForm((prev) => ({ ...prev, isActive: s.value }))}
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.status === s
+                    form.isActive === s.value
                       ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
                       : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
                   }`}
                 >
-                  {s}
+                  {s.label}
                 </button>
               ))}
             </div>
@@ -274,15 +259,18 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
+              disabled={saving}
+              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
+              disabled={saving}
+              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isEdit ? "Save Changes" : "Add Sub-Category"}
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Sub-Category"}
             </button>
           </div>
         </form>
@@ -292,72 +280,320 @@ function SubCategoryFormModal({ open, initialData, onClose, onSave }) {
 }
 
 /* -------------------------------------------------------------------------
+ * View modal — read-only details for a sub-category
+ * ---------------------------------------------------------------------- */
+
+function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClose }) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+          <h2 className="text-[15px] font-semibold text-neutral-50">Sub-Category Details</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-5 py-5">
+          {loading || !subCategory ? (
+            <div className="flex items-center justify-center gap-2 py-14 text-[13px] text-neutral-500">
+              <Loader2 size={16} className="animate-spin" />
+              Loading…
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+                  {subCategory.image ? (
+                    <img
+                      src={subCategory.image}
+                      alt={subCategory.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon size={20} className="text-neutral-600" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-[16px] font-semibold text-neutral-50">{subCategory.name}</p>
+                  <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-neutral-800 px-2.5 py-1 text-[11.5px] font-medium text-neutral-300">
+                    <Layers size={11} />
+                    {categoryName}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <StatusBadge status={subCategory.isActive ? "Active" : "Inactive"} />
+              </div>
+
+              {subCategory.description && (
+                <p className="mt-4 text-[13px] leading-relaxed text-neutral-400">
+                  {subCategory.description}
+                </p>
+              )}
+
+              <div className="mt-5 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+                <p className="text-[11px] uppercase tracking-wider text-neutral-500">
+                  Voucher Count
+                </p>
+                <p className="mt-1 text-[15px] font-semibold text-neutral-50">
+                  {subCategory.voucherCount ?? 0}
+                </p>
+              </div>
+
+              {subCategory.createdAt && (
+                <p className="mt-4 text-[11.5px] text-neutral-600">
+                  Created {new Date(subCategory.createdAt).toLocaleString("en-IN")}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
+ * Delete confirmation modal
+ * ---------------------------------------------------------------------- */
+
+function DeleteConfirmModal({ subCategory, deleting, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+            <AlertTriangle size={18} />
+          </div>
+          <div>
+            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete sub-category?</h3>
+            <p className="mt-0.5 text-[12.5px] text-neutral-500">
+              This removes "{subCategory.name}" permanently.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex items-center justify-end gap-2.5">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:opacity-60"
+          >
+            {deleting && <Loader2 size={14} className="animate-spin" />}
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
+ * Helpers to map between API shape and the form's shape
+ * ---------------------------------------------------------------------- */
+
+function apiToRow(sub) {
+  return {
+    id: sub._id ?? sub.id,
+    name: sub.name,
+    description: sub.description,
+    image: sub.image,
+    categoryId: sub.categoryId,
+    isActive: sub.isActive,
+    status: sub.isActive ? "Active" : "Inactive",
+    voucherCount: sub.voucherCount ?? 0,
+    createdAt: sub.createdAt,
+  };
+}
+
+function rowToFormDraft(row) {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    description: row.description ?? "",
+    image: null,
+    imagePreview: row.image ?? "",
+    categoryId: row.categoryId ?? "",
+    isActive: Boolean(row.isActive),
+  };
+}
+
+/* -------------------------------------------------------------------------
  * Main page
  * ---------------------------------------------------------------------- */
 
 export default function SubCategory() {
-  const [subCategories, setSubCategories] = useState(INITIAL_SUBCATEGORIES);
+  const [categories, setCategories] = useState([]);
+
+  const [subCategories, setSubCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSubCategory, setEditingSubCategory] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
-  const categoryName = (id) => CATEGORIES.find((c) => c.id === id)?.name || "—";
+  const [viewTarget, setViewTarget] = useState(null);
+  const [viewSubCategory, setViewSubCategory] = useState(null);
+  const [viewLoading, setViewLoading] = useState(false);
 
-  const filtered = subCategories.filter((sub) => {
-    const matchesSearch =
-      sub.name.toLowerCase().includes(search.toLowerCase()) ||
-      categoryName(sub.categoryId).toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === "All" || sub.categoryId === categoryFilter;
-    return matchesSearch && matchesCategory;
-  });
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const categoryName = (id) => categories.find((c) => c.id === id)?.name || "—";
+
+  // ── Load parent categories once (for the dropdown + filter) ────
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getCategories({ page: 1, limit: 100 });
+        const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name }));
+        setCategories(rows);
+      } catch (err) {
+        console.error("Failed to load categories:", err.message);
+      }
+    })();
+  }, []);
+
+  // ── Load sub-categories ──────────────────────────────────────
+  const fetchSubCategories = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const res = await getSubCategories({
+        page,
+        limit,
+        search,
+        categoryId: categoryFilter === "All" ? undefined : categoryFilter,
+      });
+      const rows = (res?.data?.data ?? []).map(apiToRow);
+      setSubCategories(rows);
+      setTotalPages(res?.data?.totalPages ?? 1);
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, search, categoryFilter]);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      fetchSubCategories();
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  // Refetch on category filter change
+  useEffect(() => {
+    setPage(1);
+    fetchSubCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryFilter]);
+
+  // Refetch on page change
+  useEffect(() => {
+    fetchSubCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   const handleAddClick = () => {
-    setEditingSubCategory(null);
+    setEditingSubCategory({ ...EMPTY_FORM, categoryId: categories[0]?.id ?? "" });
+    setSaveError("");
     setModalOpen(true);
   };
 
-  const handleEdit = (sub) => {
-    setEditingSubCategory(sub);
+  const handleEdit = (row) => {
+    setEditingSubCategory(rowToFormDraft(row));
+    setSaveError("");
     setModalOpen(true);
   };
 
-  const handleDelete = (sub) => {
-    setSubCategories((prev) => prev.filter((s) => s.id !== sub.id));
-  };
-
-  const handleSave = (formValues) => {
-    if (formValues.id) {
-      setSubCategories((prev) =>
-        prev.map((s) =>
-          s.id === formValues.id
-            ? {
-                ...s,
-                name: formValues.name.trim(),
-                image: formValues.image,
-                categoryId: formValues.categoryId,
-                status: formValues.status,
-              }
-            : s
-        )
-      );
-    } else {
-      const nextId =
-        subCategories.length > 0 ? Math.max(...subCategories.map((s) => s.id)) + 1 : 1;
-      setSubCategories((prev) => [
-        ...prev,
-        {
-          id: nextId,
-          name: formValues.name.trim(),
-          image: formValues.image,
-          categoryId: formValues.categoryId,
-          voucherCount: 0,
-          status: formValues.status,
-        },
-      ]);
+  const handleView = async (row) => {
+    setViewTarget(row);
+    setViewSubCategory(null);
+    setViewLoading(true);
+    try {
+      const res = await getSubCategoryById(row.id);
+      const detail = res?.data ?? res;
+      setViewSubCategory(apiToRow(detail));
+    } catch (err) {
+      setViewSubCategory(row);
+      console.error("Failed to load sub-category details:", err.message);
+    } finally {
+      setViewLoading(false);
     }
-    setModalOpen(false);
-    setEditingSubCategory(null);
+  };
+
+  const handleSave = async (form) => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      if (form.id) {
+        await updateSubCategory(form.id, {
+          name: form.name.trim(),
+          description: form.description,
+          image: form.image,
+          isActive: form.isActive,
+        });
+      } else {
+        await createSubCategory(form.categoryId, {
+          name: form.name.trim(),
+          description: form.description,
+          image: form.image,
+          isActive: form.isActive,
+        });
+      }
+      setModalOpen(false);
+      setEditingSubCategory(null);
+      fetchSubCategories();
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteSubCategory(deleteTarget.id);
+      setDeleteTarget(null);
+      fetchSubCategories();
+    } catch (err) {
+      console.error("Failed to delete sub-category:", err.message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const columns = [
@@ -365,7 +601,9 @@ export default function SubCategory() {
       key: "sno",
       label: "S.No",
       width: "w-16",
-      render: (_row, index) => <span className="text-neutral-500">{index + 1}</span>,
+      render: (_row, index) => (
+        <span className="text-neutral-500">{(page - 1) * limit + index + 1}</span>
+      ),
     },
     {
       key: "image",
@@ -412,6 +650,13 @@ export default function SubCategory() {
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
           <button
+            onClick={() => handleView(row)}
+            aria-label={`View ${row.name}`}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+          >
+            <Eye size={15} />
+          </button>
+          <button
             onClick={() => handleEdit(row)}
             aria-label={`Edit ${row.name}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
@@ -419,7 +664,7 @@ export default function SubCategory() {
             <Pencil size={15} />
           </button>
           <button
-            onClick={() => handleDelete(row)}
+            onClick={() => setDeleteTarget(row)}
             aria-label={`Delete ${row.name}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
           >
@@ -459,20 +704,18 @@ export default function SubCategory() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search sub-category or category..."
+              placeholder="Search sub-category..."
               className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
             />
           </div>
 
           <select
             value={categoryFilter}
-            onChange={(e) =>
-              setCategoryFilter(e.target.value === "All" ? "All" : Number(e.target.value))
-            }
+            onChange={(e) => setCategoryFilter(e.target.value)}
             className="rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 text-[13px] text-neutral-300 focus:border-emerald-400/60 focus:outline-none sm:w-56"
           >
             <option value="All">All Categories</option>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <option key={cat.id} value={cat.id}>
                 {cat.name}
               </option>
@@ -480,24 +723,95 @@ export default function SubCategory() {
           </select>
         </div>
 
-        {/* Table */}
-        <Table
-          columns={columns}
-          data={filtered}
-          emptyMessage="No sub-categories yet. Add one to get started."
-        />
+        {/* Load state */}
+        {loading && (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+            <Loader2 size={16} className="animate-spin" />
+            Loading sub-categories…
+          </div>
+        )}
+
+        {!loading && loadError && (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+            Failed to load sub-categories: {loadError}
+          </div>
+        )}
+
+        {!loading && !loadError && (
+          <>
+            {/* Table */}
+            <Table
+              columns={columns}
+              data={subCategories}
+              emptyMessage="No sub-categories yet. Add one to get started."
+            />
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <span className="text-[12.5px] text-neutral-500">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Add / Edit modal */}
       <SubCategoryFormModal
         open={modalOpen}
         initialData={editingSubCategory}
+        categories={categories}
+        saving={saving}
         onClose={() => {
+          if (saving) return;
           setModalOpen(false);
           setEditingSubCategory(null);
         }}
         onSave={handleSave}
       />
+      {modalOpen && saveError && (
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+          {saveError}
+        </div>
+      )}
+
+      {/* View modal */}
+      <SubCategoryViewModal
+        open={Boolean(viewTarget)}
+        subCategory={viewSubCategory}
+        categoryName={viewSubCategory ? categoryName(viewSubCategory.categoryId) : ""}
+        loading={viewLoading}
+        onClose={() => {
+          setViewTarget(null);
+          setViewSubCategory(null);
+        }}
+      />
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <DeleteConfirmModal
+          subCategory={deleteTarget}
+          deleting={deleting}
+          onCancel={() => !deleting && setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }

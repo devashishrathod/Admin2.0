@@ -15,7 +15,9 @@ import {
   ClipboardList,
   ArrowLeftRight,
   HandCoins,
+  Image,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 // Grouped nav — each group renders with an uppercase label (hidden when collapsed).
 const NAV_GROUPS = [
@@ -32,7 +34,9 @@ const NAV_GROUPS = [
     label: "Catalog",
     items: [
       { id: "brand", label: "Brand", icon: BadgeCheck, path: "/brand" },
+      { id: "banner", label: "Banner", icon: Image, path: "/banner" },
       { id: "vendor-plan", label: "Vendor Plan", icon: CreditCard, path: "/vendor-plan" },
+            { id: "vendor-plan", label: "Vendor Listing", icon: CreditCard, path: "/vendor-listing" },
       { id: "new-onboarding", label: "New Onboarding", icon: BadgeCheck, path: "/new-onboarding" },
       { id: "analysis-report-catalog", label: "Vender Analysis Report", icon: ClipboardList, path: "/analysis-report-vendor" },
     ],
@@ -43,7 +47,7 @@ const NAV_GROUPS = [
       { id: "customer", label: "Customer", icon: Users, path: "/customer" },
       { id: "user-plan", label: "Customer  Plan", icon: CreditCard, path: "/user-plan" },
       { id: "analysis-report-customer", label: "Customer Analysis Report", icon: ClipboardList, path: "/analysis-report-customer" },
-      { id: "employee", label: "Employee", icon: UserCog, path: "/employee" },
+      // { id: "employee", label: "Employee", icon: UserCog, path: "/employee" },
     ], 
   },
   {
@@ -52,7 +56,8 @@ const NAV_GROUPS = [
       { id: "transaction", label: "Transacation", icon: ArrowLeftRight, path: "/transaction" },
       { id: "settlements", label: "Settlements", icon: HandCoins, path: "/settlements" },
       { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
-      { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
+      { id: "settings", label: "Feature Campaign", icon: Settings, path: "/feature_campaign" },
+          { id: "settlements", label: "Coupon Code", icon: HandCoins, path: "/coupon" },
     ],
   },
 ];
@@ -94,8 +99,8 @@ function GrowthMark() {
 function NavButton({ item, isActive, collapsed, onClick }) {
   const Icon = item.icon;
   return (
-    <a
-      href={item.path}
+    <Link
+      to={item.path}
       onClick={onClick}
       title={collapsed ? item.label : undefined}
       className={`group relative flex h-[42px] w-full items-center gap-3 rounded-xl px-3 text-left text-[13.5px] font-medium no-underline transition-colors duration-150
@@ -128,7 +133,7 @@ function NavButton({ item, isActive, collapsed, onClick }) {
       {item.badge != null && collapsed && (
         <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
       )}
-    </a>
+    </Link>
   );
 }
 

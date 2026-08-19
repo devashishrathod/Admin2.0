@@ -7,33 +7,92 @@ import {
   X,
   Eye,
   Image as ImageIcon,
+  Link as LinkIcon,
   AlertTriangle,
   Loader2,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
-import {
-  createCategory,
-  getCategories,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
-} from "../../features/category/services/CategoryApi";
+// Real API calls — wired up in ./services/BannerApi.js, disabled for now
+// while the page runs on local dummy data. Uncomment and swap the mock
+// handlers below (fetchBanners / handleSave / confirmDelete / handleView)
+// back to these once the backend endpoints are ready.
+// import {
+//   createBanner,
+//   getBanners,
+//   getBannerById,
+//   updateBanner,
+//   deleteBanner,
+// } from "./services/BannerApi";
+
+// Dummy banners (Unsplash images) shown until the real API is wired back in.
+const DUMMY_BANNERS = [
+  {
+    id: 1,
+    title: "Monsoon Mega Sale — Up to 60% Off",
+    link: "/category/fashion",
+    order: 1,
+    image: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&q=80&auto=format&fit=crop",
+    isActive: true,
+    status: "Active",
+    createdAt: "2026-07-01T10:00:00.000Z",
+  },
+  {
+    id: 2,
+    title: "New Season Sneaker Drop",
+    link: "/category/footwear",
+    order: 2,
+    image: "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=1200&q=80&auto=format&fit=crop",
+    isActive: true,
+    status: "Active",
+    createdAt: "2026-07-04T09:30:00.000Z",
+  },
+  {
+    id: 3,
+    title: "Premium Watches — Festive Offer",
+    link: "/category/accessories",
+    order: 3,
+    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=1200&q=80&auto=format&fit=crop",
+    isActive: false,
+    status: "Inactive",
+    createdAt: "2026-07-08T14:15:00.000Z",
+  },
+  {
+    id: 4,
+    title: "Fragrance Fest — Buy 1 Get 1",
+    link: "/category/beauty",
+    order: 4,
+    image: "https://images.unsplash.com/photo-1541643600914-78b084683601?w=1200&q=80&auto=format&fit=crop",
+    isActive: true,
+    status: "Active",
+    createdAt: "2026-07-12T11:45:00.000Z",
+  },
+  {
+    id: 5,
+    title: "Weekend Grocery Deals",
+    link: "/category/grocery",
+    order: 5,
+    image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200&q=80&auto=format&fit=crop",
+    isActive: true,
+    status: "Active",
+    createdAt: "2026-07-15T08:00:00.000Z",
+  },
+];
 
 const EMPTY_FORM = {
   id: null,
-  name: "",
-  description: "",
-  image: null,       // File object when a new image is picked
-  imagePreview: "",  // existing image URL (edit) or local object URL (new pick)
+  title: "",
+  link: "",
+  order: 0,
+  image: null, // File object when a new image is picked
+  imagePreview: "", // existing image URL (edit) or local object URL (new pick)
   isActive: true,
 };
 
 /* -------------------------------------------------------------------------
- * Add / Edit modal — now uses a real image file upload + description,
- * matching the actual API payload.
+ * Add / Edit modal — banner image upload + title + redirect link + order.
  * ---------------------------------------------------------------------- */
 
-function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
+function BannerFormModal({ open, initialData, saving, onClose, onSave }) {
   const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
@@ -65,7 +124,8 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     const nextErrors = {};
-    if (!form.name.trim()) nextErrors.name = "Category name is required";
+    if (!form.title.trim()) nextErrors.title = "Banner title is required";
+    if (!isEdit && !form.image) nextErrors.image = "Banner image is required";
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
@@ -86,12 +146,12 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
         <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
           <div>
             <h2 className="text-[15px] font-semibold text-neutral-50">
-              {isEdit ? "Edit Category" : "Add Category"}
+              {isEdit ? "Edit Banner" : "Add Banner"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
               {isEdit
-                ? "Update the details for this category."
-                : "Create a new product category."}
+                ? "Update the details for this banner."
+                : "Upload a new promotional banner."}
             </p>
           </div>
           <button
@@ -106,75 +166,96 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="px-5 py-5">
-          {/* Image upload */}
+          {/* Image upload — wide banner preview */}
           <div className="mb-4">
             <label className="mb-2 block text-[12.5px] font-medium text-neutral-300">
-              Category Image
+              Banner Image
             </label>
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
-                {form.imagePreview ? (
-                  <img
-                    src={form.imagePreview}
-                    alt="preview"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <ImageIcon size={18} className="text-neutral-600" />
-                )}
-              </div>
-              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-emerald-400/60 hover:text-emerald-400">
-                <ImageIcon size={14} />
-                {form.image ? "Change image" : "Upload image"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImagePick}
-                  className="hidden"
+            <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-700 bg-neutral-800">
+              {form.imagePreview ? (
+                <img
+                  src={form.imagePreview}
+                  alt="preview"
+                  className="h-full w-full object-cover"
                 />
-              </label>
+              ) : (
+                <ImageIcon size={24} className="text-neutral-600" />
+              )}
             </div>
+            <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-emerald-400/60 hover:text-emerald-400">
+              <ImageIcon size={14} />
+              {form.image || form.imagePreview ? "Change image" : "Upload image"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImagePick}
+                className="hidden"
+              />
+            </label>
+            {errors.image && (
+              <p className="mt-1.5 text-[12px] text-red-400">{errors.image}</p>
+            )}
           </div>
 
-          {/* Name */}
+          {/* Title */}
           <div className="mb-4">
             <label
-              htmlFor="cat-name"
+              htmlFor="banner-title"
               className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
             >
-              Category Name
+              Banner Title
             </label>
             <input
-              id="cat-name"
-              value={form.name}
-              onChange={handleChange("name")}
-              placeholder="e.g. Electronics"
+              id="banner-title"
+              value={form.title}
+              onChange={handleChange("title")}
+              placeholder="e.g. Monsoon Mega Sale"
               className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
-                errors.name
+                errors.title
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
                   : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
               }`}
             />
-            {errors.name && (
-              <p className="mt-1.5 text-[12px] text-red-400">{errors.name}</p>
+            {errors.title && (
+              <p className="mt-1.5 text-[12px] text-red-400">{errors.title}</p>
             )}
           </div>
 
-          {/* Description */}
+          {/* Redirect link */}
           <div className="mb-4">
             <label
-              htmlFor="cat-description"
+              htmlFor="banner-link"
               className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
             >
-              Description
+              Redirect Link
             </label>
-            <textarea
-              id="cat-description"
-              value={form.description}
-              onChange={handleChange("description")}
-              placeholder="Short description of this category"
-              rows={3}
-              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 focus-within:border-emerald-400/60 focus-within:ring-1 focus-within:ring-emerald-400/60">
+              <LinkIcon size={14} className="shrink-0 text-neutral-500" />
+              <input
+                id="banner-link"
+                value={form.link}
+                onChange={handleChange("link")}
+                placeholder="https://... or /category/electronics"
+                className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Display order */}
+          <div className="mb-6">
+            <label
+              htmlFor="banner-order"
+              className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
+            >
+              Display Order
+            </label>
+            <input
+              id="banner-order"
+              type="number"
+              min={0}
+              value={form.order}
+              onChange={handleChange("order")}
+              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
             />
           </div>
 
@@ -220,7 +301,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
               className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Category"}
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Banner"}
             </button>
           </div>
         </form>
@@ -230,10 +311,10 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
 }
 
 /* -------------------------------------------------------------------------
- * View modal — read-only details for a category
+ * View modal — read-only details for a banner
  * ---------------------------------------------------------------------- */
 
-function CategoryViewModal({ open, category, loading, onClose }) {
+function BannerViewModal({ open, banner, loading, onClose }) {
   if (!open) return null;
 
   return (
@@ -246,7 +327,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
         className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-neutral-50">Category Details</h2>
+          <h2 className="text-[15px] font-semibold text-neutral-50">Banner Details</h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -257,59 +338,64 @@ function CategoryViewModal({ open, category, loading, onClose }) {
         </div>
 
         <div className="px-5 py-5">
-          {loading || !category ? (
+          {loading || !banner ? (
             <div className="flex items-center justify-center gap-2 py-14 text-[13px] text-neutral-500">
               <Loader2 size={16} className="animate-spin" />
               Loading…
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
-                  {category.image ? (
-                    <img
-                      src={category.image}
-                      alt={category.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <ImageIcon size={20} className="text-neutral-600" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-[16px] font-semibold text-neutral-50">{category.name}</p>
-                  <StatusBadge status={category.isActive ? "Active" : "Inactive"} />
-                </div>
+              <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+                {banner.image ? (
+                  <img
+                    src={banner.image}
+                    alt={banner.title}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <ImageIcon size={22} className="text-neutral-600" />
+                )}
               </div>
 
-              {category.description && (
-                <p className="mt-4 text-[13px] leading-relaxed text-neutral-400">
-                  {category.description}
-                </p>
+              <div className="mt-4 flex items-start justify-between gap-3">
+                <p className="text-[16px] font-semibold text-neutral-50">{banner.title}</p>
+                <StatusBadge status={banner.isActive ? "Active" : "Inactive"} />
+              </div>
+
+              {banner.link && (
+                <a
+                  href={banner.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-sky-400 hover:text-sky-300"
+                >
+                  <LinkIcon size={12} />
+                  {banner.link}
+                </a>
               )}
 
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
                   <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    Sub Categories
+                    Display Order
                   </p>
                   <p className="mt-1 text-[15px] font-semibold text-neutral-50">
-                    {category.subCategoryCount ?? 0}
+                    {banner.order ?? 0}
                   </p>
                 </div>
                 <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
                   <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    Vouchers
+                    Status
                   </p>
                   <p className="mt-1 text-[15px] font-semibold text-neutral-50">
-                    {category.voucherCount ?? 0}
+                    {banner.isActive ? "Active" : "Inactive"}
                   </p>
                 </div>
               </div>
 
-              {category.createdAt && (
+              {banner.createdAt && (
                 <p className="mt-4 text-[11.5px] text-neutral-600">
-                  Created {new Date(category.createdAt).toLocaleString("en-IN")}
+                  Created {new Date(banner.createdAt).toLocaleString("en-IN")}
                 </p>
               )}
             </>
@@ -324,7 +410,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
  * Delete confirmation modal
  * ---------------------------------------------------------------------- */
 
-function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
+function DeleteConfirmModal({ banner, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
       <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
@@ -333,9 +419,9 @@ function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
             <AlertTriangle size={18} />
           </div>
           <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete category?</h3>
+            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete banner?</h3>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
-              This removes "{category.name}" and its sub-categories/vouchers link.
+              This removes "{banner.title}" and it will stop showing in the app.
             </p>
           </div>
         </div>
@@ -365,25 +451,25 @@ function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
  * Helpers to map between API shape and the form's shape
  * ---------------------------------------------------------------------- */
 
-function apiToRow(cat) {
+function apiToRow(banner) {
   return {
-    id: cat._id ?? cat.id,
-    name: cat.name,
-    description: cat.description,
-    image: cat.image,
-    isActive: cat.isActive,
-    status: cat.isActive ? "Active" : "Inactive",
-    subCategoryCount: cat.subCategoryCount ?? 0,
-    voucherCount: cat.voucherCount ?? 0,
-    createdAt: cat.createdAt,
+    id: banner._id ?? banner.id,
+    title: banner.title,
+    link: banner.link,
+    order: banner.order ?? 0,
+    image: banner.image,
+    isActive: banner.isActive,
+    status: banner.isActive ? "Active" : "Inactive",
+    createdAt: banner.createdAt,
   };
 }
 
 function rowToFormDraft(row) {
   return {
     id: row.id,
-    name: row.name ?? "",
-    description: row.description ?? "",
+    title: row.title ?? "",
+    link: row.link ?? "",
+    order: row.order ?? 0,
     image: null,
     imagePreview: row.image ?? "",
     isActive: Boolean(row.isActive),
@@ -394,8 +480,12 @@ function rowToFormDraft(row) {
  * Main page
  * ---------------------------------------------------------------------- */
 
-export default function Category() {
-  const [categories, setCategories] = useState([]);
+export default function Banner() {
+  // Acts as the mock "backend" — all reads/writes below go through this
+  // instead of the real API while BannerApi.js is disabled.
+  const [allBanners, setAllBanners] = useState(DUMMY_BANNERS);
+
+  const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -405,37 +495,47 @@ export default function Category() {
   const [totalPages, setTotalPages] = useState(1);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingBanner, setEditingBanner] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   const [viewTarget, setViewTarget] = useState(null); // row summary that was clicked
-  const [viewCategory, setViewCategory] = useState(null); // full detail from API
+  const [viewBanner, setViewBanner] = useState(null); // full detail from API
   const [viewLoading, setViewLoading] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const fetchCategories = useCallback(async () => {
+  const fetchBanners = useCallback(async () => {
     setLoading(true);
     setLoadError("");
     try {
-      const res = await getCategories({ page, limit, search });
-      const rows = (res?.data?.data ?? []).map(apiToRow);
-      setCategories(rows);
-      setTotalPages(res?.data?.totalPages ?? 1);
+      // --- Dummy data (active) ---
+      const filtered = allBanners.filter((b) =>
+        !search || b.title.toLowerCase().includes(search.toLowerCase())
+      );
+      const sorted = [...filtered].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const start = (page - 1) * limit;
+      setBanners(sorted.slice(start, start + limit).map(apiToRow));
+      setTotalPages(Math.max(1, Math.ceil(sorted.length / limit)));
+
+      // --- Real API (disabled) ---
+      // const res = await getBanners({ page, limit, search });
+      // const rows = (res?.data?.data ?? []).map(apiToRow);
+      // setBanners(rows);
+      // setTotalPages(res?.data?.totalPages ?? 1);
     } catch (err) {
       setLoadError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search]);
+  }, [page, limit, search, allBanners]);
 
   // Debounce search so we don't hit the API on every keystroke
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(1);
-      fetchCategories();
+      fetchBanners();
     }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -443,34 +543,39 @@ export default function Category() {
 
   // Refetch on page change (search effect already handles search changes)
   useEffect(() => {
-    fetchCategories();
+    fetchBanners();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, allBanners]);
 
   const handleAddClick = () => {
-    setEditingCategory(null);
+    setEditingBanner(null);
     setSaveError("");
     setModalOpen(true);
   };
 
   const handleEdit = (row) => {
-    setEditingCategory(rowToFormDraft(row));
+    setEditingBanner(rowToFormDraft(row));
     setSaveError("");
     setModalOpen(true);
   };
 
   const handleView = async (row) => {
     setViewTarget(row);
-    setViewCategory(null);
+    setViewBanner(null);
     setViewLoading(true);
     try {
-      const res = await getCategoryById(row.id);
-      const detail = res?.data ?? res;
-      setViewCategory(apiToRow(detail));
+      // --- Dummy data (active) ---
+      const detail = allBanners.find((b) => b.id === row.id) ?? row;
+      setViewBanner(apiToRow(detail));
+
+      // --- Real API (disabled) ---
+      // const res = await getBannerById(row.id);
+      // const detail = res?.data ?? res;
+      // setViewBanner(apiToRow(detail));
     } catch (err) {
       // fall back to the row data we already have if the detail call fails
-      setViewCategory(row);
-      console.error("Failed to load category details:", err.message);
+      setViewBanner(row);
+      console.error("Failed to load banner details:", err.message);
     } finally {
       setViewLoading(false);
     }
@@ -480,24 +585,39 @@ export default function Category() {
     setSaving(true);
     setSaveError("");
     try {
+      const payload = {
+        title: form.title.trim(),
+        link: form.link.trim(),
+        order: Number(form.order) || 0,
+        // No real upload endpoint while the API is disabled — keep the
+        // locally-picked preview URL (or the existing image on edit).
+        image: form.imagePreview || form.image,
+        isActive: form.isActive,
+      };
+
+      // --- Dummy data (active) ---
       if (form.id) {
-        await updateCategory(form.id, {
-          name: form.name.trim(),
-          description: form.description,
-          image: form.image,
-          isActive: form.isActive,
-        });
+        setAllBanners((prev) =>
+          prev.map((b) => (b.id === form.id ? { ...b, ...payload, status: payload.isActive ? "Active" : "Inactive" } : b))
+        );
       } else {
-        await createCategory({
-          name: form.name.trim(),
-          description: form.description,
-          image: form.image,
-          isActive: form.isActive,
-        });
+        const nextId = allBanners.reduce((max, b) => Math.max(max, b.id), 0) + 1;
+        setAllBanners((prev) => [
+          ...prev,
+          { id: nextId, ...payload, status: payload.isActive ? "Active" : "Inactive", createdAt: new Date().toISOString() },
+        ]);
       }
+
+      // --- Real API (disabled) ---
+      // if (form.id) {
+      //   await updateBanner(form.id, { ...payload, image: form.image });
+      // } else {
+      //   await createBanner({ ...payload, image: form.image });
+      // }
+      // fetchBanners();
+
       setModalOpen(false);
-      setEditingCategory(null);
-      fetchCategories();
+      setEditingBanner(null);
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -508,11 +628,16 @@ export default function Category() {
   const confirmDelete = async () => {
     setDeleting(true);
     try {
-      await deleteCategory(deleteTarget.id);
+      // --- Dummy data (active) ---
+      setAllBanners((prev) => prev.filter((b) => b.id !== deleteTarget.id));
       setDeleteTarget(null);
-      fetchCategories();
+
+      // --- Real API (disabled) ---
+      // await deleteBanner(deleteTarget.id);
+      // setDeleteTarget(null);
+      // fetchBanners();
     } catch (err) {
-      console.error("Failed to delete category:", err.message);
+      console.error("Failed to delete banner:", err.message);
     } finally {
       setDeleting(false);
     }
@@ -529,12 +654,12 @@ export default function Category() {
       ),
     },
     {
-      key: "icon",
-      label: "Category Icon",
+      key: "image",
+      label: "Banner",
       render: (row) => (
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
+        <div className="flex h-10 w-20 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
           {row.image ? (
-            <img src={row.image} alt={row.name} className="h-full w-full object-cover" />
+            <img src={row.image} alt={row.title} className="h-full w-full object-cover" />
           ) : (
             <ImageIcon size={15} className="text-neutral-600" />
           )}
@@ -542,20 +667,33 @@ export default function Category() {
       ),
     },
     {
-      key: "name",
-      label: "Category Name",
+      key: "title",
+      label: "Title",
       render: (row) => (
-        <span className="font-medium text-neutral-50">{row.name}</span>
+        <span className="font-medium text-neutral-50">{row.title}</span>
       ),
     },
     {
-      key: "subCategoryCount",
-      label: "Sub Category Count",
-      align: "center",
+      key: "link",
+      label: "Redirect Link",
+      render: (row) =>
+        row.link ? (
+          <a
+            href={row.link}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-sky-400 hover:text-sky-300"
+          >
+            <LinkIcon size={12} />
+            <span className="max-w-[180px] truncate">{row.link}</span>
+          </a>
+        ) : (
+          <span className="text-neutral-600">—</span>
+        ),
     },
     {
-      key: "voucherCount",
-      label: "Voucher Count",
+      key: "order",
+      label: "Order",
       align: "center",
     },
     {
@@ -571,21 +709,21 @@ export default function Category() {
         <div className="flex items-center justify-end gap-1.5">
           <button
             onClick={() => handleView(row)}
-            aria-label={`View ${row.name}`}
+            aria-label={`View ${row.title}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
           >
             <Eye size={15} />
           </button>
           <button
             onClick={() => handleEdit(row)}
-            aria-label={`Edit ${row.name}`}
+            aria-label={`Edit ${row.title}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => setDeleteTarget(row)}
-            aria-label={`Delete ${row.name}`}
+            aria-label={`Delete ${row.title}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
           >
             <Trash2 size={15} />
@@ -602,10 +740,10 @@ export default function Category() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
-              Category
+              Banner
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
-              Manage product categories, sub-categories and their vouchers.
+              Upload and manage promotional banners shown in the app.
             </p>
           </div>
           <button
@@ -613,7 +751,7 @@ export default function Category() {
             className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
           >
             <Plus size={16} />
-            Add Category
+            Add Banner
           </button>
         </div>
 
@@ -623,7 +761,7 @@ export default function Category() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search category..."
+            placeholder="Search banner..."
             className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
           />
         </div>
@@ -632,13 +770,13 @@ export default function Category() {
         {loading && (
           <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
             <Loader2 size={16} className="animate-spin" />
-            Loading categories…
+            Loading banners…
           </div>
         )}
 
         {!loading && loadError && (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
-            Failed to load categories: {loadError}
+            Failed to load banners: {loadError}
           </div>
         )}
 
@@ -647,8 +785,8 @@ export default function Category() {
             {/* Table */}
             <Table
               columns={columns}
-              data={categories}
-              emptyMessage="No categories yet. Add one to get started."
+              data={banners}
+              emptyMessage="No banners yet. Add one to get started."
             />
 
             {/* Pagination */}
@@ -677,15 +815,15 @@ export default function Category() {
         )}
       </div>
 
-      {/* Add / Edit Category modal */}
-      <CategoryFormModal
+      {/* Add / Edit Banner modal */}
+      <BannerFormModal
         open={modalOpen}
-        initialData={editingCategory}
+        initialData={editingBanner}
         saving={saving}
         onClose={() => {
           if (saving) return;
           setModalOpen(false);
-          setEditingCategory(null);
+          setEditingBanner(null);
         }}
         onSave={handleSave}
       />
@@ -695,21 +833,21 @@ export default function Category() {
         </div>
       )}
 
-      {/* View Category modal */}
-      <CategoryViewModal
+      {/* View Banner modal */}
+      <BannerViewModal
         open={Boolean(viewTarget)}
-        category={viewCategory}
+        banner={viewBanner}
         loading={viewLoading}
         onClose={() => {
           setViewTarget(null);
-          setViewCategory(null);
+          setViewBanner(null);
         }}
       />
 
       {/* Delete confirmation modal */}
       {deleteTarget && (
         <DeleteConfirmModal
-          category={deleteTarget}
+          banner={deleteTarget}
           deleting={deleting}
           onCancel={() => !deleting && setDeleteTarget(null)}
           onConfirm={confirmDelete}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus,
   Pencil,
@@ -8,171 +8,83 @@ import {
   Star,
   IndianRupee,
   Tag,
-  Clock,
   AlertTriangle,
+  ThumbsUp,
+  ThumbsDown,
+  ListChecks,
+  Loader2,
 } from "lucide-react";
+import {
+  getPlans,
+  addPlan,
+  updatePlan,
+  deletePlan,
+  toggleFeatureAvailability,
+  updateFeatureValue,
+} from "../plan/services/planApi";
 
 /* -------------------------------------------------------------------------
- * Feature matrix definition (rows of the comparison table)
- * type: "boolean" -> check / cross toggle
- * type: "text"    -> free text value per plan (e.g. outlet count, SLA)
+ * Data shape (matches the incoming form payload)
+ *
+ * {
+ *   id, name, description, price, oldPrice, discountLabel,
+ *   type: "MONTHLY" | "YEARLY",
+ *   status: "Active" | "Inactive",
+ *   popular: boolean,
+ *   benefits: string[],
+ *   limitations: string[],
+ *   features: [{ id, title, value, available }]
+ * }
  * ---------------------------------------------------------------------- */
 
-const FEATURE_LIST = [
-  { key: "outlets", label: "Outlets Allowed", type: "text" },
-  { key: "supportSla", label: "Support Response Time", type: "text" },
-  { key: "listings", label: "Product / Service Listings", type: "boolean" },
-  { key: "verifiedBadge", label: "Verified Badge", type: "boolean" },
-  { key: "analytics", label: "Analytics Dashboard", type: "boolean" },
-  { key: "reviews", label: "Customer Reviews", type: "boolean" },
-  { key: "settlements", label: "Settlement Reports", type: "boolean" },
-  { key: "marketing", label: "Marketing Tools", type: "boolean" },
-  { key: "customerChat", label: "Customer Chat", type: "boolean" },
-  { key: "prioritySupport", label: "Priority Support", type: "boolean" },
-  { key: "customBranding", label: "Custom Branding", type: "boolean" },
-  { key: "apiAccess", label: "API Access", type: "boolean" },
-  { key: "teamMembers", label: "Team Member Accounts", type: "boolean" },
-  { key: "ads", label: "Advertisement Slots", type: "boolean" },
-  { key: "advancedReports", label: "Advanced Reports", type: "boolean" },
-];
-
-/* -------------------------------------------------------------------------
- * Mock data — Basic, Advanced, Pro, Pro Lite
- * ---------------------------------------------------------------------- */
-
-const INITIAL_PLANS = [
-  {
-    id: 1,
-    name: "Basic",
-    tagline: "For brands just getting started",
-    price: 1999,
-    oldPrice: 2499,
-    discountLabel: "20% OFF",
-    billingCycle: "Yearly",
-    status: "Active",
-    popular: false,
-    features: {
-      outlets: "01",
-      supportSla: "48 Hrs",
-      listings: true,
-      verifiedBadge: false,
-      analytics: false,
-      reviews: true,
-      settlements: true,
-      marketing: false,
-      customerChat: true,
-      prioritySupport: false,
-      customBranding: false,
-      apiAccess: false,
-      teamMembers: true,
-      ads: false,
-      advancedReports: false,
-    },
-  },
-  {
-    id: 2,
-    name: "Advanced",
-    tagline: "For growing multi-outlet brands",
-    price: 2999,
-    oldPrice: 3999,
-    discountLabel: "25% OFF",
-    billingCycle: "Yearly",
-    status: "Active",
-    popular: false,
-    features: {
-      outlets: "15",
-      supportSla: "24 Hrs",
-      listings: true,
-      verifiedBadge: true,
-      analytics: true,
-      reviews: true,
-      settlements: true,
-      marketing: true,
-      customerChat: true,
-      prioritySupport: false,
-      customBranding: true,
-      apiAccess: false,
-      teamMembers: true,
-      ads: true,
-      advancedReports: false,
-    },
-  },
-  {
-    id: 3,
-    name: "Pro",
-    tagline: "For established regional chains",
-    price: 3999,
-    oldPrice: 5499,
-    discountLabel: "27% OFF",
-    billingCycle: "Yearly",
-    status: "Active",
-    popular: true,
-    features: {
-      outlets: "25",
-      supportSla: "12 Hrs",
-      listings: true,
-      verifiedBadge: true,
-      analytics: true,
-      reviews: true,
-      settlements: true,
-      marketing: true,
-      customerChat: true,
-      prioritySupport: true,
-      customBranding: true,
-      apiAccess: false,
-      teamMembers: true,
-      ads: true,
-      advancedReports: true,
-    },
-  },
-  {
-    id: 4,
-    name: "Pro Lite",
-    tagline: "For national brands at scale",
-    price: 4999,
-    oldPrice: 6999,
-    discountLabel: "29% OFF",
-    billingCycle: "Yearly",
-    status: "Active",
-    popular: false,
-    features: {
-      outlets: "Unlimited",
-      supportSla: "Instant",
-      listings: true,
-      verifiedBadge: true,
-      analytics: true,
-      reviews: true,
-      settlements: true,
-      marketing: true,
-      customerChat: true,
-      prioritySupport: true,
-      customBranding: true,
-      apiAccess: true,
-      teamMembers: true,
-      ads: true,
-      advancedReports: true,
-    },
-  },
-];
-
-const emptyFeatureSet = () =>
-  FEATURE_LIST.reduce((acc, f) => {
-    acc[f.key] = f.type === "boolean" ? false : "";
-    return acc;
-  }, {});
+const uid = () => Math.random().toString(36).slice(2, 10);
 
 const emptyPlanDraft = () => ({
   id: null,
   name: "",
-  tagline: "",
+  description: "",
   price: "",
   oldPrice: "",
   discountLabel: "",
-  billingCycle: "Yearly",
+  type: "MONTHLY",
   status: "Active",
   popular: false,
-  features: emptyFeatureSet(),
+  benefits: [],
+  limitations: [],
+  features: [],
 });
+
+// Normalizes whatever the API returns into the shape every component below
+// expects — fills in missing arrays/fields with safe defaults so nothing
+// crashes on `.length`, `.map`, etc. Handles both `_id` and `id`.
+//
+// NOTE: the real API does NOT return `oldPrice`, `discountLabel`, or
+// `popular` — those are UI-only fields for now (kept so the form still
+// works, but they won't persist unless the backend adds support).
+function normalizePlan(raw) {
+  return {
+    id: raw?._id ?? raw?.id ?? uid(),
+    name: raw?.name ?? "",
+    description: raw?.description ?? "",
+    price: raw?.price ?? 0,
+    oldPrice: raw?.oldPrice ?? "",
+    discountLabel: raw?.discountLabel ?? "",
+    type: raw?.type ?? "MONTHLY",
+    durationInDays: raw?.durationInDays ?? "",
+    status: raw?.status ?? (raw?.isActive === false ? "Inactive" : "Active"),
+    popular: Boolean(raw?.popular),
+    benefits: Array.isArray(raw?.benefits) ? raw.benefits : [],
+    limitations: Array.isArray(raw?.limitations) ? raw.limitations : [],
+    features: Array.isArray(raw?.features)
+      ? raw.features.map((f) => ({
+          id: f?._id ?? f?.id ?? uid(),
+          title: f?.title ?? "",
+          value: f?.value ?? "",
+          available: Boolean(f?.available),
+        }))
+      : [],
+  };
+}
 
 /* -------------------------------------------------------------------------
  * Small shared bits
@@ -189,6 +101,14 @@ function Field({ label, children }) {
 
 const inputClass =
   "w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none";
+
+function TypePill({ type }) {
+  return (
+    <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-300">
+      {type === "MONTHLY" ? "Monthly" : "Yearly"}
+    </span>
+  );
+}
 
 /* -------------------------------------------------------------------------
  * Plan card
@@ -208,13 +128,13 @@ function PlanCard({ plan, onEdit, onDelete }) {
         </span>
       )}
 
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="text-[15px] font-semibold text-neutral-50">{plan.name}</h3>
-          <p className="mt-0.5 text-[12px] text-neutral-500">{plan.tagline}</p>
+          <p className="mt-0.5 text-[12px] text-neutral-500">{plan.description}</p>
         </div>
         <span
-          className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
             plan.status === "Active"
               ? "bg-emerald-400/10 text-emerald-400"
               : "bg-neutral-700/40 text-neutral-400"
@@ -226,22 +146,47 @@ function PlanCard({ plan, onEdit, onDelete }) {
 
       <div className="mt-4 flex items-baseline gap-2">
         <span className="text-[24px] font-bold text-neutral-50">
-          ₹{Number(plan.price).toLocaleString("en-IN")}
+          ₹{Number(plan.price || 0).toLocaleString("en-IN")}
         </span>
-        <span className="text-[12px] text-neutral-500">/{plan.billingCycle}</span>
+        <TypePill type={plan.type} />
       </div>
       <div className="mt-1 flex items-center gap-2">
-        {plan.oldPrice && (
+        {plan.oldPrice ? (
           <span className="text-[12.5px] text-neutral-600 line-through">
             ₹{Number(plan.oldPrice).toLocaleString("en-IN")}
           </span>
-        )}
-        {plan.discountLabel && (
+        ) : null}
+        {plan.discountLabel ? (
           <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-400">
             {plan.discountLabel}
           </span>
-        )}
+        ) : null}
       </div>
+
+      {plan.benefits.length > 0 && (
+        <ul className="mt-4 space-y-1.5">
+          {plan.benefits.slice(0, 3).map((b, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-400">
+              <ThumbsUp size={12} className="mt-0.5 shrink-0 text-emerald-400" />
+              {b}
+            </li>
+          ))}
+          {plan.benefits.length > 3 && (
+            <li className="text-[11.5px] text-neutral-600">+{plan.benefits.length - 3} more</li>
+          )}
+        </ul>
+      )}
+
+      {plan.limitations.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {plan.limitations.slice(0, 2).map((l, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-600">
+              <ThumbsDown size={12} className="mt-0.5 shrink-0 text-red-400/70" />
+              {l}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-5 flex items-center gap-2 border-t border-neutral-800 pt-4">
         <button
@@ -264,18 +209,36 @@ function PlanCard({ plan, onEdit, onDelete }) {
 }
 
 /* -------------------------------------------------------------------------
- * Benefits comparison matrix — click a check/cross to toggle,
- * click a text cell to edit it inline (quick admin edits without
- * opening the full plan modal).
+ * Benefits / limitations comparison matrix — rows are the union of every
+ * feature title used across all plans. Click a check/cross to toggle
+ * availability, click the value to edit it inline.
  * ---------------------------------------------------------------------- */
 
-function ComparisonTable({ plans, onToggleFeature, onEditFeatureText }) {
-  const [editingCell, setEditingCell] = useState(null); // `${planId}-${featureKey}`
+function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
+  const [editingCell, setEditingCell] = useState(null); // `${planId}-${title}`
+
+  const featureTitles = useMemo(() => {
+    const seen = [];
+    plans.forEach((p) =>
+      p.features.forEach((f) => {
+        if (!seen.includes(f.title)) seen.push(f.title);
+      })
+    );
+    return seen;
+  }, [plans]);
 
   if (!plans.length) {
     return (
       <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
         No plans yet — add a plan to build the comparison table.
+      </div>
+    );
+  }
+
+  if (!featureTitles.length) {
+    return (
+      <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+        No features added to any plan yet — add features from the plan editor.
       </div>
     );
   }
@@ -287,7 +250,7 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureText }) {
           <thead>
             <tr className="bg-neutral-900">
               <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-                Benefits Of Plan
+                Feature
               </th>
               {plans.map((plan) => (
                 <th
@@ -300,66 +263,60 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureText }) {
             </tr>
           </thead>
           <tbody>
-            {FEATURE_LIST.map((feature, i) => (
-              <tr
-                key={feature.key}
-                className={i % 2 === 0 ? "bg-neutral-950" : "bg-neutral-900/40"}
-              >
-                <td className="px-4 py-3 text-neutral-400">{feature.label}</td>
+            {featureTitles.map((title, i) => (
+              <tr key={title} className={i % 2 === 0 ? "bg-neutral-950" : "bg-neutral-900/40"}>
+                <td className="px-4 py-3 text-neutral-400">{title}</td>
                 {plans.map((plan) => {
-                  const value = plan.features?.[feature.key];
-                  const cellId = `${plan.id}-${feature.key}`;
+                  const feature = plan.features.find((f) => f.title === title);
+                  const cellId = `${plan.id}-${title}`;
 
-                  if (feature.type === "boolean") {
+                  if (!feature) {
                     return (
-                      <td key={plan.id} className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => onToggleFeature(plan.id, feature.key)}
-                          aria-label={`Toggle ${feature.label} for ${plan.name}`}
-                          className="inline-flex"
-                        >
-                          {value ? (
-                            <Check
-                              size={16}
-                              className="text-emerald-400 transition-transform hover:scale-110"
-                            />
-                          ) : (
-                            <X
-                              size={16}
-                              className="text-red-400/80 transition-transform hover:scale-110"
-                            />
-                          )}
-                        </button>
+                      <td key={plan.id} className="px-4 py-3 text-center text-neutral-700">
+                        —
                       </td>
                     );
                   }
 
-                  // text-type cell
                   const isEditing = editingCell === cellId;
+
                   return (
-                    <td key={plan.id} className="px-4 py-3 text-center">
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          defaultValue={value}
-                          onBlur={(e) => {
-                            onEditFeatureText(plan.id, feature.key, e.target.value);
-                            setEditingCell(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") e.target.blur();
-                            if (e.key === "Escape") setEditingCell(null);
-                          }}
-                          className="w-20 rounded-md border border-emerald-400/50 bg-neutral-950 px-2 py-1 text-center text-[12.5px] text-neutral-200 focus:outline-none"
-                        />
-                      ) : (
+                    <td key={plan.id} className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
                         <button
-                          onClick={() => setEditingCell(cellId)}
-                          className="rounded-md px-2 py-1 text-neutral-300 transition-colors hover:bg-neutral-800"
+                          onClick={() => onToggleFeature(plan.id, feature.id)}
+                          aria-label={`Toggle ${title} for ${plan.name}`}
+                          className="inline-flex shrink-0"
                         >
-                          {value || "—"}
+                          {feature.available ? (
+                            <Check size={15} className="text-emerald-400 transition-transform hover:scale-110" />
+                          ) : (
+                            <X size={15} className="text-red-400/80 transition-transform hover:scale-110" />
+                          )}
                         </button>
-                      )}
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            defaultValue={feature.value}
+                            onBlur={(e) => {
+                              onEditFeatureValue(plan.id, feature.id, e.target.value);
+                              setEditingCell(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.target.blur();
+                              if (e.key === "Escape") setEditingCell(null);
+                            }}
+                            className="w-16 rounded-md border border-emerald-400/50 bg-neutral-950 px-1.5 py-0.5 text-center text-[12px] text-neutral-200 focus:outline-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => setEditingCell(cellId)}
+                            className="rounded-md px-1.5 py-0.5 text-[12px] text-neutral-400 transition-colors hover:bg-neutral-800"
+                          >
+                            {feature.value || "—"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   );
                 })}
@@ -373,15 +330,145 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureText }) {
 }
 
 /* -------------------------------------------------------------------------
+ * Editable list rows used for Benefits and Limitations
+ * ---------------------------------------------------------------------- */
+
+function EditableStringList({ title, icon, items, placeholder, accent, onChange }) {
+  const update = (i, value) => {
+    const next = [...items];
+    next[i] = value;
+    onChange(next);
+  };
+  const remove = (i) => onChange(items.filter((_, idx) => idx !== i));
+  const add = () => onChange([...items, ""]);
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
+          {icon}
+          {title}
+        </p>
+        <button
+          onClick={add}
+          className={`flex items-center gap-1 rounded-lg border border-neutral-800 px-2 py-1 text-[11.5px] font-medium text-neutral-300 transition-colors hover:${accent}`}
+        >
+          <Plus size={12} />
+          Add
+        </button>
+      </div>
+      <div className="space-y-1.5">
+        {items.length === 0 && (
+          <p className="rounded-xl border border-dashed border-neutral-800 px-3 py-2.5 text-[12px] text-neutral-600">
+            None added yet.
+          </p>
+        )}
+        {items.map((item, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={item}
+              onChange={(e) => update(i, e.target.value)}
+              placeholder={placeholder}
+              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none"
+            />
+            <button
+              onClick={() => remove(i)}
+              aria-label="Remove"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
+ * Editable feature rows (title / value / available) inside the plan modal
+ * ---------------------------------------------------------------------- */
+
+function EditableFeatureList({ features, onChange }) {
+  const update = (i, patch) => {
+    const next = [...features];
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  };
+  const remove = (i) => onChange(features.filter((_, idx) => idx !== i));
+  const add = () => onChange([...features, { id: uid(), title: "", value: "", available: true }]);
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
+          <ListChecks size={13} className="text-neutral-600" />
+          Features
+        </p>
+        <button
+          onClick={add}
+          className="flex items-center gap-1 rounded-lg border border-neutral-800 px-2 py-1 text-[11.5px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400"
+        >
+          <Plus size={12} />
+          Add Feature
+        </button>
+      </div>
+
+      <div className="space-y-1.5">
+        {features.length === 0 && (
+          <p className="rounded-xl border border-dashed border-neutral-800 px-3 py-2.5 text-[12px] text-neutral-600">
+            No features added yet.
+          </p>
+        )}
+        {features.map((f, i) => (
+          <div
+            key={f.id}
+            className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2"
+          >
+            <input
+              value={f.title}
+              onChange={(e) => update(i, { title: e.target.value })}
+              placeholder="Feature title, e.g. Sub Brand"
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+            />
+            <input
+              value={f.value}
+              onChange={(e) => update(i, { value: e.target.value })}
+              placeholder="Value"
+              className="w-24 shrink-0 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-right text-[12px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+            />
+            <button
+              onClick={() => update(i, { available: !f.available })}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors ${
+                f.available
+                  ? "bg-emerald-400/10 text-emerald-400"
+                  : "bg-red-500/10 text-red-400"
+              }`}
+            >
+              {f.available ? "Available" : "Unavailable"}
+            </button>
+            <button
+              onClick={() => remove(i)}
+              aria-label="Remove feature"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
  * Add / Edit plan modal
  * ---------------------------------------------------------------------- */
 
-function PlanFormModal({ draft, isNew, onChange, onCancel, onSave }) {
+function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
   const setField = (field, value) => onChange({ ...draft, [field]: value });
-  const setFeature = (key, value) =>
-    onChange({ ...draft, features: { ...draft.features, [key]: value } });
 
-  const canSave = draft.name.trim() && String(draft.price).trim();
+  const canSave = draft.name.trim() && String(draft.price).trim() && !saving;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -404,27 +491,27 @@ function PlanFormModal({ draft, isNew, onChange, onCancel, onSave }) {
             <input
               value={draft.name}
               onChange={(e) => setField("name", e.target.value)}
-              placeholder="e.g. Basic"
+              placeholder="e.g. Advanced Plan"
               className={inputClass}
             />
           </Field>
-          <Field label="Billing Cycle">
+          <Field label="Type">
             <select
-              value={draft.billingCycle}
-              onChange={(e) => setField("billingCycle", e.target.value)}
+              value={draft.type}
+              onChange={(e) => setField("type", e.target.value)}
               className={inputClass}
             >
-              <option>Monthly</option>
-              <option>Yearly</option>
+              <option value="MONTHLY">Monthly</option>
+              <option value="YEARLY">Yearly</option>
             </select>
           </Field>
 
           <div className="col-span-2">
-            <Field label="Tagline">
+            <Field label="Description">
               <input
-                value={draft.tagline}
-                onChange={(e) => setField("tagline", e.target.value)}
-                placeholder="Short one-line description"
+                value={draft.description}
+                onChange={(e) => setField("description", e.target.value)}
+                placeholder="e.g. Premium access"
                 className={inputClass}
               />
             </Field>
@@ -437,7 +524,7 @@ function PlanFormModal({ draft, isNew, onChange, onCancel, onSave }) {
                 type="number"
                 value={draft.price}
                 onChange={(e) => setField("price", e.target.value)}
-                placeholder="1999"
+                placeholder="2999"
                 className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
               />
             </div>
@@ -449,7 +536,7 @@ function PlanFormModal({ draft, isNew, onChange, onCancel, onSave }) {
                 type="number"
                 value={draft.oldPrice}
                 onChange={(e) => setField("oldPrice", e.target.value)}
-                placeholder="2499"
+                placeholder="3999"
                 className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
               />
             </div>
@@ -461,7 +548,7 @@ function PlanFormModal({ draft, isNew, onChange, onCancel, onSave }) {
               <input
                 value={draft.discountLabel}
                 onChange={(e) => setField("discountLabel", e.target.value)}
-                placeholder="20% OFF"
+                placeholder="25% OFF"
                 className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
               />
             </div>
@@ -489,55 +576,52 @@ function PlanFormModal({ draft, isNew, onChange, onCancel, onSave }) {
         </label>
 
         {/* Benefits */}
-        <p className="mb-3 mt-6 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
-          Benefits Of Plan
-        </p>
-        <div className="space-y-1.5">
-          {FEATURE_LIST.map((feature) => (
-            <div
-              key={feature.key}
-              className="flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2"
-            >
-              <span className="flex items-center gap-2 text-[12.5px] text-neutral-400">
-                <Clock size={12} className="text-neutral-600" />
-                {feature.label}
-              </span>
-              {feature.type === "boolean" ? (
-                <button
-                  onClick={() => setFeature(feature.key, !draft.features[feature.key])}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                    draft.features[feature.key]
-                      ? "bg-emerald-400/10 text-emerald-400"
-                      : "bg-red-500/10 text-red-400"
-                  }`}
-                >
-                  {draft.features[feature.key] ? "Included" : "Not Included"}
-                </button>
-              ) : (
-                <input
-                  value={draft.features[feature.key]}
-                  onChange={(e) => setFeature(feature.key, e.target.value)}
-                  placeholder="e.g. 15, Unlimited, 24 Hrs"
-                  className="w-32 rounded-lg border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-right text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
-                />
-              )}
-            </div>
-          ))}
+        <div className="mt-6">
+          <EditableStringList
+            title="Benefits"
+            icon={<ThumbsUp size={13} className="text-neutral-600" />}
+            items={draft.benefits}
+            placeholder="e.g. Unlimited transactions"
+            accent="border-emerald-400/60 hover:text-emerald-400"
+            onChange={(next) => setField("benefits", next)}
+          />
+        </div>
+
+        {/* Limitations */}
+        <div className="mt-6">
+          <EditableStringList
+            title="Limitations"
+            icon={<ThumbsDown size={13} className="text-neutral-600" />}
+            items={draft.limitations}
+            placeholder="e.g. No franchise support"
+            accent="border-red-400/60 hover:text-red-400"
+            onChange={(next) => setField("limitations", next)}
+          />
+        </div>
+
+        {/* Features */}
+        <div className="mt-6">
+          <EditableFeatureList
+            features={draft.features}
+            onChange={(next) => setField("features", next)}
+          />
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-800 pt-4">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700"
+            disabled={saving}
+            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={onSave}
             disabled={!canSave}
-            className="rounded-xl bg-emerald-400 px-4 py-2.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isNew ? "Add Plan" : "Save Changes"}
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {saving ? "Saving…" : isNew ? "Add Plan" : "Save Changes"}
           </button>
         </div>
       </div>
@@ -549,7 +633,7 @@ function PlanFormModal({ draft, isNew, onChange, onCancel, onSave }) {
  * Delete confirmation modal
  * ---------------------------------------------------------------------- */
 
-function DeleteConfirmModal({ plan, onCancel, onConfirm }) {
+function DeleteConfirmModal({ plan, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
@@ -567,15 +651,18 @@ function DeleteConfirmModal({ plan, onCancel, onConfirm }) {
         <div className="mt-5 flex items-center justify-end gap-2.5">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700"
+            disabled={deleting}
+            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="rounded-xl bg-red-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-400"
+            disabled={deleting}
+            className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:opacity-60"
           >
-            Delete
+            {deleting && <Loader2 size={14} className="animate-spin" />}
+            {deleting ? "Deleting…" : "Delete"}
           </button>
         </div>
       </div>
@@ -588,52 +675,194 @@ function DeleteConfirmModal({ plan, onCancel, onConfirm }) {
  * ---------------------------------------------------------------------- */
 
 export default function Plan() {
-  const [plans, setPlans] = useState(INITIAL_PLANS);
-  const [draft, setDraft] = useState(null); // plan currently being added/edited
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const [draft, setDraft] = useState(null);
   const [isNew, setIsNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // ── Load plans from the API on mount ─────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const res = await getPlans();
+        const rawList = Array.isArray(res)
+          ? res
+          : res?.data?.data ?? res?.data?.plans ?? res?.data ?? res?.plans ?? [];
+        if (!cancelled) setPlans((Array.isArray(rawList) ? rawList : []).map(normalizePlan));
+      } catch (err) {
+        if (!cancelled) setLoadError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const openAdd = () => {
     setDraft(emptyPlanDraft());
     setIsNew(true);
+    setSaveError("");
   };
 
   const openEdit = (plan) => {
-    setDraft({ ...plan, features: { ...plan.features } });
+    setDraft({
+      ...plan,
+      benefits: [...plan.benefits],
+      limitations: [...plan.limitations],
+      features: plan.features.map((f) => ({ ...f })),
+    });
     setIsNew(false);
+    setSaveError("");
   };
 
-  const closeModal = () => setDraft(null);
-
-  const saveDraft = () => {
-    if (isNew) {
-      const newPlan = { ...draft, id: Date.now() };
-      setPlans((prev) => [...prev, newPlan]);
-    } else {
-      setPlans((prev) => prev.map((p) => (p.id === draft.id ? { ...draft } : p)));
-    }
+  const closeModal = () => {
+    if (saving) return;
     setDraft(null);
   };
 
-  const toggleFeature = (planId, key) => {
-    setPlans((prev) =>
-      prev.map((p) =>
-        p.id === planId ? { ...p, features: { ...p.features, [key]: !p.features[key] } } : p
-      )
-    );
+  // ── Add / Update plan via API ────────────────────────────────
+  const saveDraft = async () => {
+    const cleaned = {
+      ...draft,
+      benefits: draft.benefits.map((b) => b.trim()).filter(Boolean),
+      limitations: draft.limitations.map((l) => l.trim()).filter(Boolean),
+      features: draft.features.filter((f) => f.title.trim()),
+    };
+
+    // The real API doesn't accept oldPrice/discountLabel/popular/status —
+    // it wants isActive (boolean) and durationInDays instead.
+    const apiPayload = {
+      name: cleaned.name.trim(),
+      description: cleaned.description,
+      price: Number(cleaned.price) || 0,
+      type: cleaned.type,
+      durationInDays: cleaned.type === "YEARLY" ? 365 : 30,
+      isActive: cleaned.status === "Active",
+      benefits: cleaned.benefits,
+      limitations: cleaned.limitations,
+      features: cleaned.features.map((f) => ({
+        title: f.title,
+        value: f.value,
+        available: Boolean(f.available),
+      })),
+    };
+
+    setSaving(true);
+    setSaveError("");
+    try {
+      if (isNew) {
+        const created = await addPlan(apiPayload);
+        const newPlan = normalizePlan(created?.plan ?? created?.data ?? created ?? cleaned);
+        setPlans((prev) => [...prev, newPlan]);
+      } else {
+        const updated = await updatePlan(cleaned.id, apiPayload);
+        const updatedPlan = normalizePlan(updated?.plan ?? updated?.data ?? updated ?? cleaned);
+        setPlans((prev) => prev.map((p) => (p.id === updatedPlan.id ? updatedPlan : p)));
+      }
+      setDraft(null);
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const editFeatureText = (planId, key, value) => {
+  // ── Toggle feature availability via API (optimistic) ──────────
+  const toggleFeature = async (planId, featureId) => {
     setPlans((prev) =>
       prev.map((p) =>
-        p.id === planId ? { ...p, features: { ...p.features, [key]: value } } : p
+        p.id === planId
+          ? {
+              ...p,
+              features: p.features.map((f) =>
+                f.id === featureId ? { ...f, available: !f.available } : f
+              ),
+            }
+          : p
       )
     );
+    try {
+      await toggleFeatureAvailability(planId, featureId);
+    } catch (err) {
+      // revert on failure
+      setPlans((prev) =>
+        prev.map((p) =>
+          p.id === planId
+            ? {
+                ...p,
+                features: p.features.map((f) =>
+                  f.id === featureId ? { ...f, available: !f.available } : f
+                ),
+              }
+            : p
+        )
+      );
+      console.error("Failed to toggle feature:", err.message);
+    }
   };
 
-  const confirmDelete = () => {
-    setPlans((prev) => prev.filter((p) => p.id !== deleteTarget.id));
-    setDeleteTarget(null);
+  // ── Edit feature value via API (optimistic) ────────────────────
+  const editFeatureValue = async (planId, featureId, value) => {
+    let previousValue;
+    setPlans((prev) =>
+      prev.map((p) =>
+        p.id === planId
+          ? {
+              ...p,
+              features: p.features.map((f) => {
+                if (f.id === featureId) {
+                  previousValue = f.value;
+                  return { ...f, value };
+                }
+                return f;
+              }),
+            }
+          : p
+      )
+    );
+    try {
+      await updateFeatureValue(planId, featureId, value);
+    } catch (err) {
+      setPlans((prev) =>
+        prev.map((p) =>
+          p.id === planId
+            ? {
+                ...p,
+                features: p.features.map((f) =>
+                  f.id === featureId ? { ...f, value: previousValue } : f
+                ),
+              }
+            : p
+        )
+      );
+      console.error("Failed to update feature value:", err.message);
+    }
+  };
+
+  // ── Delete plan via API ─────────────────────────────────────────
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await deletePlan(deleteTarget.id);
+      setPlans((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("Failed to delete plan:", err.message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -646,7 +875,7 @@ export default function Plan() {
               Subscription Plans
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
-              Add, edit or remove plans, and manage what each plan includes.
+              Add, edit or remove plans, and manage benefits, limitations and features for each.
             </p>
           </div>
           <button
@@ -658,27 +887,40 @@ export default function Plan() {
           </button>
         </div>
 
-        {/* Plan cards */}
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {plans.map((plan) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              onEdit={openEdit}
-              onDelete={setDeleteTarget}
-            />
-          ))}
-        </div>
+        {/* Load state */}
+        {loading && (
+          <div className="mb-8 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+            <Loader2 size={16} className="animate-spin" />
+            Loading plans…
+          </div>
+        )}
 
-        {/* Benefits comparison */}
-        <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
-          Benefits Of Plan
-        </p>
-        <ComparisonTable
-          plans={plans}
-          onToggleFeature={toggleFeature}
-          onEditFeatureText={editFeatureText}
-        />
+        {!loading && loadError && (
+          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+            Failed to load plans: {loadError}
+          </div>
+        )}
+
+        {!loading && !loadError && (
+          <>
+            {/* Plan cards */}
+            <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {plans.map((plan) => (
+                <PlanCard key={plan.id} plan={plan} onEdit={openEdit} onDelete={setDeleteTarget} />
+              ))}
+            </div>
+
+            {/* Feature comparison */}
+            <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
+              Feature Comparison
+            </p>
+            <ComparisonTable
+              plans={plans}
+              onToggleFeature={toggleFeature}
+              onEditFeatureValue={editFeatureValue}
+            />
+          </>
+        )}
       </div>
 
       {/* Modals */}
@@ -686,15 +928,22 @@ export default function Plan() {
         <PlanFormModal
           draft={draft}
           isNew={isNew}
+          saving={saving}
           onChange={setDraft}
           onCancel={closeModal}
           onSave={saveDraft}
         />
       )}
+      {draft && saveError && (
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+          {saveError}
+        </div>
+      )}
       {deleteTarget && (
         <DeleteConfirmModal
           plan={deleteTarget}
-          onCancel={() => setDeleteTarget(null)}
+          deleting={deleting}
+          onCancel={() => !deleting && setDeleteTarget(null)}
           onConfirm={confirmDelete}
         />
       )}

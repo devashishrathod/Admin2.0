@@ -18,6 +18,7 @@ import {
   Store,
   Phone,
   Mail,
+  Star,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
 
@@ -53,6 +54,10 @@ const TYPE_META = {
   },
 };
 
+// Dynamic "Top X" label per active type, e.g. "Top Voucher", "Top Deal Pack",
+// "Top Membership" — used on the filter toggle, table header and badge.
+const topSuggestionLabel = (type) => `Top ${type}`;
+
 const APPROVAL_FILTERS = ["All", "Pending", "Approved", "Rejected"];
 
 const DETAIL_TABS = (type) => ["Overview", `${type} Info`, TYPE_META[type].activityLabel, "Merchant"];
@@ -61,6 +66,9 @@ const DETAIL_TABS = (type) => ["Overview", `${type} Info`, TYPE_META[type].activ
  * Mock data — vendor-submitted items awaiting / holding admin approval.
  * Only items with approvalStatus "Approved" (and status "Active") are
  * meant to be visible in the live app; everything else is admin-only.
+ *
+ * `topSuggestion` marks an item as a featured "Top Suggestion" for its
+ * type (Top Voucher / Top Deal Pack / Top Membership).
  * ---------------------------------------------------------------------- */
 
 const INITIAL_DATA = {
@@ -75,6 +83,7 @@ const INITIAL_DATA = {
       secondaryValue: "₹200.00",
       approvalStatus: "Approved",
       status: "Active",
+      topSuggestion: true,
       time: "2/7/2026",
       code: "ARENT50",
       category: "Travel & Resorts",
@@ -110,6 +119,7 @@ const INITIAL_DATA = {
       secondaryValue: "₹499.00",
       approvalStatus: "Pending",
       status: "Inactive",
+      topSuggestion: false,
       time: "9/7/2026",
       code: "THALI100",
       category: "Food & Beverage",
@@ -137,6 +147,7 @@ const INITIAL_DATA = {
       secondaryValue: "4 items",
       approvalStatus: "Pending",
       status: "Inactive",
+      topSuggestion: false,
       time: "5/7/2026",
       code: "GLOW4PACK",
       category: "Beauty & Personal Care",
@@ -165,6 +176,7 @@ const INITIAL_DATA = {
       secondaryValue: "12 Months",
       approvalStatus: "Approved",
       status: "Active",
+      topSuggestion: true,
       time: "3/7/2026",
       code: "SALONGOLD",
       category: "Beauty & Personal Care",
@@ -200,6 +212,44 @@ function ApprovalBadge({ status }) {
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}>
       {status}
     </span>
+  );
+}
+
+// Static "Top Suggestion" tag shown wherever an item is flagged as featured.
+function TopSuggestionBadge({ type }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-400/10 px-2.5 py-1 text-[11px] font-semibold text-yellow-400">
+      <Star size={11} className="fill-yellow-400" />
+      {topSuggestionLabel(type)}
+    </span>
+  );
+}
+
+// Clickable star toggle used in the table + details page to mark/unmark an
+// item as a Top Suggestion. Works identically for all three tabs since the
+// label and the underlying field name are the same across types.
+function TopSuggestionToggle({ item, type, onToggle, size = "sm" }) {
+  const active = !!item.topSuggestion;
+  const dims = size === "lg" ? "h-9 px-3" : "h-8 w-8";
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(item)}
+      aria-pressed={active}
+      title={active ? `Remove from ${topSuggestionLabel(type)}` : `Mark as ${topSuggestionLabel(type)}`}
+      className={`flex shrink-0 items-center justify-center gap-1.5 rounded-lg transition-colors ${dims} ${
+        active
+          ? "bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20"
+          : "text-neutral-500 hover:bg-neutral-800 hover:text-yellow-400"
+      }`}
+    >
+      <Star size={size === "lg" ? 15 : 15} className={active ? "fill-yellow-400" : ""} />
+      {size === "lg" && (
+        <span className="text-[12px] font-semibold">
+          {active ? topSuggestionLabel(type) : `Mark as ${topSuggestionLabel(type)}`}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -283,13 +333,18 @@ function MainTabs({ activeType, onChange, counts }) {
 }
 
 /* -------------------------------------------------------------------------
- * List header — approval status tabs, export, date range, search
+ * List header — approval status tabs, top-suggestion filter, export,
+ * date range, search
  * ---------------------------------------------------------------------- */
 
 function ListHeader({
   approvalFilter,
   onApprovalFilterChange,
   counts,
+  activeType,
+  topOnly,
+  onTopOnlyChange,
+  topCount,
   dateFrom,
   onDateFromChange,
   dateTo,
@@ -300,7 +355,7 @@ function ListHeader({
 }) {
   return (
     <div className="mb-5 flex flex-col gap-3 border-b border-neutral-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
-      {/* Approval status tabs */}
+      {/* Approval status tabs + Top Suggestions filter */}
       <div className="flex flex-wrap items-center gap-1.5">
         {APPROVAL_FILTERS.map((tab) => (
           <button
@@ -322,6 +377,25 @@ function ListHeader({
             </span>
           </button>
         ))}
+
+        {/* Divider */}
+        <span className="mx-1 h-4 w-px bg-neutral-800" />
+
+        {/* Same filter, works for all tabs: label flips to
+            "Top Voucher" / "Top Deal Pack" / "Top Membership" */}
+        <button
+          onClick={() => onTopOnlyChange(!topOnly)}
+          aria-pressed={topOnly}
+          className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+            topOnly ? "bg-yellow-400/10 text-yellow-400" : "text-neutral-500 hover:text-neutral-300"
+          }`}
+        >
+          <Star size={12} className={topOnly ? "fill-yellow-400" : ""} />
+          {topSuggestionLabel(activeType)}
+          <span className={`rounded-full px-1.5 text-[10.5px] ${topOnly ? "bg-yellow-400/20" : "bg-neutral-800"}`}>
+            {topCount}
+          </span>
+        </button>
       </div>
 
       {/* Actions */}
@@ -389,7 +463,7 @@ function EntriesFooter({ pageSize, onPageSizeChange, total }) {
 }
 
 /* -------------------------------------------------------------------------
- * Quick edit modal — title, merchant, price, value, status
+ * Quick edit modal — title, merchant, price, value, status, top suggestion
  * ---------------------------------------------------------------------- */
 
 function EditModal({ item, type, onCancel, onSave }) {
@@ -473,6 +547,27 @@ function EditModal({ item, type, onCancel, onSave }) {
                 Only approved items can be shown in the app.
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">
+              {topSuggestionLabel(type)}
+            </label>
+            <button
+              type="button"
+              onClick={() => setField("topSuggestion", !form.topSuggestion)}
+              aria-pressed={!!form.topSuggestion}
+              className={`flex w-full items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
+                form.topSuggestion
+                  ? "border-yellow-400/50 bg-yellow-400/10 text-yellow-400"
+                  : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              <Star size={14} className={form.topSuggestion ? "fill-yellow-400" : ""} />
+              {form.topSuggestion
+                ? `Featured as ${topSuggestionLabel(type)}`
+                : `Mark as ${topSuggestionLabel(type)}`}
+            </button>
           </div>
         </div>
 
@@ -653,10 +748,11 @@ function MerchantTab({ item }) {
 }
 
 /* -------------------------------------------------------------------------
- * Details page — includes the approve / reject workflow up top.
+ * Details page — includes the approve / reject workflow and the Top
+ * Suggestion toggle up top.
  * ---------------------------------------------------------------------- */
 
-function ItemDetails({ item, type, onBack, onApprove, onReject }) {
+function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSuggestion }) {
   const [tab, setTab] = useState("Overview");
   const tabs = DETAIL_TABS(type);
   const activityLabel = TYPE_META[type].activityLabel;
@@ -719,11 +815,19 @@ function ItemDetails({ item, type, onBack, onApprove, onReject }) {
               </div>
             </div>
             <div className="flex flex-col items-end gap-1.5">
-              <ApprovalBadge status={item.approvalStatus} />
+              <div className="flex items-center gap-1.5">
+                <ApprovalBadge status={item.approvalStatus} />
+                {item.topSuggestion && <TopSuggestionBadge type={type} />}
+              </div>
               {item.approvalStatus === "Approved" && (
                 <StatusBadge status={item.status} activeLabel="Active" />
               )}
             </div>
+          </div>
+
+          {/* Top Suggestion toggle — same control across Voucher / Deal Pack / Membership */}
+          <div className="mt-4">
+            <TopSuggestionToggle item={item} type={type} onToggle={onToggleTopSuggestion} size="lg" />
           </div>
 
           {/* Tabs */}
@@ -768,6 +872,7 @@ function exportToCsv(type, items) {
     meta.valueLabel,
     "Approval Status",
     "Status",
+    topSuggestionLabel(type),
     "Time",
   ];
 
@@ -780,6 +885,7 @@ function exportToCsv(type, items) {
     item.secondaryValue,
     item.approvalStatus,
     item.status,
+    item.topSuggestion ? "Yes" : "No",
     item.time,
   ]);
 
@@ -806,6 +912,7 @@ export default function Voucher() {
   const [dataByType, setDataByType] = useState(INITIAL_DATA);
   const [activeType, setActiveType] = useState("Voucher");
   const [approvalFilter, setApprovalFilter] = useState("All");
+  const [topOnly, setTopOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -822,9 +929,10 @@ export default function Voucher() {
       item.merchant.toLowerCase().includes(search.toLowerCase()) ||
       item.title.toLowerCase().includes(search.toLowerCase());
     const matchesApproval = approvalFilter === "All" || item.approvalStatus === approvalFilter;
+    const matchesTop = !topOnly || item.topSuggestion;
     const matchesFrom = !dateFrom || new Date(item.validTo) >= new Date(dateFrom);
     const matchesTo = !dateTo || new Date(item.validFrom) <= new Date(dateTo);
-    return matchesSearch && matchesApproval && matchesFrom && matchesTo;
+    return matchesSearch && matchesApproval && matchesTop && matchesFrom && matchesTo;
   });
 
   const mainTabCounts = MAIN_TABS.reduce((acc, t) => {
@@ -837,6 +945,8 @@ export default function Voucher() {
     return acc;
   }, {});
 
+  const topCount = items.filter((i) => i.topSuggestion).length;
+
   const updateItem = (id, updates) => {
     setDataByType((prev) => ({
       ...prev,
@@ -846,6 +956,10 @@ export default function Voucher() {
 
   const handleApprove = (item) => updateItem(item.id, { approvalStatus: "Approved", status: "Active" });
   const handleReject = (item) => updateItem(item.id, { approvalStatus: "Rejected", status: "Inactive" });
+
+  // Toggles the Top Suggestion flag. Works the same way for every tab —
+  // Voucher, Deal Pack and Membership all share this one handler.
+  const handleToggleTopSuggestion = (item) => updateItem(item.id, { topSuggestion: !item.topSuggestion });
 
   const handleDelete = (item) => {
     setDataByType((prev) => ({
@@ -880,7 +994,12 @@ export default function Voucher() {
     {
       key: "title",
       label: "Title",
-      render: (row) => <span className="text-neutral-300">{row.title}</span>,
+      render: (row) => (
+        <span className="flex items-center gap-1.5 text-neutral-300">
+          {row.title}
+          {row.topSuggestion && <TopSuggestionBadge type={activeType} />}
+        </span>
+      ),
     },
     {
       key: "publishedDate",
@@ -911,6 +1030,15 @@ export default function Voucher() {
         ) : (
           <span className="text-[11.5px] text-neutral-600">Not live</span>
         ),
+    },
+    {
+      // Same "Top Suggestion" toggle column for Voucher, Deal Pack and
+      // Membership — only the label text changes per tab.
+      key: "topSuggestion",
+      label: topSuggestionLabel(activeType),
+      render: (row) => (
+        <TopSuggestionToggle item={row} type={activeType} onToggle={handleToggleTopSuggestion} />
+      ),
     },
     {
       key: "action",
@@ -974,6 +1102,7 @@ export default function Voucher() {
         onReject={(item) => {
           handleReject(item);
         }}
+        onToggleTopSuggestion={handleToggleTopSuggestion}
       />
     );
   }
@@ -988,7 +1117,8 @@ export default function Voucher() {
           </h1>
           <p className="mt-1 text-[13px] text-neutral-500">
             Vendors submit vouchers, deal packs and memberships here. Approve an item to make it
-            live in the app — rejected or pending items stay hidden.
+            live in the app — rejected or pending items stay hidden. Star an item to feature it as
+            a Top Suggestion.
           </p>
         </div>
 
@@ -998,16 +1128,21 @@ export default function Voucher() {
           onChange={(type) => {
             setActiveType(type);
             setApprovalFilter("All");
+            setTopOnly(false);
             setSearch("");
           }}
           counts={mainTabCounts}
         />
 
-        {/* Approval filter + export + date range + search */}
+        {/* Approval filter + Top Suggestion filter + export + date range + search */}
         <ListHeader
           approvalFilter={approvalFilter}
           onApprovalFilterChange={setApprovalFilter}
           counts={approvalCounts}
+          activeType={activeType}
+          topOnly={topOnly}
+          onTopOnlyChange={setTopOnly}
+          topCount={topCount}
           dateFrom={dateFrom}
           onDateFromChange={setDateFrom}
           dateTo={dateTo}

@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, Search, Bell, ChevronDown, LogOut, User } from "lucide-react";
+import { Menu, X, Search, Bell, ChevronDown, LogOut, User } from "lucide-react";
 import { useAuthStore } from "../../features/auth/store/authStore";
 
-export default function Header({ setMobileOpen }) {
+export default function Header({ mobileOpen, setMobileOpen }) {
   const [userMenu, setUserMenu] = useState(false);
   const menuRef = useRef(null);
   const navigate = useNavigate();
@@ -38,13 +38,13 @@ export default function Header({ setMobileOpen }) {
   }
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-3.5 border-b border-neutral-800 bg-neutral-950/70 px-5 backdrop-blur-md">
+    <header className="sticky top-0 z-20 flex h-16 items-center gap-2 sm:gap-3.5 border-b border-neutral-800 bg-neutral-950/70 px-3 sm:px-5 backdrop-blur-md">
       <button
-        onClick={() => setMobileOpen(true)}
-        className="flex text-neutral-400 md:hidden"
-        aria-label="Open menu"
+        onClick={() => setMobileOpen((v) => !v)}
+        className="flex shrink-0 text-neutral-400 lg:hidden"
+        aria-label={mobileOpen ? "Close menu" : "Open menu"}
       >
-        <Menu size={20} />
+        {mobileOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
 
       <div className="hidden w-80 max-w-[40vw] items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-500 focus-within:border-emerald-600 md:flex">
@@ -59,25 +59,27 @@ export default function Header({ setMobileOpen }) {
 
       <button
         aria-label="Notifications"
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 transition-colors hover:border-emerald-600 hover:text-emerald-400"
+        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 transition-colors hover:border-emerald-600 hover:text-emerald-400"
       >
         <Bell size={16} />
         <span className="absolute right-2 top-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
       </button>
 
       {/* User menu */}
-      <div ref={menuRef} className="relative">
+      <div ref={menuRef} className="relative shrink-0">
         <div
           onClick={() => setUserMenu((v) => !v)}
-          className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 py-1.5 pl-1.5 pr-2.5 text-[12.5px] font-semibold text-neutral-50"
+          className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 py-1.5 pl-1.5 pr-2 sm:pr-2.5 text-[12.5px] font-semibold text-neutral-50"
         >
-          <div className="flex h-6.5 w-6.5 items-center justify-center rounded-md bg-gradient-to-br from-emerald-400 to-lime-400 text-[10px] font-bold text-neutral-950">
+          <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-emerald-400 to-lime-400 text-[10px] font-bold text-neutral-950">
             {initials}
           </div>
-          {displayName}
+          {/* Hidden on narrow phones so a long name never forces the
+              header to overflow horizontally. */}
+          <span className="hidden sm:inline">{displayName}</span>
           <ChevronDown
             size={13}
-            className={`transition-transform duration-150 ${userMenu ? "rotate-180" : ""}`}
+            className={`hidden transition-transform duration-150 sm:block ${userMenu ? "rotate-180" : ""}`}
           />
         </div>
 

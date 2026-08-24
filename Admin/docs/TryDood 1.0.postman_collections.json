@@ -1,0 +1,5063 @@
+{
+  "info": {
+    "_postman_id": "ac0c9f94-165c-4f7b-9bcd-3e095d82e3c2",
+    "name": "TryDood 1.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "55353653",
+    "_collection_link": "https://go.postman.co/collection/55154970-ac0c9f94-165c-4f7b-9bcd-3e095d82e3c2?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "user",
+      "item": [
+        {
+          "name": "application home",
+          "item": [
+            {
+              "name": "get single banner",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/home/single",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "home",
+                    "single"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "deal of the day",
+          "item": [
+            {
+              "name": "get by pagination",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/dealOfDay/pagination?page=1&limit=10",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "dealOfDay",
+                    "pagination"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get by id",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/dealOfDay/getOne/6856acdb51a24a1dd5ac76d1",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "dealOfDay",
+                    "getOne",
+                    "6856acdb51a24a1dd5ac76d1"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "privacy",
+          "item": [
+            {
+              "name": "get all",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/privacy/getAll",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "privacy",
+                    "getAll"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get one only",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/privacy/single",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "privacy",
+                    "single"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "get one only",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/settings/privacy/single",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "settings",
+                        "privacy",
+                        "single"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "json",
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json",
+                      "description": "",
+                      "type": "text"
+                    }
+                  ],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"Privacy details\",\r\n    \"result\": {\r\n        \"_id\": \"685a4f5211d86cc8754cdadb\",\r\n        \"privacy\": \"Trydood  ADVISEMENT RULES AND TERMS:\\r\\n* If you want to post your add give request to our app.\\r\\n* Your offer should be taken 4 photos and sent to our app, offer date will be mentioned in our app till last date and sent request to our app.\\r\\n* Within 24 hours it will be claimed your request in STIPNOW, then add will be posted in stipnow as soon.\\r\\n* If you have any error on post within 2 hour intimate to STIPNOW.\\r\\n* If you want to extend your add for more then one month you have to pay for that, if don't pay it STIPNOW will take that add without your knowledge.\\r\\n* Per month you did not use 5 add, it will not take it to next month.\\r\\n* If you have any complain on our add, you can call to our team they will help you.\\r\\n* All payment will be processed only online payment.\\r\\n* These rules apply unless otherwise stated in the fine print pertaining to the Offer:\\r\\n\\r\\nOffer will expire on the date specified on the offer.\\r\\nCannot be combined with other offers.\\r\\nProviding offer code is mandatory to avail offer.\\r\\nBooking, reservations and amendments are subject to availability.\\r\\nIn case you have availed or booked any At Home Service, please ensure that you duly check and validate the Photo ID Proof of the personnel of the Merchant or Individual itself, as the case may be.\\r\\nMust be redeemed in a single visit (unless specified otherwise).\\r\\nOffers can be redeemed only after due verification of the customer (including Photo ID Proof, if required).\\r\\nAll local/ national laws and rules, consumption of intoxicants etc. that apply to regular customers, apply to Nearby offers, holders too.\\r\\nThe merchant is solely responsible for the taxes levied/ to be levied on the services/ products for providing the Sales Invoice to the Customer against the services rendered or product sold.\\r\\n\\r\\nFood & Beverages Offers with Drinks:\\r\\nDrinks can only be redeemed only after due verification of the customer (including age proof – 25 years or above and as per the legal drinking age set by the respective state, Government issued valid Photo ID Proof, if required).\\r\\n\\r\\nHealth/ Medical/ Surgical Services and other Offers:\\r\\nGiven the nature of these Offers, STIPNOW does not take responsibility for any medical complications that arise during or post the treatment. We strongly advise our Users to take all necessary precautions/ consultations before availing this Offer.\\r\\n\\r\\nPurchase and Redemption of STIPNOW Offers:\\r\\nDescriptions of the Merchant Offers and Products listed on the Website and Mobile Application are provided by the Merchant or other referenced third parties. STIPNOW is not responsible for any claims arising out of the description of the Merchant Offers or Products. Pricing relating to certain Merchant Offers, Products, and other available programs on the Website and Mobile Application may change at any time in STIPNOW’s sole discretion without notice. Thus, it is advisable to go through the policies before any purchase or redemption on our Website or Mobile Application.\\r\\n\\r\\nA Merchant may list goods, services or experiences on its own Website and Mobile Application, or with respect to Products or Services, supply products or services to STIPNOW, that require Merchant to have regulatory authorization, license, approval or certification. STIPNOW does not verify, validate, or collect evidence of any regulatory authorization or certification from any Merchant (including but not limited to Health & Fitness and Beauty & Spa Merchants and At Home Services), and you agree to avail the services made available by the Merchant at all times and shall be governed by the separate Terms and Conditions agreed between the Merchant and STIPNOW that may be subject to change from time to time.\",\r\n        \"type\": \"web\",\r\n        \"createdAt\": \"2025-06-24T07:10:10.650Z\",\r\n        \"updatedAt\": \"2025-06-24T07:10:10.650Z\",\r\n        \"__v\": 0\r\n    }\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get single by id",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/privacy/getOne/privacy id",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "privacy",
+                    "getOne",
+                    "privacy id"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "refund policy",
+          "item": [
+            {
+              "name": "get all",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/refundPolicy/getAll",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "refundPolicy",
+                    "getAll"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get one only",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/refundPolicy/single",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "refundPolicy",
+                    "single"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "get one only",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/settings/privacy/single",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "settings",
+                        "privacy",
+                        "single"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "json",
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json",
+                      "description": "",
+                      "type": "text"
+                    }
+                  ],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"Privacy details\",\r\n    \"result\": {\r\n        \"_id\": \"685a48ded18f8c8938b05561\",\r\n        \"refundPolicy\": \"Trydood  ADVISEMENT RULES AND TERMS:\\r\\n* If you want to post your add give request to our app.\\r\\n* Your offer should be taken 4 photos and sent to our app, offer date will be mentioned in our app till last date and sent request to our app.\\r\\n* Within 24 hours it will be claimed your request in STIPNOW, then add will be posted in stipnow as soon.\\r\\n* If you have any error on post within 2 hour intimate to STIPNOW.\\r\\n* If you want to extend your add for more then one month you have to pay for that, if don't pay it STIPNOW will take that add without your knowledge.\\r\\n* Per month you did not use 5 add, it will not take it to next month.\\r\\n* If you have any complain on our add, you can call to our team they will help you.\\r\\n* All payment will be processed only online payment.\\r\\n* These rules apply unless otherwise stated in the fine print pertaining to the Offer:\\r\\n\\r\\nOffer will expire on the date specified on the offer.\\r\\nCannot be combined with other offers.\\r\\nProviding offer code is mandatory to avail offer.\\r\\nBooking, reservations and amendments are subject to availability.\\r\\nIn case you have availed or booked any At Home Service, please ensure that you duly check and validate the Photo ID Proof of the personnel of the Merchant or Individual itself, as the case may be.\\r\\nMust be redeemed in a single visit (unless specified otherwise).\\r\\nOffers can be redeemed only after due verification of the customer (including Photo ID Proof, if required).\\r\\nAll local/ national laws and rules, consumption of intoxicants etc. that apply to regular customers, apply to Nearby offers, holders too.\\r\\nThe merchant is solely responsible for the taxes levied/ to be levied on the services/ products for providing the Sales Invoice to the Customer against the services rendered or product sold.\\r\\n\\r\\nFood & Beverages Offers with Drinks:\\r\\nDrinks can only be redeemed only after due verification of the customer (including age proof – 25 years or above and as per the legal drinking age set by the respective state, Government issued valid Photo ID Proof, if required).\\r\\n\\r\\nHealth/ Medical/ Surgical Services and other Offers:\\r\\nGiven the nature of these Offers, STIPNOW does not take responsibility for any medical complications that arise during or post the treatment. We strongly advise our Users to take all necessary precautions/ consultations before availing this Offer.\\r\\n\\r\\nPurchase and Redemption of STIPNOW Offers:\\r\\nDescriptions of the Merchant Offers and Products listed on the Website and Mobile Application are provided by the Merchant or other referenced third parties. STIPNOW is not responsible for any claims arising out of the description of the Merchant Offers or Products. Pricing relating to certain Merchant Offers, Products, and other available programs on the Website and Mobile Application may change at any time in STIPNOW’s sole discretion without notice. Thus, it is advisable to go through the policies before any purchase or redemption on our Website or Mobile Application.\\r\\n\\r\\nA Merchant may list goods, services or experiences on its own Website and Mobile Application, or with respect to Products or Services, supply products or services to STIPNOW, that require Merchant to have regulatory authorization, license, approval or certification. STIPNOW does not verify, validate, or collect evidence of any regulatory authorization or certification from any Merchant (including but not limited to Health & Fitness and Beauty & Spa Merchants and At Home Services), and you agree to avail the services made available by the Merchant at all times and shall be governed by the separate Terms and Conditions agreed between the Merchant and STIPNOW that may be subject to change from time to time.\\r\\n\\r\\nafter update\",\r\n        \"type\": \"web\",\r\n        \"createdAt\": \"2025-06-24T06:42:38.984Z\",\r\n        \"updatedAt\": \"2025-06-24T06:56:07.755Z\",\r\n        \"__v\": 0\r\n    }\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get single by id",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/refundPolicy/getOne/685a48ded18f8c8938b05561",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "refundPolicy",
+                    "getOne",
+                    "685a48ded18f8c8938b05561"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "terms and condition",
+          "item": [
+            {
+              "name": "get all",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/term/getAll",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "term",
+                    "getAll"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "get all",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/settings/term/getAll",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "settings",
+                        "term",
+                        "getAll"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "json",
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json",
+                      "description": "",
+                      "type": "text"
+                    }
+                  ],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"Privacy details\",\r\n    \"result\": [\r\n        {\r\n            \"_id\": \"685a4ea3a6b6d6c15b62f2d0\",\r\n            \"terms\": \"Trydood  ADVISEMENT RULES AND TERMS:\\r\\n* If you want to post your add give request to our app.\\r\\n* Your offer should be taken 4 photos and sent to our app, offer date will be mentioned in our app till last date and sent request to our app.\\r\\n* Within 24 hours it will be claimed your request in STIPNOW, then add will be posted in stipnow as soon.\\r\\n* If you have any error on post within 2 hour intimate to STIPNOW.\\r\\n* If you want to extend your add for more then one month you have to pay for that, if don't pay it STIPNOW will take that add without your knowledge.\\r\\n* Per month you did not use 5 add, it will not take it to next month.\\r\\n* If you have any complain on our add, you can call to our team they will help you.\\r\\n* All payment will be processed only online payment.\\r\\n* These rules apply unless otherwise stated in the fine print pertaining to the Offer:\\r\\n\\r\\nOffer will expire on the date specified on the offer.\\r\\nCannot be combined with other offers.\\r\\nProviding offer code is mandatory to avail offer.\\r\\nBooking, reservations and amendments are subject to availability.\\r\\nIn case you have availed or booked any At Home Service, please ensure that you duly check and validate the Photo ID Proof of the personnel of the Merchant or Individual itself, as the case may be.\\r\\nMust be redeemed in a single visit (unless specified otherwise).\\r\\nOffers can be redeemed only after due verification of the customer (including Photo ID Proof, if required).\\r\\nAll local/ national laws and rules, consumption of intoxicants etc. that apply to regular customers, apply to Nearby offers, holders too.\\r\\nThe merchant is solely responsible for the taxes levied/ to be levied on the services/ products for providing the Sales Invoice to the Customer against the services rendered or product sold.\\r\\n\\r\\nFood & Beverages Offers with Drinks:\\r\\nDrinks can only be redeemed only after due verification of the customer (including age proof – 25 years or above and as per the legal drinking age set by the respective state, Government issued valid Photo ID Proof, if required).\\r\\n\\r\\nHealth/ Medical/ Surgical Services and other Offers:\\r\\nGiven the nature of these Offers, STIPNOW does not take responsibility for any medical complications that arise during or post the treatment. We strongly advise our Users to take all necessary precautions/ consultations before availing this Offer.\\r\\n\\r\\nPurchase and Redemption of STIPNOW Offers:\\r\\nDescriptions of the Merchant Offers and Products listed on the Website and Mobile Application are provided by the Merchant or other referenced third parties. STIPNOW is not responsible for any claims arising out of the description of the Merchant Offers or Products. Pricing relating to certain Merchant Offers, Products, and other available programs on the Website and Mobile Application may change at any time in STIPNOW’s sole discretion without notice. Thus, it is advisable to go through the policies before any purchase or redemption on our Website or Mobile Application.\\r\\n\\r\\nA Merchant may list goods, services or experiences on its own Website and Mobile Application, or with respect to Products or Services, supply products or services to STIPNOW, that require Merchant to have regulatory authorization, license, approval or certification. STIPNOW does not verify, validate, or collect evidence of any regulatory authorization or certification from any Merchant (including but not limited to Health & Fitness and Beauty & Spa Merchants and At Home Services), and you agree to avail the services made available by the Merchant at all times and shall be governed by the separate Terms and Conditions agreed between the Merchant and STIPNOW that may be subject to change from time to time.\",\r\n            \"type\": \"web\",\r\n            \"createdAt\": \"2025-06-24T07:07:15.138Z\",\r\n            \"updatedAt\": \"2025-06-24T07:07:15.138Z\",\r\n            \"__v\": 0\r\n        }\r\n    ]\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get one only",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/term/single",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "term",
+                    "single"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "get one only",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/settings/term/single",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "settings",
+                        "term",
+                        "single"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "json",
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json",
+                      "description": "",
+                      "type": "text"
+                    }
+                  ],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"Privacy details\",\r\n    \"result\": {\r\n        \"_id\": \"685a4ea3a6b6d6c15b62f2d0\",\r\n        \"terms\": \"Trydood  ADVISEMENT RULES AND TERMS:\\r\\n* If you want to post your add give request to our app.\\r\\n* Your offer should be taken 4 photos and sent to our app, offer date will be mentioned in our app till last date and sent request to our app.\\r\\n* Within 24 hours it will be claimed your request in STIPNOW, then add will be posted in stipnow as soon.\\r\\n* If you have any error on post within 2 hour intimate to STIPNOW.\\r\\n* If you want to extend your add for more then one month you have to pay for that, if don't pay it STIPNOW will take that add without your knowledge.\\r\\n* Per month you did not use 5 add, it will not take it to next month.\\r\\n* If you have any complain on our add, you can call to our team they will help you.\\r\\n* All payment will be processed only online payment.\\r\\n* These rules apply unless otherwise stated in the fine print pertaining to the Offer:\\r\\n\\r\\nOffer will expire on the date specified on the offer.\\r\\nCannot be combined with other offers.\\r\\nProviding offer code is mandatory to avail offer.\\r\\nBooking, reservations and amendments are subject to availability.\\r\\nIn case you have availed or booked any At Home Service, please ensure that you duly check and validate the Photo ID Proof of the personnel of the Merchant or Individual itself, as the case may be.\\r\\nMust be redeemed in a single visit (unless specified otherwise).\\r\\nOffers can be redeemed only after due verification of the customer (including Photo ID Proof, if required).\\r\\nAll local/ national laws and rules, consumption of intoxicants etc. that apply to regular customers, apply to Nearby offers, holders too.\\r\\nThe merchant is solely responsible for the taxes levied/ to be levied on the services/ products for providing the Sales Invoice to the Customer against the services rendered or product sold.\\r\\n\\r\\nFood & Beverages Offers with Drinks:\\r\\nDrinks can only be redeemed only after due verification of the customer (including age proof – 25 years or above and as per the legal drinking age set by the respective state, Government issued valid Photo ID Proof, if required).\\r\\n\\r\\nHealth/ Medical/ Surgical Services and other Offers:\\r\\nGiven the nature of these Offers, STIPNOW does not take responsibility for any medical complications that arise during or post the treatment. We strongly advise our Users to take all necessary precautions/ consultations before availing this Offer.\\r\\n\\r\\nPurchase and Redemption of STIPNOW Offers:\\r\\nDescriptions of the Merchant Offers and Products listed on the Website and Mobile Application are provided by the Merchant or other referenced third parties. STIPNOW is not responsible for any claims arising out of the description of the Merchant Offers or Products. Pricing relating to certain Merchant Offers, Products, and other available programs on the Website and Mobile Application may change at any time in STIPNOW’s sole discretion without notice. Thus, it is advisable to go through the policies before any purchase or redemption on our Website or Mobile Application.\\r\\n\\r\\nA Merchant may list goods, services or experiences on its own Website and Mobile Application, or with respect to Products or Services, supply products or services to STIPNOW, that require Merchant to have regulatory authorization, license, approval or certification. STIPNOW does not verify, validate, or collect evidence of any regulatory authorization or certification from any Merchant (including but not limited to Health & Fitness and Beauty & Spa Merchants and At Home Services), and you agree to avail the services made available by the Merchant at all times and shall be governed by the separate Terms and Conditions agreed between the Merchant and STIPNOW that may be subject to change from time to time.\",\r\n        \"type\": \"web\",\r\n        \"createdAt\": \"2025-06-24T07:07:15.138Z\",\r\n        \"updatedAt\": \"2025-06-24T07:07:15.138Z\",\r\n        \"__v\": 0\r\n    }\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get single by id",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/term/getOne/685a4ea3a6b6d6c15b62f2d0",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "term",
+                    "getOne",
+                    "685a4ea3a6b6d6c15b62f2d0"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "state",
+          "item": [
+            {
+              "name": "get all state",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/state/getAll",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "state",
+                    "getAll"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "get all state",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/settings/state/getAll",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "settings",
+                        "state",
+                        "getAll"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "json",
+                  "header": [
+                    {
+                      "key": "Content-Type",
+                      "value": "application/json",
+                      "description": "",
+                      "type": "text"
+                    }
+                  ],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"State details\",\r\n    \"result\": [\r\n        {\r\n            \"_id\": \"68594d6409d85dfc9618db55\",\r\n            \"name\": \"Odisha\",\r\n            \"createdAt\": \"2025-06-23T12:49:40.390Z\",\r\n            \"updatedAt\": \"2025-06-23T12:49:57.507Z\",\r\n            \"__v\": 0\r\n        },\r\n        {\r\n            \"_id\": \"68594affe605b9901a3db500\",\r\n            \"name\": \"West Bengal\",\r\n            \"createdAt\": \"2025-06-23T12:39:27.471Z\",\r\n            \"updatedAt\": \"2025-06-23T12:39:27.471Z\",\r\n            \"__v\": 0\r\n        },\r\n        {\r\n            \"_id\": \"68594aebe605b9901a3db4f5\",\r\n            \"name\": \"Jharkhand\",\r\n            \"createdAt\": \"2025-06-23T12:39:07.996Z\",\r\n            \"updatedAt\": \"2025-06-23T12:39:07.996Z\",\r\n            \"__v\": 0\r\n        },\r\n        {\r\n            \"_id\": \"68594a45e605b9901a3db4d5\",\r\n            \"name\": \"Bihar\",\r\n            \"createdAt\": \"2025-06-23T12:36:21.250Z\",\r\n            \"updatedAt\": \"2025-06-23T12:39:32.628Z\",\r\n            \"__v\": 0\r\n        }\r\n    ]\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get single state id",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/state/getOne/stateId",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "state",
+                    "getOne",
+                    "stateId"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "bill",
+          "item": [
+            {
+              "name": "createBill",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodUserToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"billAmount\": 25000,\r\n    \"subBrandId\": \"694cbc2296d93e43bbd84f7f\",\r\n    \"voucherId\": \"694d49b796d93e43bbd85011\"\r\n    // \"offer\": {\r\n    //     \"offerType\": \"PromoCode\",\r\n    //     \"offerId\": \"689ad9f6ff6e3220289d064b\"\r\n    // }\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}bill/create",
+                  "host": [
+                    "{{TryDoodBaseUrl}}bill"
+                  ],
+                  "path": [
+                    "create"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "feedback",
+          "item": [
+            {
+              "name": "createReview",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodUserToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "review",
+                      "value": "awesome product",
+                      "type": "text",
+                      "uuid": "2914671c-0e50-4aec-b158-496d9ca33751"
+                    },
+                    {
+                      "key": "rating",
+                      "value": "5",
+                      "type": "text",
+                      "uuid": "e3b44710-0b14-47e6-9785-dfd4fe145d4d"
+                    },
+                    {
+                      "key": "voucherId",
+                      "type": "text",
+                      "uuid": "9629a417-bb10-4a55-963b-72c7ba89cfb5",
+                      "value": "68c5193063230fa192e4fec7"
+                    },
+                    {
+                      "key": "images",
+                      "type": "file",
+                      "uuid": "883176b7-bf93-4b0d-a7ae-236762c4f7a8",
+                      "src": "/C:/Users/acar/OneDrive/Pictures/b84e92f0-cb22-458e-aa27-9abb9a602fdd_1421x699.jpg"
+                    },
+                    {
+                      "key": "images",
+                      "type": "text",
+                      "uuid": "75f4c62c-07ba-45fd-af2b-4afd06e510ac",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "images",
+                      "type": "text",
+                      "uuid": "8ef86287-c671-498f-8052-915f97632e86",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "",
+                      "value": "",
+                      "type": "text",
+                      "uuid": "903658b7-142e-4169-a2b7-06b7ed2255e2",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}feedbacks/create-review/68c50cee63230fa192e4fa95",
+                  "host": [
+                    "{{TryDoodBaseUrl}}feedbacks"
+                  ],
+                  "path": [
+                    "create-review",
+                    "68c50cee63230fa192e4fa95"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getAllFeedbacks",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodAdminToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{TryDoodDomailUrl}}feedbacks/getAll/reviews?user=694a49c296d93e43bbd8416e&page=1&limit=5",
+                  "host": [
+                    "{{TryDoodDomailUrl}}feedbacks"
+                  ],
+                  "path": [
+                    "getAll",
+                    "reviews"
+                  ],
+                  "query": [
+                    {
+                      "key": "brand",
+                      "value": "6899d5e4df02d206d1be0ad2",
+                      "disabled": true
+                    },
+                    {
+                      "key": "subBrand",
+                      "value": "64f123abc456def789012999",
+                      "disabled": true
+                    },
+                    {
+                      "key": "user",
+                      "value": "694a49c296d93e43bbd8416e"
+                    },
+                    {
+                      "key": "isBlocked",
+                      "value": "false",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    },
+                    {
+                      "key": "search",
+                      "value": "great",
+                      "disabled": true
+                    },
+                    {
+                      "key": "startDate",
+                      "value": "2025-08-01",
+                      "disabled": true
+                    },
+                    {
+                      "key": "endDate",
+                      "value": "2025-08-20",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "5"
+                    },
+                    {
+                      "key": "voucher",
+                      "value": "6899d5e4df02d206d1be0ad2",
+                      "type": "text",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "toggleLikeFeedback",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodUserToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}feedbacks/68ee20d91fba2df16c8cd142/toggle-like",
+                  "host": [
+                    "{{baseUrl}}feedbacks"
+                  ],
+                  "path": [
+                    "68ee20d91fba2df16c8cd142",
+                    "toggle-like"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "replyOnFeedback",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{token}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"reply\": \"Thanks you    \"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}feedbacks/68ee20d91fba2df16c8cd142/reply",
+                  "host": [
+                    "{{baseUrl}}feedbacks"
+                  ],
+                  "path": [
+                    "68ee20d91fba2df16c8cd142",
+                    "reply"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "deleteFeedback",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodUserToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}feedbacks/delete/68ee20d91fba2df16c8cd142",
+                  "host": [
+                    "{{TryDoodBaseUrl}}feedbacks"
+                  ],
+                  "path": [
+                    "delete",
+                    "68ee20d91fba2df16c8cd142"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "user profile",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/v1/users/userProfile?userId=689adbe5001e85bbda0b266c",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "userProfile"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "689adbe5001e85bbda0b266c",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "user profile complete",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodUserToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"name\": \"Devashish\",\r\n    \"email\": \"dev@gmail.com\",\r\n    \"address\": \"Alirajpur\",\r\n    \"dob\": \"05/07/1999\",\r\n    \"referCode\": \"hcwui1\",\r\n    \"lat\": \"74.3558\",\r\n    \"lng\": \"22.3060\",\r\n    \"isFirst\": true,\r\n    \"city\": \"Alirajpur\",\r\n    \"state\": \"Madhaya Pradesh\",\r\n    \"country\": \"India\",\r\n    \"postalCode\": \"457887\",\r\n    \"formattedAddress\": \"MG Road Alirajpur, 457887, MP, India\",\r\n    \"street\": \"MG Road Alirajpur\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/v1/users/userProfileComplete",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "userProfileComplete"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "update profile",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"name\": \"Devashish Rathod\",\r\n    \"email\": \"devashishtrydood@gmail.com\",\r\n    //   \"mobile\": \"8889524382\",\r\n    \"address\": \"123 Main Street\",\r\n    \"dob\": \"1998-05-20\",\r\n    \"referCode\": \"REF12345\",\r\n    \"lat\": 23.1765,\r\n    \"lng\": 75.7885,\r\n    \"city\": \"Mandsaur\",\r\n    \"state\": \"Madhya Pradesh\",\r\n    \"country\": \"India\",\r\n    \"postalCode\": \"458001\",\r\n    \"formattedAddress\": \"123 Main Street, Mandsaur, Madhya Pradesh, India\",\r\n    \"street\": \"Main Street\",\r\n    \"landMark\": \"Near sabji mandi\",\r\n    //   \"image\": \"https://example.com/profile.jpg\",\r\n    \"isActive\": true\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}users/userProfile/update?userId=694525d696d93e43bbd83a93",
+              "host": [
+                "{{TryDoodBaseUrl}}users"
+              ],
+              "path": [
+                "userProfile",
+                "update"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "694525d696d93e43bbd83a93"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllUsers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}users/getAll?page=1&limit=5&role=vendor",
+              "host": [
+                "{{TryDoodBaseUrl}}users"
+              ],
+              "path": [
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "uniqueId",
+                  "value": "%23TD80041",
+                  "disabled": true
+                },
+                {
+                  "key": "role",
+                  "value": "vendor"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "auth",
+      "item": [
+        {
+          "name": "register",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Trydood Admin",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "trydoodadmin@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "mobile",
+                  "value": "8319170360",
+                  "type": "text"
+                },
+                {
+                  "key": "whatsappNumber",
+                  "value": "8889524382",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "123456",
+                  "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "admin",
+                  "type": "text"
+                },
+                {
+                  "key": "address",
+                  "value": "Alirajpur",
+                  "type": "text"
+                },
+                {
+                  "key": "fcmToken",
+                  "value": "odjeuhcyrbchwdncow",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "uuid": "f8ca372b-e684-47c7-9e06-fd7f3be15199",
+                  "src": "/C:/Users/acar/Downloads/veer.png"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}auth/register",
+              "host": [
+                "{{TryDoodDomailUrl}}auth"
+              ],
+              "path": [
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "login",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"type\": \"email\", // \"mobile\" // for mobile login\r\n    \"email\": \"trydoodadmin@gmail.com\",\r\n    //  \"mobile\": \"8319170360\",\r\n    \"password\": \"123456\",\r\n    \"role\": \"admin\" // optional if admin,\r\n    // \"fcmToken\": \"kjxwjnwjnxjsnxwxw\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}auth/login",
+              "host": [
+                "{{TryDoodDomailUrl}}auth"
+              ],
+              "path": [
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "loginOrSignUp",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"whatsappNumber\": \"8889524382\",\r\n    \"role\": \"vendor\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}auth/loginOrSignUp",
+              "host": [
+                "{{TryDoodBaseUrl}}auth"
+              ],
+              "path": [
+                "loginOrSignUp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();\r",
+                  "pm.environment.set(\"TryDoodUserToken\", `Bearer ${response.token}`);\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"otp\": \"436480\",\r\n    \"whatsappNumber\": \"8319170360\",\r\n    \"role\": \"vendor\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}auth/verifyOtp",
+              "host": [
+                "{{TryDoodBaseUrl}}auth"
+              ],
+              "path": [
+                "verifyOtp"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "admin",
+      "item": [
+        {
+          "name": "brand",
+          "item": [
+            {
+              "name": "add brand",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2ODEzNmU4MzMwZTU3NzQwMjAyNWQ4ZTQiLCJuYW1lIjoia2FyaW0gYW5zYXJpIiwiZW1haWwiOiJrYXJpbWFuc2FyaTQ5NkBnbWFpbC5jb20iLCJtb2JpbGUiOjYyMDEzNDI4MDIsImFkZHJlc3MiOiJqYW1zaGVkcHVyIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzQ3OTgyODMzLCJleHAiOjE3NDg1ODc2MzN9.zd2sAGxYGaEIK0F-gD1sIs_dfvK7yzLvjxmSoLnB8zw",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "Relaince",
+                      "type": "text"
+                    },
+                    {
+                      "key": "slogan",
+                      "value": "up with",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "test@gmail.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "mobile",
+                      "value": "1234567895",
+                      "type": "text"
+                    },
+                    {
+                      "key": "whatsappNumber",
+                      "value": "1234567895",
+                      "type": "text"
+                    },
+                    {
+                      "key": "category",
+                      "value": "68301a7b68eac4eed66c2f68",
+                      "type": "text"
+                    },
+                    {
+                      "key": "subCategory",
+                      "value": "68301b8064b631ddc236c5a2",
+                      "type": "text"
+                    },
+                    {
+                      "key": "descrpition",
+                      "value": "testing",
+                      "type": "text"
+                    },
+                    {
+                      "key": "marketPermission",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "address",
+                      "value": "jamshedpur",
+                      "type": "text"
+                    },
+                    {
+                      "key": "state",
+                      "value": "jharkhand",
+                      "type": "text"
+                    },
+                    {
+                      "key": "city",
+                      "value": "jamshedpur",
+                      "type": "text"
+                    },
+                    {
+                      "key": "pinCode",
+                      "value": "831012",
+                      "type": "text"
+                    },
+                    {
+                      "key": "companyName",
+                      "value": "test",
+                      "type": "text"
+                    },
+                    {
+                      "key": "gstNumber",
+                      "value": "20sljdflsd55sdfsd",
+                      "type": "text"
+                    },
+                    {
+                      "key": "zipCode",
+                      "value": "831012",
+                      "type": "text"
+                    },
+                    {
+                      "key": "loginEmail",
+                      "value": "test1@gmail.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "password",
+                      "value": "12345",
+                      "type": "text"
+                    },
+                    {
+                      "key": "logo",
+                      "type": "file",
+                      "src": "/C:/Users/HP/Downloads/groceryfood.jpg"
+                    },
+                    {
+                      "key": "cover",
+                      "type": "file",
+                      "src": "/C:/Users/HP/Downloads/images.jpeg"
+                    },
+                    {
+                      "key": "monday",
+                      "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "tuesday",
+                      "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "wednesday",
+                      "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "thursday",
+                      "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "friday",
+                      "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "saturday",
+                      "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "sunday",
+                      "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/brand/add",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "brand",
+                    "add"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "add brand",
+                  "originalRequest": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2ODEzNmU4MzMwZTU3NzQwMjAyNWQ4ZTQiLCJuYW1lIjoia2FyaW0gYW5zYXJpIiwiZW1haWwiOiJrYXJpbWFuc2FyaTQ5NkBnbWFpbC5jb20iLCJtb2JpbGUiOjYyMDEzNDI4MDIsImFkZHJlc3MiOiJqYW1zaGVkcHVyIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzQ3OTgyODMzLCJleHAiOjE3NDg1ODc2MzN9.zd2sAGxYGaEIK0F-gD1sIs_dfvK7yzLvjxmSoLnB8zw",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "formdata",
+                      "formdata": [
+                        {
+                          "key": "name",
+                          "value": "Relaince",
+                          "type": "text"
+                        },
+                        {
+                          "key": "slogan",
+                          "value": "up with",
+                          "type": "text"
+                        },
+                        {
+                          "key": "email",
+                          "value": "test@gmail.com",
+                          "type": "text"
+                        },
+                        {
+                          "key": "mobile",
+                          "value": "1234567895",
+                          "type": "text"
+                        },
+                        {
+                          "key": "whatsappNumber",
+                          "value": "1234567895",
+                          "type": "text"
+                        },
+                        {
+                          "key": "category",
+                          "value": "68301a7b68eac4eed66c2f68",
+                          "type": "text"
+                        },
+                        {
+                          "key": "subCategory",
+                          "value": "68301b8064b631ddc236c5a2",
+                          "type": "text"
+                        },
+                        {
+                          "key": "descrpition",
+                          "value": "testing",
+                          "type": "text"
+                        },
+                        {
+                          "key": "marketPermission",
+                          "value": "true",
+                          "type": "text"
+                        },
+                        {
+                          "key": "isActive",
+                          "value": "true",
+                          "type": "text"
+                        },
+                        {
+                          "key": "address",
+                          "value": "jamshedpur",
+                          "type": "text"
+                        },
+                        {
+                          "key": "state",
+                          "value": "jharkhand",
+                          "type": "text"
+                        },
+                        {
+                          "key": "city",
+                          "value": "jamshedpur",
+                          "type": "text"
+                        },
+                        {
+                          "key": "pinCode",
+                          "value": "831012",
+                          "type": "text"
+                        },
+                        {
+                          "key": "companyName",
+                          "value": "test",
+                          "type": "text"
+                        },
+                        {
+                          "key": "gstNumber",
+                          "value": "20sljdflsd55sdfsd",
+                          "type": "text"
+                        },
+                        {
+                          "key": "zipCode",
+                          "value": "831012",
+                          "type": "text"
+                        },
+                        {
+                          "key": "loginEmail",
+                          "value": "test1@gmail.com",
+                          "type": "text"
+                        },
+                        {
+                          "key": "password",
+                          "value": "12345",
+                          "type": "text"
+                        },
+                        {
+                          "key": "logo",
+                          "type": "file",
+                          "src": [
+                            "/C:/Users/HP/Downloads/groceryfood.jpg"
+                          ]
+                        },
+                        {
+                          "key": "cover",
+                          "type": "file",
+                          "src": [
+                            "/C:/Users/HP/Downloads/images.jpeg"
+                          ]
+                        },
+                        {
+                          "key": "monday",
+                          "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                          "type": "text"
+                        },
+                        {
+                          "key": "tuesday",
+                          "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                          "type": "text"
+                        },
+                        {
+                          "key": "wednesday",
+                          "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                          "type": "text"
+                        },
+                        {
+                          "key": "thursday",
+                          "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                          "type": "text"
+                        },
+                        {
+                          "key": "friday",
+                          "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                          "type": "text"
+                        },
+                        {
+                          "key": "saturday",
+                          "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                          "type": "text"
+                        },
+                        {
+                          "key": "sunday",
+                          "value": "{\"start\":\"9:00\",\"end\":\"18:00\"}",
+                          "type": "text"
+                        }
+                      ]
+                    },
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/brand/add",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "brand",
+                        "add"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "Text",
+                  "header": [],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"Brand added successfully\",\r\n    \"result\": {\r\n        \"name\": \"Relaince\",\r\n        \"slogan\": \"up with\",\r\n        \"email\": \"test@gmail.com\",\r\n        \"mobile\": 1234567895,\r\n        \"whatsappNumber\": 1234567895,\r\n        \"category\": \"68301a7b68eac4eed66c2f68\",\r\n        \"subCategory\": \"68301b8064b631ddc236c5a2\",\r\n        \"descrpition\": \"testing\",\r\n        \"marketPermission\": true,\r\n        \"isActive\": true,\r\n        \"_id\": \"68308a29aa99ef09e26c0306\",\r\n        \"logo\": \"https://res.cloudinary.com/drwv6ap7i/image/upload/f_auto,q_auto/afaxndywjm2xvk3xojem?_a=BAMAJafi0\",\r\n        \"cover\": \"https://res.cloudinary.com/drwv6ap7i/image/upload/f_auto,q_auto/mugkhwltucrw8wnxq1m6?_a=BAMAJafi0\",\r\n        \"location\": \"68308a2faa99ef09e26c0308\",\r\n        \"user\": \"68308a2faa99ef09e26c0307\",\r\n        \"workHours\": \"68308a30aa99ef09e26c030c\",\r\n        \"createdAt\": \"2025-05-23T14:46:08.341Z\",\r\n        \"updatedAt\": \"2025-05-23T14:46:08.341Z\",\r\n        \"__v\": 0\r\n    }\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get all brand",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/brand/getOne/686e185dc014f2918f25d51e",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "brand",
+                    "getOne",
+                    "686e185dc014f2918f25d51e"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "get all brand",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/brand/getAll",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "brand",
+                        "getAll"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "Text",
+                  "header": [],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"Brand details\",\r\n    \"result\": [\r\n        {\r\n            \"_id\": \"68308a29aa99ef09e26c0306\",\r\n            \"name\": \"Relaince\",\r\n            \"slogan\": \"up with\",\r\n            \"email\": \"test@gmail.com\",\r\n            \"mobile\": 1234567895,\r\n            \"whatsappNumber\": 1234567895,\r\n            \"category\": \"68301a7b68eac4eed66c2f68\",\r\n            \"subCategory\": \"68301b8064b631ddc236c5a2\",\r\n            \"descrpition\": \"testing\",\r\n            \"marketPermission\": true,\r\n            \"isActive\": true,\r\n            \"logo\": \"https://res.cloudinary.com/drwv6ap7i/image/upload/f_auto,q_auto/afaxndywjm2xvk3xojem?_a=BAMAJafi0\",\r\n            \"cover\": \"https://res.cloudinary.com/drwv6ap7i/image/upload/f_auto,q_auto/mugkhwltucrw8wnxq1m6?_a=BAMAJafi0\",\r\n            \"location\": {\r\n                \"location\": {\r\n                    \"type\": \"Point\",\r\n                    \"coordinates\": [\r\n                        0,\r\n                        0\r\n                    ]\r\n                },\r\n                \"_id\": \"68308a2faa99ef09e26c0308\",\r\n                \"user\": \"68308a2faa99ef09e26c0307\",\r\n                \"brand\": \"68308a29aa99ef09e26c0306\",\r\n                \"address\": \"jamshedpur\",\r\n                \"state\": \"jharkhand\",\r\n                \"city\": \"jamshedpur\",\r\n                \"pinCode\": \"831012\",\r\n                \"createdAt\": \"2025-05-23T14:46:07.868Z\",\r\n                \"updatedAt\": \"2025-05-23T14:46:07.868Z\",\r\n                \"__v\": 0\r\n            },\r\n            \"user\": \"68308a2faa99ef09e26c0307\",\r\n            \"workHours\": {\r\n                \"monday\": {\r\n                    \"start\": \"9:00\",\r\n                    \"end\": \"18:00\"\r\n                },\r\n                \"tuesday\": {\r\n                    \"start\": \"9:00\",\r\n                    \"end\": \"18:00\"\r\n                },\r\n                \"wednesday\": {\r\n                    \"start\": \"9:00\",\r\n                    \"end\": \"18:00\"\r\n                },\r\n                \"friday\": {\r\n                    \"start\": \"9:00\",\r\n                    \"end\": \"18:00\"\r\n                },\r\n                \"saturday\": {\r\n                    \"start\": \"9:00\",\r\n                    \"end\": \"18:00\"\r\n                },\r\n                \"sunday\": {\r\n                    \"start\": \"9:00\",\r\n                    \"end\": \"18:00\"\r\n                },\r\n                \"_id\": \"68308a30aa99ef09e26c030c\",\r\n                \"brand\": \"68308a29aa99ef09e26c0306\",\r\n                \"user\": \"68308a2faa99ef09e26c0307\",\r\n                \"createdAt\": \"2025-05-23T14:46:08.126Z\",\r\n                \"updatedAt\": \"2025-05-23T14:46:08.126Z\",\r\n                \"__v\": 0\r\n            },\r\n            \"createdAt\": \"2025-05-23T14:46:08.341Z\",\r\n            \"updatedAt\": \"2025-05-23T14:46:08.341Z\",\r\n            \"__v\": 0\r\n        }\r\n    ]\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get single brand",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/brand/getOne/68308a29aa99ef09e26c0306",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "brand",
+                    "getOne",
+                    "68308a29aa99ef09e26c0306"
+                  ]
+                }
+              },
+              "response": [
+                {
+                  "name": "get single brand",
+                  "originalRequest": {
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "http://localhost:5000/api/v1/brand/getOne/68308a29aa99ef09e26c0306",
+                      "protocol": "http",
+                      "host": [
+                        "localhost"
+                      ],
+                      "port": "5000",
+                      "path": [
+                        "api",
+                        "v1",
+                        "brand",
+                        "getOne",
+                        "68308a29aa99ef09e26c0306"
+                      ]
+                    }
+                  },
+                  "_postman_previewlanguage": "Text",
+                  "header": [],
+                  "cookie": [
+                    {
+                      "expires": "Invalid Date",
+                      "domain": "",
+                      "path": ""
+                    }
+                  ],
+                  "body": "{\r\n    \"success\": true,\r\n    \"msg\": \"Brand details\",\r\n    \"result\": {\r\n        \"_id\": \"68308a29aa99ef09e26c0306\",\r\n        \"name\": \"Relaince\",\r\n        \"slogan\": \"up with\",\r\n        \"email\": \"test@gmail.com\",\r\n        \"mobile\": 1234567895,\r\n        \"whatsappNumber\": 1234567895,\r\n        \"category\": \"68301a7b68eac4eed66c2f68\",\r\n        \"subCategory\": \"68301b8064b631ddc236c5a2\",\r\n        \"descrpition\": \"testing\",\r\n        \"marketPermission\": true,\r\n        \"isActive\": true,\r\n        \"logo\": \"https://res.cloudinary.com/drwv6ap7i/image/upload/f_auto,q_auto/afaxndywjm2xvk3xojem?_a=BAMAJafi0\",\r\n        \"cover\": \"https://res.cloudinary.com/drwv6ap7i/image/upload/f_auto,q_auto/mugkhwltucrw8wnxq1m6?_a=BAMAJafi0\",\r\n        \"location\": {\r\n            \"location\": {\r\n                \"type\": \"Point\",\r\n                \"coordinates\": [\r\n                    0,\r\n                    0\r\n                ]\r\n            },\r\n            \"_id\": \"68308a2faa99ef09e26c0308\",\r\n            \"user\": \"68308a2faa99ef09e26c0307\",\r\n            \"brand\": \"68308a29aa99ef09e26c0306\",\r\n            \"address\": \"jamshedpur\",\r\n            \"state\": \"jharkhand\",\r\n            \"city\": \"jamshedpur\",\r\n            \"pinCode\": \"831012\",\r\n            \"createdAt\": \"2025-05-23T14:46:07.868Z\",\r\n            \"updatedAt\": \"2025-05-23T14:46:07.868Z\",\r\n            \"__v\": 0\r\n        },\r\n        \"user\": \"68308a2faa99ef09e26c0307\",\r\n        \"workHours\": {\r\n            \"monday\": {\r\n                \"start\": \"9:00\",\r\n                \"end\": \"18:00\"\r\n            },\r\n            \"tuesday\": {\r\n                \"start\": \"9:00\",\r\n                \"end\": \"18:00\"\r\n            },\r\n            \"wednesday\": {\r\n                \"start\": \"9:00\",\r\n                \"end\": \"18:00\"\r\n            },\r\n            \"friday\": {\r\n                \"start\": \"9:00\",\r\n                \"end\": \"18:00\"\r\n            },\r\n            \"saturday\": {\r\n                \"start\": \"9:00\",\r\n                \"end\": \"18:00\"\r\n            },\r\n            \"sunday\": {\r\n                \"start\": \"9:00\",\r\n                \"end\": \"18:00\"\r\n            },\r\n            \"_id\": \"68308a30aa99ef09e26c030c\",\r\n            \"brand\": \"68308a29aa99ef09e26c0306\",\r\n            \"user\": \"68308a2faa99ef09e26c0307\",\r\n            \"createdAt\": \"2025-05-23T14:46:08.126Z\",\r\n            \"updatedAt\": \"2025-05-23T14:46:08.126Z\",\r\n            \"__v\": 0\r\n        },\r\n        \"createdAt\": \"2025-05-23T14:46:08.341Z\",\r\n        \"updatedAt\": \"2025-05-23T14:46:08.341Z\",\r\n        \"__v\": 0\r\n    }\r\n}"
+                }
+              ]
+            },
+            {
+              "name": "get all with pagination",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/brand/pagination?page=1&limit=10",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "brand",
+                    "pagination"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "subscription",
+          "item": [
+            {
+              "name": "add subscription",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodAdminToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"name\": \"Testing\",\r\n    \"price\": 1199,\r\n    \"description\": \"starter plan for one year\",\r\n    // \"durationInDays\": 30,\r\n    \"durationInYears\": 1,\r\n    \"numberOfSubBrands\": 1,\r\n    \"discount\": 20,\r\n    \"benefits\": [\r\n        \"1 subbrand\",\r\n        \"3 years\"\r\n    ],\r\n    \"limitations\": [\r\n        \"life time access\"\r\n    ]\r\n    // \"type\": \"monthly\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}subscriptions/add",
+                  "host": [
+                    "{{TryDoodBaseUrl}}subscriptions"
+                  ],
+                  "path": [
+                    "add"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "update subscription",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodAdminToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    // \"name\": \"Testing\",\r\n    // \"price\": 1199,\r\n    // \"description\": \"starter plan for one year\",\r\n    // // \"durationInDays\": 30,\r\n    // \"durationInYears\": 1,\r\n    // \"numberOfSubBrands\": 1,\r\n    // \"discount\": 20,\r\n    \"benefits\": [\r\n        \"8 subbrand\",\r\n        \"30 years\"\r\n    ],\r\n    \"limitations\": [\r\n        \"full life time access\"\r\n    ]\r\n    // \"type\": \"monthly\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}subscriptions/update/697b07a8536e395570837660",
+                  "host": [
+                    "{{TryDoodBaseUrl}}subscriptions"
+                  ],
+                  "path": [
+                    "update",
+                    "697b07a8536e395570837660"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get single subscription",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/subscriptions/getOne/6842e87283de6712e7130d0d",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions",
+                    "getOne",
+                    "6842e87283de6712e7130d0d"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get all subscription",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/subscriptions/getAll",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions",
+                    "getAll"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get by pagination",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}subscriptions/pagination?page=1&limit=10",
+                  "host": [
+                    "{{TryDoodBaseUrl}}subscriptions"
+                  ],
+                  "path": [
+                    "pagination"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "application home",
+          "item": [
+            {
+              "name": "add home",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": "/C:/Users/HP/Downloads/redailer.jpg"
+                    },
+                    {
+                      "key": "title",
+                      "value": "title",
+                      "type": "text"
+                    },
+                    {
+                      "key": "header",
+                      "value": "header",
+                      "type": "text"
+                    },
+                    {
+                      "key": "description",
+                      "value": "description",
+                      "type": "text"
+                    },
+                    {
+                      "key": "type",
+                      "value": "android",
+                      "type": "text"
+                    },
+                    {
+                      "key": "colourCode",
+                      "value": "#F17B0E",
+                      "type": "text",
+                      "uuid": "78fe450b-99fa-43d5-902b-ac4f97d0629d"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/home/add",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "home",
+                    "add"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "update home",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2ODQyODk4YTRhYTEyNzY3OGJmZGEwZWEiLCJlbWFpbCI6ImlyZmFuQGdtYWlsLmNvbSIsIm1vYmlsZSI6OTg3NjU0MzIxMCwicm9sZSI6InZlbmRvciIsImlhdCI6MTc0OTE5MTg1MSwiZXhwIjoxNzQ5Nzk2NjUxfQ.MrO6ZRBfrKI7q8mfwZfd2JfggTf2rL_i4OiqJeXz248",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": []
+                },
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/home/update/id",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "home",
+                    "update",
+                    "id"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get single",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/home/single",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "home",
+                    "single"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "get all",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:5000/api/v1/settings/home/getAll",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "5000",
+                  "path": [
+                    "api",
+                    "v1",
+                    "settings",
+                    "home",
+                    "getAll"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getDahsboardReports",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodAdminToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}settings/dashboard-analytics?userId=6942b37645fb8703c932e175",
+                  "host": [
+                    "{{TryDoodBaseUrl}}settings"
+                  ],
+                  "path": [
+                    "dashboard-analytics"
+                  ],
+                  "query": [
+                    {
+                      "key": "brandId",
+                      "value": "6899d5e4df02d206d1be0ad2",
+                      "disabled": true
+                    },
+                    {
+                      "key": "date",
+                      "value": "2025-02-15",
+                      "disabled": true
+                    },
+                    {
+                      "key": "startDate",
+                      "value": "",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "endDate",
+                      "value": "",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "subBrandId",
+                      "value": "6899d61adf02d206d1be0b17",
+                      "disabled": true
+                    },
+                    {
+                      "key": "userId",
+                      "value": "6942b37645fb8703c932e175",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "couponCode",
+          "item": [
+            {
+              "name": "createCouponCode",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"voucher\": \"68908bb1c898a5aaaf578109\",\r\n    \"title\": \"Summer Blast Offer\",\r\n    \"description\": \"Get amazing discounts on your summer shopping!\",\r\n    \"promoCode\": \"SUMMER25\",\r\n    \"maxDiscountValue\": 100,\r\n    \"userLimit\": 200,\r\n    \"validFrom\": \"2025-08-10T00:00:00.000Z\",\r\n    \"validTill\": \"2025-08-12T23:59:59.000Z\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}coupon/create",
+                  "host": [
+                    "{{baseUrl}}coupon"
+                  ],
+                  "path": [
+                    "create"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getAllCoupons",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}coupon/getAll?validTill=2025-08-20",
+                  "host": [
+                    "{{baseUrl}}coupon"
+                  ],
+                  "path": [
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": true
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10",
+                      "disabled": true
+                    },
+                    {
+                      "key": "sortBy",
+                      "value": "createdAt",
+                      "disabled": true
+                    },
+                    {
+                      "key": "sortOrder",
+                      "value": "desc",
+                      "disabled": true
+                    },
+                    {
+                      "key": "promoCode",
+                      "value": "SUMMER25",
+                      "disabled": true
+                    },
+                    {
+                      "key": "title",
+                      "value": "Summer%20Blast",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    },
+                    {
+                      "key": "voucher",
+                      "value": "68908bb1c898a5aaaf578109",
+                      "disabled": true
+                    },
+                    {
+                      "key": "validFrom",
+                      "value": "2025-08-11",
+                      "disabled": true
+                    },
+                    {
+                      "key": "validTill",
+                      "value": "2025-08-20"
+                    },
+                    {
+                      "key": "maxDiscountValue",
+                      "value": "50",
+                      "disabled": true
+                    },
+                    {
+                      "key": "userLimit",
+                      "value": "2",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "lessAmount",
+          "item": [
+            {
+              "name": "createLessAmount",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"voucher\": \"689ad3e8cc1cae3a68b443c5\",\r\n    \"scope\": \"SELECTED_USERS\", // enum ALL_USERS\r\n    \"users\": [                    // if ALL USERS so no need \r\n        \"64d8f1a4c9f1b2a5e4b1a9d3\",\r\n        \"64d8f1a4c9f1b2a5e4b1a9d4\"\r\n    ],\r\n    \"title\": \"Summer Special Discount\",\r\n    \"description\": \"Get amazing discounts during our summer sale.\",\r\n    \"maxDiscountValue\": 510,\r\n    \"validFrom\": \"2025-08-12T00:00:00.000Z\",\r\n    \"validTill\": \"2025-08-20T23:59:59.000Z\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}lessAmount/create",
+                  "host": [
+                    "{{baseUrl}}lessAmount"
+                  ],
+                  "path": [
+                    "create"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getAllLessAmounts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{TryDoodAdminToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{TryDoodBaseUrl}}lessAmount/getAll",
+                  "host": [
+                    "{{TryDoodBaseUrl}}lessAmount"
+                  ],
+                  "path": [
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": true
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10",
+                      "disabled": true
+                    },
+                    {
+                      "key": "search",
+                      "value": "diwali",
+                      "disabled": true
+                    },
+                    {
+                      "key": "scope",
+                      "value": "ALL_USERS",
+                      "disabled": true
+                    },
+                    {
+                      "key": "voucher",
+                      "value": "694aea5096d93e43bbd844eb",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "validFrom",
+                      "value": "2025-01-01",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "validTill",
+                      "value": "2025-01-01",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "sortBy",
+                      "value": "createdAt",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "sortOrder",
+                      "value": "asc",
+                      "description": "desc , asc",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "todayOffers",
+          "item": [
+            {
+              "name": "getAllDealsOfCategories",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}todayOffers/get-categories",
+                  "host": [
+                    "{{baseUrl}}todayOffers"
+                  ],
+                  "path": [
+                    "get-categories"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getAllVouchersofCategory",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}todayOffers/get-all-vouchers/68933380b7fb9b0c18a50de2",
+                  "host": [
+                    "{{baseUrl}}todayOffers"
+                  ],
+                  "path": [
+                    "get-all-vouchers",
+                    "68933380b7fb9b0c18a50de2"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getAllOffers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}todayOffers/get-all-offers",
+                  "host": [
+                    "{{baseUrl}}todayOffers"
+                  ],
+                  "path": [
+                    "get-all-offers"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "SuggestionAds",
+          "item": [
+            {
+              "name": "createsuggestionAds",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "scope",
+                      "value": "SELECTED_USERS",
+                      "type": "text",
+                      "uuid": "3a95aaa6-b595-451d-b050-4a42baea50eb"
+                    },
+                    {
+                      "key": "states",
+                      "value": "[{\"code\":\"AP\",\"countryCode\":\"IN\",\"name\":\"Andhra Pradesh\",\"type\":\"state\"},{\"code\":\"BR\",\"countryCode\":\"IN\",\"name\":\"Bihar\",\"type\":\"state\"}]",
+                      "type": "text",
+                      "uuid": "125a2aec-1ff9-4245-9ecb-457129391932"
+                    },
+                    {
+                      "key": "cities",
+                      "value": "[{\"countryCode\":\"IN\",\"stateCode\":\"AP\",\"name\":\"Addanki\",\"type\":\"district\"},{\"countryCode\":\"IN\",\"stateCode\":\"BR\",\"name\":\"Muzaffarpur\",\"type\":\"district\"}]",
+                      "type": "text",
+                      "uuid": "b434decf-87b5-4006-85ba-2df2a77cd5c7"
+                    },
+                    {
+                      "key": "title",
+                      "value": "Special Offer",
+                      "type": "text",
+                      "uuid": "4f76c6dd-0e19-4d9c-b355-61dd1ceadff7"
+                    },
+                    {
+                      "key": "description",
+                      "value": "Exclusive offer for selected users in AP and BR states",
+                      "type": "text",
+                      "uuid": "f8d0b674-3b9d-4e65-92c2-d45bc68a63dd"
+                    },
+                    {
+                      "key": "users",
+                      "value": "[\"66d16c8a2a9a1e5f8c11a111\",\"66d16c8a2a9a1e5f8c11a112\"]",
+                      "type": "text",
+                      "uuid": "b05ddc63-6fa1-408f-9233-adaa140f9a68"
+                    },
+                    {
+                      "key": "discountTitle",
+                      "value": "50 off",
+                      "type": "text",
+                      "uuid": "22be1dd8-8907-407b-a28d-6027ed232928",
+                      "disabled": true
+                    },
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "uuid": "8f7e2e6a-ea51-4aee-a887-d270f50081e7",
+                      "src": "/C:/Users/acar/OneDrive/Pictures/Saved Pictures/Screenshots/Screenshot 2025-08-20 165154.png"
+                    },
+                    {
+                      "key": "status",
+                      "value": "active",
+                      "type": "text",
+                      "uuid": "345637a0-33f4-447e-a575-5b24e0f3188b"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}suggestionAd/689ad3e8cc1cae3a68b443c5/create",
+                  "host": [
+                    "{{baseUrl}}suggestionAd"
+                  ],
+                  "path": [
+                    "689ad3e8cc1cae3a68b443c5",
+                    "create"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getAllSuggestionAds",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}suggestionAd/getAll",
+                  "host": [
+                    "{{baseUrl}}suggestionAd"
+                  ],
+                  "path": [
+                    "getAll"
+                  ],
+                  "query": [
+                    {
+                      "key": "stateNames",
+                      "value": "Bihar",
+                      "disabled": true
+                    },
+                    {
+                      "key": "cityNames",
+                      "value": "Patna",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": true
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10",
+                      "disabled": true
+                    },
+                    {
+                      "key": "countryCode",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "voucherId",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "scope",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "activeOnly",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "status",
+                      "value": "active",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "employee",
+          "item": [
+            {
+              "name": "addEmployee",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "dev",
+                      "type": "text",
+                      "uuid": "b2409d93-5013-4464-a5a0-feeeca784c68"
+                    },
+                    {
+                      "key": "dob",
+                      "value": "01 Jun 1998",
+                      "type": "text",
+                      "uuid": "047485eb-aabc-4b6e-abab-e2d06b3f6e11"
+                    },
+                    {
+                      "key": "email",
+                      "value": "dev1234@gmail.com",
+                      "type": "text",
+                      "uuid": "5dce0fc1-b51b-4bc2-85a2-3de98646b6d6"
+                    },
+                    {
+                      "key": "whatsappNumber",
+                      "value": "8889524385",
+                      "type": "text",
+                      "uuid": "f1a562a2-e019-4b66-8778-d1bf91d30967"
+                    },
+                    {
+                      "key": "referCode",
+                      "value": "dev1234",
+                      "type": "text",
+                      "uuid": "6afa9f13-13dc-4d68-ba2c-1c79c1664aaf"
+                    },
+                    {
+                      "key": "bankName",
+                      "value": "THE FEDERAL BANK LTD",
+                      "type": "text",
+                      "uuid": "175c992c-3934-4c73-93a2-10d2572d463c"
+                    },
+                    {
+                      "key": "branchName",
+                      "value": "Anna Nagar, Chennai",
+                      "type": "text",
+                      "uuid": "dfc0494d-b76b-4ee3-8a37-71bc66aecefc"
+                    },
+                    {
+                      "key": "accountNumber",
+                      "value": "1742020002393",
+                      "type": "text",
+                      "uuid": "29736c05-b271-4479-a167-717f7d0f4d6d"
+                    },
+                    {
+                      "key": "ifscCode",
+                      "value": "FDRL0001742",
+                      "type": "text",
+                      "uuid": "e17fbd31-2c94-449c-bfd5-46b5cce52b95"
+                    },
+                    {
+                      "key": "state",
+                      "value": "mp",
+                      "type": "text",
+                      "uuid": "3d9bec6d-783d-48a2-8345-b958f648a393"
+                    },
+                    {
+                      "key": "city",
+                      "value": "alirajpur",
+                      "type": "text",
+                      "uuid": "9ee6baea-c64c-4dd0-8c78-a2bd31bca1ec"
+                    },
+                    {
+                      "key": "district",
+                      "value": "alirajpur",
+                      "type": "text",
+                      "uuid": "a115e0f8-5644-4a3c-a007-99cc6d004e11"
+                    },
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "uuid": "63abcd9c-273b-45b7-988e-680a85912b42",
+                      "src": "/C:/Users/acar/OneDrive/Pictures/Saved Pictures/Screenshots/Screenshot 2025-09-05 142641.png"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}employee/add",
+                  "host": [
+                    "{{baseUrl}}employee"
+                  ],
+                  "path": [
+                    "add"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "deleteEmployee",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}employee/68bac1c051ec7e32168c5313/delete",
+                  "host": [
+                    "{{baseUrl}}employee"
+                  ],
+                  "path": [
+                    "68bac1c051ec7e32168c5313",
+                    "delete"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "toggleActiveDeactive",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}employee/68bac1c051ec7e32168c5313/toggle-status",
+                  "host": [
+                    "{{baseUrl}}employee"
+                  ],
+                  "path": [
+                    "68bac1c051ec7e32168c5313",
+                    "toggle-status"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "getAllEmployees",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}employee/get-all",
+                  "host": [
+                    "{{baseUrl}}employee"
+                  ],
+                  "path": [
+                    "get-all"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": true
+                    },
+                    {
+                      "key": "limit",
+                      "value": "5",
+                      "disabled": true
+                    },
+                    {
+                      "key": "search",
+                      "value": "dev",
+                      "disabled": true
+                    },
+                    {
+                      "key": "name",
+                      "value": null,
+                      "disabled": true
+                    },
+                    {
+                      "key": "email",
+                      "value": null,
+                      "disabled": true
+                    },
+                    {
+                      "key": "uniqueId",
+                      "value": null,
+                      "disabled": true
+                    },
+                    {
+                      "key": "referCode",
+                      "value": null,
+                      "disabled": true
+                    },
+                    {
+                      "key": "whatsappNumber",
+                      "value": null,
+                      "disabled": true
+                    },
+                    {
+                      "key": "dob",
+                      "value": null,
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": null,
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "pushNotification",
+          "item": [
+            {
+              "name": "createPushNotification",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "{{admin_token}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "scope",
+                      "value": "SELECTED_USERS",
+                      "type": "text",
+                      "uuid": "5c6366b5-d79c-4dc8-b1fe-960c26ae166e"
+                    },
+                    {
+                      "key": "states",
+                      "value": "[{\"code\":\"AP\",\"countryCode\":\"IN\",\"name\":\"Andhra Pradesh\",\"type\":\"state\"},{\"code\":\"BR\",\"countryCode\":\"IN\",\"name\":\"Bihar\",\"type\":\"state\"}]",
+                      "type": "text",
+                      "uuid": "7ee0a729-ffe5-44db-8c1d-dab15d4b7984"
+                    },
+                    {
+                      "key": "cities",
+                      "value": "[{\"countryCode\":\"IN\",\"stateCode\":\"AP\",\"name\":\"Addanki\",\"type\":\"district\"},{\"countryCode\":\"IN\",\"stateCode\":\"BR\",\"name\":\"Muzaffarpur\",\"type\":\"district\"}]",
+                      "type": "text",
+                      "uuid": "a3209917-0071-42fe-850d-f4808e48bf8d"
+                    },
+                    {
+                      "key": "title",
+                      "value": "Special Offer",
+                      "type": "text",
+                      "uuid": "b8a48fd7-7357-463d-9847-e7b72480b9a7"
+                    },
+                    {
+                      "key": "description",
+                      "value": "Exclusive offer for selected users in AP and BR states",
+                      "type": "text",
+                      "uuid": "68eb3602-13bd-436c-bda8-c25f17bbc2de"
+                    },
+                    {
+                      "key": "users",
+                      "value": "[\"66d16c8a2a9a1e5f8c11a111\",\"66d16c8a2a9a1e5f8c11a112\"]",
+                      "type": "text",
+                      "uuid": "48a35724-3d3d-417c-9762-76f57dfcf421"
+                    },
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "uuid": "69af947b-33a7-446c-9f90-0242f6299076",
+                      "src": "/C:/Users/acar/OneDrive/Pictures/Saved Pictures/Screenshots/Screenshot 2025-09-13 165935.png"
+                    },
+                    {
+                      "key": "status",
+                      "value": "active",
+                      "type": "text",
+                      "uuid": "fa06fc40-91e1-494b-8cc1-19f7c55f5742"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}pushNotification/689ad3e8cc1cae3a68b443c5/create",
+                  "host": [
+                    "{{baseUrl}}pushNotification"
+                  ],
+                  "path": [
+                    "689ad3e8cc1cae3a68b443c5",
+                    "create"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vendor",
+      "item": [
+        {
+          "name": "addBrandAsVendor",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodUserToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"name\": \"RESSolution\",\r\n    \"slogan\": \"no slogon\",\r\n    \"companyName\": \"jsk\",\r\n    \"companyEmail\": \"dDDDev@gmail.com\"\r\n    //    \"mobile\": \"9876543210\",\r\n    //  \"whatsappNumber\": \"8889524382\"\r\n    //  \"gstNumber\": \"\",\r\n    // \"panNumber\": \"EWDPD2672E\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}brand/addBrand",
+              "host": [
+                "{{TryDoodBaseUrl}}brand"
+              ],
+              "path": [
+                "addBrand"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getBrandDetails",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/v1/brand/getOne/6899d5e4df02d206d1be0ad2",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "v1",
+                "brand",
+                "getOne",
+                "6899d5e4df02d206d1be0ad2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllBrands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodUserToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}brand/getAll",
+              "host": [
+                "{{TryDoodBaseUrl}}brand"
+              ],
+              "path": [
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateBrand",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodVendorToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    // \"categoryId\": \"686e58ea68c40d9bbf08fd66\",\r\n    // \"subCategoryId\": \"686e593068c40d9bbf08fd6a\"\r\n    // ============== Location Screen updates ================= //\r\n    // \"shopOrBuildingNumber\": \"Bhicholi Hapsi Road 123\",\r\n    // \"address\": \"Adarsh Shishu Vihar Higher Secondary School\",\r\n    // \"area\": \"Adarsh Shishu Vihar Higher Secondary School\",\r\n    // \"city\": \"Indore\",\r\n    // \"zipCode\": 452001,\r\n    // \"landMark\": \"hat gali\",\r\n    // \"state\": \"Madhya Pradesh\",\r\n    // \"country\": \"India\",\r\n    // \"lat\": 22.7138357,\r\n    // \"lng\": 75.9147553,\r\n    //  \"currentScreen\": \"SUBSCRIPTION_SELECTION\"\r\n    // =============  Work hours update =============== //\r\n    // \"monday\": {\r\n    //     \"start\": \"09:00\",\r\n    //     \"end\": \"17:00\"\r\n    // },\r\n    // \"tuesday\": {\r\n    //     \"start\": \"09:00\",\r\n    //     \"end\": \"17:00\"\r\n    // },\r\n    // \"wednesday\": {\r\n    //     \"start\": \"09:00\",\r\n    //     \"end\": \"17:00\"\r\n    // },\r\n    // \"thursday\": {\r\n    //     \"start\": \"09:00\",\r\n    //     \"end\": \"17:00\"\r\n    // },\r\n    // \"friday\": {\r\n    //     \"start\": \"09:00\",\r\n    //     \"end\": \"17:00\"\r\n    // },\r\n    // \"saturday\": {\r\n    //     \"start\": \"09:00\",\r\n    //     \"end\": \"17:00\"\r\n    // },\r\n    // \"sunday\": {\r\n    //     \"start\": \"8:00\",\r\n    //     \"end\": \"12:00\"\r\n    // },\r\n    // ============ Account Details ============== //\r\n    \"panNumber\": \"ABCDE1234F\",\r\n    \"gstNumber\": \"27AAAAA0000A1Z5\"\r\n    // \"accountType\": \"savings\",\r\n    // \"bankName\": \"SBI\",\r\n    // \"branchName\": \"Alirajpur\",\r\n    // \"ifscCode\": \"BORB0ALIRAJ\",\r\n    // \"accountNumber\": \"06890100019287\",\r\n    // \"holderName\": \"Shree Ram\",\r\n    //  \"micrCode\": \"45897897546\",\r\n    // \"upiId\": \"shreeram@axis.upi\",\r\n    // \"upiName\": \"Siya Ram\"\r\n    // \"currentScreen\": \"Mummy\",\r\n    // \"isOnBoardingCompleted\": true\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}brand/update/6a024ab116b389d1b7508726",
+              "host": [
+                "{{TryDoodBaseUrl}}brand"
+              ],
+              "path": [
+                "update",
+                "6a024ab116b389d1b7508726"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "69d49e9fbc115b0dc58c28fa",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "toggleBrandFollow",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}brand/68c50cee63230fa192e4fa95/toggle-follow",
+              "host": [
+                "{{TryDoodBaseUrl}}brand"
+              ],
+              "path": [
+                "68c50cee63230fa192e4fa95",
+                "toggle-follow"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getUserFollowedBrands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}brand/me/followed-brands?page=1&limit=2&brandId=694aaa8696d93e43bbd841c7",
+              "host": [
+                "{{TryDoodDomailUrl}}brand"
+              ],
+              "path": [
+                "me",
+                "followed-brands"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "2"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "userId",
+                  "value": "694a49c296d93e43bbd8416e",
+                  "description": "if role === admin then required to get all following brands of user",
+                  "disabled": true
+                },
+                {
+                  "key": "brandId",
+                  "value": "694aaa8696d93e43bbd841c7",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "toggleBrandStatus",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}brand/69c65633bc115b0dc58bd9cc/toggle-active",
+              "host": [
+                "{{TryDoodBaseUrl}}brand"
+              ],
+              "path": [
+                "69c65633bc115b0dc58bd9cc",
+                "toggle-active"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllBrandsPagination",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}brand/pagination",
+              "host": [
+                "{{TryDoodDomailUrl}}brand"
+              ],
+              "path": [
+                "pagination"
+              ],
+              "query": [
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sub-Brand",
+      "item": [
+        {
+          "name": "addSubBrandByVendorOrSubVendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{access-token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    // \"companyEmail\": \"abcd@gmail.com\",\r\n    //  whatsappNumber,\r\n    // currentScreen,\r\n    \"shopOrBuildingNumber\": \"80\",\r\n    \"address\": \"indore\",\r\n    \"area\": \"jila\",\r\n    \"city\": \"ghar\",\r\n    \"state\": \"MP\",\r\n    \"country\": \"india\",\r\n    \"zipCode\": \"243564\",\r\n    \"landMark\": \"devash\",\r\n    \"lat\": 29.1,\r\n    \"lng\": 77.5\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}subBrands/addSubBrandByVendorOrSubBrandUser/686cf383e067ac8b05bbe37c",
+              "host": [
+                "{{baseUrl}}subBrands"
+              ],
+              "path": [
+                "addSubBrandByVendorOrSubBrandUser",
+                "686cf383e067ac8b05bbe37c"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllSubBrands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}subBrands/getAll",
+              "host": [
+                "{{TryDoodBaseUrl}}subBrands"
+              ],
+              "path": [
+                "getAll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllSubBrandsOfBrand",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}subBrands/getAllSubBrandsOfBrand/694cbb4596d93e43bbd84e97",
+              "host": [
+                "{{TryDoodBaseUrl}}subBrands"
+              ],
+              "path": [
+                "getAllSubBrandsOfBrand",
+                "694cbb4596d93e43bbd84e97"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Subscribed",
+      "item": [
+        {
+          "name": "getAllSubscribedByBrand",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}subscribed/getAll/6945678396d93e43bbd83c24",
+              "host": [
+                "{{TryDoodDomailUrl}}subscribed"
+              ],
+              "path": [
+                "getAll",
+                "6945678396d93e43bbd83c24"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllSubscribeds",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}subscribed/getAll",
+              "host": [
+                "{{TryDoodDomailUrl}}subscribed"
+              ],
+              "path": [
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "maxUpgradeDate",
+                  "value": "2025-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "brand",
+                  "value": "65f1a...",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "user",
+                  "value": "697b2b71536e395570838",
+                  "disabled": true
+                },
+                {
+                  "key": "brand",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "subscribedBy",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "upgradedBy",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "transaction",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "subscription",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "isExpired",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "isUpgraded",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "isCoolingPlan",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "durationInDays",
+                  "value": "30",
+                  "disabled": true
+                },
+                {
+                  "key": "durationInYears",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "price",
+                  "value": "1999",
+                  "disabled": true
+                },
+                {
+                  "key": "discount",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "numberOfSubBrands",
+                  "value": "5",
+                  "disabled": true
+                },
+                {
+                  "key": "paidAmount",
+                  "value": "1500",
+                  "disabled": true
+                },
+                {
+                  "key": "dueAmount",
+                  "value": "499",
+                  "disabled": true
+                },
+                {
+                  "key": "numberOfUpgrade",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "minDurationInDays",
+                  "value": "15",
+                  "disabled": true
+                },
+                {
+                  "key": "maxDurationInDays",
+                  "value": "90",
+                  "disabled": true
+                },
+                {
+                  "key": "minDurationInYears",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "maxDurationInYears",
+                  "value": "3",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "999",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "5000",
+                  "disabled": true
+                },
+                {
+                  "key": "minDiscount",
+                  "value": "5",
+                  "disabled": true
+                },
+                {
+                  "key": "maxDiscount",
+                  "value": "50",
+                  "disabled": true
+                },
+                {
+                  "key": "minNumberOfSubBrands",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "maxNumberOfSubBrands",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "minPaidAmount",
+                  "value": "500",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPaidAmount",
+                  "value": "5000",
+                  "disabled": true
+                },
+                {
+                  "key": "minDueAmount",
+                  "value": "0",
+                  "disabled": true
+                },
+                {
+                  "key": "maxDueAmount",
+                  "value": "2000",
+                  "disabled": true
+                },
+                {
+                  "key": "minNumberOfUpgrade",
+                  "value": "0",
+                  "disabled": true
+                },
+                {
+                  "key": "maxNumberOfUpgrade",
+                  "value": "5",
+                  "disabled": true
+                },
+                {
+                  "key": "startDate",
+                  "value": "2025-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "expiryDate",
+                  "value": "2026-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "upgradeDate",
+                  "value": "2025-06-01",
+                  "disabled": true
+                },
+                {
+                  "key": "minStartDate",
+                  "value": "2025-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "maxStartDate",
+                  "value": "2025-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "minEndDate",
+                  "value": "2025-06-01",
+                  "disabled": true
+                },
+                {
+                  "key": "maxEndDate",
+                  "value": "2026-06-01",
+                  "disabled": true
+                },
+                {
+                  "key": "minExpiryDate",
+                  "value": "2025-12-01",
+                  "disabled": true
+                },
+                {
+                  "key": "maxExpiryDate",
+                  "value": "2026-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "minUpgradeDate",
+                  "value": "2025-01-01",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ActiveCoolingPlan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodVendorToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}subscribed/activateCoolingPlan",
+              "host": [
+                "{{TryDoodBaseUrl}}subscribed"
+              ],
+              "path": [
+                "activateCoolingPlan"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Vouchers",
+      "item": [
+        {
+          "name": "getAllVouchers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodUserToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}vouchers/getAll",
+              "host": [
+                "{{TryDoodBaseUrl}}vouchers"
+              ],
+              "path": [
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "68906d0f777a58f71adb4c91",
+                  "disabled": true
+                },
+                {
+                  "key": "subCategoryId",
+                  "value": "68906d2e777a58f71adb4c99",
+                  "disabled": true
+                },
+                {
+                  "key": "onlyLiked",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "userLng",
+                  "value": "85.3437924",
+                  "disabled": true
+                },
+                {
+                  "key": "userLat",
+                  "value": "23.3998218",
+                  "disabled": true
+                },
+                {
+                  "key": "maxDistance",
+                  "value": "5002",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "5000",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "2000",
+                  "disabled": true
+                },
+                {
+                  "key": "maxOffer",
+                  "value": "60",
+                  "disabled": true
+                },
+                {
+                  "key": "minOffer",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "maxRating",
+                  "value": "3",
+                  "disabled": true
+                },
+                {
+                  "key": "minRating",
+                  "value": "3",
+                  "disabled": true
+                },
+                {
+                  "key": "brandId",
+                  "value": "68c50cee63230fa192e4fa95",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "exactRating",
+                  "value": "5",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "exactPrice",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "exactOffer",
+                  "value": "20",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "voucherType",
+                  "value": "Very High",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "rating",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "asc",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllClaimedVouchers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}transaction/get-all-claimed-vouchers",
+              "host": [
+                "{{TryDoodDomailUrl}}transaction"
+              ],
+              "path": [
+                "get-all-claimed-vouchers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "startDate",
+                  "value": "2025-08-01",
+                  "disabled": true
+                },
+                {
+                  "key": "brandId",
+                  "value": "697b2b83536e395570838579",
+                  "disabled": true
+                },
+                {
+                  "key": "subBrandId",
+                  "value": "6899d61adf02d206d1be0b17",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-08-10",
+                  "disabled": true
+                },
+                {
+                  "key": "userId",
+                  "value": "694525d696d93e43bbd83a93",
+                  "disabled": true
+                },
+                {
+                  "key": "date",
+                  "value": "2025-11-25",
+                  "disabled": true
+                },
+                {
+                  "key": "maxAmount",
+                  "value": "10000000",
+                  "disabled": true
+                },
+                {
+                  "key": "voucherType",
+                  "value": "Very Low Price",
+                  "disabled": true
+                },
+                {
+                  "key": "isRefunded",
+                  "value": "true",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "paymentMethod",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "minAmount",
+                  "value": "0",
+                  "disabled": true
+                },
+                {
+                  "key": "rating",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "discount",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy[]",
+                  "value": "price",
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder[]",
+                  "value": "asc",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy[]",
+                  "value": "rating",
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder[]",
+                  "value": "desc",
+                  "disabled": true
+                },
+                {
+                  "key": "voucherId",
+                  "value": "697de2fab1c8169a1160b0a9",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "toggleLikeVoucher",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}vouchers/689ad3e8cc1cae3a68b443c5/toggle-like",
+              "host": [
+                "{{baseUrl}}vouchers"
+              ],
+              "path": [
+                "689ad3e8cc1cae3a68b443c5",
+                "toggle-like"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getVoucherDetails",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}vouchers/get/689ad3e8cc1cae3a68b443c5/",
+              "host": [
+                "{{baseUrl}}vouchers"
+              ],
+              "path": [
+                "get",
+                "689ad3e8cc1cae3a68b443c5",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "createVoucher",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodVendorToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"images\": [\r\n        {\r\n            \"imageUrl\": \"https://midas-pr.com/wp-content/uploads/2020/07/what-branding-actually-is.jpg\",\r\n            \"size\": \"50\",\r\n            \"filename\": \"branding\",\r\n            \"mime\": \"jpg\"\r\n        }\r\n    ],\r\n    \"title\": \"my voucher\",\r\n    \"description\": \"aaj ka voucher\",\r\n    \"publishedDate\": \"2026/05/10\",\r\n    \"validFrom\": \"2026/05/10\",\r\n    \"validTill\": \"2026/05/15\",\r\n    \"status\": \"active\",\r\n    \"subBrandIds\": [\r\n        \"6958c6256c98bc135a9c5be7\"\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}vouchers/add/694aaa8696d93e43bbd841c7",
+              "host": [
+                "{{TryDoodBaseUrl}}vouchers"
+              ],
+              "path": [
+                "add",
+                "694aaa8696d93e43bbd841c7"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "global",
+      "item": [
+        {
+          "name": "global-search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}settings/global-search?query=dev",
+              "host": [
+                "{{baseUrl}}settings"
+              ],
+              "path": [
+                "global-search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "dev"
+                },
+                {
+                  "key": "userId",
+                  "value": "689adbe5001e85bbda0b266c",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getRecentSearch",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}settings/recent-search?page=2&limit=5",
+              "host": [
+                "{{baseUrl}}settings"
+              ],
+              "path": [
+                "recent-search"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "689adbe5001e85bbda0b266c",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "2"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteSearchHistory",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}settings/68b15f6444a072ac995a273a/delete-search-history",
+              "host": [
+                "{{baseUrl}}settings"
+              ],
+              "path": [
+                "68b15f6444a072ac995a273a",
+                "delete-search-history"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Refund",
+      "item": [
+        {
+          "name": "raiseRefundRequest",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transactionId\": \"68b02262bbc0e3f1b09458ec\",\r\n    \"voucherId\": \"68b021c0bbc0e3f1b0945836\",\r\n    \"reason\": \"don't like\",\r\n    \"refundAmount\": 800,\r\n    \"bankName\": \"HDFC Bank\",\r\n    \"branchName\": \"MG Road Branch\",\r\n    \"accountNumber\": \"123456789015\",\r\n    \"ifscCode\": \"HDFC0001234\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}refund/raise-refund-request",
+              "host": [
+                "{{baseUrl}}refund"
+              ],
+              "path": [
+                "raise-refund-request"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllRefundRequest",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}refund/get-all-refunds?user=694525d696d93e43bbd83a93",
+              "host": [
+                "{{TryDoodDomailUrl}}refund"
+              ],
+              "path": [
+                "get-all-refunds"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "date",
+                  "value": "2025-08-29",
+                  "disabled": true
+                },
+                {
+                  "key": "startDate",
+                  "value": "2025-08-01",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-08-29",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "APPROVED",
+                  "disabled": true
+                },
+                {
+                  "key": "isApproved",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "brand",
+                  "value": "66cfb7e8d2f1a32244b89b10",
+                  "disabled": true
+                },
+                {
+                  "key": "subBrand",
+                  "value": "66cfb7e8d2f1a32244b89b20",
+                  "disabled": true
+                },
+                {
+                  "key": "voucher",
+                  "value": "66cfb7e8d2f1a32244b89b30",
+                  "disabled": true
+                },
+                {
+                  "key": "user",
+                  "value": "694525d696d93e43bbd83a93"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "approveOrRejectRefund",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"action\": \"APPROVED\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}refund/update-status/68b2cb38e1fb406ee7e6f51b",
+              "host": [
+                "{{baseUrl}}refund"
+              ],
+              "path": [
+                "update-status",
+                "68b2cb38e1fb406ee7e6f51b"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Transaction",
+      "item": [
+        {
+          "name": "getOverallPerDayTransaction",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}transaction/get-overall-per-day?isPaidToVendor=false",
+              "host": [
+                "{{TryDoodBaseUrl}}transaction"
+              ],
+              "path": [
+                "get-overall-per-day"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "disabled": true
+                },
+                {
+                  "key": "date",
+                  "value": "2025-09-25",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "startDate",
+                  "value": "2025-08-01",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "2025-08-10",
+                  "disabled": true
+                },
+                {
+                  "key": "brandId",
+                  "value": "6899d5e4df02d206d1be0ad2",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "brandName",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "isPaidToVendor",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "clearDailyPayment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transactionIds\": [\r\n        \"69ddb01fbc115b0dc58c517e\"\r\n    ],\r\n    \"brandId\": \"6945678396d93e43bbd83c24\",\r\n    //  \"paymentDate\": \"2025-11-06\", // optional \r\n    //   \"paymentTime\": \"12:00 PM\", \r\n    \"paymentMethod\": \"CASH_DEPOSIT\", // optional\r\n    \"bankTransactionId\": \"txn@123673S444ARVDJETVXSJS\",\r\n    \"paymentTo\": \"VENDOR\" // enum [ VENDOR , REFUND_CUSTOMER ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}dailyPayments/clear-payment",
+              "host": [
+                "{{TryDoodBaseUrl}}dailyPayments"
+              ],
+              "path": [
+                "clear-payment"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "createCategory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Rooms",
+                  "type": "text",
+                  "uuid": "1728835c-36ba-4284-a67d-752616bff315"
+                },
+                {
+                  "key": "description",
+                  "value": "all home equipments",
+                  "type": "text",
+                  "uuid": "69c4a789-b835-4fa0-b01f-77537106eb5b"
+                },
+                {
+                  "key": "type",
+                  "value": "web",
+                  "type": "text",
+                  "uuid": "92042417-8d22-4aee-9093-a3b03f18f7a7"
+                },
+                {
+                  "key": "image",
+                  "description": "optional by default it take default image",
+                  "type": "file",
+                  "uuid": "1138d99b-28f5-4ed0-97f0-ed938db51bd1",
+                  "src": "/C:/Users/acar/Downloads/mateLogic.jpeg"
+                },
+                {
+                  "key": "isActive",
+                  "value": "false",
+                  "description": "optional by default it take true",
+                  "type": "text",
+                  "uuid": "c1328ece-1ad8-4036-a715-a6bfc4156ab1",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}categories/create",
+              "host": [
+                "{{TryDoodDomailUrl}}categories"
+              ],
+              "path": [
+                "create"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getCategory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}categories/get/69412cdf69deed95b0d82baa",
+              "host": [
+                "{{TryDoodBaseUrl}}categories"
+              ],
+              "path": [
+                "get",
+                "69412cdf69deed95b0d82baa"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllCategories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}categories/getAll",
+              "host": [
+                "{{TryDoodDomailUrl}}categories"
+              ],
+              "path": [
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "diwali",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "android",
+                  "type": "text",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "fromDate",
+                  "value": "2025-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "toDate",
+                  "value": "2025-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt",
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "\"asc\" for ascending order, \"desc\" for decreasing order",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateCategory",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "home",
+                  "type": "text",
+                  "uuid": "bb954c23-bd50-44aa-88ce-5859b436eaa3",
+                  "disabled": true
+                },
+                {
+                  "key": "description",
+                  "value": "",
+                  "type": "text",
+                  "uuid": "f59d9897-46f2-406e-b72f-45a51a8a59c8",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "description": "work as toggle if passed in body",
+                  "type": "text",
+                  "uuid": "20a71b2c-4793-49b9-8173-039a83f7c7b6",
+                  "disabled": true
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "uuid": "8529e30a-33eb-46ee-926e-7062239fffba",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "web",
+                  "type": "text",
+                  "uuid": "f6fbb103-ba82-401c-9614-13473a6d2999"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}categories/update/69412cab69deed95b0d82b9a",
+              "host": [
+                "{{TryDoodBaseUrl}}categories"
+              ],
+              "path": [
+                "update",
+                "69412cab69deed95b0d82b9a"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteCategory",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}categories/delete/69412cab69deed95b0d82b9a",
+              "host": [
+                "{{TryDoodBaseUrl}}categories"
+              ],
+              "path": [
+                "delete",
+                "69412cab69deed95b0d82b9a"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "SubCategories",
+      "item": [
+        {
+          "name": "createSubCategory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "top rooms",
+                  "type": "text",
+                  "uuid": "1728835c-36ba-4284-a67d-752616bff315"
+                },
+                {
+                  "key": "description",
+                  "value": "topper listing",
+                  "type": "text",
+                  "uuid": "69c4a789-b835-4fa0-b01f-77537106eb5b"
+                },
+                {
+                  "key": "image",
+                  "description": "optional by default it take default image",
+                  "type": "file",
+                  "uuid": "1138d99b-28f5-4ed0-97f0-ed938db51bd1",
+                  "src": "/C:/Users/acar/Downloads/mateNewLogo.jpg"
+                },
+                {
+                  "key": "isActive",
+                  "value": "false",
+                  "description": "optional by default it take true",
+                  "type": "text",
+                  "uuid": "c1328ece-1ad8-4036-a715-a6bfc4156ab1",
+                  "disabled": true
+                },
+                {
+                  "key": "",
+                  "value": "",
+                  "type": "text",
+                  "uuid": "00b6bae8-5a47-4e5b-8d82-cbdad6201268",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}subCategories/6943dff645fb8703c932e492/create",
+              "host": [
+                "{{TryDoodDomailUrl}}subCategories"
+              ],
+              "path": [
+                "6943dff645fb8703c932e492",
+                "create"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getSubCategory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}subCategories/get/6943e03445fb8703c932e497",
+              "host": [
+                "{{TryDoodDomailUrl}}subCategories"
+              ],
+              "path": [
+                "get",
+                "6943e03445fb8703c932e497"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllSubCategories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{NVS-userToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodDomailUrl}}subCategories/getAll?categoryId=6942b82645fb8703c932e28e",
+              "host": [
+                "{{TryDoodDomailUrl}}subCategories"
+              ],
+              "path": [
+                "getAll"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "diwali",
+                  "disabled": true
+                },
+                {
+                  "key": "categoryId",
+                  "value": "6942b82645fb8703c932e28e"
+                },
+                {
+                  "key": "type",
+                  "value": "web",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "fromDate",
+                  "value": "2025-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "toDate",
+                  "value": "2025-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt",
+                  "disabled": true
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "\"asc\" for ascending order, \"desc\" for decreasing order",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateSubCategory",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "",
+                  "type": "text",
+                  "uuid": "bb954c23-bd50-44aa-88ce-5859b436eaa3",
+                  "disabled": true
+                },
+                {
+                  "key": "description",
+                  "value": "radhe radhe",
+                  "type": "text",
+                  "uuid": "f59d9897-46f2-406e-b72f-45a51a8a59c8",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "description": "work as toggle if passed in body",
+                  "type": "text",
+                  "uuid": "20a71b2c-4793-49b9-8173-039a83f7c7b6",
+                  "disabled": true
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "uuid": "8529e30a-33eb-46ee-926e-7062239fffba",
+                  "value": null,
+                  "disabled": true
+                },
+                {
+                  "key": "categoryId",
+                  "value": "6942b82645fb8703c932e28e",
+                  "type": "text",
+                  "uuid": "77191513-b1e5-49f1-9904-b9f2d63362e7",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}subCategories/update/6943e03445fb8703c932e497",
+              "host": [
+                "{{TryDoodBaseUrl}}subCategories"
+              ],
+              "path": [
+                "update",
+                "6943e03445fb8703c932e497"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteSubCategory",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}subCategories/delete/694197ff72e18d3e0d99973c",
+              "host": [
+                "{{TryDoodBaseUrl}}subCategories"
+              ],
+              "path": [
+                "delete",
+                "694197ff72e18d3e0d99973c"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Images",
+      "item": [
+        {
+          "name": "addImages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"entityId\": \"6945678396d93e43bbd83c24\", // brand or sub brand Id\r\n    \"type\": \"web\", // web, android , ios\r\n    \"fieldType\": \"gallery\", // gallery , menu\r\n    \"images\": [\r\n        {\r\n            \"imageUrl\": \"https://midas-pr.com/wp-content/uploads/2020/07/what-branding-actually-is.jpg\",\r\n            \"size\": \"50\",\r\n            \"filename\": \"branding\",\r\n            \"mime\": \"jpg\"\r\n        }\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}images/addImage",
+              "host": [
+                "{{TryDoodBaseUrl}}images"
+              ],
+              "path": [
+                "addImage"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getAllImages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}images/getAllImages/6945678396d93e43bbd83c24",
+              "host": [
+                "{{TryDoodBaseUrl}}images"
+              ],
+              "path": [
+                "getAllImages",
+                "6945678396d93e43bbd83c24"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "update or delete Images",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{TryDoodAdminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"deletedImageIds\": [\r\n        \"69eb11405c6a552bd40765fe\" // images Ids\r\n    ],\r\n    \"type\": \"web\", // web, android , ios\r\n    \"fieldType\": \"gallery\", // gallery , menu\r\n    \"newImages\": [\r\n        {\r\n            \"imageUrl\": \"https://midas-pr.com/wp-content/uploads/2020/07/what-branding-actually-is.jpg\",\r\n            \"size\": \"50\",\r\n            \"filename\": \"branding\",\r\n            \"mime\": \"jpg\"\r\n        }\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{TryDoodBaseUrl}}images/updateOrDeleteImages/6945678396d93e43bbd83c24",
+              "host": [
+                "{{TryDoodBaseUrl}}images"
+              ],
+              "path": [
+                "updateOrDeleteImages",
+                "6945678396d93e43bbd83c24"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "razorpaytest",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"amount\": 500,\r\n    \"userId\": \"686b5a50a64077af35e64640\",\r\n    \"paymentMethod\": \"upi\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}razorpay/create-order",
+          "host": [
+            "{{baseUrl}}razorpay"
+          ],
+          "path": [
+            "create-order"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Tendidgit-Test",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://app.tendigit.in/api/sendtemplate.php?LicenseNumber=84073987890&APIKey=xMpg0QBZad8bvlfiALj1zOyuG&Contact=8889524382&Template=code_alert&Param=123456&URLParam=123456",
+          "protocol": "https",
+          "host": [
+            "app",
+            "tendigit",
+            "in"
+          ],
+          "path": [
+            "api",
+            "sendtemplate.php"
+          ],
+          "query": [
+            {
+              "key": "LicenseNumber",
+              "value": "84073987890"
+            },
+            {
+              "key": "APIKey",
+              "value": "xMpg0QBZad8bvlfiALj1zOyuG"
+            },
+            {
+              "key": "Contact",
+              "value": "8889524382"
+            },
+            {
+              "key": "Template",
+              "value": "code_alert"
+            },
+            {
+              "key": "Param",
+              "value": "123456"
+            },
+            {
+              "key": "URLParam",
+              "value": "123456"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Tendigit-message",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://app.tendigit.in/api/conversationvalidity.php?LicenseNumber=84073987890&APIKey=Z4aneV7twHIorAOXW53udLUFM&Contact=918889524382",
+          "protocol": "https",
+          "host": [
+            "app",
+            "tendigit",
+            "in"
+          ],
+          "path": [
+            "api",
+            "conversationvalidity.php"
+          ],
+          "query": [
+            {
+              "key": "LicenseNumber",
+              "value": "84073987890"
+            },
+            {
+              "key": "APIKey",
+              "value": "Z4aneV7twHIorAOXW53udLUFM"
+            },
+            {
+              "key": "Contact",
+              "value": "918889524382"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ]
+}

@@ -35,8 +35,8 @@ export default function Layout({ children }) {
         setMobileOpen={setMobileOpen}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Header setMobileOpen={setMobileOpen} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
+        <Header mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
         {children}
       </div>
     </div>

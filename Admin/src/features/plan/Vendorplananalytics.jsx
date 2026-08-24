@@ -138,7 +138,7 @@ function KpiCard({ icon: Icon, label, value, delta, deltaGood = true }) {
 
 function ChartCard({ title, subtitle, children }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+    <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
       <div className="mb-4">
         <h3 className="text-[13.5px] font-semibold text-neutral-100">{title}</h3>
         {subtitle && <p className="mt-0.5 text-[11.5px] text-neutral-500">{subtitle}</p>}
@@ -245,7 +245,7 @@ export default function VendorPlanAnalytics() {
 
         {/* Charts row 1 */}
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <ChartCard
               title="Revenue By Plan"
               subtitle="Monthly revenue split across all four vendor plans"
@@ -328,7 +328,7 @@ export default function VendorPlanAnalytics() {
 
         {/* Charts row 2 */}
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <ChartCard title="New vs Churned" subtitle="Vendor movement this month, by plan">
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={PLAN_PERFORMANCE} barGap={6}>

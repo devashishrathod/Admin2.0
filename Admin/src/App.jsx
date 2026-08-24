@@ -8,7 +8,7 @@ import Brand from './features/brand/Brand'
 import Voucher from './features/voucher/Voucher'
 import Plan from './features/plan/Plan'
 import SubCategory from './features/subcategory/SubCategory'
-import NewOboarding from './features/brand/NewOboarding'
+import NewOnboarding from './features/newOnboarding/NewOnboarding'
 import AnalyticsReport from './features/dashboard/Analyticsreport'
 import CustomerPlan from './features/plan/Customerplan'
 import VendorPlanAnalytics from './features/plan/Vendorplananalytics'
@@ -24,6 +24,9 @@ import { BrandProvider } from './features/brand/BrandContext'
 import FeatureCampaign from './features/featurecampaign/page/FeatureCampaign'
 import CouponCode from './features/coupon/Couponcode'
 import Banner from './features/banner/Banner'
+import PromotionalTicker from './features/promotionalTicker/PromotionalTicker'
+import Settings from './features/settings/Settings'
+import PromoCode from './features/promoCode/PromoCode'
 // import BrandPage from './features/BrandPage'
 // import LoginPage from './features/auth/components/LoginPage'
 
@@ -88,7 +91,7 @@ function App() {
           path="/new-onboarding"
           element={
             <Layout>
-              < NewOboarding />
+              <NewOnboarding />
             </Layout>
           }
         />
@@ -116,6 +119,33 @@ function App() {
           element={
             <Layout>
               <Banner />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/promotional-ticker"
+          element={
+            <Layout>
+              <PromotionalTicker />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <Layout>
+              <Settings />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/promo-code"
+          element={
+            <Layout>
+              <PromoCode />
             </Layout>
           }
         />

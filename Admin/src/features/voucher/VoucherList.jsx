@@ -78,12 +78,6 @@ export function computeStatus(v) {
 const STATUS_FILTERS = ["All", ...Object.values(VOUCHER_STATUSES)];
 
 /* ---- date helpers -------------------------------------------------------*/
-function formatDate(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
-}
 function formatDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -106,7 +100,13 @@ function personLabel(userObj, fallbackId) {
 function buildTimeline(v) {
   const entries = [];
   if (v.createdAt) {
-    entries.push({ action: "Created", date: v.createdAt, by: personLabel(v.createdByUser, v.createdBy), remarks: null });
+    const brandName = v.brand?.brandName;
+    entries.push({
+      action: "Created",
+      date: v.createdAt,
+      by: personLabel(v.createdByUser, v.createdBy),
+      remarks: brandName ? `For brand ${brandName}.` : null,
+    });
   }
   if (v.submittedAt) {
     entries.push({
@@ -183,9 +183,23 @@ function apiVersionToRow(v) {
     minBillAmount: primaryOffer?.minBillAmount ?? 0,
     maxDiscountAmount: primaryOffer?.maxDiscountAmount ?? 0,
     attachedSubBrandsCount: v.attachedSubBrandsCount ?? 0,
-    publishedDate: formatDate(v.publishedAt || v.createdAt),
-    startDate: formatDate(v.startAt),
-    endDate: formatDate(v.endAt),
+    // Date + time (not just the date) — shown in both the table and the
+    // details page.
+    createdAtDisplay: formatDateTime(v.createdAt),
+    // No fallback to createdAt here — a DRAFT/never-published version has
+    // no publishedAt at all, and showing createdAt in its place would
+    // falsely imply it went live.
+    publishedDate: v.publishedAt ? formatDateTime(v.publishedAt) : null,
+    startDate: formatDateTime(v.startAt),
+    endDate: formatDateTime(v.endAt),
+    // Who actually created this voucher — falls back to whoever submitted
+    // it when a separate creator isn't populated (older records only
+    // carry submittedBy/submittedByUser).
+    creator: {
+      name: personLabel(v.createdByUser, v.createdBy) || personLabel(v.submittedByUser, v.submittedBy) || "—",
+      role: v.createdByUser?.role || v.submittedByUser?.role || null,
+      whatsappNumber: v.createdByUser?.whatsappNumber || v.submittedByUser?.whatsappNumber || null,
+    },
     // The version's own `status` is the authoritative, up-to-date workflow
     // state — the parent `voucher.status` can lag behind it (e.g. a
     // version can show status "PUBLISHED" while `voucher.status` is still
@@ -329,9 +343,23 @@ export default function VoucherListing() {
         <button onClick={() => setSelectedId(row.id)} className="text-left hover:underline">
           <p className="font-medium text-neutral-50">{row.title}</p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-neutral-500">
-            <Tag size={10} /> {row.versionCode} · {row.brandName}
+            <Tag size={10} /> {row.versionCode}
           </p>
         </button>
+      ),
+    },
+    {
+      key: "brand",
+      label: "Brand",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          {row.brand?.logo && (
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-0.5">
+              <img src={row.brand.logo} alt={row.brandName} className="h-full w-full object-contain" />
+            </div>
+          )}
+          <span className="text-neutral-300">{row.brandName}</span>
+        </div>
       ),
     },
     {
@@ -359,6 +387,11 @@ export default function VoucherListing() {
           {row.startDate} → {row.endDate}
         </span>
       ),
+    },
+    {
+      key: "created",
+      label: "Created",
+      render: (row) => <span className="text-[12.5px] text-neutral-400">{row.createdAtDisplay}</span>,
     },
     {
       key: "status",

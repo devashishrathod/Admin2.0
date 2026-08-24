@@ -19,6 +19,20 @@ function maskValue(val, type) {
     return val.slice(0, 3) + '****' + val.slice(-3);
 }
 
+// Mirrors the access token into its own plain localStorage entry, outside
+// the zustand-persisted JSON blob — makes it directly visible/inspectable
+// in DevTools → Application → Local Storage, instead of buried inside the
+// 'trydood-auth' state object.
+const TOKEN_STORAGE_KEY = 'trydood-token';
+function syncTokenToStorage(token) {
+    if (typeof window === 'undefined') return;
+    if (token) {
+        window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+        window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+}
+
 export const useAuthStore = create(
     persist(
         (set, get) => ({
@@ -94,6 +108,7 @@ export const useAuthStore = create(
                         isAuthenticated: true,
                         verifyingOtp: false,
                     });
+                    syncTokenToStorage(payload.token ?? null);
                     return { success: true, data: res };
                 } catch (err) {
                     set({ error: err.message, verifyingOtp: false });
@@ -130,17 +145,20 @@ export const useAuthStore = create(
                 error: '',
             }),
 
-            logout: () => set({
-                user: null,
-                accessToken: null,
-                refreshToken: null,
-                isAuthenticated: false,
-                value: '',
-                inputType: null,
-                maskedValue: '',
-                sessionId: null,
-                modalOpen: false,
-            }),
+            logout: () => {
+                set({
+                    user: null,
+                    accessToken: null,
+                    refreshToken: null,
+                    isAuthenticated: false,
+                    value: '',
+                    inputType: null,
+                    maskedValue: '',
+                    sessionId: null,
+                    modalOpen: false,
+                });
+                syncTokenToStorage(null);
+            },
         }),
         {
             name: 'trydood-auth', // localStorage key
@@ -150,6 +168,11 @@ export const useAuthStore = create(
                 refreshToken: state.refreshToken,
                 isAuthenticated: state.isAuthenticated,
             }),
+            // Existing sessions (persisted before this key existed) get the
+            // standalone token entry synced on the very next load too.
+            onRehydrateStorage: () => (state) => {
+                if (state?.accessToken) syncTokenToStorage(state.accessToken);
+            },
         }
     )
 );

@@ -1154,7 +1154,7 @@ function MembershipTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
               <BarChart3 size={15} className="text-emerald-400" /> Active Members per Plan
@@ -1176,7 +1176,7 @@ function MembershipTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
           <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
             <Layers size={15} className="text-emerald-400" /> Plan Distribution
           </div>
@@ -1494,7 +1494,7 @@ function TransactionTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
               <Repeat size={15} className="text-emerald-400" /> Success vs Failed Transactions
@@ -1514,7 +1514,7 @@ function TransactionTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
           <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
             <Smartphone size={15} className="text-emerald-400" /> Payment Method Split
           </div>

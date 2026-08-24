@@ -4,8 +4,6 @@ import {
   Tag,
   Layers,
   Calendar,
-  Percent,
-  IndianRupee,
   CheckCircle2,
   XCircle,
   UploadCloud,
@@ -20,7 +18,9 @@ import {
   BadgeCheck,
   Hash,
   Layers3,
+  UserRound,
 } from "lucide-react";
+import Table from "../../components/common/Table";
 import { computeStatus, VoucherStatusBadge } from "./VoucherList";
 import { VOUCHER_STATUSES } from "./services/VoucherApi";
 
@@ -47,9 +47,9 @@ import { VOUCHER_STATUSES } from "./services/VoucherApi";
 
 function InfoRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-start gap-3 py-2.5">
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-800 text-neutral-400">
-        <Icon size={14} />
+    <div className="flex items-start gap-2.5 py-2">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-neutral-800 text-neutral-400">
+        <Icon size={12} />
       </span>
       <div>
         <p className="text-[11px] uppercase tracking-wide text-neutral-500">{label}</p>
@@ -79,6 +79,53 @@ const HISTORY_COLORS = {
   Archived: "text-neutral-400 bg-neutral-700/40",
 };
 
+const OFFER_COLUMNS = [
+  { key: "title", label: "Offer", render: (o) => <span className="font-medium text-neutral-100">{o.title}</span> },
+  {
+    key: "discount",
+    label: "Discount",
+    render: (o) => (
+      <span className="text-neutral-300">
+        {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
+      </span>
+    ),
+  },
+  { key: "minBillAmount", label: "Min Bill", render: (o) => <span className="text-neutral-300">₹{o.minBillAmount}</span> },
+  {
+    key: "maxDiscountAmount",
+    label: "Max Discount",
+    render: (o) => <span className="text-neutral-300">₹{o.maxDiscountAmount}</span>,
+  },
+  { key: "usageType", label: "Usage", render: (o) => <span className="text-neutral-400">{o.usageType}</span> },
+  {
+    key: "discountApplicableOn",
+    label: "Applicable On",
+    render: (o) => <span className="text-neutral-400">{o.discountApplicableOn}</span>,
+  },
+];
+
+const HISTORY_COLUMNS = [
+  {
+    key: "action",
+    label: "Action",
+    render: (h) => {
+      const Icon = HISTORY_ICONS[h.action] || Clock;
+      const color = HISTORY_COLORS[h.action] || "text-neutral-400 bg-neutral-700/40";
+      return (
+        <span className="flex items-center gap-2 font-medium text-neutral-100">
+          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${color}`}>
+            <Icon size={12} />
+          </span>
+          {h.action}
+        </span>
+      );
+    },
+  },
+  { key: "by", label: "By", render: (h) => <span className="text-neutral-300">{h.by || "—"}</span> },
+  { key: "date", label: "Date", render: (h) => <span className="text-neutral-400">{h.date}</span> },
+  { key: "remarks", label: "Remarks", render: (h) => <span className="text-neutral-400">{h.remarks || "—"}</span> },
+];
+
 export default function VoucherDetails({ voucher, onBack, onApprove, onReject, onPublish, busy, actionError }) {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectBox, setShowRejectBox] = useState(false);
@@ -100,7 +147,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
 
   return (
     <div className="min-h-screen bg-neutral-950 p-6">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -132,7 +179,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
           {/* Left: voucher info */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {/* Images */}
             {voucher.images?.length > 0 && (
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
@@ -150,11 +197,25 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
               </p>
               <div className="divide-y divide-neutral-800/70">
                 <InfoRow icon={Hash} label="Voucher Code" value={voucher.voucherCode} />
-                <InfoRow icon={Layers3} label="Version" value={`${voucher.versionCode} `} />
+                <InfoRow
+                  icon={Layers3}
+                  label="Version"
+                  value={`${voucher.versionCode}`}
+                />
+                <InfoRow
+                  icon={UserRound}
+                  label="Created By"
+                  value={`${voucher.creator?.name || "—"}${voucher.creator?.role ? ` · ${voucher.creator.role}` : ""}`}
+                />
                 <InfoRow icon={Layers} label="Category" value={`${voucher.category} · ${voucher.subCategory}`} />
-                <InfoRow icon={Calendar} label="Published" value={voucher.publishedDate} />
+                <InfoRow icon={Calendar} label="Created" value={voucher.createdAtDisplay} />
+                {/* Only shown once the voucher has actually been published —
+                    no fallback to createdAt, so a DRAFT never shows this. */}
+                {/* {voucher.publishedDate && (
+                  <InfoRow icon={Calendar} label="Published" value={voucher.publishedDate} />
+                )} */}
                 <InfoRow icon={Calendar} label="Validity" value={`${voucher.startDate} → ${voucher.endDate}`} />
-                <InfoRow icon={Store} label="Sub-Brands Attached" value={voucher.attachedSubBrandsCount ?? 0} />
+                {/* <InfoRow icon={Store} label="Sub-Brands Attached" value={voucher.attachedSubBrandsCount ?? 0} /> */}
               </div>
               {voucher.description && (
                 <div className="mt-3 rounded-xl bg-neutral-950/60 p-3.5">
@@ -176,77 +237,13 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
               )}
             </div>
 
-            {/* Brand */}
-            {voucher.brand && (
-              <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
-                  Brand
-                </p>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
-                    {voucher.brand.logo ? (
-                      <img src={voucher.brand.logo} alt={voucher.brand.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <Store size={18} className="text-neutral-600" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-[14px] font-semibold text-neutral-50">{voucher.brand.name}</p>
-                    <p className="text-[11.5px] text-neutral-500">{voucher.brand.legalName}</p>
-                  </div>
-                </div>
-                <div className="mt-2 divide-y divide-neutral-800/70">
-                  <InfoRow icon={BadgeCheck} label="Brand ID" value={voucher.brand.uniqueId} />
-                  <InfoRow icon={Store} label="Merchant ID" value={voucher.brand.merchantId} />
-                  <InfoRow icon={Phone} label="WhatsApp" value={voucher.brand.whatsappNumber} />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.brand.isApproved ? "bg-emerald-400/10 text-emerald-400" : "bg-neutral-700/40 text-neutral-400"
-                    }`}
-                  >
-                    {voucher.brand.isApproved ? "Brand Approved" : "Brand Pending Approval"}
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.brand.isSubscribed ? "bg-sky-400/10 text-sky-400" : "bg-neutral-700/40 text-neutral-400"
-                    }`}
-                  >
-                    {voucher.brand.isSubscribed ? "Subscribed" : "Not Subscribed"}
-                  </span>
-                  <span className="rounded-full bg-neutral-800 px-2.5 py-1 text-[11px] font-medium text-neutral-400">
-                    Onboarding: {voucher.brand.onboardingStatus}
-                  </span>
-                </div>
-              </div>
-            )}
-
             {/* Offers */}
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
               <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                 Offers ({voucher.offers?.length ?? 0})
               </p>
               {voucher.offers?.length ? (
-                <div className="space-y-2.5">
-                  {voucher.offers.map((offer, i) => (
-                    <div
-                      key={offer._id || i}
-                      className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3"
-                    >
-                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-400">
-                        <Percent size={14} />
-                      </span>
-                      <div>
-                        <p className="text-[13.5px] font-medium text-neutral-100">{offer.title}</p>
-                        <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-neutral-500">
-                          <IndianRupee size={10} /> Min bill ₹{offer.minBillAmount} · Max discount ₹
-                          {offer.maxDiscountAmount} · {offer.usageType} · on {offer.discountApplicableOn}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <Table columns={OFFER_COLUMNS} data={voucher.offers} rowKey="_id" emptyMessage="No offers on this version." />
               ) : (
                 <p className="text-[12.5px] text-neutral-500">No offers on this version.</p>
               )}
@@ -258,35 +255,13 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                   Approval History
                 </p>
-                <div className="space-y-4">
-                  {voucher.history.map((h, i) => {
-                    const Icon = HISTORY_ICONS[h.action] || Clock;
-                    const color = HISTORY_COLORS[h.action] || "text-neutral-400 bg-neutral-700/40";
-                    return (
-                      <div key={i} className="flex gap-3">
-                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${color}`}>
-                          <Icon size={14} />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-baseline gap-2">
-                            <p className="text-[13px] font-semibold text-neutral-100">{h.action}</p>
-                            <span className="text-[11px] text-neutral-500">
-                              {h.by ? `${h.by} · ` : ""}
-                              {h.date}
-                            </span>
-                          </div>
-                          {h.remarks && <p className="mt-0.5 text-[12.5px] text-neutral-400">{h.remarks}</p>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <Table columns={HISTORY_COLUMNS} data={voucher.history} rowKey="action" emptyMessage="No history yet." />
               </div>
             )}
           </div>
 
-          {/* Right: Super Admin approval panel */}
-          <div className="space-y-4">
+          {/* Right: Super Admin approval panel + brand + quick facts */}
+          <div className="min-w-0 space-y-4">
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
               <div className="mb-4 flex items-center gap-1.5 text-[14px] font-bold text-neutral-50">
                 <ShieldCheck size={16} className="text-emerald-400" /> Super Admin Approval
@@ -431,6 +406,52 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 </div>
               )}
             </div>
+
+            {/* Brand */}
+            {voucher.brand && (
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+                  Brand
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1.5">
+                    {voucher.brand.logo ? (
+                      <img src={voucher.brand.logo} alt={voucher.brand.name} className="h-full w-full object-contain" />
+                    ) : (
+                      <Store size={16} className="text-neutral-400" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-semibold text-neutral-50">{voucher.brand.name}</p>
+                    <p className="text-[11.5px] text-neutral-500">{voucher.brand.legalName}</p>
+                  </div>
+                </div>
+                <div className="mt-2 divide-y divide-neutral-800/70">
+                  <InfoRow icon={BadgeCheck} label="Brand ID" value={voucher.brand.uniqueId} />
+                  <InfoRow icon={Store} label="Merchant ID" value={voucher.brand.merchantId} />
+                  <InfoRow icon={Phone} label="WhatsApp" value={voucher.brand.whatsappNumber} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      voucher.brand.isApproved ? "bg-emerald-400/10 text-emerald-400" : "bg-neutral-700/40 text-neutral-400"
+                    }`}
+                  >
+                    {voucher.brand.isApproved ? "Brand Approved" : "Brand Pending Approval"}
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      voucher.brand.isSubscribed ? "bg-sky-400/10 text-sky-400" : "bg-neutral-700/40 text-neutral-400"
+                    }`}
+                  >
+                    {voucher.brand.isSubscribed ? "Subscribed" : "Not Subscribed"}
+                  </span>
+                  <span className="rounded-full bg-neutral-800 px-2.5 py-1 text-[11px] font-medium text-neutral-400">
+                    Onboarding: {voucher.brand.onboardingStatus}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Quick facts */}
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">

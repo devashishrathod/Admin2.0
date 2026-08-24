@@ -9,7 +9,7 @@ const api = axios.create({
     baseURL: BASE_URL,
 });
 
-// Attach auth token automatically (same pattern as authApi.js / CategoryApi.js)
+// Attach auth token automatically (same pattern as authApi.js / BannerApi.js)
 api.interceptors.request.use(async (config) => {
     const { useAuthStore } = await import('../../auth/store/authStore');
     const token = useAuthStore.getState().accessToken;
@@ -29,17 +29,7 @@ function handleError(error) {
     throw new Error(message);
 }
 
-// ── Banner media type — the `type` field itself must be uppercase
-// (backend validates it as one of IMAGE | VIDEO | GIF), while the file
-// upload still goes under the lowercase field name (image/video/gif) —
-// see buildFormData below.
-export const BANNER_TYPES = Object.freeze({
-    IMAGE: 'IMAGE',
-    VIDEO: 'VIDEO',
-    GIF: 'GIF',
-});
-
-// ── Redirect target types — matches the backend's `redirect` contract ───
+// ── Redirect target types — same contract as banners' `redirect` field ──
 // targetId is required for CATEGORY / DEAL / BRAND / OFFER, url is
 // required for EXTERNAL_URL, NONE needs neither.
 export const REDIRECT_TYPES = Object.freeze({
@@ -59,7 +49,7 @@ const TARGET_ID_REQUIRED = [
 ];
 
 // Builds and validates the `redirect` field, sent to the backend as a JSON
-// string, e.g. {"type":"BRAND","targetId":"...","url":"..."}.
+// string, e.g. {"type":"CATEGORY","targetId":"..."}.
 export function buildRedirectPayload({ type = REDIRECT_TYPES.NONE, targetId, url } = {}) {
     if (TARGET_ID_REQUIRED.includes(type) && !targetId) {
         throw new Error(`A target is required for redirect type ${type}`);
@@ -73,22 +63,18 @@ export function buildRedirectPayload({ type = REDIRECT_TYPES.NONE, targetId, url
     return JSON.stringify(payload);
 }
 
-// Builds multipart/form-data. `file` is uploaded under whichever field
-// name matches `type` (image/video/gif) — only appended when a new File
-// was actually selected, so updates can omit it to keep the existing media.
-function buildFormData({ title, description, type, redirect, startDate, endDate, isActive, file }) {
+// Builds multipart/form-data. `icon` is only appended when a new File was
+// actually selected, so updates can omit it to keep the existing icon.
+function buildFormData({ title, redirect, displayOrder, startDate, endDate, isActive, icon }) {
     const fd = new FormData();
     fd.append('title', title ?? '');
-    if (description !== undefined) fd.append('description', description ?? '');
-    if (type) fd.append('type', type);
     if (redirect) fd.append('redirect', typeof redirect === 'string' ? redirect : JSON.stringify(redirect));
+    fd.append('displayOrder', String(displayOrder ?? 0));
     if (startDate) fd.append('startDate', startDate);
     if (endDate) fd.append('endDate', endDate);
     fd.append('isActive', String(Boolean(isActive)));
-    // The file field name is lowercase (image/video/gif) even though the
-    // `type` value sent above is uppercase.
-    if (file instanceof File && type) {
-        fd.append(type.toLowerCase(), file);
+    if (icon instanceof File) {
+        fd.append('icon', icon);
     }
     return fd;
 }
@@ -97,32 +83,20 @@ function buildFormData({ title, description, type, redirect, startDate, endDate,
  * Payload shape sent to / received from the API
  *
  * {
- *   _id, title, description, type: "image"|"video"|"gif",
- *   image|video|gif (URL string on read, matching `type`),
- *   redirect: { type, targetId?, url? }, startDate, endDate,
- *   isActive: boolean, createdAt
+ *   _id, title, icon (URL string on read), redirect: { type, targetId?, url? },
+ *   displayOrder, startDate, endDate, isActive: boolean, createdAt
  * }
  * ---------------------------------------------------------------------- */
 
-// ── Create Banner ─────────────────────────────────────────
-// POST {{TryDood2.0BaseUrl}}/banners/create
-// form-data: { title, description, type, redirect (JSON string),
-// startDate, endDate, isActive, image|video|gif (file, matching type) }
-export async function createBanner({
-    title,
-    description = '',
-    type,
-    redirect,
-    startDate,
-    endDate,
-    isActive = true,
-    file,
-}) {
+// ── Create Promotional Ticker ─────────────────────────────────────────
+// POST {{TryDood2.0BaseUrl}}/promotionalTickers/create
+// form-data: { title, redirect (JSON string, optional), displayOrder,
+// startDate, endDate, isActive, icon (file) }
+export async function createPromotionalTicker({ title, redirect, displayOrder = 0, startDate, endDate, isActive = true, icon }) {
     try {
         if (!title) throw new Error('title is required');
-        if (!type) throw new Error('type is required');
-        const fd = buildFormData({ title, description, type, redirect, startDate, endDate, isActive, file });
-        const { data } = await api.post('/banners/create', fd, {
+        const fd = buildFormData({ title, redirect, displayOrder, startDate, endDate, isActive, icon });
+        const { data } = await api.post('/promotionalTickers/create', fd, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
         return data;
@@ -131,28 +105,28 @@ export async function createBanner({
     }
 }
 
-// ── Get All Banners (paginated + searchable) ──────────────
-// GET {{TryDood2.0BaseUrl}}/banners/getAll?page=&limit=&search=
-export async function getBanners({ page = 1, limit = 10, search = '' } = {}) {
+// ── Get All Promotional Tickers (paginated + searchable) ──────────────
+// GET {{TryDood2.0BaseUrl}}/promotionalTickers/getAll?page=&limit=&search=
+export async function getPromotionalTickers({ page = 1, limit = 10, search = '' } = {}) {
     try {
         const params = { page, limit };
         if (search) params.search = search;
-        const { data } = await api.get('/banners/get-all',);
+        const { data } = await api.get('/promotionalTickers/get-all', { params });
         return data;
     } catch (error) {
         handleError(error);
     }
 }
 
-// ── Update Banner ───────────────────────────────────────────
-// PUT {{TryDood2.0BaseUrl}}/banners/update/:id
-// form-data: same fields as create — `type`/file are optional and only
-// need sending if the banner's media is being changed.
-export async function updateBanner(id, { title, description, type, redirect, startDate, endDate, isActive = true, file } = {}) {
+// ── Update Promotional Ticker ───────────────────────────────────────────
+// PUT {{TryDood2.0BaseUrl}}/promotionalTickers/update/:id
+// form-data: same fields as create — `icon` is optional and only needs
+// sending if the ticker's icon is being changed.
+export async function updatePromotionalTicker(id, { title, redirect, displayOrder, startDate, endDate, isActive = true, icon } = {}) {
     try {
         if (!id) throw new Error('id is required');
-        const fd = buildFormData({ title, description, type, redirect, startDate, endDate, isActive, file });
-        const { data } = await api.put(`/banners/update/${id}`, fd, {
+        const fd = buildFormData({ title, redirect, displayOrder, startDate, endDate, isActive, icon });
+        const { data } = await api.put(`/promotionalTickers/update/${id}`, fd, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
         return data;
@@ -161,12 +135,12 @@ export async function updateBanner(id, { title, description, type, redirect, sta
     }
 }
 
-// ── Delete Banner ────────────────────────────────────────────
-// DELETE {{TryDood2.0BaseUrl}}/banners/delete/:id
-export async function deleteBanner(id) {
+// ── Delete Promotional Ticker ────────────────────────────────────────────
+// DELETE {{TryDood2.0BaseUrl}}/promotionalTickers/delete/:id
+export async function deletePromotionalTicker(id) {
     try {
         if (!id) throw new Error('id is required');
-        const { data } = await api.delete(`/banners/delete/${id}`);
+        const { data } = await api.delete(`/promotionalTickers/delete/${id}`);
         return data;
     } catch (error) {
         handleError(error);
@@ -174,11 +148,10 @@ export async function deleteBanner(id) {
 }
 
 export default {
-    createBanner,
-    getBanners,
-    updateBanner,
-    deleteBanner,
+    createPromotionalTicker,
+    getPromotionalTickers,
+    updatePromotionalTicker,
+    deletePromotionalTicker,
     buildRedirectPayload,
-    BANNER_TYPES,
     REDIRECT_TYPES,
 };

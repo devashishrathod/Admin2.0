@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   LayoutDashboard,
   BarChart3,
@@ -16,6 +16,9 @@ import {
   ArrowLeftRight,
   HandCoins,
   Image,
+  MonitorPlay,
+  X,
+  Percent,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -35,8 +38,9 @@ const NAV_GROUPS = [
     items: [
       { id: "brand", label: "Brand", icon: BadgeCheck, path: "/brand" },
       { id: "banner", label: "Banner", icon: Image, path: "/banner" },
+      { id: "promotional-ticker", label: "Promotional Ticker", icon: MonitorPlay, path: "/promotional-ticker" },
       { id: "vendor-plan", label: "Vendor Plan", icon: CreditCard, path: "/vendor-plan" },
-            { id: "vendor-plan", label: "Vendor Listing", icon: CreditCard, path: "/vendor-listing" },
+      { id: "vendor-plan", label: "Voucher Listing", icon: CreditCard, path: "/vendor-listing" },
       { id: "new-onboarding", label: "New Onboarding", icon: BadgeCheck, path: "/new-onboarding" },
       { id: "analysis-report-catalog", label: "Vender Analysis Report", icon: ClipboardList, path: "/analysis-report-vendor" },
     ],
@@ -58,7 +62,12 @@ const NAV_GROUPS = [
       { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
       { id: "settings", label: "Feature Campaign", icon: Settings, path: "/feature_campaign" },
           { id: "settlements", label: "Coupon Code", icon: HandCoins, path: "/coupon" },
+      { id: "promo-code", label: "Promo Code", icon: Percent, path: "/promo-code" },
     ],
+  },
+  {
+    label: "System",
+    items: [{ id: "app-settings", label: "Settings", icon: Settings, path: "/settings" }],
   },
 ];
 
@@ -145,12 +154,21 @@ export default function Sidebar({
   mobileOpen,
   setMobileOpen,
 }) {
+  // Lock body scroll while the mobile drawer is open — otherwise the page
+  // behind it scrolls too, showing two competing scrollbars at once.
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
+
   return (
     <>
       <aside
-        className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-neutral-800 bg-neutral-900 transition-all duration-300 md:sticky
-          ${collapsed ? "md:w-[76px]" : "md:w-[252px]"}
-          ${mobileOpen ? "left-0 w-[240px]" : "-left-[260px] w-[240px] md:left-0"}
+        className={`fixed top-0 z-30 flex h-screen flex-col border-r border-neutral-800 bg-neutral-900 transition-all duration-300 lg:sticky
+          ${collapsed ? "lg:w-[76px]" : "lg:w-[252px]"}
+          ${mobileOpen ? "left-0 w-[240px]" : "-left-[260px] w-[240px] lg:left-0"}
         `}
       >
         {/* Head */}
@@ -162,15 +180,27 @@ export default function Sidebar({
           >
             Trydood
           </span>
+          {/* Collapse-to-icons toggle — desktop only. Mobile's drawer width
+              is fixed regardless of `collapsed`, so this control has no
+              effect there and would be a dead button if shown. */}
           <button
             onClick={() => setCollapsed((c) => !c)}
             aria-label="Toggle sidebar"
-            className="ml-auto flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-neutral-800 bg-neutral-800 text-neutral-400 transition-colors hover:border-emerald-600 hover:text-emerald-400"
+            className="ml-auto hidden h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-neutral-800 bg-neutral-800 text-neutral-400 transition-colors hover:border-emerald-600 hover:text-emerald-400 lg:flex"
           >
             <ChevronLeft
               size={14}
               className={`transition-transform duration-300 ${collapsed ? "rotate-180" : "rotate-0"}`}
             />
+          </button>
+
+          {/* Close button — mobile drawer only. */}
+          <button
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="ml-auto flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-neutral-800 bg-neutral-800 text-neutral-400 transition-colors hover:border-red-500/60 hover:text-red-400 lg:hidden"
+          >
+            <X size={14} />
           </button>
         </div>
 
@@ -224,7 +254,7 @@ export default function Sidebar({
       {mobileOpen && (
         <div
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-20 bg-black/50 md:hidden"
+          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
         />
       )}
     </>

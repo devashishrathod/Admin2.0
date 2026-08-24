@@ -24,51 +24,89 @@ import {
 } from "../plan/services/planApi";
 
 /* -------------------------------------------------------------------------
- * Data shape (matches the incoming form payload)
+ * Data shape (matches the real API payload)
  *
  * {
- *   id, name, description, price, oldPrice, discountLabel,
+ *   id, name, description, price, strikePrice,
+ *   discountType: "PERCENT" | "FLAT", discountPercent,
  *   type: "MONTHLY" | "YEARLY",
  *   status: "Active" | "Inactive",
- *   popular: boolean,
+ *   popular: boolean,               // UI-only, not persisted by the API
  *   benefits: string[],
  *   limitations: string[],
- *   features: [{ id, title, value, available }]
+ *   features: [{ id, title, value, available }],
+ *   entitlements: {
+ *     subBrands: { isUnlimited, limit? },
+ *     franchises: { isUnlimited, limit? },
+ *     vouchers: { isEnabled },
+ *     dealPack: { isEnabled },
+ *     prioritySupport: { isEnabled },
+ *     showcase: { isEnabled },
+ *   }
  * }
  * ---------------------------------------------------------------------- */
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+const emptyEntitlements = () => ({
+  subBrands: { isUnlimited: false, limit: 0 },
+  franchises: { isUnlimited: false, limit: 0 },
+  vouchers: { isEnabled: false },
+  dealPack: { isEnabled: false },
+  prioritySupport: { isEnabled: false },
+  showcase: { isEnabled: false },
+});
 
 const emptyPlanDraft = () => ({
   id: null,
   name: "",
   description: "",
   price: "",
-  oldPrice: "",
-  discountLabel: "",
+  strikePrice: "",
+  discountType: "PERCENT",
+  discountPercent: "",
   type: "MONTHLY",
   status: "Active",
   popular: false,
   benefits: [],
   limitations: [],
   features: [],
+  entitlements: emptyEntitlements(),
 });
 
 // Normalizes whatever the API returns into the shape every component below
 // expects — fills in missing arrays/fields with safe defaults so nothing
 // crashes on `.length`, `.map`, etc. Handles both `_id` and `id`.
 //
-// NOTE: the real API does NOT return `oldPrice`, `discountLabel`, or
-// `popular` — those are UI-only fields for now (kept so the form still
-// works, but they won't persist unless the backend adds support).
+// NOTE: `popular` is still UI-only — the real API doesn't return it.
+function normalizeEntitlementLimit(raw) {
+  return {
+    isUnlimited: Boolean(raw?.isUnlimited),
+    limit: raw?.limit ?? 0,
+  };
+}
+
+function normalizeEntitlements(raw) {
+  const defaults = emptyEntitlements();
+  return {
+    subBrands: raw?.subBrands ? normalizeEntitlementLimit(raw.subBrands) : defaults.subBrands,
+    franchises: raw?.franchises ? normalizeEntitlementLimit(raw.franchises) : defaults.franchises,
+    vouchers: { isEnabled: Boolean(raw?.vouchers?.isEnabled) },
+    dealPack: { isEnabled: Boolean(raw?.dealPack?.isEnabled) },
+    prioritySupport: { isEnabled: Boolean(raw?.prioritySupport?.isEnabled) },
+    showcase: { isEnabled: Boolean(raw?.showcase?.isEnabled) },
+  };
+}
+
 function normalizePlan(raw) {
   return {
     id: raw?._id ?? raw?.id ?? uid(),
     name: raw?.name ?? "",
     description: raw?.description ?? "",
     price: raw?.price ?? 0,
-    oldPrice: raw?.oldPrice ?? "",
-    discountLabel: raw?.discountLabel ?? "",
+    strikePrice: raw?.strikePrice ?? "",
+    discountType: raw?.discountType ?? "PERCENT",
+    discountPercent: raw?.discountPercent ?? 0,
     type: raw?.type ?? "MONTHLY",
     durationInDays: raw?.durationInDays ?? "",
     status: raw?.status ?? (raw?.isActive === false ? "Inactive" : "Active"),
@@ -83,6 +121,7 @@ function normalizePlan(raw) {
           available: Boolean(f?.available),
         }))
       : [],
+    entitlements: normalizeEntitlements(raw?.entitlements),
   };
 }
 
@@ -151,14 +190,16 @@ function PlanCard({ plan, onEdit, onDelete }) {
         <TypePill type={plan.type} />
       </div>
       <div className="mt-1 flex items-center gap-2">
-        {plan.oldPrice ? (
+        {plan.strikePrice ? (
           <span className="text-[12.5px] text-neutral-600 line-through">
-            ₹{Number(plan.oldPrice).toLocaleString("en-IN")}
+            ₹{Number(plan.strikePrice).toLocaleString("en-IN")}
           </span>
         ) : null}
-        {plan.discountLabel ? (
+        {Number(plan.discountPercent) > 0 ? (
           <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-400">
-            {plan.discountLabel}
+            {plan.discountType === "PERCENT"
+              ? `${plan.discountPercent}% OFF`
+              : `₹${plan.discountPercent} OFF`}
           </span>
         ) : null}
       </div>
@@ -462,6 +503,112 @@ function EditableFeatureList({ features, onChange }) {
 }
 
 /* -------------------------------------------------------------------------
+ * Entitlements editor — subBrands/franchises are unlimited-or-limited,
+ * the rest (vouchers, dealPack, prioritySupport, showcase) are plain
+ * enable/disable switches.
+ * ---------------------------------------------------------------------- */
+
+function EnableToggle({ label, enabled, onChange }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!enabled)}
+      aria-pressed={enabled}
+      className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left text-[12.5px] font-medium transition-colors ${
+        enabled
+          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
+          : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+      }`}
+    >
+      {label}
+      <span
+        className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+          enabled ? "bg-emerald-400/20" : "bg-neutral-800"
+        }`}
+      >
+        {enabled ? "Enabled" : "Disabled"}
+      </span>
+    </button>
+  );
+}
+
+function LimitOrUnlimitedField({ label, entitlement, onChange }) {
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[12.5px] font-medium text-neutral-300">{label}</span>
+        <button
+          type="button"
+          onClick={() => onChange({ ...entitlement, isUnlimited: !entitlement.isUnlimited })}
+          aria-pressed={entitlement.isUnlimited}
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors ${
+            entitlement.isUnlimited
+              ? "bg-emerald-400/10 text-emerald-400"
+              : "bg-neutral-800 text-neutral-400"
+          }`}
+        >
+          {entitlement.isUnlimited ? "Unlimited" : "Limited"}
+        </button>
+      </div>
+      {!entitlement.isUnlimited && (
+        <input
+          type="number"
+          min={0}
+          value={entitlement.limit}
+          onChange={(e) => onChange({ ...entitlement, limit: e.target.value })}
+          placeholder="e.g. 5"
+          className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none"
+        />
+      )}
+    </div>
+  );
+}
+
+function EntitlementsEditor({ entitlements, onChange }) {
+  const set = (key, value) => onChange({ ...entitlements, [key]: value });
+
+  return (
+    <div>
+      <p className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
+        Entitlements
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <LimitOrUnlimitedField
+          label="Sub Brands"
+          entitlement={entitlements.subBrands}
+          onChange={(next) => set("subBrands", next)}
+        />
+        <LimitOrUnlimitedField
+          label="Franchises"
+          entitlement={entitlements.franchises}
+          onChange={(next) => set("franchises", next)}
+        />
+        <EnableToggle
+          label="Vouchers"
+          enabled={entitlements.vouchers.isEnabled}
+          onChange={(v) => set("vouchers", { isEnabled: v })}
+        />
+        <EnableToggle
+          label="Deal Pack"
+          enabled={entitlements.dealPack.isEnabled}
+          onChange={(v) => set("dealPack", { isEnabled: v })}
+        />
+        <EnableToggle
+          label="Priority Support"
+          enabled={entitlements.prioritySupport.isEnabled}
+          onChange={(v) => set("prioritySupport", { isEnabled: v })}
+        />
+        <EnableToggle
+          label="Showcase"
+          enabled={entitlements.showcase.isEnabled}
+          onChange={(v) => set("showcase", { isEnabled: v })}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
  * Add / Edit plan modal
  * ---------------------------------------------------------------------- */
 
@@ -529,26 +676,38 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
               />
             </div>
           </Field>
-          <Field label="Old Price (₹, optional)">
+          <Field label="Strike Price (₹, optional)">
             <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
               <IndianRupee size={13} className="text-neutral-500" />
               <input
                 type="number"
-                value={draft.oldPrice}
-                onChange={(e) => setField("oldPrice", e.target.value)}
+                value={draft.strikePrice}
+                onChange={(e) => setField("strikePrice", e.target.value)}
                 placeholder="3999"
                 className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
               />
             </div>
           </Field>
 
-          <Field label="Discount Label">
+          <Field label="Discount Type">
+            <select
+              value={draft.discountType}
+              onChange={(e) => setField("discountType", e.target.value)}
+              className={inputClass}
+            >
+              <option value="PERCENT">Percent</option>
+              <option value="FLAT">Flat</option>
+            </select>
+          </Field>
+          <Field label={draft.discountType === "PERCENT" ? "Discount (%)" : "Discount (₹)"}>
             <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
               <Tag size={13} className="text-neutral-500" />
               <input
-                value={draft.discountLabel}
-                onChange={(e) => setField("discountLabel", e.target.value)}
-                placeholder="25% OFF"
+                type="number"
+                min={0}
+                value={draft.discountPercent}
+                onChange={(e) => setField("discountPercent", e.target.value)}
+                placeholder="25"
                 className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
               />
             </div>
@@ -604,6 +763,14 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
           <EditableFeatureList
             features={draft.features}
             onChange={(next) => setField("features", next)}
+          />
+        </div>
+
+        {/* Entitlements */}
+        <div className="mt-6">
+          <EntitlementsEditor
+            entitlements={draft.entitlements}
+            onChange={(next) => setField("entitlements", next)}
           />
         </div>
 
@@ -722,6 +889,14 @@ export default function Plan() {
       benefits: [...plan.benefits],
       limitations: [...plan.limitations],
       features: plan.features.map((f) => ({ ...f })),
+      entitlements: {
+        subBrands: { ...plan.entitlements.subBrands },
+        franchises: { ...plan.entitlements.franchises },
+        vouchers: { ...plan.entitlements.vouchers },
+        dealPack: { ...plan.entitlements.dealPack },
+        prioritySupport: { ...plan.entitlements.prioritySupport },
+        showcase: { ...plan.entitlements.showcase },
+      },
     });
     setIsNew(false);
     setSaveError("");
@@ -741,12 +916,15 @@ export default function Plan() {
       features: draft.features.filter((f) => f.title.trim()),
     };
 
-    // The real API doesn't accept oldPrice/discountLabel/popular/status —
-    // it wants isActive (boolean) and durationInDays instead.
+    // The real API doesn't accept `popular`/`status` — it wants `isActive`
+    // (boolean) and `durationInDays` instead.
     const apiPayload = {
       name: cleaned.name.trim(),
       description: cleaned.description,
       price: Number(cleaned.price) || 0,
+      strikePrice: Number(cleaned.strikePrice) || 0,
+      discountType: cleaned.discountType,
+      discountPercent: Number(cleaned.discountPercent) || 0,
       type: cleaned.type,
       durationInDays: cleaned.type === "YEARLY" ? 365 : 30,
       isActive: cleaned.status === "Active",
@@ -757,6 +935,18 @@ export default function Plan() {
         value: f.value,
         available: Boolean(f.available),
       })),
+      entitlements: {
+        subBrands: cleaned.entitlements.subBrands.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.subBrands.limit) || 0 },
+        franchises: cleaned.entitlements.franchises.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.franchises.limit) || 0 },
+        vouchers: { isEnabled: Boolean(cleaned.entitlements.vouchers.isEnabled) },
+        dealPack: { isEnabled: Boolean(cleaned.entitlements.dealPack.isEnabled) },
+        prioritySupport: { isEnabled: Boolean(cleaned.entitlements.prioritySupport.isEnabled) },
+        showcase: { isEnabled: Boolean(cleaned.entitlements.showcase.isEnabled) },
+      },
     };
 
     setSaving(true);

@@ -36,13 +36,21 @@ function handleError(error) {
  * Payload shape sent to / received from the API
  *
  * {
- *   name, description, price, oldPrice, discountLabel,
+ *   name, description, price, strikePrice,
+ *   discountType: "PERCENT" | "FLAT", discountPercent,
  *   type: "MONTHLY" | "YEARLY",
- *   status: "Active" | "Inactive",
- *   popular: boolean,
+ *   isActive: boolean,
  *   benefits: string[],
  *   limitations: string[],
- *   features: [{ title, value, available }]
+ *   features: [{ title, value, available }],
+ *   entitlements: {
+ *     subBrands: { isUnlimited, limit? },
+ *     franchises: { isUnlimited, limit? },
+ *     vouchers: { isEnabled },
+ *     dealPack: { isEnabled },
+ *     prioritySupport: { isEnabled },
+ *     showcase: { isEnabled }
+ *   }
  * }
  * ---------------------------------------------------------------------- */
 

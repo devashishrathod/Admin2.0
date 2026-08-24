@@ -215,7 +215,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mb-3.5 grid grid-cols-1 items-stretch gap-3.5 lg:grid-cols-[1.5fr_1fr]">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
           <div className="mb-3.5 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
               <Sparkles size={15} className="text-emerald-400" /> Weekly Revenue
@@ -246,7 +246,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
           <div className="mb-3.5 flex items-center justify-between">
             <div className="text-[14.5px] font-bold text-neutral-50">Recent Activity</div>
             <MoreHorizontal size={16} className="cursor-pointer text-neutral-500" />

@@ -132,18 +132,18 @@ function normalizePlan(raw) {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[12px] font-medium text-neutral-400">{label}</span>
+      <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
       {children}
     </label>
   );
 }
 
 const inputClass =
-  "w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none";
+  "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
 function TypePill({ type }) {
   return (
-    <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-300">
+    <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
       {type === "MONTHLY" ? "Monthly" : "Yearly"}
     </span>
   );
@@ -156,8 +156,8 @@ function TypePill({ type }) {
 function PlanCard({ plan, onEdit, onDelete }) {
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border bg-neutral-900 p-5 ${
-        plan.popular ? "border-emerald-400/60" : "border-neutral-800"
+      className={`relative flex flex-col rounded-2xl border bg-white p-5 dark:bg-neutral-900 ${
+        plan.popular ? "border-emerald-400/60" : "border-neutral-200 dark:border-neutral-800"
       }`}
     >
       {plan.popular && (
@@ -169,14 +169,14 @@ function PlanCard({ plan, onEdit, onDelete }) {
 
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="text-[15px] font-semibold text-neutral-50">{plan.name}</h3>
+          <h3 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h3>
           <p className="mt-0.5 text-[12px] text-neutral-500">{plan.description}</p>
         </div>
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
             plan.status === "Active"
-              ? "bg-emerald-400/10 text-emerald-400"
-              : "bg-neutral-700/40 text-neutral-400"
+              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
           }`}
         >
           {plan.status}
@@ -184,7 +184,7 @@ function PlanCard({ plan, onEdit, onDelete }) {
       </div>
 
       <div className="mt-4 flex items-baseline gap-2">
-        <span className="text-[24px] font-bold text-neutral-50">
+        <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">
           ₹{Number(plan.price || 0).toLocaleString("en-IN")}
         </span>
         <TypePill type={plan.type} />
@@ -196,7 +196,7 @@ function PlanCard({ plan, onEdit, onDelete }) {
           </span>
         ) : null}
         {Number(plan.discountPercent) > 0 ? (
-          <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-400">
+          <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
             {plan.discountType === "PERCENT"
               ? `${plan.discountPercent}% OFF`
               : `₹${plan.discountPercent} OFF`}
@@ -207,8 +207,8 @@ function PlanCard({ plan, onEdit, onDelete }) {
       {plan.benefits.length > 0 && (
         <ul className="mt-4 space-y-1.5">
           {plan.benefits.slice(0, 3).map((b, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-400">
-              <ThumbsUp size={12} className="mt-0.5 shrink-0 text-emerald-400" />
+            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-500 dark:text-neutral-400">
+              <ThumbsUp size={12} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
               {b}
             </li>
           ))}
@@ -222,24 +222,24 @@ function PlanCard({ plan, onEdit, onDelete }) {
         <ul className="mt-2 space-y-1.5">
           {plan.limitations.slice(0, 2).map((l, i) => (
             <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-600">
-              <ThumbsDown size={12} className="mt-0.5 shrink-0 text-red-400/70" />
+              <ThumbsDown size={12} className="mt-0.5 shrink-0 text-red-600/70 dark:text-red-400/70" />
               {l}
             </li>
           ))}
         </ul>
       )}
 
-      <div className="mt-5 flex items-center gap-2 border-t border-neutral-800 pt-4">
+      <div className="mt-5 flex items-center gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
         <button
           onClick={() => onEdit(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-2 text-[12.5px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-400 dark:border-neutral-800 dark:text-neutral-300"
         >
           <Pencil size={13} />
           Edit
         </button>
         <button
           onClick={() => onDelete(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-2 text-[12.5px] font-medium text-neutral-300 transition-colors hover:border-red-500/60 hover:text-red-400"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-red-500/60 hover:text-red-400 dark:border-neutral-800 dark:text-neutral-300"
         >
           <Trash2 size={13} />
           Delete
@@ -270,7 +270,7 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
 
   if (!plans.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+      <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
         No plans yet — add a plan to build the comparison table.
       </div>
     );
@@ -278,25 +278,25 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
 
   if (!featureTitles.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+      <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
         No features added to any plan yet — add features from the plan editor.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800">
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-[13px]">
           <thead>
-            <tr className="bg-neutral-900">
+            <tr className="bg-white dark:bg-neutral-900">
               <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                 Feature
               </th>
               {plans.map((plan) => (
                 <th
                   key={plan.id}
-                  className="px-4 py-3.5 text-center text-[12.5px] font-semibold text-neutral-200"
+                  className="px-4 py-3.5 text-center text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-200"
                 >
                   {plan.name}
                 </th>
@@ -305,15 +305,15 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
           </thead>
           <tbody>
             {featureTitles.map((title, i) => (
-              <tr key={title} className={i % 2 === 0 ? "bg-neutral-950" : "bg-neutral-900/40"}>
-                <td className="px-4 py-3 text-neutral-400">{title}</td>
+              <tr key={title} className={i % 2 === 0 ? "bg-neutral-50 dark:bg-neutral-950" : "bg-neutral-100 dark:bg-neutral-900/40"}>
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{title}</td>
                 {plans.map((plan) => {
                   const feature = plan.features.find((f) => f.title === title);
                   const cellId = `${plan.id}-${title}`;
 
                   if (!feature) {
                     return (
-                      <td key={plan.id} className="px-4 py-3 text-center text-neutral-700">
+                      <td key={plan.id} className="px-4 py-3 text-center text-neutral-400 dark:text-neutral-700">
                         —
                       </td>
                     );
@@ -330,9 +330,9 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
                           className="inline-flex shrink-0"
                         >
                           {feature.available ? (
-                            <Check size={15} className="text-emerald-400 transition-transform hover:scale-110" />
+                            <Check size={15} className="text-emerald-600 transition-transform hover:scale-110 dark:text-emerald-400" />
                           ) : (
-                            <X size={15} className="text-red-400/80 transition-transform hover:scale-110" />
+                            <X size={15} className="text-red-600/80 transition-transform hover:scale-110 dark:text-red-400/80" />
                           )}
                         </button>
                         {isEditing ? (
@@ -347,12 +347,12 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
                               if (e.key === "Enter") e.target.blur();
                               if (e.key === "Escape") setEditingCell(null);
                             }}
-                            className="w-16 rounded-md border border-emerald-400/50 bg-neutral-950 px-1.5 py-0.5 text-center text-[12px] text-neutral-200 focus:outline-none"
+                            className="w-16 rounded-md border border-emerald-400/50 bg-neutral-50 px-1.5 py-0.5 text-center text-[12px] text-neutral-800 focus:outline-none dark:bg-neutral-950 dark:text-neutral-200"
                           />
                         ) : (
                           <button
                             onClick={() => setEditingCell(cellId)}
-                            className="rounded-md px-1.5 py-0.5 text-[12px] text-neutral-400 transition-colors hover:bg-neutral-800"
+                            className="rounded-md px-1.5 py-0.5 text-[12px] text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                           >
                             {feature.value || "—"}
                           </button>
@@ -392,7 +392,7 @@ function EditableStringList({ title, icon, items, placeholder, accent, onChange 
         </p>
         <button
           onClick={add}
-          className={`flex items-center gap-1 rounded-lg border border-neutral-800 px-2 py-1 text-[11.5px] font-medium text-neutral-300 transition-colors hover:${accent}`}
+          className={`flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11.5px] font-medium text-neutral-700 transition-colors hover:${accent} dark:border-neutral-800 dark:text-neutral-300`}
         >
           <Plus size={12} />
           Add
@@ -400,7 +400,7 @@ function EditableStringList({ title, icon, items, placeholder, accent, onChange 
       </div>
       <div className="space-y-1.5">
         {items.length === 0 && (
-          <p className="rounded-xl border border-dashed border-neutral-800 px-3 py-2.5 text-[12px] text-neutral-600">
+          <p className="rounded-xl border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] text-neutral-600 dark:border-neutral-800">
             None added yet.
           </p>
         )}
@@ -410,7 +410,7 @@ function EditableStringList({ title, icon, items, placeholder, accent, onChange 
               value={item}
               onChange={(e) => update(i, e.target.value)}
               placeholder={placeholder}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
             <button
               onClick={() => remove(i)}
@@ -448,7 +448,7 @@ function EditableFeatureList({ features, onChange }) {
         </p>
         <button
           onClick={add}
-          className="flex items-center gap-1 rounded-lg border border-neutral-800 px-2 py-1 text-[11.5px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400"
+          className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
         >
           <Plus size={12} />
           Add Feature
@@ -457,26 +457,26 @@ function EditableFeatureList({ features, onChange }) {
 
       <div className="space-y-1.5">
         {features.length === 0 && (
-          <p className="rounded-xl border border-dashed border-neutral-800 px-3 py-2.5 text-[12px] text-neutral-600">
+          <p className="rounded-xl border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-600">
             No features added yet.
           </p>
         )}
         {features.map((f, i) => (
           <div
             key={f.id}
-            className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2"
+            className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"
           >
             <input
               value={f.title}
               onChange={(e) => update(i, { title: e.target.value })}
               placeholder="Feature title, e.g. Sub Brand"
-              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
             <input
               value={f.value}
               onChange={(e) => update(i, { value: e.target.value })}
               placeholder="Value"
-              className="w-24 shrink-0 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-right text-[12px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+              className="w-24 shrink-0 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-right text-[12px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
             <button
               onClick={() => update(i, { available: !f.available })}
@@ -516,14 +516,14 @@ function EnableToggle({ label, enabled, onChange }) {
       aria-pressed={enabled}
       className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left text-[12.5px] font-medium transition-colors ${
         enabled
-          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-          : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+          : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
       }`}
     >
       {label}
       <span
         className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-          enabled ? "bg-emerald-400/20" : "bg-neutral-800"
+          enabled ? "bg-emerald-400/20" : "bg-neutral-200 dark:bg-neutral-800"
         }`}
       >
         {enabled ? "Enabled" : "Disabled"}
@@ -534,17 +534,17 @@ function EnableToggle({ label, enabled, onChange }) {
 
 function LimitOrUnlimitedField({ label, entitlement, onChange }) {
   return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[12.5px] font-medium text-neutral-300">{label}</span>
+        <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
         <button
           type="button"
           onClick={() => onChange({ ...entitlement, isUnlimited: !entitlement.isUnlimited })}
           aria-pressed={entitlement.isUnlimited}
           className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors ${
             entitlement.isUnlimited
-              ? "bg-emerald-400/10 text-emerald-400"
-              : "bg-neutral-800 text-neutral-400"
+              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
           }`}
         >
           {entitlement.isUnlimited ? "Unlimited" : "Limited"}
@@ -557,7 +557,7 @@ function LimitOrUnlimitedField({ label, entitlement, onChange }) {
           value={entitlement.limit}
           onChange={(e) => onChange({ ...entitlement, limit: e.target.value })}
           placeholder="e.g. 5"
-          className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none"
+          className="w-full rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
         />
       )}
     </div>
@@ -619,14 +619,14 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-neutral-50">
+          <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
             {isNew ? "Add Plan" : `Edit Plan · ${draft.name}`}
           </h2>
           <button
             onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -665,26 +665,26 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
           </div>
 
           <Field label="Price (₹)">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 dark:border-neutral-800 dark:bg-neutral-950">
               <IndianRupee size={13} className="text-neutral-500" />
               <input
                 type="number"
                 value={draft.price}
                 onChange={(e) => setField("price", e.target.value)}
                 placeholder="2999"
-                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
             </div>
           </Field>
           <Field label="Strike Price (₹, optional)">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 dark:border-neutral-800 dark:bg-neutral-950">
               <IndianRupee size={13} className="text-neutral-500" />
               <input
                 type="number"
                 value={draft.strikePrice}
                 onChange={(e) => setField("strikePrice", e.target.value)}
                 placeholder="3999"
-                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
             </div>
           </Field>
@@ -700,7 +700,7 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
             </select>
           </Field>
           <Field label={draft.discountType === "PERCENT" ? "Discount (%)" : "Discount (₹)"}>
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 dark:border-neutral-800 dark:bg-neutral-950">
               <Tag size={13} className="text-neutral-500" />
               <input
                 type="number"
@@ -708,7 +708,7 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
                 value={draft.discountPercent}
                 onChange={(e) => setField("discountPercent", e.target.value)}
                 placeholder="25"
-                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
             </div>
           </Field>
@@ -724,12 +724,12 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
           </Field>
         </div>
 
-        <label className="mt-4 flex items-center gap-2 text-[12.5px] text-neutral-300">
+        <label className="mt-4 flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
           <input
             type="checkbox"
             checked={draft.popular}
             onChange={(e) => setField("popular", e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 accent-emerald-400"
+            className="h-4 w-4 rounded border-neutral-300 bg-white accent-emerald-400 dark:border-neutral-700 dark:bg-neutral-950"
           />
           Mark as "Most Popular"
         </label>
@@ -774,11 +774,11 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
           />
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-800 pt-4">
+        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             onClick={onCancel}
             disabled={saving}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -803,13 +803,13 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
 function DeleteConfirmModal({ plan, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
           </div>
           <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete plan?</h3>
+            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete plan?</h3>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
               This removes "{plan.name}" and its column from the comparison table.
             </p>
@@ -819,7 +819,7 @@ function DeleteConfirmModal({ plan, deleting, onCancel, onConfirm }) {
           <button
             onClick={onCancel}
             disabled={deleting}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -1056,12 +1056,12 @@ export default function Plan() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Subscription Plans
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -1079,14 +1079,14 @@ export default function Plan() {
 
         {/* Load state */}
         {loading && (
-          <div className="mb-8 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="mb-8 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading plans…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load plans: {loadError}
           </div>
         )}
@@ -1125,7 +1125,7 @@ export default function Plan() {
         />
       )}
       {draft && saveError && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-white px-4 py-2.5 text-[12.5px] text-red-600 shadow-lg dark:bg-neutral-900 dark:text-red-400 dark:shadow-none">
           {saveError}
         </div>
       )}

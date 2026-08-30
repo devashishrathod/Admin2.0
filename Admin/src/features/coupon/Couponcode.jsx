@@ -92,10 +92,10 @@ const CRUD_STATUS_FILTERS = ["All", "Active", "Inactive"];
 const REVIEW_STATUS_FILTERS = ["All", "Pending", "Approved", "Rejected"];
 
 const TINTS = {
-  emerald: "bg-emerald-400/10 text-emerald-400",
-  amber: "bg-amber-400/10 text-amber-400",
-  sky: "bg-sky-400/10 text-sky-400",
-  pink: "bg-pink-400/10 text-pink-400",
+  emerald: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
+  amber: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
+  sky: "bg-sky-400/10 text-sky-600 dark:text-sky-400",
+  pink: "bg-pink-400/10 text-pink-600 dark:text-pink-400",
 };
 
 const emptyForm = () => ({
@@ -325,11 +325,11 @@ const formatRupee = (n) => (n || n === 0 ? `₹${Number(n).toLocaleString("en-IN
 
 function StatusPill({ status }) {
   const styles = {
-    Active: "bg-emerald-400/10 text-emerald-400",
-    Inactive: "bg-neutral-800 text-neutral-400",
-    Pending: "bg-amber-400/10 text-amber-400",
-    Approved: "bg-emerald-400/10 text-emerald-400",
-    Rejected: "bg-red-500/10 text-red-400",
+    Active: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
+    Inactive: "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
+    Pending: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
+    Approved: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
+    Rejected: "bg-red-500/10 text-red-600 dark:text-red-400",
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}>
@@ -356,14 +356,14 @@ function InfoRow({ icon: Icon, label, value }) {
         {Icon && <Icon size={13} />}
         {label}
       </span>
-      <span className="text-[13.5px] font-medium text-neutral-200">{value}</span>
+      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
     </div>
   );
 }
 
 function SectionCard({ title, children }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
       {title && <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{title}</p>}
       {children}
     </div>
@@ -372,7 +372,7 @@ function SectionCard({ title, children }) {
 
 function EmptyState({ label }) {
   return (
-    <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+    <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
       {label}
     </div>
   );
@@ -380,13 +380,13 @@ function EmptyState({ label }) {
 
 function KpiCard({ icon: Icon, label, value, tint = "emerald" }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="mb-2.5 flex items-center justify-between">
         <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${TINTS[tint]}`}>
           <Icon size={16} />
         </span>
       </div>
-      <p className="text-[20px] font-bold tracking-tight text-neutral-50">{value}</p>
+      <p className="text-[20px] font-bold tracking-tight text-neutral-900 dark:text-neutral-50">{value}</p>
       <p className="mt-0.5 text-[11.5px] text-neutral-500">{label}</p>
     </div>
   );
@@ -398,7 +398,7 @@ function KpiCard({ icon: Icon, label, value, tint = "emerald" }) {
 
 function MainTabs({ activeType, onChange, counts }) {
   return (
-    <div className="mb-5 flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-neutral-800 bg-neutral-900 p-1.5">
+    <div className="mb-5 flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
       {MAIN_TABS.map((type) => {
         const meta = TYPE_META[type];
         const Icon = meta.icon;
@@ -408,12 +408,12 @@ function MainTabs({ activeType, onChange, counts }) {
             key={type}
             onClick={() => onChange(type)}
             className={`flex shrink-0 items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-[12.5px] font-semibold whitespace-nowrap transition-colors ${
-              active ? "bg-emerald-400 text-neutral-950" : "text-neutral-400 hover:text-neutral-200"
+              active ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
             }`}
           >
             <Icon size={14} />
             {type}
-            <span className={`rounded-full px-1.5 text-[10.5px] ${active ? "bg-neutral-950/15" : "bg-neutral-800"}`}>
+            <span className={`rounded-full px-1.5 text-[10.5px] ${active ? "bg-neutral-950/15" : "bg-neutral-200 dark:bg-neutral-800"}`}>
               {counts[type]}
             </span>
           </button>
@@ -430,18 +430,18 @@ function MainTabs({ activeType, onChange, counts }) {
 function ListHeader({ mode, statusFilter, onStatusFilterChange, counts, search, onSearchChange, onAdd }) {
   const filters = mode === "crud" ? CRUD_STATUS_FILTERS : REVIEW_STATUS_FILTERS;
   return (
-    <div className="mb-5 flex flex-col gap-3 border-b border-neutral-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="mb-5 flex flex-col gap-3 border-b border-neutral-200 pb-4 dark:border-neutral-800 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-wrap items-center gap-1.5">
         {filters.map((tab) => (
           <button
             key={tab}
             onClick={() => onStatusFilterChange(tab)}
             className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
-              statusFilter === tab ? "bg-emerald-400/10 text-emerald-400" : "text-neutral-500 hover:text-neutral-300"
+              statusFilter === tab ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
             }`}
           >
             {tab}
-            <span className={`rounded-full px-1.5 text-[10.5px] ${statusFilter === tab ? "bg-emerald-400/20" : "bg-neutral-800"}`}>
+            <span className={`rounded-full px-1.5 text-[10.5px] ${statusFilter === tab ? "bg-emerald-400/20" : "bg-neutral-200 dark:bg-neutral-800"}`}>
               {counts[tab]}
             </span>
           </button>
@@ -449,13 +449,13 @@ function ListHeader({ mode, statusFilter, onStatusFilterChange, counts, search, 
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5">
+        <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
           <Search size={15} className="shrink-0 text-neutral-500" />
           <input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search code or title..."
-            className="w-44 bg-transparent text-[13px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+            className="w-44 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
           />
         </div>
 
@@ -486,14 +486,14 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-neutral-50">
+          <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
             {isEdit ? "Edit" : "Add"} {type}
           </h2>
           <button
             onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -502,16 +502,16 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Coupon Code</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Coupon Code</label>
               <input
                 value={form.code}
                 onChange={(e) => setField("code", e.target.value.toUpperCase())}
                 placeholder="e.g. SAVE20"
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Status</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Status</label>
               <div className="flex gap-2">
                 {["Active", "Inactive"].map((s) => (
                   <button
@@ -520,8 +520,8 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
                     onClick={() => setField("status", s)}
                     className={`flex-1 rounded-xl border px-3 py-2.5 text-[12.5px] font-medium transition-colors ${
                       form.status === s
-                        ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                        : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                        ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                        : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                     }`}
                   >
                     {s}
@@ -532,29 +532,29 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Title</label>
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Title</label>
             <input
               value={form.title}
               onChange={(e) => setField("title", e.target.value)}
               placeholder="e.g. 20% off for new customers"
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Description</label>
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Description</label>
             <textarea
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
               rows={2}
               placeholder="Short description shown to users"
-              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Discount Type</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Discount Type</label>
               <div className="flex gap-2">
                 {["Percentage", "Flat"].map((t) => (
                   <button
@@ -564,7 +564,7 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
                     className={`flex-1 rounded-xl border px-3 py-2.5 text-[12.5px] font-medium transition-colors ${
                       form.discountType === t
                         ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                        : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                        : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                     }`}
                   >
                     {t}
@@ -573,75 +573,75 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
                 Discount Value {form.discountType === "Percentage" ? "(%)" : "(₹)"}
               </label>
               <input
                 type="number"
                 value={form.discountValue}
                 onChange={(e) => setField("discountValue", e.target.value)}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Min Purchase (₹)</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Min Purchase (₹)</label>
               <input
                 type="number"
                 value={form.minPurchase}
                 onChange={(e) => setField("minPurchase", e.target.value)}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Max Discount (₹)</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Max Discount (₹)</label>
               <input
                 type="number"
                 value={form.maxDiscount}
                 onChange={(e) => setField("maxDiscount", e.target.value)}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Valid From</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Valid From</label>
               <input
                 type="date"
                 value={form.validFrom}
                 onChange={(e) => setField("validFrom", e.target.value)}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none [color-scheme:dark]"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none [color-scheme:light] dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark]"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Valid To</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Valid To</label>
               <input
                 type="date"
                 value={form.validTo}
                 onChange={(e) => setField("validTo", e.target.value)}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none [color-scheme:dark]"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none [color-scheme:light] dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark]"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Usage Limit</label>
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Usage Limit</label>
             <input
               type="number"
               value={form.usageLimit}
               onChange={(e) => setField("usageLimit", e.target.value)}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-800 pt-4">
+        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -669,23 +669,23 @@ function ViewModal({ coupon, type, onClose, onApprove, onReject }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <TypeIcon type={type} size="lg" />
             <div>
               <p className="text-[12px] font-medium text-neutral-500">{coupon.code}</p>
-              <h2 className="mt-0.5 text-[16px] font-semibold text-neutral-50">{coupon.title}</h2>
+              <h2 className="mt-0.5 text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{coupon.title}</h2>
               {isReview ? (
-                <p className="mt-1 text-[12.5px] text-neutral-400">Submitted by {coupon.submittedBy}</p>
+                <p className="mt-1 text-[12.5px] text-neutral-500 dark:text-neutral-400">Submitted by {coupon.submittedBy}</p>
               ) : (
-                <p className="mt-1 text-[12.5px] text-neutral-400">{meta.origin}</p>
+                <p className="mt-1 text-[12.5px] text-neutral-500 dark:text-neutral-400">{meta.origin}</p>
               )}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -697,11 +697,11 @@ function ViewModal({ coupon, type, onClose, onApprove, onReject }) {
 
         {isReview && coupon.approvalStatus === "Pending" && (
           <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[12.5px] text-neutral-400">This coupon is awaiting your review.</p>
+            <p className="text-[12.5px] text-neutral-500 dark:text-neutral-400">This coupon is awaiting your review.</p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onReject(coupon)}
-                className="flex items-center gap-1.5 rounded-xl border border-red-500/40 px-3.5 py-2 text-[12.5px] font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                className="flex items-center gap-1.5 rounded-xl border border-red-500/40 px-3.5 py-2 text-[12.5px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
               >
                 <X size={14} />
                 Reject
@@ -719,11 +719,11 @@ function ViewModal({ coupon, type, onClose, onApprove, onReject }) {
 
         <div className="space-y-4">
           <SectionCard title="Description">
-            <p className="text-[13.5px] leading-relaxed text-neutral-300">{coupon.description || "—"}</p>
+            <p className="text-[13.5px] leading-relaxed text-neutral-700 dark:text-neutral-300">{coupon.description || "—"}</p>
           </SectionCard>
 
           <SectionCard title="Discount Details">
-            <div className="divide-y divide-neutral-800">
+            <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
               <InfoRow icon={Percent} label="Discount" value={formatDiscount(coupon)} />
               <InfoRow icon={IndianRupee} label="Min Purchase" value={formatRupee(coupon.minPurchase)} />
               <InfoRow icon={IndianRupee} label="Max Discount" value={formatRupee(coupon.maxDiscount)} />
@@ -732,7 +732,7 @@ function ViewModal({ coupon, type, onClose, onApprove, onReject }) {
           </SectionCard>
 
           <SectionCard title="Validity">
-            <div className="divide-y divide-neutral-800">
+            <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
               <InfoRow icon={Calendar} label="Valid From" value={coupon.validFrom} />
               <InfoRow icon={Calendar} label="Valid To" value={coupon.validTo} />
               {isReview ? (
@@ -761,9 +761,9 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800">
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
       <table className="w-full min-w-[820px] text-left text-[13px]">
-        <thead className="bg-neutral-900 text-[11px] uppercase tracking-wide text-neutral-500">
+        <thead className="bg-neutral-100 text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
           <tr>
             <th className="px-4 py-3 font-medium">Code</th>
             <th className="px-4 py-3 font-medium">Title</th>
@@ -778,27 +778,27 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
             <th className="px-4 py-3 text-right font-medium">Action</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+        <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
           {rows.map((row) => (
-            <tr key={row.id} className="transition-colors hover:bg-neutral-900/60">
+            <tr key={row.id} className="transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-900/60">
               <td className="px-4 py-3">
                 <button
                   onClick={() => onView(row)}
-                  className="font-semibold text-sky-400 transition-colors hover:text-sky-300"
+                  className="font-semibold text-sky-600 transition-colors hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
                 >
                   {row.code}
                 </button>
               </td>
-              <td className="px-4 py-3 text-neutral-300">{row.title}</td>
-              <td className="px-4 py-3 font-semibold text-neutral-200">{formatDiscount(row)}</td>
+              <td className="px-4 py-3 text-neutral-700 dark:text-neutral-300">{row.title}</td>
+              <td className="px-4 py-3 font-semibold text-neutral-800 dark:text-neutral-200">{formatDiscount(row)}</td>
               {isReview ? (
-                <td className="px-4 py-3 text-neutral-300">{row.submittedBy}</td>
+                <td className="px-4 py-3 text-neutral-700 dark:text-neutral-300">{row.submittedBy}</td>
               ) : (
-                <td className="px-4 py-3 text-neutral-400">
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
                   {row.usageCount ?? 0} / {row.usageLimit ?? "∞"}
                 </td>
               )}
-              <td className="px-4 py-3 text-neutral-400">
+              <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
                 {row.validFrom} → {row.validTo}
               </td>
               <td className="px-4 py-3">
@@ -811,14 +811,14 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
                       <button
                         onClick={() => onApprove(row)}
                         aria-label={`Approve ${row.title}`}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-emerald-400/10 hover:text-emerald-400"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-emerald-400/10 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400"
                       >
                         <Check size={15} />
                       </button>
                       <button
                         onClick={() => onReject(row)}
                         aria-label={`Reject ${row.title}`}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
                       >
                         <X size={15} />
                       </button>
@@ -827,7 +827,7 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
                   <button
                     onClick={() => onView(row)}
                     aria-label={`View ${row.title}`}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                   >
                     <Eye size={15} />
                   </button>
@@ -836,14 +836,14 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
                       <button
                         onClick={() => onEdit(row)}
                         aria-label={`Edit ${row.title}`}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
                       >
                         <Pencil size={15} />
                       </button>
                       <button
                         onClick={() => onDelete(row)}
                         aria-label={`Delete ${row.title}`}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -955,12 +955,12 @@ export default function CouponCode() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header — matches the Analytics Report page style */}
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               <Ticket size={20} className="text-emerald-400" />
               Coupon Codes
             </h1>
@@ -969,7 +969,7 @@ export default function CouponCode() {
               transactions, deal packs and memberships can only be reviewed, approved or rejected.
             </p>
           </div>
-          <span className="flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-[11.5px] text-neutral-400">
+          <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11.5px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
             <ArrowUpRight size={12} className="text-emerald-400" />
             {totalCoupons} coupons across {MAIN_TABS.length} types
           </span>
@@ -994,7 +994,7 @@ export default function CouponCode() {
         />
 
         {/* Active tab description */}
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-2.5 text-[12.5px] text-neutral-400">
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-[12.5px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400">
           <TypeIcon type={activeType} size="sm" />
           {meta.blurb}
         </div>

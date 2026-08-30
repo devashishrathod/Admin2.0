@@ -68,16 +68,12 @@ export const APPLICABLE_ACTIONS = Object.freeze({
  * List response, each record (confirmed from a real getAll call):
  * {
  *   _id, code, description, discountType, discountPercent, discountAmount,
- *   minOrderValue, subscriptionIds: [], applicableActions: [],
- *   firstTimeOnly, totalUsageLimit, perBrandUsageLimit, usedCount,
- *   createdBy, isActive, isDeleted, createdAt, updatedAt, consumedCount,
+ *   maxDiscountAmount, minOrderValue, subscriptionIds: [],
+ *   applicableActions: [], firstTimeOnly, validFrom, validTill,
+ *   totalUsageLimit, perBrandUsageLimit, usedCount, createdBy, isActive,
+ *   isDeleted, createdAt, updatedAt, updatedBy, consumedCount,
  *   reservedCount, remainingUses, isExpired
  * }
- * NOTE: `maxDiscountAmount`, `validFrom` and `validTill` are real
- * create/update fields but are NOT present on list records — they may
- * only be readable via the get-by-id endpoint, or not projected back at
- * all. `sortBy=validTill` is still a valid list query param regardless,
- * implying the field exists server-side even where it isn't returned.
  *
  * Get-by-id response (confirmed):
  * { data: {

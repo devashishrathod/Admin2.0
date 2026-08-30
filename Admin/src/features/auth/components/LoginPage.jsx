@@ -9,20 +9,10 @@ import Image1 from "@/assets/svg/device-sync.svg";
 import Image2 from "../../../assets/Logo1.jpg";
 import { useAuthStore } from "../store/authStore";
 
-// ── Email Icon ─────────────────────────────────────────────
-const EmailIcon = ({ color = '#9ca3af' }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-        fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0 1.1.9 2 2 2z" />
-        <polyline points="22,6 12,13 2,6" />
-    </svg>
-);
-
-// ── Phone Icon ─────────────────────────────────────────────
-const PhoneIcon = ({ color = '#9ca3af' }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-        fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z" />
+// ── WhatsApp Icon ──────────────────────────────────────────
+const WhatsAppIcon = ({ color = '#9ca3af' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill={color}>
+        <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.29-1.39a9.9 9.9 0 004.75 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2zm5.76 14.03c-.24.68-1.4 1.3-1.93 1.38-.49.08-1.11.11-1.79-.11-.41-.13-.94-.31-1.62-.6-2.85-1.23-4.71-4.1-4.85-4.29-.14-.19-1.16-1.54-1.16-2.94s.72-2.09.98-2.37c.26-.28.56-.35.75-.35s.38 0 .54.01c.18.01.41-.07.64.49.24.58.81 2 .88 2.14.07.14.12.31.02.5-.09.19-.14.31-.28.48-.14.16-.29.36-.42.49-.14.14-.28.29-.12.56.16.28.72 1.19 1.55 1.93 1.06.95 1.96 1.24 2.24 1.38.28.14.44.12.6-.07.16-.19.68-.79.86-1.06.18-.28.36-.23.6-.14.24.09 1.52.72 1.78.85.26.14.44.21.5.32.06.12.06.68-.18 1.36z" />
     </svg>
 );
 
@@ -31,7 +21,6 @@ const PhoneIcon = ({ color = '#9ca3af' }) => (
 // so no more prop-drilling from LoginPage.
 function OtpModal({ open, onClose, onVerifySuccess }) {
     const {
-        inputType,
         maskedValue,
         verifyOtp,
         resendOtp,
@@ -135,11 +124,8 @@ function OtpModal({ open, onClose, onVerifySuccess }) {
         }
     }
 
-    const isEmail = inputType === 'email';
-    const accentColor = isEmail ? '#6366f1' : '#10b981';
-    const gradientBg = isEmail
-        ? 'linear-gradient(135deg,#6366f1,#8b5cf6)'
-        : 'linear-gradient(135deg,#10b981,#059669)';
+    const accentColor = '#10b981';
+    const gradientBg = 'linear-gradient(135deg,#10b981,#059669)';
     const displayError = localError || storeError;
 
     if (!open) return null;
@@ -154,13 +140,13 @@ function OtpModal({ open, onClose, onVerifySuccess }) {
                 @keyframes slideUp { from { transform:translateY(30px);opacity:0 } to { transform:translateY(0);opacity:1 } }
             `}</style>
 
-            <div className="relative bg-white rounded-3xl p-6 sm:p-9 w-full max-w-sm shadow-2xl"
+            <div className="relative bg-white rounded-3xl p-6 sm:p-9 w-full max-w-sm shadow-2xl dark:bg-neutral-900 dark:shadow-none"
                 style={{ animation: 'slideUp .3s ease' }}>
 
                 {/* Close */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none"
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none dark:text-neutral-500 dark:hover:text-neutral-300"
                 >✕</button>
 
                 {verified ? (
@@ -171,7 +157,7 @@ function OtpModal({ open, onClose, onVerifySuccess }) {
                             <path d="M7 12.5l3.5 3.5 6-7" stroke="#10b981" strokeWidth="2.5"
                                 strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                        <p className="font-bold text-emerald-600 text-lg" style={{ fontFamily: 'Syne,sans-serif' }}>
+                        <p className="font-bold text-emerald-600 text-lg dark:text-emerald-400" style={{ fontFamily: 'Syne,sans-serif' }}>
                             Verified Successfully!
                         </p>
                         <p className="text-gray-400 text-xs">Redirecting to admin dashboard…</p>
@@ -182,20 +168,18 @@ function OtpModal({ open, onClose, onVerifySuccess }) {
                         <div className="flex justify-center mb-4">
                             <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
                                 style={{ background: gradientBg }}>
-                                {isEmail
-                                    ? <EmailIcon color="white" />
-                                    : <PhoneIcon color="white" />}
+                                <WhatsAppIcon color="white" />
                             </div>
                         </div>
 
                         {/* Heading */}
-                        <h3 className="text-center font-bold text-gray-900 text-xl mb-1"
+                        <h3 className="text-center font-bold text-gray-900 text-xl mb-1 dark:text-neutral-50"
                             style={{ fontFamily: 'Syne,sans-serif' }}>
-                            Verify Your {isEmail ? 'Email' : 'Mobile'}
+                            Verify Your WhatsApp
                         </h3>
                         <p className="text-center text-xs text-gray-400 mb-6 leading-relaxed">
-                            We've sent a 6-digit OTP via {isEmail ? 'email' : 'SMS'} to<br />
-                            <strong className="text-gray-600">{maskedValue}</strong>
+                            We've sent a 6-digit OTP via WhatsApp to<br />
+                            <strong className="text-gray-600 dark:text-neutral-300">{maskedValue}</strong>
                         </p>
 
                         {/* OTP Boxes */}
@@ -215,7 +199,7 @@ function OtpModal({ open, onClose, onVerifySuccess }) {
                                     className="w-10 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-bold rounded-xl border-2 outline-none transition-all duration-200"
                                     style={{
                                         borderColor: digit ? accentColor : '#e5e7eb',
-                                        background: digit ? (isEmail ? '#eef2ff' : '#ecfdf5') : '#f9fafb',
+                                        background: digit ? '#ecfdf5' : '#f9fafb',
                                         color: digit ? accentColor : '#111827',
                                         fontFamily: 'Syne,sans-serif',
                                     }}
@@ -224,7 +208,7 @@ function OtpModal({ open, onClose, onVerifySuccess }) {
                         </div>
 
                         {/* Error */}
-                        <p className="text-xs text-red-500 text-center mb-3 min-h-[16px]">{displayError}</p>
+                        <p className="text-xs text-red-500 text-center mb-3 min-h-[16px] dark:text-red-400">{displayError}</p>
 
                         {/* Verify button */}
                         <button
@@ -292,12 +276,10 @@ export default function LoginPage() {
         console.log('Admin verified! Redirecting…');
     }
 
-    const isEmail = inputType === 'email';
-    const isPhone = inputType === 'phone';
-    const iconColor = isEmail ? '#6366f1' : isPhone ? '#10b981' : '#9ca3af';
+    const iconColor = inputType === 'whatsapp' ? '#10b981' : '#9ca3af';
 
     return (
-        <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden bg-white">
+        <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden bg-white dark:bg-neutral-950">
 
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
@@ -347,7 +329,7 @@ export default function LoginPage() {
                     className="w-full max-w-md h-auto object-contain drop-shadow-sm"
                 />
                 <div className="text-center max-w-xs px-4">
-                    <p className="text-gray-700 text-md font-medium leading-relaxed">
+                    <p className="text-gray-700 text-md font-medium leading-relaxed dark:text-neutral-300">
                         Grow your business with ease on{' '}<br />
                         <span className="text-emerald-500 font-bold">Trydood.</span>
                     </p>
@@ -371,12 +353,12 @@ export default function LoginPage() {
 
                     {/* Heading */}
                     <div className="text-center mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-1"
+                        <h2 className="text-2xl font-bold text-gray-900 mb-1 dark:text-neutral-50"
                             style={{ fontFamily: 'Syne,sans-serif' }}>
                             Welcome <span className="text-emerald-500">Back!</span>
                         </h2>
                         <p className="text-sm text-gray-400">
-                            Admin login — enter email or mobile number
+                            Admin login — enter your WhatsApp number
                         </p>
                     </div>
 
@@ -386,37 +368,31 @@ export default function LoginPage() {
                         {/* Input with left icon */}
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none transition-colors duration-200">
-                                {isEmail
-                                    ? <EmailIcon color={iconColor} />
-                                    : <PhoneIcon color={iconColor} />}
+                                <WhatsAppIcon color={iconColor} />
                             </span>
 
                             <input
                                 type="text"
-                                placeholder="Email address or mobile number"
+                                placeholder="WhatsApp number"
                                 value={value}
                                 onChange={handleChange}
-                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition duration-200"
+                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition duration-200 dark:bg-neutral-900 dark:border-neutral-800 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                             />
 
                             {/* Small type badge on right */}
                             {inputType && (
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold px-2 py-0.5 rounded-md"
-                                    style={{
-                                        background: isEmail ? '#eef2ff' : '#ecfdf5',
-                                        color: isEmail ? '#6366f1' : '#10b981',
-                                    }}>
-                                    {isEmail ? 'EMAIL' : 'MOBILE'}
+                                    style={{ background: '#ecfdf5', color: '#10b981' }}>
+                                    WHATSAPP
                                 </span>
                             )}
                         </div>
 
                         {/* Helper label */}
                         <p className="text-xs pl-1 min-h-[16px] transition-all duration-200"
-                            style={{ color: isEmail ? '#6366f1' : isPhone ? '#10b981' : '#9ca3af' }}>
-                            {isEmail && '✦ OTP will be sent to your email address'}
-                            {isPhone && '✦ OTP will be sent via SMS to your mobile'}
-                            {!inputType && value.length > 0 && 'Enter a valid email or 10-digit mobile number'}
+                            style={{ color: inputType === 'whatsapp' ? '#10b981' : '#9ca3af' }}>
+                            {inputType === 'whatsapp' && '✦ OTP will be sent via WhatsApp'}
+                            {!inputType && value.length > 0 && 'Enter a valid 10-digit WhatsApp number'}
                         </p>
 
                         {/* Send-OTP level error (e.g. network/API failure) */}
@@ -438,8 +414,8 @@ export default function LoginPage() {
                     </div>
 
                     {/* Footer */}
-                    <div className="mt-8 pt-5 border-t border-gray-100 flex items-center justify-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                    <div className="mt-8 pt-5 border-t border-gray-100 flex items-center justify-center gap-3 dark:border-neutral-800">
+                        <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0 dark:bg-emerald-500/10">
                             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-500"
                                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -449,7 +425,7 @@ export default function LoginPage() {
                         <div className="text-center">
                             <p className="text-xs text-gray-400 mb-0.5">In case of any queries, reach out to</p>
                             <a href="mailto:TrydoodTeam@gmail.com"
-                                className="text-sm text-emerald-500 hover:text-emerald-600 font-medium hover:underline transition">
+                                className="text-sm text-emerald-500 hover:text-emerald-600 font-medium hover:underline transition dark:hover:text-emerald-400">
                                 trydoodteam@gmail.com
                             </a>
                         </div>

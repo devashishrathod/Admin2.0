@@ -8,19 +8,28 @@ import {
   Settings,
   ChevronLeft,
   Tags,
+  Layers,
   BadgeCheck,
+  UserPlus,
   CreditCard,
+  Repeat,
+  Gift,
+  Wallet,
+  PieChart,
   Ticket,
   UserCog,
   ClipboardList,
   ArrowLeftRight,
   HandCoins,
+  Tag,
+  Megaphone,
   Image,
   MonitorPlay,
   X,
   Percent,
+  Bell,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 // Grouped nav — each group renders with an uppercase label (hidden when collapsed).
 const NAV_GROUPS = [
@@ -30,7 +39,7 @@ const NAV_GROUPS = [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
       { id: "analysis-all", label: "Analysis ALL", icon: BarChart3, path: "/analytics" },
       { id: "main-category", label: "Main Category", icon: Tags, path: "/main-category" },
-      { id: "sub-category", label: "Sub - Catergory", icon: Tags, path: "/sub-category" },
+      { id: "sub-category", label: "Sub - Catergory", icon: Layers, path: "/sub-category" },
     ],
   },
   {
@@ -40,8 +49,9 @@ const NAV_GROUPS = [
       { id: "banner", label: "Banner", icon: Image, path: "/banner" },
       { id: "promotional-ticker", label: "Promotional Ticker", icon: MonitorPlay, path: "/promotional-ticker" },
       { id: "vendor-plan", label: "Vendor Plan", icon: CreditCard, path: "/vendor-plan" },
-      { id: "vendor-plan", label: "Voucher Listing", icon: CreditCard, path: "/vendor-listing" },
-      { id: "new-onboarding", label: "New Onboarding", icon: BadgeCheck, path: "/new-onboarding" },
+      { id: "subscriptions", label: "Subscriptions", icon: Repeat, path: "/subscriptions" },
+      { id: "voucher-listing", label: "Voucher Listing", icon: Gift, path: "/vendor-listing" },
+      { id: "new-onboarding", label: "New Onboarding", icon: UserPlus, path: "/new-onboarding" },
       { id: "analysis-report-catalog", label: "Vender Analysis Report", icon: ClipboardList, path: "/analysis-report-vendor" },
     ],
   },
@@ -49,8 +59,8 @@ const NAV_GROUPS = [
     label: "Customers",
     items: [
       { id: "customer", label: "Customer", icon: Users, path: "/customer" },
-      { id: "user-plan", label: "Customer  Plan", icon: CreditCard, path: "/user-plan" },
-      { id: "analysis-report-customer", label: "Customer Analysis Report", icon: ClipboardList, path: "/analysis-report-customer" },
+      { id: "user-plan", label: "Customer  Plan", icon: Wallet, path: "/user-plan" },
+      { id: "analysis-report-customer", label: "Customer Analysis Report", icon: PieChart, path: "/analysis-report-customer" },
       // { id: "employee", label: "Employee", icon: UserCog, path: "/employee" },
     ], 
   },
@@ -60,14 +70,17 @@ const NAV_GROUPS = [
       { id: "transaction", label: "Transacation", icon: ArrowLeftRight, path: "/transaction" },
       { id: "settlements", label: "Settlements", icon: HandCoins, path: "/settlements" },
       { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
-      { id: "settings", label: "Feature Campaign", icon: Settings, path: "/feature_campaign" },
-          { id: "settlements", label: "Coupon Code", icon: HandCoins, path: "/coupon" },
+      { id: "settings", label: "Feature Campaign", icon: Megaphone, path: "/feature_campaign" },
+          { id: "coupon-code", label: "Coupon Code", icon: Tag, path: "/coupon" },
       { id: "promo-code", label: "Promo Code", icon: Percent, path: "/promo-code" },
     ],
   },
   {
     label: "System",
-    items: [{ id: "app-settings", label: "Settings", icon: Settings, path: "/settings" }],
+    items: [
+      { id: "notifications", label: "Notifications", icon: Bell, path: "/notifications" },
+      { id: "app-settings", label: "Settings", icon: Settings, path: "/settings" },
+    ],
   },
 ];
 
@@ -115,8 +128,8 @@ function NavButton({ item, isActive, collapsed, onClick }) {
       className={`group relative flex h-[42px] w-full items-center gap-3 rounded-xl px-3 text-left text-[13.5px] font-medium no-underline transition-colors duration-150
         ${
           isActive
-            ? "bg-emerald-400/10 text-emerald-400"
-            : "text-neutral-400 hover:bg-neutral-800/70 hover:text-neutral-50"
+            ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400"
+            : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/70 dark:hover:text-neutral-50"
         }`}
     >
       {/* active rail */}
@@ -149,11 +162,11 @@ function NavButton({ item, isActive, collapsed, onClick }) {
 export default function Sidebar({
   collapsed,
   setCollapsed,
-  active,
-  setActive,
   mobileOpen,
   setMobileOpen,
 }) {
+  const location = useLocation();
+
   // Lock body scroll while the mobile drawer is open — otherwise the page
   // behind it scrolls too, showing two competing scrollbars at once.
   useEffect(() => {
@@ -166,16 +179,16 @@ export default function Sidebar({
   return (
     <>
       <aside
-        className={`fixed top-0 z-30 flex h-screen flex-col border-r border-neutral-800 bg-neutral-900 transition-all duration-300 lg:sticky
+        className={`fixed top-0 z-30 flex h-screen flex-col border-r border-neutral-200 bg-white transition-all duration-300 dark:border-neutral-800 dark:bg-neutral-900 lg:sticky
           ${collapsed ? "lg:w-[76px]" : "lg:w-[252px]"}
           ${mobileOpen ? "left-0 w-[240px]" : "-left-[260px] w-[240px] lg:left-0"}
         `}
       >
         {/* Head */}
-        <div className="flex min-h-[68px] items-center gap-2.5 border-b border-neutral-800 px-4.5 py-5">
+        <div className="flex min-h-[68px] items-center gap-2.5 border-b border-neutral-200 px-4.5 py-5 dark:border-neutral-800">
           <GrowthMark />
           <span
-            className={`overflow-hidden whitespace-nowrap font-semibold text-[17px] tracking-tight text-neutral-50 transition-opacity duration-150
+            className={`overflow-hidden whitespace-nowrap font-semibold text-[17px] tracking-tight text-neutral-900 transition-opacity duration-150 dark:text-neutral-50
               ${collapsed ? "w-0 opacity-0" : "w-auto opacity-100"}`}
           >
             Trydood
@@ -186,7 +199,7 @@ export default function Sidebar({
           <button
             onClick={() => setCollapsed((c) => !c)}
             aria-label="Toggle sidebar"
-            className="ml-auto hidden h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-neutral-800 bg-neutral-800 text-neutral-400 transition-colors hover:border-emerald-600 hover:text-emerald-400 lg:flex"
+            className="ml-auto hidden h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-100 text-neutral-500 transition-colors hover:border-emerald-500 hover:text-emerald-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:border-emerald-600 dark:hover:text-emerald-400 lg:flex"
           >
             <ChevronLeft
               size={14}
@@ -198,7 +211,7 @@ export default function Sidebar({
           <button
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
-            className="ml-auto flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-neutral-800 bg-neutral-800 text-neutral-400 transition-colors hover:border-red-500/60 hover:text-red-400 lg:hidden"
+            className="ml-auto flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-100 text-neutral-500 transition-colors hover:border-red-500/60 hover:text-red-500 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:text-red-400 lg:hidden"
           >
             <X size={14} />
           </button>
@@ -209,7 +222,7 @@ export default function Sidebar({
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="flex flex-col gap-0.5">
               <div
-                className={`px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-neutral-600 transition-opacity duration-150 ${
+                className={`px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-neutral-500 transition-opacity duration-150 dark:text-neutral-600 ${
                   collapsed ? "h-0 opacity-0" : "h-auto opacity-100"
                 }`}
               >
@@ -219,12 +232,9 @@ export default function Sidebar({
                 <NavButton
                   key={item.id}
                   item={item}
-                  isActive={active === item.id}
+                  isActive={location.pathname === item.path}
                   collapsed={collapsed}
-                  onClick={() => {
-                    setActive(item.id);
-                    setMobileOpen(false);
-                  }}
+                  onClick={() => setMobileOpen(false)}
                 />
               ))}
             </div>
@@ -232,7 +242,7 @@ export default function Sidebar({
         </nav>
 
         {/* Foot */}
-        <div className="flex items-center gap-2.5 border-t border-neutral-800 px-4 py-3.5">
+        <div className="flex items-center gap-2.5 border-t border-neutral-200 px-4 py-3.5 dark:border-neutral-800">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-lime-400 text-xs font-bold text-neutral-950">
             AK
           </div>
@@ -241,7 +251,7 @@ export default function Sidebar({
               collapsed ? "opacity-0" : "opacity-100"
             }`}
           >
-            <div className="whitespace-nowrap text-[12.5px] font-semibold text-neutral-50">
+            <div className="whitespace-nowrap text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">
               Trydood
             </div>
             <div className="whitespace-nowrap text-[11px] text-neutral-500">

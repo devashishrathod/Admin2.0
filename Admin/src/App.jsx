@@ -27,6 +27,8 @@ import Banner from './features/banner/Banner'
 import PromotionalTicker from './features/promotionalTicker/PromotionalTicker'
 import Settings from './features/settings/Settings'
 import PromoCode from './features/promoCode/PromoCode'
+import Notification from './features/notification/Notification'
+import Subscriptions from './features/subscriptions/Subscriptions'
 // import BrandPage from './features/BrandPage'
 // import LoginPage from './features/auth/components/LoginPage'
 
@@ -137,6 +139,24 @@ function App() {
           element={
             <Layout>
               <Settings />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/notifications"
+          element={
+            <Layout>
+              <Notification />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/subscriptions"
+          element={
+            <Layout>
+              <Subscriptions />
             </Layout>
           }
         />

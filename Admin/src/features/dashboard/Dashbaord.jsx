@@ -30,42 +30,44 @@ import {
  * ---------------------------------------------------------------------- */
 
 // Revenue + transactions for the last 7 days, and the week before (for the % delta).
+// Scaled to the platform's real current size — 24 vendors, 10 active customers —
+// instead of numbers that would only make sense for a much larger live platform.
 const WEEKLY_TREND = [
-  { d: "Mon", revenue: 88200, transactions: 268 },
-  { d: "Tue", revenue: 94600, transactions: 285 },
-  { d: "Wed", revenue: 91300, transactions: 274 },
-  { d: "Thu", revenue: 102800, transactions: 301 },
-  { d: "Fri", revenue: 97900, transactions: 289 },
-  { d: "Sat", revenue: 118500, transactions: 342 },
-  { d: "Sun", revenue: 132400, transactions: 378 },
+  { d: "Mon", revenue: 2100, transactions: 4 },
+  { d: "Tue", revenue: 2450, transactions: 5 },
+  { d: "Wed", revenue: 1980, transactions: 3 },
+  { d: "Thu", revenue: 2800, transactions: 6 },
+  { d: "Fri", revenue: 2350, transactions: 5 },
+  { d: "Sat", revenue: 3200, transactions: 7 },
+  { d: "Sun", revenue: 3650, transactions: 8 },
 ];
-const PREVIOUS_WEEK_REVENUE = 611000;
-const PREVIOUS_WEEK_TRANSACTIONS = 1840;
+const PREVIOUS_WEEK_REVENUE = 15800;
+const PREVIOUS_WEEK_TRANSACTIONS = 32;
 
 // Platform-wide snapshot vs. last month, used for the vendor/customer/settlement cards.
 const PLATFORM_STATS = {
-  totalVendors: 342,
-  totalVendorsLastMonth: 318,
-  activeCustomers: 2467,
-  activeCustomersLastMonth: 2214,
-  pendingSettlements: 6,
-  pendingSettlementsYesterday: 9,
+  totalVendors: 24,
+  totalVendorsLastMonth: 22,
+  activeCustomers: 10,
+  activeCustomersLastMonth: 8,
+  pendingSettlements: 3,
+  pendingSettlementsYesterday: 5,
 };
 
 // Recent platform activity — one real event per line, newest first.
 const ACTIVITY_FEED = [
   { id: 1, icon: Store, tint: "emerald", who: "Bloom & Co Florist", what: "upgraded to the Pro plan", when: "6m ago" },
-  { id: 2, icon: Landmark, tint: "sky", who: "Spice Route Kitchen", what: "settlement of ₹20,500 was paid", when: "24m ago" },
-  { id: 3, icon: Tag, tint: "amber", who: "FitZone Gym", what: "customer redeemed a ₹450 voucher", when: "1h ago" },
+  { id: 2, icon: Landmark, tint: "sky", who: "Spice Route Kitchen", what: "settlement of ₹2,050 was paid", when: "24m ago" },
+  { id: 3, icon: Tag, tint: "amber", who: "FitZone Gym", what: "customer redeemed a ₹150 voucher", when: "1h ago" },
   { id: 4, icon: Package, tint: "pink", who: "GlowUp Cosmetics", what: "sold 3 Deal Packs", when: "2h ago" },
   { id: 5, icon: Users, tint: "sky", who: "TechHub Electronics", what: "onboarded as a new vendor", when: "3h ago" },
 ];
 
 // Top brands this month, tracked against their monthly revenue goal.
 const BRAND_GOALS = [
-  { id: 1, name: "Spice Route Kitchen", revenue: 212000, goal: 250000 },
-  { id: 2, name: "Jr Unisex Salon", revenue: 96500, goal: 120000 },
-  { id: 3, name: "FitZone Gym", revenue: 90000, goal: 100000 },
+  { id: 1, name: "Spice Route Kitchen", revenue: 8200, goal: 10000 },
+  { id: 2, name: "Jr Unisex Salon", revenue: 5400, goal: 7000 },
+  { id: 3, name: "FitZone Gym", revenue: 3100, goal: 5000 },
 ];
 
 const tints = {
@@ -117,25 +119,25 @@ function StatCard({ label, value, prefix = "", suffix = "", delta, positive, rin
   const dash = 2 * Math.PI * 15;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+    <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="mb-2.5 flex items-center justify-between">
-        <span className="text-xs font-medium text-neutral-400">{label}</span>
+        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
         <span
           className={`flex items-center gap-1 text-[11.5px] font-bold ${
-            positive ? "text-emerald-400" : "text-red-400"
+            positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"
           }`}
         >
           {positive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
           {delta}
         </span>
       </div>
-      <div className="text-[27px] font-bold tracking-tight text-neutral-50">
+      <div className="text-[27px] font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
         {prefix}
         {display}
         {suffix}
       </div>
       <svg className="absolute bottom-3 right-3 h-10 w-10 opacity-90" viewBox="0 0 40 40">
-        <circle cx="20" cy="20" r="15" className="fill-none stroke-neutral-800" strokeWidth="3" />
+        <circle cx="20" cy="20" r="15" className="fill-none stroke-neutral-200 dark:stroke-neutral-800" strokeWidth="3" />
         <circle
           cx="20"
           cy="20"
@@ -158,9 +160,9 @@ function StatCard({ label, value, prefix = "", suffix = "", delta, positive, rin
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-800 px-2.5 py-1.5 text-[11.5px]">
-      <div className="mb-0.5 text-neutral-400">{label}</div>
-      <div className="font-bold text-emerald-400">{formatCurrency(payload[0].value)}</div>
+    <div className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[11.5px] shadow-sm dark:border-neutral-800 dark:bg-neutral-800 dark:shadow-none">
+      <div className="mb-0.5 text-neutral-500 dark:text-neutral-400">{label}</div>
+      <div className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(payload[0].value)}</div>
     </div>
   );
 }
@@ -170,16 +172,16 @@ export default function Dashboard() {
     <main className="mx-auto max-w-[1240px] px-7 pb-16 pt-6.5">
       <div className="mb-5.5 flex items-end justify-between">
         <div>
-          <div className="text-2xl font-bold tracking-tight text-neutral-50">
+          <div className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
             Good afternoon, Navnit
           </div>
-          <div className="mt-1 text-[13.5px] text-neutral-400">
+          <div className="mt-1 text-[13.5px] text-neutral-500 dark:text-neutral-400">
             Here's how Trydood is growing this week.
           </div>
         </div>
-        <button className="flex items-center gap-1.5 rounded-lg bg-emerald-400 px-3.5 py-2 text-[13px] font-bold text-neutral-950 transition-transform hover:-translate-y-0.5">
+        {/* <button className="flex items-center gap-1.5 rounded-lg bg-emerald-400 px-3.5 py-2 text-[13px] font-bold text-neutral-950 transition-transform hover:-translate-y-0.5">
           <Plus size={15} /> Add Vendor
-        </button>
+        </button> */}
       </div>
 
       <div className="mb-4.5 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
@@ -188,14 +190,14 @@ export default function Dashboard() {
           value={PLATFORM_STATS.totalVendors}
           delta={`${vendorDelta >= 0 ? "+" : ""}${vendorDelta.toFixed(1)}% this month`}
           positive={vendorDelta >= 0}
-          ringPct={(PLATFORM_STATS.totalVendors / 400) * 100}
+          ringPct={(PLATFORM_STATS.totalVendors / 30) * 100}
         />
         <StatCard
           label="Active Customers"
           value={PLATFORM_STATS.activeCustomers}
           delta={`${customerDelta >= 0 ? "+" : ""}${customerDelta.toFixed(1)}% this month`}
           positive={customerDelta >= 0}
-          ringPct={(PLATFORM_STATS.activeCustomers / 3000) * 100}
+          ringPct={(PLATFORM_STATS.activeCustomers / 15) * 100}
         />
         <StatCard
           label="Revenue (7 days)"
@@ -203,24 +205,24 @@ export default function Dashboard() {
           prefix="₹"
           delta={`${revenueDelta >= 0 ? "+" : ""}${revenueDelta.toFixed(1)}% vs last wk`}
           positive={revenueDelta >= 0}
-          ringPct={(weekRevenue / 800000) * 100}
+          ringPct={(weekRevenue / 25000) * 100}
         />
         <StatCard
           label="Pending Settlements"
           value={PLATFORM_STATS.pendingSettlements}
           delta={`${settlementDelta >= 0 ? "+" : ""}${settlementDelta.toFixed(1)}% vs yesterday`}
           positive={settlementDelta <= 0}
-          ringPct={(PLATFORM_STATS.pendingSettlements / 20) * 100}
+          ringPct={(PLATFORM_STATS.pendingSettlements / 10) * 100}
         />
       </div>
 
       <div className="mb-3.5 grid grid-cols-1 items-stretch gap-3.5 lg:grid-cols-[1.5fr_1fr]">
-        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="mb-3.5 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
-              <Sparkles size={15} className="text-emerald-400" /> Weekly Revenue
+            <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
+              <Sparkles size={15} className="text-emerald-500 dark:text-emerald-400" /> Weekly Revenue
             </div>
-            <div className="flex items-center gap-1 text-xs text-neutral-400">
+            <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
               {formatCompact(weekRevenue)} · {weekTransactions} txns
             </div>
           </div>
@@ -246,22 +248,22 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="mb-3.5 flex items-center justify-between">
-            <div className="text-[14.5px] font-bold text-neutral-50">Recent Activity</div>
-            <MoreHorizontal size={16} className="cursor-pointer text-neutral-500" />
+            <div className="text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">Recent Activity</div>
+            <MoreHorizontal size={16} className="cursor-pointer text-neutral-400 dark:text-neutral-500" />
           </div>
           {ACTIVITY_FEED.map((a) => {
             const Icon = a.icon;
             return (
               <div
                 key={a.id}
-                className="flex items-center gap-2.5 border-b border-neutral-800 py-2.5 last:border-none"
+                className="flex items-center gap-2.5 border-b border-neutral-200 py-2.5 last:border-none dark:border-neutral-800"
               >
                 <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tints[a.tint]}`}>
                   <Icon size={13} />
                 </span>
-                <div className="text-[12.5px] leading-snug text-neutral-50">
+                <div className="text-[12.5px] leading-snug text-neutral-900 dark:text-neutral-50">
                   <b className="font-semibold">{a.who}</b> {a.what}
                 </div>
                 <span className="ml-auto shrink-0 font-mono text-[11px] text-neutral-500">
@@ -273,27 +275,27 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
-            <Target size={15} className="text-emerald-400" /> Brand Revenue Goals
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
+            <Target size={15} className="text-emerald-500 dark:text-emerald-400" /> Brand Revenue Goals
           </div>
-          <div className="flex cursor-pointer items-center gap-1 text-xs text-neutral-400 hover:text-emerald-400">
+          <div className="flex cursor-pointer items-center gap-1 text-xs text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
             View all brands <ArrowUpRight size={12} />
           </div>
         </div>
         {BRAND_GOALS.map((b) => {
           const progress = Math.min(100, Math.round((b.revenue / b.goal) * 100));
           return (
-            <div key={b.id} className="flex items-center gap-3 border-b border-neutral-800 py-2.5 last:border-none">
-              <div className="w-40 shrink-0 truncate text-[13px] font-semibold text-neutral-50">{b.name}</div>
-              <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-800">
+            <div key={b.id} className="flex items-center gap-3 border-b border-neutral-200 py-2.5 last:border-none dark:border-neutral-800">
+              <div className="w-40 shrink-0 truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-50">{b.name}</div>
+              <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-1000"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <div className="w-9 shrink-0 text-right font-mono text-xs text-neutral-400">{progress}%</div>
+              <div className="w-9 shrink-0 text-right font-mono text-xs text-neutral-500 dark:text-neutral-400">{progress}%</div>
               <div className="w-28 shrink-0 text-right font-mono text-[11px] text-neutral-500">
                 {formatCompact(b.revenue)} / {formatCompact(b.goal)}
               </div>

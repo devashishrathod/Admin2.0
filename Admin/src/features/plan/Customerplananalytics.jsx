@@ -96,17 +96,17 @@ const fmtINR = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
 
 function KpiCard({ icon: Icon, label, value, delta, deltaGood = true }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-center justify-between">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-400">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
           <Icon size={16} />
         </span>
         {delta != null && (
           <span
             className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
               deltaGood
-                ? "bg-emerald-400/10 text-emerald-400"
-                : "bg-red-500/10 text-red-400"
+                ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                : "bg-red-500/10 text-red-600 dark:text-red-400"
             }`}
           >
             {deltaGood ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
@@ -114,7 +114,7 @@ function KpiCard({ icon: Icon, label, value, delta, deltaGood = true }) {
           </span>
         )}
       </div>
-      <div className="mt-4 text-[22px] font-bold text-neutral-50">{value}</div>
+      <div className="mt-4 text-[22px] font-bold text-neutral-900 dark:text-neutral-50">{value}</div>
       <div className="mt-0.5 text-[12px] text-neutral-500">{label}</div>
     </div>
   );
@@ -122,9 +122,9 @@ function KpiCard({ icon: Icon, label, value, delta, deltaGood = true }) {
 
 function ChartCard({ title, subtitle, children }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+    <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="mb-4">
-        <h3 className="text-[13.5px] font-semibold text-neutral-100">{title}</h3>
+        <h3 className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">{title}</h3>
         {subtitle && <p className="mt-0.5 text-[11.5px] text-neutral-500">{subtitle}</p>}
       </div>
       {children}
@@ -153,12 +153,12 @@ export default function CustomerPlanAnalytics() {
   );
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Customer Plan Analytics
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -166,7 +166,7 @@ export default function CustomerPlanAnalytics() {
             </p>
           </div>
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center rounded-xl border border-neutral-800 bg-neutral-900 p-1">
+            <div className="flex items-center rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
               {RANGE_OPTIONS.map((opt) => (
                 <button
                   key={opt}
@@ -174,14 +174,14 @@ export default function CustomerPlanAnalytics() {
                   className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
                     range === opt
                       ? "bg-emerald-400 text-neutral-950"
-                      : "text-neutral-400 hover:text-neutral-100"
+                      : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                   }`}
                 >
                   {opt}
                 </button>
               ))}
             </div>
-            <button className="flex items-center gap-1.5 rounded-xl border border-neutral-800 px-3.5 py-2 text-[12.5px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400">
+            <button className="flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400">
               <Download size={14} />
               Export
             </button>
@@ -256,7 +256,7 @@ export default function CustomerPlanAnalytics() {
               </ResponsiveContainer>
               <div className="mt-3 flex items-center justify-center gap-5">
                 {Object.entries(PLAN_COLORS).map(([name, color]) => (
-                  <span key={name} className="flex items-center gap-1.5 text-[11.5px] text-neutral-400">
+                  <span key={name} className="flex items-center gap-1.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
                     <span className="h-2 w-2 rounded-full" style={{ background: color }} />
                     {name}
                   </span>
@@ -287,14 +287,14 @@ export default function CustomerPlanAnalytics() {
             <div className="mt-2 space-y-2">
               {DISTRIBUTION_DATA.map((d) => (
                 <div key={d.name} className="flex items-center justify-between text-[12px]">
-                  <span className="flex items-center gap-1.5 text-neutral-400">
+                  <span className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                     <span
                       className="h-2 w-2 rounded-full"
                       style={{ background: PLAN_COLORS[d.name] }}
                     />
                     {d.name}
                   </span>
-                  <span className="font-medium text-neutral-200">
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">
                     {((d.value / totalSubscribers) * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -347,10 +347,10 @@ export default function CustomerPlanAnalytics() {
         </div>
 
         {/* Plan performance table */}
-        <div className="overflow-hidden rounded-2xl border border-neutral-800">
-          <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900 px-5 py-4">
-            <h3 className="text-[13.5px] font-semibold text-neutral-100">Plan Performance</h3>
-            <button className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-neutral-300">
+        <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+          <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-5 py-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <h3 className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">Plan Performance</h3>
+            <button className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
               Sorted by revenue
               <ChevronDown size={13} />
             </button>
@@ -358,7 +358,7 @@ export default function CustomerPlanAnalytics() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] border-collapse text-[13px]">
               <thead>
-                <tr className="bg-neutral-900/60">
+                <tr className="bg-neutral-50 dark:bg-neutral-900/60">
                   <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                     Plan
                   </th>
@@ -386,10 +386,10 @@ export default function CustomerPlanAnalytics() {
                 {sortedByRevenue.map((plan, i) => (
                   <tr
                     key={plan.name}
-                    className={i % 2 === 0 ? "bg-neutral-950" : "bg-neutral-900/40"}
+                    className={i % 2 === 0 ? "bg-white dark:bg-neutral-950" : "bg-neutral-50 dark:bg-neutral-900/40"}
                   >
                     <td className="px-5 py-3.5">
-                      <span className="flex items-center gap-2 font-medium text-neutral-100">
+                      <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-100">
                         <span
                           className="h-2 w-2 rounded-full"
                           style={{ background: PLAN_COLORS[plan.name] }}
@@ -397,23 +397,23 @@ export default function CustomerPlanAnalytics() {
                         {plan.name}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-right text-neutral-400">
+                    <td className="px-5 py-3.5 text-right text-neutral-500 dark:text-neutral-400">
                       {fmtINR(plan.price)}
                     </td>
-                    <td className="px-5 py-3.5 text-right text-neutral-200">
+                    <td className="px-5 py-3.5 text-right text-neutral-800 dark:text-neutral-200">
                       {plan.subscribers.toLocaleString("en-IN")}
                     </td>
-                    <td className="px-5 py-3.5 text-right text-emerald-400">
+                    <td className="px-5 py-3.5 text-right text-emerald-600 dark:text-emerald-400">
                       +{plan.newThisMonth}
                     </td>
-                    <td className="px-5 py-3.5 text-right text-red-400">
+                    <td className="px-5 py-3.5 text-right text-red-600 dark:text-red-400">
                       -{plan.churned}
                     </td>
-                    <td className="px-5 py-3.5 text-right font-medium text-neutral-100">
+                    <td className="px-5 py-3.5 text-right font-medium text-neutral-800 dark:text-neutral-100">
                       {fmtINR(plan.revenue)}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-400">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400">
                         <TrendingUp size={11} />
                         {plan.growth}%
                       </span>

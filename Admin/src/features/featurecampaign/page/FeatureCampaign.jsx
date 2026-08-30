@@ -116,12 +116,12 @@ export function computeCampaignStatus(c) {
 }
 
 const STATUS_STYLES = {
-  Live: { dot: "bg-emerald-400", text: "text-emerald-400", bg: "bg-emerald-400/10" },
-  Upcoming: { dot: "bg-sky-400", text: "text-sky-400", bg: "bg-sky-400/10" },
-  "Pending Approval": { dot: "bg-amber-400", text: "text-amber-400", bg: "bg-amber-400/10" },
-  Rejected: { dot: "bg-red-400", text: "text-red-400", bg: "bg-red-500/10" },
-  Expired: { dot: "bg-neutral-500", text: "text-neutral-400", bg: "bg-neutral-700/40" },
-  Inactive: { dot: "bg-neutral-500", text: "text-neutral-400", bg: "bg-neutral-700/40" },
+  Live: { dot: "bg-emerald-400", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-400/10" },
+  Upcoming: { dot: "bg-sky-400", text: "text-sky-600 dark:text-sky-400", bg: "bg-sky-400/10" },
+  "Pending Approval": { dot: "bg-amber-400", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-400/10" },
+  Rejected: { dot: "bg-red-400", text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" },
+  Expired: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
+  Inactive: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
 };
 
 export function CampaignStatusBadge({ status }) {
@@ -149,10 +149,10 @@ export function PlatformBadges({ campaign, size = "md" }) {
         key={label}
         className={`inline-flex items-center gap-1 rounded-full font-semibold ${pad} ${
           !requested
-            ? "bg-neutral-800/50 text-neutral-600"
+            ? "bg-neutral-200/50 dark:bg-neutral-800/50 text-neutral-400 dark:text-neutral-600"
             : lit
-            ? "bg-emerald-400/10 text-emerald-400"
-            : "bg-neutral-800 text-neutral-400"
+            ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+            : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"
         }`}
         title={
           !requested
@@ -182,7 +182,7 @@ export function AdAccountPill({ adAccount }) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-        complete ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-400/10 text-amber-400"
+        complete ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-400/10 text-amber-600 dark:text-amber-400"
       }`}
     >
       {complete ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
@@ -474,11 +474,11 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
               {isEdit ? "Edit Campaign" : "Add Feature Campaign"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -490,7 +490,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -499,33 +499,33 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
         <form onSubmit={handleSubmit} className="max-h-[70vh] overflow-y-auto px-5 py-5">
           {/* Title */}
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Campaign Title</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Campaign Title</label>
             <input
               value={form.title}
               onChange={handleChange("title")}
               placeholder="e.g. Weekend Thali Push"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
                 errors.title
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 dark:border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
               }`}
             />
-            {errors.title && <p className="mt-1.5 text-[12px] text-red-400">{errors.title}</p>}
+            {errors.title && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.title}</p>}
           </div>
 
           {/* Brand + Category */}
           <div className="mb-4 grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Brand</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Brand</label>
               <input
                 value={form.brandName}
                 onChange={handleChange("brandName")}
                 placeholder="e.g. Spice Route Kitchen"
                 list="brand-suggestions"
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+                className={`w-full rounded-xl border bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
                   errors.brandName
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 dark:border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
                 }`}
               />
               <datalist id="brand-suggestions">
@@ -533,14 +533,14 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
                   <option key={b} value={b} />
                 ))}
               </datalist>
-              {errors.brandName && <p className="mt-1.5 text-[12px] text-red-400">{errors.brandName}</p>}
+              {errors.brandName && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.brandName}</p>}
             </div>
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Category</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Category</label>
               <select
                 value={form.category}
                 onChange={handleChange("category")}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+                className="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-800 dark:text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
               >
                 {CATEGORY_OPTIONS.map((c) => (
                   <option key={c} value={c}>
@@ -553,7 +553,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
 
           {/* Platforms */}
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Show ads on
             </label>
             <div className="flex items-center gap-2">
@@ -566,8 +566,8 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
                     onClick={() => togglePlatform(platform)}
                     className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-[12.5px] font-medium transition-colors ${
                       checked
-                        ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-400"
-                        : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:border-neutral-700"
+                        ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                        : "border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 hover:border-neutral-300 dark:hover:border-neutral-700"
                     }`}
                   >
                     <Smartphone size={13} />
@@ -576,88 +576,88 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
                 );
               })}
             </div>
-            {errors.platforms && <p className="mt-1.5 text-[12px] text-red-400">{errors.platforms}</p>}
+            {errors.platforms && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.platforms}</p>}
           </div>
 
           {/* Budget + Dates */}
           <div className="mb-4 grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Budget (₹)</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Budget (₹)</label>
               <input
                 type="number"
                 min="0"
                 value={form.budget}
                 onChange={handleChange("budget")}
                 placeholder="25000"
-                className={`w-full rounded-xl border bg-neutral-950 px-3 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+                className={`w-full rounded-xl border bg-neutral-50 dark:bg-neutral-950 px-3 py-2.5 text-[13.5px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
                   errors.budget
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 dark:border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
                 }`}
               />
-              {errors.budget && <p className="mt-1.5 text-[11.5px] text-red-400">{errors.budget}</p>}
+              {errors.budget && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.budget}</p>}
             </div>
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Start Date</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Start Date</label>
               <input
                 type="date"
                 value={form.startDate}
                 onChange={handleChange("startDate")}
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 ${
+                className={`w-full rounded-xl border bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 ${
                   errors.startDate
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 dark:border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
                 }`}
               />
-              {errors.startDate && <p className="mt-1.5 text-[11.5px] text-red-400">{errors.startDate}</p>}
+              {errors.startDate && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.startDate}</p>}
             </div>
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">End Date</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">End Date</label>
               <input
                 type="date"
                 value={form.endDate}
                 onChange={handleChange("endDate")}
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 ${
+                className={`w-full rounded-xl border bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 ${
                   errors.endDate
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 dark:border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
                 }`}
               />
-              {errors.endDate && <p className="mt-1.5 text-[11.5px] text-red-400">{errors.endDate}</p>}
+              {errors.endDate && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.endDate}</p>}
             </div>
           </div>
 
           {/* Ad Account details */}
-          <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-950/50 p-3.5">
+          <div className="mb-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/50 p-3.5">
             <p className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
               <ShieldCheck size={12} />
               Ad Account Details
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Ad Account ID</label>
+                <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Ad Account ID</label>
                 <input
                   value={form.adAccountId}
                   onChange={handleChange("adAccountId")}
                   placeholder="e.g. GAD-90042113"
-                  className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-[13px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+                  className="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3 py-2.5 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Ad Account Name</label>
+                <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Ad Account Name</label>
                 <input
                   value={form.adAccountName}
                   onChange={handleChange("adAccountName")}
                   placeholder="e.g. Brand — Google Ads"
-                  className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-[13px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+                  className="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3 py-2.5 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
                 />
               </div>
               <div className="col-span-2">
-                <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Ad Platform</label>
+                <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Ad Platform</label>
                 <select
                   value={form.adPlatform}
                   onChange={handleChange("adPlatform")}
-                  className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-[13px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+                  className="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3 py-2.5 text-[13px] text-neutral-800 dark:text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
                 >
                   {AD_PLATFORM_OPTIONS.map((p) => (
                     <option key={p} value={p}>
@@ -666,21 +666,21 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
                   ))}
                 </select>
               </div>
-              <label className="col-span-2 flex items-center gap-2 text-[12.5px] text-neutral-300">
+              <label className="col-span-2 flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
                 <input
                   type="checkbox"
                   checked={form.accessGranted}
                   onChange={(e) => setForm((f) => ({ ...f, accessGranted: e.target.checked }))}
-                  className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 accent-emerald-400"
+                  className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 accent-emerald-400"
                 />
                 Admin access has been granted on this ad account
               </label>
-              <label className="col-span-2 flex items-center gap-2 text-[12.5px] text-neutral-300">
+              <label className="col-span-2 flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
                 <input
                   type="checkbox"
                   checked={form.billingVerified}
                   onChange={(e) => setForm((f) => ({ ...f, billingVerified: e.target.checked }))}
-                  className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 accent-emerald-400"
+                  className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 accent-emerald-400"
                 />
                 Billing details are set up and verified
               </label>
@@ -692,7 +692,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
 
           {/* Description */}
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Description <span className="font-normal text-neutral-500">(optional)</span>
             </label>
             <textarea
@@ -700,7 +700,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
               onChange={handleChange("description")}
               rows={3}
               placeholder="What is this campaign promoting?"
-              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full resize-none rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
             />
           </div>
 
@@ -708,7 +708,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 dark:border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-700 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -969,7 +969,7 @@ export default function FeatureCampaign() {
       label: "Campaign",
       render: (row) => (
         <button onClick={() => setSelectedId(row.id)} className="text-left hover:underline">
-          <p className="font-medium text-neutral-50">{row.title}</p>
+          <p className="font-medium text-neutral-900 dark:text-neutral-50">{row.title}</p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-neutral-500">
             <Tag size={10} /> {row.id} · {row.brandName}
           </p>
@@ -992,7 +992,7 @@ export default function FeatureCampaign() {
       align: "right",
       render: (row) => (
         <div>
-          <p className="text-neutral-200">₹{row.budget.toLocaleString("en-IN")}</p>
+          <p className="text-neutral-800 dark:text-neutral-200">₹{row.budget.toLocaleString("en-IN")}</p>
           <p className="text-[11px] text-neutral-500">Spent ₹{(row.spentAmount || 0).toLocaleString("en-IN")}</p>
         </div>
       ),
@@ -1001,7 +1001,7 @@ export default function FeatureCampaign() {
       key: "validity",
       label: "Validity",
       render: (row) => (
-        <span className="text-[12.5px] text-neutral-400">
+        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
           {row.startDate} → {row.endDate}
         </span>
       ),
@@ -1022,7 +1022,7 @@ export default function FeatureCampaign() {
             <button
               onClick={() => setSelectedId(row.id)}
               aria-label={`View ${row.title}`}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
               title="View details"
             >
               <Eye size={15} />
@@ -1034,8 +1034,8 @@ export default function FeatureCampaign() {
               title={locked ? "Approved campaigns can't be edited directly" : "Edit"}
               className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
                 locked
-                  ? "cursor-not-allowed text-neutral-700"
-                  : "text-neutral-400 hover:bg-neutral-800 hover:text-emerald-400"
+                  ? "cursor-not-allowed text-neutral-300 dark:text-neutral-700"
+                  : "text-neutral-500 hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
               }`}
             >
               {locked ? <Lock size={14} /> : <Pencil size={15} />}
@@ -1044,7 +1044,7 @@ export default function FeatureCampaign() {
               onClick={() => handleDelete(row)}
               aria-label={`Delete ${row.title}`}
               title="Delete"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
             >
               <Trash2 size={15} />
             </button>
@@ -1055,12 +1055,12 @@ export default function FeatureCampaign() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">Feature Campaigns</h1>
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Feature Campaigns</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Brands submit ad campaigns here. A Super Admin verifies the ad account before
               approving — once approved, the campaign goes live on the requested platforms.
@@ -1077,24 +1077,24 @@ export default function FeatureCampaign() {
 
         {/* Search + status filter */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs">
             <Search size={16} className="shrink-0 text-neutral-500" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search campaign, brand or ID..."
-              className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900 p-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
             <SlidersHorizontal size={14} className="ml-1 shrink-0 text-neutral-500" />
             {STATUS_FILTERS.map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                  statusFilter === s ? "bg-emerald-400 text-neutral-950" : "text-neutral-400 hover:text-neutral-200"
+                  statusFilter === s ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
                 }`}
               >
                 {s}

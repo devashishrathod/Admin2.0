@@ -80,12 +80,12 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
               {isEdit ? "Edit Category" : "Add Category"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -98,7 +98,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
             onClick={onClose}
             disabled={saving}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -108,11 +108,11 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
         <form onSubmit={handleSubmit} className="px-5 py-5">
           {/* Image upload */}
           <div className="mb-4">
-            <label className="mb-2 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Category Image
             </label>
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
                 {form.imagePreview ? (
                   <img
                     src={form.imagePreview}
@@ -123,7 +123,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
                   <ImageIcon size={18} className="text-neutral-600" />
                 )}
               </div>
-              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-emerald-400/60 hover:text-emerald-400">
+              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-400 dark:border-neutral-700 dark:text-neutral-400">
                 <ImageIcon size={14} />
                 {form.image ? "Change image" : "Upload image"}
                 <input
@@ -140,7 +140,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
           <div className="mb-4">
             <label
               htmlFor="cat-name"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
+              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
             >
               Category Name
             </label>
@@ -149,10 +149,10 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
               value={form.name}
               onChange={handleChange("name")}
               placeholder="e.g. Electronics"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.name
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
             {errors.name && (
@@ -164,7 +164,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
           <div className="mb-4">
             <label
               htmlFor="cat-description"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
+              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
             >
               Description
             </label>
@@ -174,13 +174,13 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
               onChange={handleChange("description")}
               placeholder="Short description of this category"
               rows={3}
-              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
           </div>
 
           {/* Status */}
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Status
             </label>
             <div className="flex gap-2">
@@ -195,7 +195,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.isActive === s.value
                       ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s.label}
@@ -210,7 +210,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800 disabled:opacity-50"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -243,14 +243,14 @@ function CategoryViewModal({ open, category, loading, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-neutral-50">Category Details</h2>
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Category Details</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -265,7 +265,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
           ) : (
             <>
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
                   {category.image ? (
                     <img
                       src={category.image}
@@ -277,31 +277,31 @@ function CategoryViewModal({ open, category, loading, onClose }) {
                   )}
                 </div>
                 <div>
-                  <p className="text-[16px] font-semibold text-neutral-50">{category.name}</p>
+                  <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{category.name}</p>
                   <StatusBadge status={category.isActive ? "Active" : "Inactive"} />
                 </div>
               </div>
 
               {category.description && (
-                <p className="mt-4 text-[13px] leading-relaxed text-neutral-400">
+                <p className="mt-4 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                   {category.description}
                 </p>
               )}
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
                   <p className="text-[11px] uppercase tracking-wider text-neutral-500">
                     Sub Categories
                   </p>
-                  <p className="mt-1 text-[15px] font-semibold text-neutral-50">
+                  <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
                     {category.subCategoryCount ?? 0}
                   </p>
                 </div>
-                <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
                   <p className="text-[11px] uppercase tracking-wider text-neutral-500">
                     Vouchers
                   </p>
-                  <p className="mt-1 text-[15px] font-semibold text-neutral-50">
+                  <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
                     {category.voucherCount ?? 0}
                   </p>
                 </div>
@@ -532,7 +532,7 @@ export default function Category() {
       key: "icon",
       label: "Category Icon",
       render: (row) => (
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
           {row.image ? (
             <img src={row.image} alt={row.name} className="h-full w-full object-cover" />
           ) : (
@@ -545,7 +545,7 @@ export default function Category() {
       key: "name",
       label: "Category Name",
       render: (row) => (
-        <span className="font-medium text-neutral-50">{row.name}</span>
+        <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.name}</span>
       ),
     },
     {
@@ -572,21 +572,21 @@ export default function Category() {
           <button
             onClick={() => handleView(row)}
             aria-label={`View ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
           >
             <Eye size={15} />
           </button>
           <button
             onClick={() => handleEdit(row)}
             aria-label={`Edit ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => setDeleteTarget(row)}
             aria-label={`Delete ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -596,12 +596,12 @@ export default function Category() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Category
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -618,26 +618,26 @@ export default function Category() {
         </div>
 
         {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs dark:border-neutral-800 dark:bg-neutral-900">
           <Search size={16} className="shrink-0 text-neutral-500" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search category..."
-            className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
           />
         </div>
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading categories…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load categories: {loadError}
           </div>
         )}
@@ -657,7 +657,7 @@ export default function Category() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Prev
                 </button>
@@ -667,7 +667,7 @@ export default function Category() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Next
                 </button>
@@ -690,7 +690,7 @@ export default function Category() {
         onSave={handleSave}
       />
       {modalOpen && saveError && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-white px-4 py-2.5 text-[12.5px] text-red-600 shadow-lg dark:bg-neutral-900 dark:text-red-400">
           {saveError}
         </div>
       )}

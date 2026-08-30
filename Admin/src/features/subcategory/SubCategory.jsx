@@ -46,17 +46,17 @@ function ImageUploader({ imagePreview, hasImage, onPick, onRemove, label = "Imag
 
   return (
     <div>
-      <label className="mb-2 block text-[12.5px] font-medium text-neutral-300">{label}</label>
+      <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</label>
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-700 bg-neutral-950 transition-colors hover:border-emerald-400/50"
+          className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-50 transition-colors hover:border-emerald-400/50 dark:border-neutral-700 dark:bg-neutral-950"
         >
           {imagePreview ? (
             <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
           ) : (
-            <ImageIcon size={20} className="text-neutral-600" />
+            <ImageIcon size={20} className="text-neutral-500 dark:text-neutral-600" />
           )}
         </button>
 
@@ -64,7 +64,7 @@ function ImageUploader({ imagePreview, hasImage, onPick, onRemove, label = "Imag
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
+            className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
             {hasImage ? "Change Image" : "Upload Image"}
           </button>
@@ -72,12 +72,12 @@ function ImageUploader({ imagePreview, hasImage, onPick, onRemove, label = "Imag
             <button
               type="button"
               onClick={onRemove}
-              className="text-[11.5px] font-medium text-red-400 transition-colors hover:text-red-300"
+              className="text-[11.5px] font-medium text-red-600 transition-colors hover:text-red-500 dark:text-red-400 dark:hover:text-red-300"
             >
               Remove
             </button>
           )}
-          <p className="text-[11px] text-neutral-600">PNG or JPG, up to 2MB</p>
+          <p className="text-[11px] text-neutral-500 dark:text-neutral-600">PNG or JPG, up to 2MB</p>
         </div>
 
         <input
@@ -130,11 +130,11 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
               {isEdit ? "Edit Sub-Category" : "Add Sub-Category"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -145,7 +145,7 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
             onClick={onClose}
             disabled={saving}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -169,7 +169,7 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
           </div>
 
           <div className="mb-4">
-            <label htmlFor="subcat-name" className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label htmlFor="subcat-name" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Sub-Category Name
             </label>
             <input
@@ -177,19 +177,19 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="e.g. Mobiles & Accessories"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.name
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
-            {errors.name && <p className="mt-1.5 text-[12px] text-red-400">{errors.name}</p>}
+            {errors.name && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.name}</p>}
           </div>
 
           <div className="mb-4">
             <label
               htmlFor="subcat-description"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
+              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
             >
               Description
             </label>
@@ -199,12 +199,12 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               placeholder="Short description of this sub-category"
               rows={3}
-              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
           </div>
 
           <div className="mb-4">
-            <label htmlFor="subcat-parent" className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label htmlFor="subcat-parent" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Parent Category
             </label>
             <select
@@ -212,10 +212,10 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
               value={form.categoryId}
               onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value }))}
               disabled={isEdit} // most APIs don't allow moving a sub-category to another parent on update
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 disabled:opacity-50 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 disabled:opacity-50 dark:bg-neutral-950 dark:text-neutral-200 ${
                 errors.categoryId
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             >
               <option value="" disabled>
@@ -228,12 +228,12 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
               ))}
             </select>
             {errors.categoryId && (
-              <p className="mt-1.5 text-[12px] text-red-400">{errors.categoryId}</p>
+              <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.categoryId}</p>
             )}
           </div>
 
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Status</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
             <div className="flex gap-2">
               {[
                 { label: "Active", value: true },
@@ -245,8 +245,8 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
                   onClick={() => setForm((prev) => ({ ...prev, isActive: s.value }))}
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.isActive === s.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s.label}
@@ -260,7 +260,7 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800 disabled:opacity-50"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -293,14 +293,14 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-neutral-50">Sub-Category Details</h2>
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Sub-Category Details</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -315,7 +315,7 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
           ) : (
             <>
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
                   {subCategory.image ? (
                     <img
                       src={subCategory.image}
@@ -327,8 +327,8 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
                   )}
                 </div>
                 <div>
-                  <p className="text-[16px] font-semibold text-neutral-50">{subCategory.name}</p>
-                  <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-neutral-800 px-2.5 py-1 text-[11.5px] font-medium text-neutral-300">
+                  <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{subCategory.name}</p>
+                  <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-neutral-200 px-2.5 py-1 text-[11.5px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
                     <Layers size={11} />
                     {categoryName}
                   </span>
@@ -340,16 +340,16 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
               </div>
 
               {subCategory.description && (
-                <p className="mt-4 text-[13px] leading-relaxed text-neutral-400">
+                <p className="mt-4 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                   {subCategory.description}
                 </p>
               )}
 
-              <div className="mt-5 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+              <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
                 <p className="text-[11px] uppercase tracking-wider text-neutral-500">
                   Voucher Count
                 </p>
-                <p className="mt-1 text-[15px] font-semibold text-neutral-50">
+                <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
                   {subCategory.voucherCount ?? 0}
                 </p>
               </div>
@@ -374,13 +374,13 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
 function DeleteConfirmModal({ subCategory, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
           </div>
           <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete sub-category?</h3>
+            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete sub-category?</h3>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
               This removes "{subCategory.name}" permanently.
             </p>
@@ -390,7 +390,7 @@ function DeleteConfirmModal({ subCategory, deleting, onCancel, onConfirm }) {
           <button
             onClick={onCancel}
             disabled={deleting}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -609,7 +609,7 @@ export default function SubCategory() {
       key: "image",
       label: "Image",
       render: (row) => (
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
           {row.image ? (
             <img src={row.image} alt={row.name} className="h-full w-full object-cover" />
           ) : (
@@ -621,13 +621,13 @@ export default function SubCategory() {
     {
       key: "name",
       label: "Sub-Category Name",
-      render: (row) => <span className="font-medium text-neutral-50">{row.name}</span>,
+      render: (row) => <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.name}</span>,
     },
     {
       key: "category",
       label: "Parent Category",
       render: (row) => (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-800 px-2.5 py-1 text-[11.5px] font-medium text-neutral-300">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-200 px-2.5 py-1 text-[11.5px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
           <Layers size={11} />
           {categoryName(row.categoryId)}
         </span>
@@ -652,21 +652,21 @@ export default function SubCategory() {
           <button
             onClick={() => handleView(row)}
             aria-label={`View ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
           >
             <Eye size={15} />
           </button>
           <button
             onClick={() => handleEdit(row)}
             aria-label={`Edit ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => setDeleteTarget(row)}
             aria-label={`Delete ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -676,12 +676,12 @@ export default function SubCategory() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Sub-Category
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -699,20 +699,20 @@ export default function SubCategory() {
 
         {/* Filters */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs sm:flex-1">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs sm:flex-1 dark:border-neutral-800 dark:bg-neutral-900">
             <Search size={16} className="shrink-0 text-neutral-500" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search sub-category..."
-              className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
             />
           </div>
 
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 text-[13px] text-neutral-300 focus:border-emerald-400/60 focus:outline-none sm:w-56"
+            className="rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13px] text-neutral-700 focus:border-emerald-400/60 focus:outline-none sm:w-56 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
           >
             <option value="All">All Categories</option>
             {categories.map((cat) => (
@@ -725,14 +725,14 @@ export default function SubCategory() {
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading sub-categories…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load sub-categories: {loadError}
           </div>
         )}
@@ -752,7 +752,7 @@ export default function SubCategory() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Prev
                 </button>
@@ -762,7 +762,7 @@ export default function SubCategory() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Next
                 </button>
@@ -786,7 +786,7 @@ export default function SubCategory() {
         onSave={handleSave}
       />
       {modalOpen && saveError && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-white px-4 py-2.5 text-[12.5px] text-red-600 shadow-lg dark:bg-neutral-900 dark:text-red-400">
           {saveError}
         </div>
       )}

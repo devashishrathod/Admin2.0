@@ -48,14 +48,14 @@ const STATUS_LABELS = {
 };
 
 const STATUS_STYLES = {
-  [VOUCHER_STATUSES.DRAFT]: { dot: "bg-neutral-500", text: "text-neutral-400", bg: "bg-neutral-700/40" },
-  [VOUCHER_STATUSES.UNDER_REVIEW]: { dot: "bg-amber-400", text: "text-amber-400", bg: "bg-amber-400/10" },
-  [VOUCHER_STATUSES.APPROVED]: { dot: "bg-sky-400", text: "text-sky-400", bg: "bg-sky-400/10" },
-  [VOUCHER_STATUSES.PUBLISHED]: { dot: "bg-emerald-400", text: "text-emerald-400", bg: "bg-emerald-400/10" },
-  [VOUCHER_STATUSES.REJECTED]: { dot: "bg-red-400", text: "text-red-400", bg: "bg-red-500/10" },
-  [VOUCHER_STATUSES.EXPIRED]: { dot: "bg-neutral-500", text: "text-neutral-400", bg: "bg-neutral-700/40" },
-  [VOUCHER_STATUSES.PAUSED]: { dot: "bg-orange-400", text: "text-orange-400", bg: "bg-orange-400/10" },
-  [VOUCHER_STATUSES.ARCHIVED]: { dot: "bg-neutral-600", text: "text-neutral-500", bg: "bg-neutral-800" },
+  [VOUCHER_STATUSES.DRAFT]: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
+  [VOUCHER_STATUSES.UNDER_REVIEW]: { dot: "bg-amber-400", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-400/10" },
+  [VOUCHER_STATUSES.APPROVED]: { dot: "bg-sky-400", text: "text-sky-600 dark:text-sky-400", bg: "bg-sky-400/10" },
+  [VOUCHER_STATUSES.PUBLISHED]: { dot: "bg-emerald-400", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-400/10" },
+  [VOUCHER_STATUSES.REJECTED]: { dot: "bg-red-400", text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" },
+  [VOUCHER_STATUSES.EXPIRED]: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
+  [VOUCHER_STATUSES.PAUSED]: { dot: "bg-orange-400", text: "text-orange-600 dark:text-orange-400", bg: "bg-orange-400/10" },
+  [VOUCHER_STATUSES.ARCHIVED]: { dot: "bg-neutral-600", text: "text-neutral-500", bg: "bg-neutral-200 dark:bg-neutral-800" },
 };
 
 export function VoucherStatusBadge({ status }) {
@@ -151,6 +151,9 @@ function buildTimeline(v) {
 function apiVersionToRow(v) {
   const voucher = v.voucher || {};
   const brand = v.brand || null;
+  const category = v.category || null;
+  const subCategory = v.subCategory || null;
+  const creatorUser = v.createdByUser || null;
   const primaryOffer = v.offers?.[0];
   return {
     id: v._id, // version id — approve/reject/publish act on this
@@ -171,13 +174,49 @@ function apiVersionToRow(v) {
           onboardingStatus: brand.status || "—",
           isApproved: Boolean(brand.isApproved),
           isSubscribed: Boolean(brand.isSubscribed),
+          description: brand.description || "",
+          businessEntityType: brand.businessEntityType || "—",
+          businessRegistrationStatus: brand.businessRegistrationStatus || "—",
+          joinedDate: brand.joinedDate ? formatDateTime(brand.joinedDate) : "—",
+          isRevoked: Boolean(brand.isRevoked),
+          isReviewed: Boolean(brand.isReviewed),
+          followersCount: brand.followersCount ?? 0,
+          franchises: {
+            used: brand.franchisesUsed ?? 0,
+            limit: brand.franchisesLimit ?? 0,
+            unlimited: Boolean(brand.isFranchisesUnlimited),
+          },
+          subBrands: {
+            used: brand.subBrandsUsed ?? 0,
+            limit: brand.subBrandsLimit ?? 0,
+            unlimited: Boolean(brand.isSubBrandsUnlimited),
+          },
+          showcase: {
+            used: brand.showcaseUsed ?? 0,
+            limit: brand.showcaseLimit ?? 0,
+            unlimited: Boolean(brand.isShowcaseUnlimited),
+          },
+          vouchers: {
+            used: brand.vouchersUsed ?? 0,
+            limit: brand.vouchersLimit ?? 0,
+            unlimited: Boolean(brand.isVouchersUnlimited),
+          },
         }
       : null,
-    category: v.category?.name || "—",
-    subCategory: v.subCategory?.name || "—",
+    category: category?.name || "—",
+    subCategory: subCategory?.name || "—",
+    categoryDetails: category
+      ? { name: category.name || "—", description: category.description || "", image: category.image || "" }
+      : null,
+    subCategoryDetails: subCategory
+      ? { name: subCategory.name || "—", description: subCategory.description || "", image: subCategory.image || "" }
+      : null,
     description: v.description || "",
     tags: v.tags || [],
-    images: (v.images || []).map((img) => img.url),
+    images: (v.images || [])
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map((img) => ({ url: img.url, sortOrder: img.sortOrder, provider: img.storage?.provider || null })),
     offers: v.offers || [],
     discount: primaryOffer?.title || "—",
     minBillAmount: primaryOffer?.minBillAmount ?? 0,
@@ -186,6 +225,7 @@ function apiVersionToRow(v) {
     // Date + time (not just the date) — shown in both the table and the
     // details page.
     createdAtDisplay: formatDateTime(v.createdAt),
+    updatedAtDisplay: formatDateTime(v.updatedAt),
     // No fallback to createdAt here — a DRAFT/never-published version has
     // no publishedAt at all, and showing createdAt in its place would
     // falsely imply it went live.
@@ -200,6 +240,38 @@ function apiVersionToRow(v) {
       role: v.createdByUser?.role || v.submittedByUser?.role || null,
       whatsappNumber: v.createdByUser?.whatsappNumber || v.submittedByUser?.whatsappNumber || null,
     },
+    // Full raw record of whoever created the version, for the "Created By"
+    // panel — separate from `creator` above (which is just a display label
+    // with a submittedBy fallback used elsewhere).
+    creatorUser: creatorUser
+      ? {
+          role: creatorUser.role || "—",
+          loginType: creatorUser.loginType || "—",
+          whatsappNumber: creatorUser.whatsappNumber || "—",
+          uniqueId: creatorUser.uniqueId || "—",
+          referralCode: creatorUser.referralCode || "—",
+          isEmailVerified: Boolean(creatorUser.isEmailVerified),
+          isMobileVerified: Boolean(creatorUser.isMobileVerified),
+          isOnBoardingCompleted: Boolean(creatorUser.isOnBoardingCompleted),
+          walletBalance: creatorUser.walletBalance ?? 0,
+          tCoinsBalance: creatorUser.tCoinsBalance ?? 0,
+          currentScreen: creatorUser.currentScreen || "—",
+        }
+      : null,
+    // The parent voucher record (as opposed to this version) — its own
+    // lifecycle/status/timestamps, distinct from the version's.
+    parentVoucher: v.voucher
+      ? {
+          normalizedName: voucher.normalizedName || "—",
+          timezone: voucher.timezone || "—",
+          currentVersion: voucher.currentVersion ?? "—",
+          status: voucher.status || "—",
+          isActive: Boolean(voucher.isActive),
+          isDeleted: Boolean(voucher.isDeleted),
+          createdAtDisplay: voucher.createdAt ? formatDateTime(voucher.createdAt) : "—",
+          updatedAtDisplay: voucher.updatedAt ? formatDateTime(voucher.updatedAt) : "—",
+        }
+      : null,
     // The version's own `status` is the authoritative, up-to-date workflow
     // state — the parent `voucher.status` can lag behind it (e.g. a
     // version can show status "PUBLISHED" while `voucher.status` is still
@@ -207,6 +279,8 @@ function apiVersionToRow(v) {
     // the parent's when the version itself doesn't have one.
     approvalStatus: v.status || voucher.status || VOUCHER_STATUSES.DRAFT,
     isActive: Boolean(v.isActive),
+    isDeleted: Boolean(v.isDeleted),
+    isImmutable: Boolean(v.isImmutable),
     rejectionReason: v.rejectionReason || null,
     history: buildTimeline(v),
   };
@@ -341,7 +415,7 @@ export default function VoucherListing() {
       label: "Voucher",
       render: (row) => (
         <button onClick={() => setSelectedId(row.id)} className="text-left hover:underline">
-          <p className="font-medium text-neutral-50">{row.title}</p>
+          <p className="font-medium text-neutral-900 dark:text-neutral-50">{row.title}</p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-neutral-500">
             <Tag size={10} /> {row.versionCode}
           </p>
@@ -358,21 +432,21 @@ export default function VoucherListing() {
               <img src={row.brand.logo} alt={row.brandName} className="h-full w-full object-contain" />
             </div>
           )}
-          <span className="text-neutral-300">{row.brandName}</span>
+          <span className="text-neutral-700 dark:text-neutral-300">{row.brandName}</span>
         </div>
       ),
     },
     {
       key: "category",
       label: "Category",
-      render: (row) => <span className="text-neutral-300">{row.category}</span>,
+      render: (row) => <span className="text-neutral-700 dark:text-neutral-300">{row.category}</span>,
     },
     {
       key: "discount",
       label: "Offer",
       render: (row) => (
         <div>
-          <p className="font-semibold text-neutral-200">{row.discount}</p>
+          <p className="font-semibold text-neutral-800 dark:text-neutral-200">{row.discount}</p>
           {row.offers.length > 1 && (
             <p className="text-[11px] text-neutral-500">+{row.offers.length - 1} more</p>
           )}
@@ -383,7 +457,7 @@ export default function VoucherListing() {
       key: "validity",
       label: "Validity",
       render: (row) => (
-        <span className="text-[12.5px] text-neutral-400">
+        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
           {row.startDate} → {row.endDate}
         </span>
       ),
@@ -391,7 +465,7 @@ export default function VoucherListing() {
     {
       key: "created",
       label: "Created",
-      render: (row) => <span className="text-[12.5px] text-neutral-400">{row.createdAtDisplay}</span>,
+      render: (row) => <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">{row.createdAtDisplay}</span>,
     },
     {
       key: "status",
@@ -407,7 +481,7 @@ export default function VoucherListing() {
           <button
             onClick={() => setSelectedId(row.id)}
             aria-label={`View ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
             title="View details"
           >
             <Eye size={15} />
@@ -417,7 +491,7 @@ export default function VoucherListing() {
             disabled={actionBusy}
             aria-label={`Delete ${row.title}`}
             title="Delete"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -427,36 +501,38 @@ export default function VoucherListing() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">Vouchers</h1>
-          <p className="mt-1 text-[13px] text-neutral-500">
+          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Vouchers</h1>
+          <p className="mt-1 text-[13px] text-neutral-500 dark:text-neutral-400">
             Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.
           </p>
         </div>
 
         {/* Search + status filter */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs">
             <Search size={16} className="shrink-0 text-neutral-500" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search voucher, brand or code..."
-              className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900 p-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
             <SlidersHorizontal size={14} className="ml-1 shrink-0 text-neutral-500" />
             {STATUS_FILTERS.map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                  statusFilter === s ? "bg-emerald-400 text-neutral-950" : "text-neutral-400 hover:text-neutral-200"
+                  statusFilter === s
+                    ? "bg-emerald-400 text-neutral-950"
+                    : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
                 }`}
               >
                 {s === "All" ? "All" : STATUS_LABELS[s] || s}
@@ -466,7 +542,7 @@ export default function VoucherListing() {
         </div>
 
         {actionError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-400">
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />
             {actionError}
           </div>
@@ -474,14 +550,14 @@ export default function VoucherListing() {
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading vouchers…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load vouchers: {loadError}
           </div>
         )}

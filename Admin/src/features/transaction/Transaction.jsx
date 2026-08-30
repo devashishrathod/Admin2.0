@@ -26,8 +26,8 @@ export function StatusBadge({ status, activeLabel = "Active" }) {
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold
         ${
           isActive
-            ? "bg-emerald-400/10 text-emerald-400"
-            : "bg-neutral-700/40 text-neutral-400"
+            ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+            : "bg-neutral-200 text-neutral-600 dark:bg-neutral-700/40 dark:text-neutral-400"
         }`}
     >
       <span
@@ -54,11 +54,11 @@ export function Table({
       : "text-left";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] border-collapse text-[13.5px]">
           <thead>
-            <tr className="border-b border-neutral-800 bg-neutral-800/40">
+            <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800/40">
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -85,14 +85,14 @@ export function Table({
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className={`border-b border-neutral-800/70 transition-colors last:border-b-0 hover:bg-neutral-800/30 ${
+                  className={`border-b border-neutral-200/70 transition-colors last:border-b-0 hover:bg-neutral-50 dark:border-neutral-800/70 dark:hover:bg-neutral-800/30 ${
                     row.isToday ? "bg-cyan-400/[0.04]" : ""
                   }`}
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-3 text-neutral-300 ${alignClass(
+                      className={`px-4 py-3 text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
                       )}`}
                     >
@@ -218,15 +218,15 @@ const inr = (n) =>
 function TxnStatusBadge({ status }) {
   const map = {
     Success: {
-      cls: "bg-emerald-400/10 text-emerald-400 ring-emerald-400/30",
+      cls: "bg-emerald-400/10 text-emerald-600 ring-emerald-400/30 dark:text-emerald-400",
       icon: CheckCircle2,
     },
     Pending: {
-      cls: "bg-amber-400/10 text-amber-400 ring-amber-400/30",
+      cls: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400",
       icon: Clock3,
     },
     Failed: {
-      cls: "bg-red-400/10 text-red-400 ring-red-400/30",
+      cls: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400",
       icon: XCircle,
     },
   };
@@ -244,24 +244,24 @@ function TxnStatusBadge({ status }) {
 
 function StatCard({ icon: Icon, label, amount, sub, tone = "emerald", live }) {
   const toneCls = {
-    emerald: "text-emerald-400",
-    cyan: "text-cyan-400",
-    amber: "text-amber-400",
-    red: "text-red-400",
+    emerald: "text-emerald-600 dark:text-emerald-400",
+    cyan: "text-cyan-600 dark:text-cyan-400",
+    amber: "text-amber-600 dark:text-amber-400",
+    red: "text-red-600 dark:text-red-400",
   }[tone];
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-      <div className="flex items-center gap-2 text-[12.5px] text-neutral-400">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
         <Icon size={15} className={toneCls} />
         {label}
         {live && (
-          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             Live
           </span>
         )}
       </div>
-      <div className="mt-3 text-[22px] font-semibold text-neutral-50">
+      <div className="mt-3 text-[22px] font-semibold text-neutral-900 dark:text-neutral-50">
         {inr(amount)}
       </div>
       <div className="mt-1 text-[12px] text-neutral-500">{sub}</div>
@@ -362,24 +362,24 @@ function TransactionDrawer({ txn, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="h-full w-full max-w-md overflow-y-auto border-l border-neutral-800 bg-neutral-900 p-6"
+        className="h-full w-full max-w-md overflow-y-auto border-l border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900"
       >
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold text-neutral-50">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
             {txn.id}
           </h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="mb-5 flex items-center justify-between rounded-xl bg-neutral-950 px-4 py-4">
+        <div className="mb-5 flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-4 dark:bg-neutral-950">
           <div>
             <p className="text-[11.5px] text-neutral-500">Amount</p>
-            <p className="mt-0.5 text-[20px] font-semibold text-neutral-50">
+            <p className="mt-0.5 text-[20px] font-semibold text-neutral-900 dark:text-neutral-50">
               {inr(txn.amount)}
             </p>
           </div>
@@ -397,24 +397,24 @@ function TransactionDrawer({ txn, onClose }) {
 
         {txn.status === "Failed" && (
           <div className="mt-5 rounded-xl bg-red-400/10 px-4 py-3">
-            <p className="text-[11.5px] font-medium text-red-400">
+            <p className="text-[11.5px] font-medium text-red-600 dark:text-red-400">
               Failure reason
             </p>
-            <p className="mt-1 text-[13px] text-neutral-300">
+            <p className="mt-1 text-[13px] text-neutral-700 dark:text-neutral-300">
               {txn.failureReason}
             </p>
           </div>
         )}
 
         {txn.status === "Pending" && (
-          <div className="mt-5 rounded-xl bg-amber-400/10 px-4 py-3 text-[13px] text-neutral-300">
+          <div className="mt-5 rounded-xl bg-amber-400/10 px-4 py-3 text-[13px] text-neutral-700 dark:text-neutral-300">
             This transaction is still being processed by the payment gateway.
           </div>
         )}
 
         {txn.status === "Success" && (
-          <div className="mt-5 flex items-center gap-2 rounded-xl bg-emerald-400/10 px-4 py-3 text-[13px] text-neutral-300">
-            <CheckCircle2 size={15} className="text-emerald-400" />
+          <div className="mt-5 flex items-center gap-2 rounded-xl bg-emerald-400/10 px-4 py-3 text-[13px] text-neutral-700 dark:text-neutral-300">
+            <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400" />
             Payment completed and confirmed.
           </div>
         )}
@@ -427,7 +427,7 @@ function DrawerField({ label, value }) {
   return (
     <div>
       <p className="text-[11.5px] text-neutral-500">{label}</p>
-      <p className="mt-0.5 truncate text-[13.5px] font-medium text-neutral-100">
+      <p className="mt-0.5 truncate text-[13.5px] font-medium text-neutral-800 dark:text-neutral-100">
         {value}
       </p>
     </div>
@@ -490,7 +490,7 @@ export default function Transaction() {
     { key: "id", label: "Transaction Id", render: (r) => (
       <button
         onClick={() => setSelected(r)}
-        className="font-medium text-emerald-400 hover:underline"
+        className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
       >
         {r.id}
       </button>
@@ -504,7 +504,7 @@ export default function Transaction() {
         <span>
           {formatDate(r.date)}{" "}
           {r.isToday && (
-            <span className="ml-1 rounded-full bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+            <span className="ml-1 rounded-full bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-600 dark:text-cyan-300">
               Today
             </span>
           )}
@@ -518,7 +518,7 @@ export default function Transaction() {
       label: "Amount",
       align: "right",
       render: (r) => (
-        <span className="font-medium text-neutral-50">{inr(r.amount)}</span>
+        <span className="font-medium text-neutral-900 dark:text-neutral-50">{inr(r.amount)}</span>
       ),
     },
     {
@@ -536,12 +536,12 @@ export default function Transaction() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Transactions
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -557,7 +557,7 @@ export default function Transaction() {
               <Download size={15} />
               Export CSV
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 hover:bg-neutral-800">
+            <button className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800">
               <RefreshCw size={15} />
               Refresh
             </button>
@@ -604,7 +604,7 @@ export default function Transaction() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 p-1.5">
+        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
           {TABS.map((t) => {
             const count =
               t.key === "all"
@@ -621,7 +621,7 @@ export default function Transaction() {
                 className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors ${
                   active
                     ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                    : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                 }`}
               >
                 {t.label}
@@ -629,7 +629,7 @@ export default function Transaction() {
                   className={`rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold ${
                     active
                       ? "bg-neutral-950/20 text-neutral-950"
-                      : "bg-neutral-800 text-neutral-400"
+                      : "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
                   }`}
                 >
                   {count}
@@ -641,7 +641,7 @@ export default function Transaction() {
 
         {/* Toolbar */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
             <Search size={15} className="shrink-0 text-neutral-500" />
             <input
               value={search}
@@ -650,11 +650,11 @@ export default function Transaction() {
                 setPage(1);
               }}
               placeholder="Search transaction id, vendor, customer, reference..."
-              className="w-72 bg-transparent text-[13px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+              className="w-72 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
             />
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 px-1 py-1">
+            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-1 py-1 dark:border-neutral-800 dark:bg-neutral-900">
               <Filter size={14} className="ml-1.5 text-neutral-500" />
               {["All", ...PAYMENT_METHODS].map((m) => (
                 <button
@@ -665,8 +665,8 @@ export default function Transaction() {
                   }}
                   className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
                     methodFilter === m
-                      ? "bg-emerald-400/15 text-emerald-400"
-                      : "text-neutral-400 hover:text-neutral-200"
+                      ? "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400"
+                      : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {m}
@@ -693,7 +693,7 @@ export default function Transaction() {
                 setRowsPerPage(Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-200 focus:outline-none"
+              className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-neutral-800 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
             >
               {[10, 20, 50].map((n) => (
                 <option key={n} value={n}>
@@ -713,7 +713,7 @@ export default function Transaction() {
                 className={`flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-medium ${
                   page === n
                     ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-400 hover:bg-neutral-800"
+                    : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 }`}
               >
                 {n}

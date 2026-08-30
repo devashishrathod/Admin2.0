@@ -7,8 +7,8 @@ export function StatusBadge({ status, activeLabel = "Active" }) {
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold
         ${
           isActive
-            ? "bg-emerald-400/10 text-emerald-400"
-            : "bg-neutral-700/40 text-neutral-400"
+            ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+            : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
         }`}
     >
       <span
@@ -40,6 +40,7 @@ export default function Table({
   data = [],
   emptyMessage = "No records found.",
   rowKey = "id",
+  minWidth = 760,
 }) {
   const alignClass = (align) =>
     align === "center"
@@ -49,11 +50,11 @@ export default function Table({
       : "text-left";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse text-[13.5px]">
+        <table className="w-full border-collapse text-[13.5px]" style={{ minWidth: minWidth ? `${minWidth}px` : undefined }}>
           <thead>
-            <tr className="border-b border-neutral-800 bg-neutral-800/40">
+            <tr className="border-b border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-800/40">
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -80,12 +81,12 @@ export default function Table({
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className="border-b border-neutral-800/70 transition-colors last:border-b-0 hover:bg-neutral-800/30"
+                  className="border-b border-neutral-200 transition-colors last:border-b-0 hover:bg-neutral-100 dark:border-neutral-800/70 dark:hover:bg-neutral-800/30"
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-3 text-neutral-300 ${alignClass(
+                      className={`px-4 py-3 text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
                       )}`}
                     >

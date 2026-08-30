@@ -40,7 +40,7 @@ const CAMPAIGN_REJECTION_REASONS = [
 
 function SectionCard({ title, icon: Icon, children, className = "" }) {
   return (
-    <div className={`rounded-2xl border border-neutral-800 bg-neutral-900 p-5 ${className}`}>
+    <div className={`rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900 ${className}`}>
       {title && (
         <p className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
           {Icon && <Icon size={12} />}
@@ -56,7 +56,7 @@ function InfoRow({ label, value }) {
   return (
     <div className="flex items-center justify-between py-2.5">
       <span className="text-[12.5px] text-neutral-500">{label}</span>
-      <span className="text-[13.5px] font-medium text-neutral-200">{value || "—"}</span>
+      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{value || "—"}</span>
     </div>
   );
 }
@@ -80,19 +80,19 @@ function RejectReasonModal({ campaign, onClose, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-[16px] font-semibold text-neutral-50">Reject Campaign</h2>
+            <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Reject Campaign</h2>
             <p className="mt-1 text-[12.5px] text-neutral-500">
-              Tell {campaign.brandName} why <span className="text-neutral-300">{campaign.title}</span>{" "}
+              Tell {campaign.brandName} why <span className="text-neutral-700 dark:text-neutral-300">{campaign.title}</span>{" "}
               is being rejected. This reason is shown to the brand.
             </p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-800 text-neutral-400 transition-colors hover:border-neutral-700 hover:text-neutral-200"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             <X size={15} />
           </button>
@@ -100,11 +100,11 @@ function RejectReasonModal({ campaign, onClose, onConfirm }) {
 
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1.5 block text-[12px] font-medium text-neutral-400">Reason</span>
+            <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Reason</span>
             <select
               value={reasonChoice}
               onChange={(e) => setReasonChoice(e.target.value)}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13px] text-neutral-200 outline-none focus:border-emerald-500/50"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 outline-none focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             >
               {CAMPAIGN_REJECTION_REASONS.map((r) => (
                 <option key={r} value={r}>
@@ -115,7 +115,7 @@ function RejectReasonModal({ campaign, onClose, onConfirm }) {
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-[12px] font-medium text-neutral-400">
+            <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
               {reasonChoice === "Other" ? "Describe the reason" : "Additional note (optional)"}
             </span>
             <textarea
@@ -123,16 +123,16 @@ function RejectReasonModal({ campaign, onClose, onConfirm }) {
               onChange={(e) => setNote(e.target.value)}
               rows={3}
               placeholder="Add specific details to help the brand fix the issue..."
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13px] text-neutral-200 outline-none focus:border-emerald-500/50"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 outline-none focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </label>
         </div>
 
-        <div className="mt-5 flex items-center justify-end gap-2 border-t border-neutral-800 pt-4">
+        <div className="mt-5 flex items-center justify-end gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-neutral-800 px-4 py-2 text-[13px] font-medium text-neutral-400 transition-colors hover:border-neutral-700 hover:text-neutral-200"
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             Cancel
           </button>
@@ -158,40 +158,40 @@ function ApproveModal({ campaign, onClose, onConfirm }) {
   const [remarks, setRemarks] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-[16px] font-semibold text-neutral-50">Approve Campaign</h2>
+            <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Approve Campaign</h2>
             <p className="mt-1 text-[12.5px] text-neutral-500">
-              <span className="text-neutral-300">{campaign.title}</span> will go live on{" "}
-              <span className="font-medium text-emerald-400">{campaign.platforms.join(" & ")}</span> once approved.
+              <span className="text-neutral-700 dark:text-neutral-300">{campaign.title}</span> will go live on{" "}
+              <span className="font-medium text-emerald-600 dark:text-emerald-400">{campaign.platforms.join(" & ")}</span> once approved.
             </p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-800 text-neutral-400 transition-colors hover:border-neutral-700 hover:text-neutral-200"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             <X size={15} />
           </button>
         </div>
 
         <label className="block">
-          <span className="mb-1.5 block text-[12px] font-medium text-neutral-400">Remarks (optional)</span>
+          <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Remarks (optional)</span>
           <textarea
             value={remarks}
             onChange={(e) => setRemarks(e.target.value)}
             rows={3}
             placeholder="e.g. Ad account verified, all details in order."
-            className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13px] text-neutral-200 outline-none focus:border-emerald-500/50"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 outline-none focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
           />
         </label>
 
-        <div className="mt-5 flex items-center justify-end gap-2 border-t border-neutral-800 pt-4">
+        <div className="mt-5 flex items-center justify-end gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-neutral-800 px-4 py-2 text-[13px] font-medium text-neutral-400 transition-colors hover:border-neutral-700 hover:text-neutral-200"
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             Cancel
           </button>
@@ -226,7 +226,7 @@ function AdAccountChecklistCard({ campaign, onToggleField }) {
           <InfoRow label="Account ID" value={campaign.adAccount?.accountId} />
         </div>
       </div>
-      <div className="divide-y divide-neutral-800">
+      <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
         <InfoRow label="Account Name" value={campaign.adAccount?.accountName} />
         <InfoRow label="Ad Platform" value={campaign.adAccount?.platform} />
       </div>
@@ -239,18 +239,18 @@ function AdAccountChecklistCard({ campaign, onToggleField }) {
               item.done ? "border-emerald-400/20 bg-emerald-400/5" : "border-amber-400/20 bg-amber-400/5"
             }`}
           >
-            <span className="flex items-center gap-2 text-[12.5px] text-neutral-300">
+            <span className="flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
               {item.done ? (
-                <Check size={13} className="text-emerald-400" />
+                <Check size={13} className="text-emerald-600 dark:text-emerald-400" />
               ) : (
-                <X size={13} className="text-amber-400" />
+                <X size={13} className="text-amber-600 dark:text-amber-400" />
               )}
               {item.label}
             </span>
             {editable && (item.key === "accessGranted" || item.key === "billingVerified") && (
               <button
                 onClick={() => onToggleField(item.key)}
-                className="rounded-full border border-neutral-700 px-2.5 py-1 text-[10.5px] font-medium text-neutral-400 transition-colors hover:border-neutral-600 hover:text-neutral-200"
+                className="rounded-full border border-neutral-300 px-2.5 py-1 text-[10.5px] font-medium text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-800 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-600 dark:hover:text-neutral-200"
               >
                 Mark as {item.done ? "not done" : "done"}
               </button>
@@ -261,7 +261,7 @@ function AdAccountChecklistCard({ campaign, onToggleField }) {
 
       <div
         className={`mt-4 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[12.5px] font-medium ${
-          complete ? "bg-emerald-400/10 text-emerald-400" : "bg-amber-400/10 text-amber-400"
+          complete ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-400/10 text-amber-600 dark:text-amber-400"
         }`}
       >
         {complete ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
@@ -281,15 +281,15 @@ function HistoryTimeline({ history }) {
         {[...history].reverse().map((h, i) => (
           <div key={i} className="flex gap-3">
             <div className="flex flex-col items-center">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-600" />
-              {i !== history.length - 1 && <span className="mt-1 w-px flex-1 bg-neutral-800" />}
+              <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-600" />
+              {i !== history.length - 1 && <span className="mt-1 w-px flex-1 bg-neutral-200 dark:bg-neutral-800" />}
             </div>
             <div className="pb-1">
-              <p className="text-[12.5px] font-medium text-neutral-200">
+              <p className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">
                 {h.action} <span className="font-normal text-neutral-500">by {h.by}</span>
               </p>
               <p className="mt-0.5 text-[11.5px] text-neutral-500">{h.date}</p>
-              {h.remarks && <p className="mt-1 text-[12px] text-neutral-400">{h.remarks}</p>}
+              {h.remarks && <p className="mt-1 text-[12px] text-neutral-500 dark:text-neutral-400">{h.remarks}</p>}
             </div>
           </div>
         ))}
@@ -331,13 +331,13 @@ export default function CampaignDetails({
   const isApproved = campaign.approvalStatus === "Approved";
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-4xl">
         {/* Top bar */}
         <div className="mb-4 flex items-center justify-between">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-neutral-700 hover:text-neutral-200"
+            className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             <ArrowLeft size={13} />
             Back to Campaigns
@@ -346,7 +346,7 @@ export default function CampaignDetails({
           {onEdit && (
             <button
               onClick={onEdit}
-              className="flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-emerald-400/40 hover:text-emerald-400"
+              className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/40 hover:text-emerald-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-emerald-400"
             >
               <Pencil size={13} />
               Edit Campaign
@@ -355,58 +355,58 @@ export default function CampaignDetails({
         </div>
 
         {/* Header card */}
-        <div className="relative mb-5 overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900 p-6">
+        <div className="relative mb-5 overflow-hidden rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[19px] font-semibold text-neutral-50">{campaign.title}</h1>
+                <h1 className="text-[19px] font-semibold text-neutral-900 dark:text-neutral-50">{campaign.title}</h1>
                 <CampaignStatusBadge status={status} />
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-[13px] text-neutral-500">
                 <Building2 size={13} />
                 {campaign.brandName}
-                <span className="text-neutral-700">·</span>
+                <span className="text-neutral-300 dark:text-neutral-700">·</span>
                 <Tag size={12} />
                 {campaign.id}
               </p>
-              <p className="mt-2 text-[13px] text-neutral-400">{campaign.description}</p>
+              <p className="mt-2 text-[13px] text-neutral-500 dark:text-neutral-400">{campaign.description}</p>
             </div>
             <PlatformBadges campaign={campaign} />
           </div>
 
           {/* Quick stats */}
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3.5">
-              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-800 text-neutral-400">
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Wallet size={13} />
               </span>
               <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Budget</p>
-              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-100">
+              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">
                 ₹{campaign.budget.toLocaleString("en-IN")}
               </p>
             </div>
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3.5">
-              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-800 text-neutral-400">
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Wallet size={13} />
               </span>
               <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Spent</p>
-              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-100">
+              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">
                 ₹{(campaign.spentAmount || 0).toLocaleString("en-IN")}
               </p>
             </div>
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3.5">
-              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-800 text-neutral-400">
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Calendar size={13} />
               </span>
               <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Start</p>
-              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-100">{campaign.startDate}</p>
+              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">{campaign.startDate}</p>
             </div>
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3.5">
-              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-800 text-neutral-400">
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+              <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Calendar size={13} />
               </span>
               <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">End</p>
-              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-100">{campaign.endDate}</p>
+              <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">{campaign.endDate}</p>
             </div>
           </div>
         </div>
@@ -415,13 +415,13 @@ export default function CampaignDetails({
         {isRejected && campaign.rejectionReason && (
           <SectionCard className="mb-4 border-red-500/30 bg-red-500/[0.04]">
             <div className="flex items-start gap-3">
-              <MessageSquareWarning size={16} className="mt-0.5 shrink-0 text-red-400" />
+              <MessageSquareWarning size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
               <div className="flex-1">
-                <p className="text-[13.5px] font-semibold text-red-400">Campaign Rejected</p>
-                <p className="mt-1 text-[12.5px] text-neutral-400">{campaign.rejectionReason}</p>
+                <p className="text-[13.5px] font-semibold text-red-600 dark:text-red-400">Campaign Rejected</p>
+                <p className="mt-1 text-[12.5px] text-neutral-500 dark:text-neutral-400">{campaign.rejectionReason}</p>
                 <button
                   onClick={onReopen}
-                  className="mt-3 flex items-center gap-1.5 rounded-full border border-neutral-700 px-3 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/50 hover:text-emerald-400"
+                  className="mt-3 flex items-center gap-1.5 rounded-full border border-neutral-300 px-3 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/50 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-300 dark:hover:text-emerald-400"
                 >
                   <RotateCcw size={12} />
                   Reopen for review
@@ -437,7 +437,7 @@ export default function CampaignDetails({
 
           {/* Platform targeting */}
           <SectionCard title="Platform Targeting" icon={Smartphone}>
-            <p className="mb-3 text-[12.5px] text-neutral-400">
+            <p className="mb-3 text-[12.5px] text-neutral-500 dark:text-neutral-400">
               The brand requested ads on the platform(s) below. They only go live once this
               campaign is approved.
             </p>
@@ -450,10 +450,10 @@ export default function CampaignDetails({
                     key={platform}
                     className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 ${
                       !requested
-                        ? "border-neutral-800 bg-neutral-950/40 text-neutral-600"
+                        ? "border-neutral-200 bg-neutral-50/60 text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-600"
                         : live
-                        ? "border-emerald-400/30 bg-emerald-400/5 text-emerald-400"
-                        : "border-neutral-800 bg-neutral-950 text-neutral-300"
+                        ? "border-emerald-400/30 bg-emerald-400/5 text-emerald-600 dark:text-emerald-400"
+                        : "border-neutral-200 bg-neutral-50 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
                     }`}
                   >
                     <Smartphone size={14} />
@@ -473,12 +473,12 @@ export default function CampaignDetails({
         </div>
 
         {/* Sticky-ish action bar */}
-        <div className="sticky bottom-4 mt-6 flex flex-wrap items-center justify-end gap-2.5 rounded-2xl border border-neutral-800 bg-neutral-900/95 p-4 backdrop-blur">
+        <div className="sticky bottom-4 mt-6 flex flex-wrap items-center justify-end gap-2.5 rounded-2xl border border-neutral-200 bg-white/95 p-4 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/95">
           {isPending && (
             <>
               <button
                 onClick={() => setShowRejectModal(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-red-500/30 px-4 py-2.5 text-[13px] font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                className="flex items-center gap-1.5 rounded-xl border border-red-500/30 px-4 py-2.5 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
               >
                 <X size={14} />
                 Reject
@@ -490,7 +490,7 @@ export default function CampaignDetails({
                 className={`flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-colors ${
                   complete
                     ? "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
-                    : "cursor-not-allowed bg-neutral-800 text-neutral-500"
+                    : "cursor-not-allowed bg-neutral-200 text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500"
                 }`}
               >
                 <Check size={14} />
@@ -502,7 +502,7 @@ export default function CampaignDetails({
           {isApproved && (
             <button
               onClick={onToggleActive}
-              className="flex items-center gap-1.5 rounded-xl border border-neutral-700 px-4 py-2.5 text-[13px] font-semibold text-neutral-300 transition-colors hover:border-neutral-600 hover:text-neutral-100"
+              className="flex items-center gap-1.5 rounded-xl border border-neutral-300 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:border-neutral-400 hover:text-neutral-900 dark:border-neutral-700 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:text-neutral-100"
             >
               <Power size={14} />
               {campaign.isActive ? "Pause Campaign" : "Resume Campaign"}

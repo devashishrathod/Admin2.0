@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, X, Search, Bell, ChevronDown, LogOut, User } from "lucide-react";
+import { Menu, X, Search, Bell, ChevronDown, LogOut, User, Settings as SettingsIcon } from "lucide-react";
 import { useAuthStore } from "../../features/auth/store/authStore";
+import ThemeToggle from "../common/ThemeToggle";
+
+const UNREAD_NOTIFICATIONS = 3;
 
 export default function Header({ mobileOpen, setMobileOpen }) {
   const [userMenu, setUserMenu] = useState(false);
@@ -37,80 +40,121 @@ export default function Header({ mobileOpen, setMobileOpen }) {
     navigate("/login");
   }
 
+  const iconButtonClass =
+    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50";
+
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-2 sm:gap-3.5 border-b border-neutral-800 bg-neutral-950/70 px-3 sm:px-5 backdrop-blur-md">
+    <header className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-neutral-200/80 bg-white/80 px-3 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-950/70 sm:gap-3 sm:px-5">
       <button
         onClick={() => setMobileOpen((v) => !v)}
-        className="flex shrink-0 text-neutral-400 lg:hidden"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50 lg:hidden"
         aria-label={mobileOpen ? "Close menu" : "Open menu"}
       >
-        {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+        {mobileOpen ? <X size={19} /> : <Menu size={19} />}
       </button>
 
-      <div className="hidden w-80 max-w-[40vw] items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-500 focus-within:border-emerald-600 md:flex">
-        <Search size={15} />
+      <label className="hidden w-full max-w-sm items-center gap-2.5 rounded-full border border-transparent bg-neutral-100 px-4 py-2.5 text-neutral-500 transition-colors focus-within:border-emerald-500/50 focus-within:bg-white focus-within:shadow-sm dark:bg-neutral-900 dark:focus-within:border-emerald-500/40 dark:focus-within:bg-neutral-900 md:flex">
+        <Search size={16} className="shrink-0" />
         <input
           placeholder="Search projects, people, tasks…"
-          className="w-full bg-transparent text-[13px] text-neutral-50 outline-none placeholder:text-neutral-500"
+          className="w-full bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500 dark:text-neutral-50"
         />
-      </div>
+      </label>
 
       <div className="flex-1" />
 
-      <button
-        aria-label="Notifications"
-        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 transition-colors hover:border-emerald-600 hover:text-emerald-400"
-      >
-        <Bell size={16} />
-        <span className="absolute right-2 top-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-      </button>
+      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+        <ThemeToggle />
 
-      {/* User menu */}
-      <div ref={menuRef} className="relative shrink-0">
-        <div
-          onClick={() => setUserMenu((v) => !v)}
-          className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 py-1.5 pl-1.5 pr-2 sm:pr-2.5 text-[12.5px] font-semibold text-neutral-50"
-        >
-          <div className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-emerald-400 to-lime-400 text-[10px] font-bold text-neutral-950">
-            {initials}
-          </div>
-          {/* Hidden on narrow phones so a long name never forces the
-              header to overflow horizontally. */}
-          <span className="hidden sm:inline">{displayName}</span>
-          <ChevronDown
-            size={13}
-            className={`hidden transition-transform duration-150 sm:block ${userMenu ? "rotate-180" : ""}`}
-          />
-        </div>
+        <button aria-label="Notifications" className={iconButtonClass}>
+          <Bell size={18} />
+          {UNREAD_NOTIFICATIONS > 0 && (
+            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white dark:ring-neutral-950">
+              {UNREAD_NOTIFICATIONS > 9 ? "9+" : UNREAD_NOTIFICATIONS}
+            </span>
+          )}
+        </button>
 
-        {userMenu && (
-          <div className="absolute right-0 top-[calc(100%+8px)] w-48 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 py-1.5 shadow-xl">
-            <div className="border-b border-neutral-800 px-3.5 py-2.5">
-              <p className="truncate text-[12.5px] font-semibold text-neutral-50">
-                {displayName}
-              </p>
-              {user?.email && (
-                <p className="truncate text-[11.5px] text-neutral-500">{user.email}</p>
-              )}
+        <span className="mx-1 hidden h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-800 sm:block" />
+
+        {/* User menu */}
+        <div ref={menuRef} className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setUserMenu((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={userMenu}
+            className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-[12.5px] font-semibold text-neutral-900 transition-colors hover:bg-neutral-100 dark:text-neutral-50 dark:hover:bg-neutral-800 sm:pr-2.5"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-lime-400 text-[11px] font-bold text-neutral-950">
+              {initials}
             </div>
+            {/* Hidden on narrow phones so a long name never forces the
+                header to overflow horizontally. */}
+            <span className="hidden max-w-[120px] truncate sm:inline">{displayName}</span>
+            <ChevronDown
+              size={13}
+              className={`hidden shrink-0 text-neutral-400 transition-transform duration-150 dark:text-neutral-500 sm:block ${
+                userMenu ? "rotate-180" : ""
+              }`}
+            />
+          </button>
 
-            <button
-              onClick={() => setUserMenu(false)}
-              className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] text-neutral-300 transition-colors hover:bg-neutral-800"
+          {userMenu && (
+            <div
+              role="menu"
+              className="absolute right-0 top-[calc(100%+10px)] w-56 overflow-hidden rounded-2xl border border-neutral-200 bg-white py-1.5 shadow-xl shadow-black/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30"
             >
-              <User size={14} className="text-neutral-500" />
-              Profile
-            </button>
+              <div className="flex items-center gap-2.5 px-3.5 py-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-lime-400 text-[11px] font-bold text-neutral-950">
+                  {initials}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">
+                    {displayName}
+                  </p>
+                  {user?.email && (
+                    <p className="truncate text-[11.5px] text-neutral-500">{user.email}</p>
+                  )}
+                </div>
+              </div>
 
-            <button
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-medium text-red-400 transition-colors hover:bg-red-500/10"
-            >
-              <LogOut size={14} />
-              Logout
-            </button>
-          </div>
-        )}
+              <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-800" />
+
+              <button
+                role="menuitem"
+                onClick={() => setUserMenu(false)}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                <User size={14} className="text-neutral-500" />
+                Profile
+              </button>
+
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setUserMenu(false);
+                  navigate("/settings");
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                <SettingsIcon size={14} className="text-neutral-500" />
+                Settings
+              </button>
+
+              <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-800" />
+
+              <button
+                role="menuitem"
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
+                <LogOut size={14} />
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

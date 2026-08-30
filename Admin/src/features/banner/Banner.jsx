@@ -143,12 +143,12 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
               {isEdit ? "Edit Banner" : "Add Banner"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -159,7 +159,7 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
             onClick={onClose}
             disabled={saving}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -169,7 +169,7 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
         <form onSubmit={handleSubmit} className="max-h-[75vh] overflow-y-auto px-5 py-5">
           {/* Media type */}
           <div className="mb-4">
-            <label className="mb-2 block text-[12.5px] font-medium text-neutral-300">Media Type</label>
+            <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Media Type</label>
             <div className="flex gap-2">
               {TYPE_OPTIONS.map((t) => (
                 <button
@@ -178,8 +178,8 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
                   onClick={() => handleTypeChange(t.value)}
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.type === t.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   <t.icon size={14} />
@@ -191,10 +191,10 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
 
           {/* Media upload — wide banner preview */}
           <div className="mb-4">
-            <label className="mb-2 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Banner {typeOption.label}
             </label>
-            <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-700 bg-neutral-800">
+            <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
               {form.filePreview ? (
                 form.type === BANNER_TYPES.VIDEO ? (
                   <video src={form.filePreview} className="h-full w-full object-cover" muted controls />
@@ -202,20 +202,20 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
                   <img src={form.filePreview} alt="preview" className="h-full w-full object-cover" />
                 )
               ) : (
-                <typeOption.icon size={24} className="text-neutral-600" />
+                <typeOption.icon size={24} className="text-neutral-400 dark:text-neutral-600" />
               )}
             </div>
-            <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-emerald-400/60 hover:text-emerald-400">
+            <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
               <typeOption.icon size={14} />
               {form.filePreview ? `Change ${typeOption.label.toLowerCase()}` : `Upload ${typeOption.label.toLowerCase()}`}
               <input type="file" accept={typeOption.accept} onChange={handleFilePick} className="hidden" />
             </label>
-            {errors.file && <p className="mt-1.5 text-[12px] text-red-400">{errors.file}</p>}
+            {errors.file && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.file}</p>}
           </div>
 
           {/* Title */}
           <div className="mb-4">
-            <label htmlFor="banner-title" className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label htmlFor="banner-title" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Banner Title
             </label>
             <input
@@ -223,18 +223,18 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
               value={form.title}
               onChange={handleChange("title")}
               placeholder="e.g. Diwali Mega Sale"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.title
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
-            {errors.title && <p className="mt-1.5 text-[12px] text-red-400">{errors.title}</p>}
+            {errors.title && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.title}</p>}
           </div>
 
           {/* Description */}
           <div className="mb-4">
-            <label htmlFor="banner-description" className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label htmlFor="banner-description" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Description <span className="font-normal text-neutral-500">(optional)</span>
             </label>
             <textarea
@@ -243,17 +243,17 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
               onChange={handleChange("description")}
               rows={2}
               placeholder="Up to 50% off during the festive season"
-              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
           </div>
 
           {/* Redirect */}
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Redirect On Tap</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Redirect On Tap</label>
             <select
               value={form.redirectType}
               onChange={(e) => setForm((prev) => ({ ...prev, redirectType: e.target.value, targetId: "", url: "" }))}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             >
               {REDIRECT_OPTIONS.map((r) => (
                 <option key={r.value} value={r.value}>
@@ -267,10 +267,10 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
                 <select
                   value={form.targetId}
                   onChange={handleChange("targetId")}
-                  className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 ${
+                  className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 ${
                     errors.targetId
                       ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                      : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                   }`}
                 >
                   <option value="">Select a category…</option>
@@ -280,7 +280,7 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
                     </option>
                   ))}
                 </select>
-                {errors.targetId && <p className="mt-1.5 text-[12px] text-red-400">{errors.targetId}</p>}
+                {errors.targetId && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.targetId}</p>}
               </div>
             )}
 
@@ -290,23 +290,23 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
                   value={form.targetId}
                   onChange={handleChange("targetId")}
                   placeholder={`${REDIRECT_OPTIONS.find((r) => r.value === form.redirectType)?.label} ID`}
-                  className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+                  className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                     errors.targetId
                       ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                      : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                   }`}
                 />
-                {errors.targetId && <p className="mt-1.5 text-[12px] text-red-400">{errors.targetId}</p>}
+                {errors.targetId && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.targetId}</p>}
               </div>
             )}
 
             {form.redirectType === REDIRECT_TYPES.EXTERNAL_URL && (
               <div className="mt-2.5">
                 <div
-                  className={`flex items-center gap-2 rounded-xl border bg-neutral-950 px-3.5 py-2.5 focus-within:ring-1 ${
+                  className={`flex items-center gap-2 rounded-xl border bg-neutral-50 px-3.5 py-2.5 focus-within:ring-1 dark:bg-neutral-950 ${
                     errors.url
                       ? "border-red-500/60 focus-within:border-red-500/60 focus-within:ring-red-500/60"
-                      : "border-neutral-800 focus-within:border-emerald-400/60 focus-within:ring-emerald-400/60"
+                      : "border-neutral-200 focus-within:border-emerald-400/60 focus-within:ring-emerald-400/60 dark:border-neutral-800"
                   }`}
                 >
                   <LinkIcon size={14} className="shrink-0 text-neutral-500" />
@@ -314,10 +314,10 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
                     value={form.url}
                     onChange={handleChange("url")}
                     placeholder="https://trydood.com"
-                    className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                    className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
                   />
                 </div>
-                {errors.url && <p className="mt-1.5 text-[12px] text-red-400">{errors.url}</p>}
+                {errors.url && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.url}</p>}
               </div>
             )}
           </div>
@@ -325,38 +325,38 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
           {/* Validity */}
           <div className="mb-4 grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Start Date</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Start Date</label>
               <input
                 type="datetime-local"
                 value={form.startDateLocal}
                 onChange={handleChange("startDateLocal")}
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 [color-scheme:dark] ${
+                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark] ${
                   errors.startDateLocal
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                 }`}
               />
-              {errors.startDateLocal && <p className="mt-1.5 text-[11.5px] text-red-400">{errors.startDateLocal}</p>}
+              {errors.startDateLocal && <p className="mt-1.5 text-[11.5px] text-red-500 dark:text-red-400">{errors.startDateLocal}</p>}
             </div>
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">End Date</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">End Date</label>
               <input
                 type="datetime-local"
                 value={form.endDateLocal}
                 onChange={handleChange("endDateLocal")}
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 [color-scheme:dark] ${
+                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark] ${
                   errors.endDateLocal
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                 }`}
               />
-              {errors.endDateLocal && <p className="mt-1.5 text-[11.5px] text-red-400">{errors.endDateLocal}</p>}
+              {errors.endDateLocal && <p className="mt-1.5 text-[11.5px] text-red-500 dark:text-red-400">{errors.endDateLocal}</p>}
             </div>
           </div>
 
           {/* Status */}
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Status</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
             <div className="flex gap-2">
               {[
                 { label: "Active", value: true },
@@ -368,8 +368,8 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
                   onClick={() => setField("isActive", s.value)}
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.isActive === s.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s.label}
@@ -384,7 +384,7 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800 disabled:opacity-50"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -417,21 +417,21 @@ function BannerViewModal({ open, banner, categories, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-neutral-50">Banner Details</h2>
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Banner Details</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
         </div>
 
         <div className="px-5 py-5">
-          <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+          <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
             {banner.mediaUrl ? (
               banner.type === BANNER_TYPES.VIDEO ? (
                 <video src={banner.mediaUrl} className="h-full w-full object-cover" muted controls />
@@ -439,43 +439,43 @@ function BannerViewModal({ open, banner, categories, onClose }) {
                 <img src={banner.mediaUrl} alt={banner.title} className="h-full w-full object-cover" />
               )
             ) : (
-              <ImageIcon size={22} className="text-neutral-600" />
+              <ImageIcon size={22} className="text-neutral-400 dark:text-neutral-600" />
             )}
           </div>
 
           <div className="mt-4 flex items-start justify-between gap-3">
-            <p className="text-[16px] font-semibold text-neutral-50">{banner.title}</p>
+            <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{banner.title}</p>
             <StatusBadge status={banner.isActive ? "Active" : "Inactive"} />
           </div>
 
           {banner.description && (
-            <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-400">{banner.description}</p>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">{banner.description}</p>
           )}
 
-          <p className="mt-3 text-[12.5px] text-sky-400">{redirectSummary(banner.redirect, categories)}</p>
+          <p className="mt-3 text-[12.5px] text-sky-600 dark:text-sky-400">{redirectSummary(banner.redirect, categories)}</p>
 
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
               <p className="text-[11px] uppercase tracking-wider text-neutral-500">Type</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50 capitalize">{banner.type?.toLowerCase()}</p>
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 capitalize dark:text-neutral-50">{banner.type?.toLowerCase()}</p>
             </div>
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
               <p className="text-[11px] uppercase tracking-wider text-neutral-500">Status</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50">
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
                 {banner.isActive ? "Active" : "Inactive"}
               </p>
             </div>
           </div>
 
-          <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+          <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
             <p className="text-[11px] uppercase tracking-wider text-neutral-500">Validity</p>
-            <p className="mt-1 text-[13.5px] font-medium text-neutral-200">
+            <p className="mt-1 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">
               {formatDateTime(banner.startDate)} → {formatDateTime(banner.endDate)}
             </p>
           </div>
 
           {banner.createdAt && (
-            <p className="mt-4 text-[11.5px] text-neutral-600">Created {formatDateTime(banner.createdAt)}</p>
+            <p className="mt-4 text-[11.5px] text-neutral-400 dark:text-neutral-600">Created {formatDateTime(banner.createdAt)}</p>
           )}
         </div>
       </div>
@@ -490,13 +490,13 @@ function BannerViewModal({ open, banner, categories, onClose }) {
 function DeleteConfirmModal({ banner, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
           </div>
           <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete banner?</h3>
+            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete banner?</h3>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
               This removes "{banner.title}" and it will stop showing in the app.
             </p>
@@ -506,7 +506,7 @@ function DeleteConfirmModal({ banner, deleting, onCancel, onConfirm }) {
           <button
             onClick={onCancel}
             disabled={deleting}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -759,25 +759,25 @@ export default function Banner() {
     {
       key: "title",
       label: "Title",
-      render: (row) => <span className="font-medium text-neutral-50">{row.title}</span>,
+      render: (row) => <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.title}</span>,
     },
     {
       key: "type",
       label: "Type",
-      render: (row) => <span className="capitalize text-neutral-300">{row.type?.toLowerCase()}</span>,
+      render: (row) => <span className="capitalize text-neutral-700 dark:text-neutral-300">{row.type?.toLowerCase()}</span>,
     },
     {
       key: "redirect",
       label: "Redirect",
       render: (row) => (
-        <span className="max-w-[200px] truncate text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
+        <span className="max-w-[200px] truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
       ),
     },
     {
       key: "validity",
       label: "Validity",
       render: (row) => (
-        <span className="text-[12.5px] text-neutral-400">
+        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
           {formatDateTime(row.startDate)} → {formatDateTime(row.endDate)}
         </span>
       ),
@@ -796,21 +796,21 @@ export default function Banner() {
           <button
             onClick={() => setViewTarget(row)}
             aria-label={`View ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
           >
             <Eye size={15} />
           </button>
           <button
             onClick={() => handleEdit(row)}
             aria-label={`Edit ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => setDeleteTarget(row)}
             aria-label={`Delete ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -820,12 +820,12 @@ export default function Banner() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">Banner</h1>
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Banner</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Upload and manage promotional banners shown in the app.
             </p>
@@ -840,26 +840,26 @@ export default function Banner() {
         </div>
 
         {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs">
           <Search size={16} className="shrink-0 text-neutral-500" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search banner..."
-            className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
           />
         </div>
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading banners…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load banners: {loadError}
           </div>
         )}
@@ -875,7 +875,7 @@ export default function Banner() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Prev
                 </button>
@@ -885,7 +885,7 @@ export default function Banner() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Next
                 </button>
@@ -909,7 +909,7 @@ export default function Banner() {
         onSave={handleSave}
       />
       {modalOpen && saveError && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-white px-4 py-2.5 text-[12.5px] text-red-600 shadow-lg dark:bg-neutral-900 dark:text-red-400">
           {saveError}
         </div>
       )}

@@ -104,12 +104,12 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
               {isEdit ? "Edit Promotional Ticker" : "Add Promotional Ticker"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -120,7 +120,7 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
             onClick={onClose}
             disabled={saving}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -130,27 +130,27 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
         <form onSubmit={handleSubmit} className="max-h-[75vh] overflow-y-auto px-5 py-5">
           {/* Icon upload */}
           <div className="mb-4">
-            <label className="mb-2 block text-[12.5px] font-medium text-neutral-300">Icon</label>
+            <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Icon</label>
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
                 {form.iconPreview ? (
                   <img src={form.iconPreview} alt="preview" className="h-full w-full object-cover" />
                 ) : (
-                  <ImageIcon size={18} className="text-neutral-600" />
+                  <ImageIcon size={18} className="text-neutral-400 dark:text-neutral-600" />
                 )}
               </div>
-              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-emerald-400/60 hover:text-emerald-400">
+              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
                 <ImageIcon size={14} />
                 {form.iconPreview ? "Change icon" : "Upload icon"}
                 <input type="file" accept="image/*" onChange={handleIconPick} className="hidden" />
               </label>
             </div>
-            {errors.icon && <p className="mt-1.5 text-[12px] text-red-400">{errors.icon}</p>}
+            {errors.icon && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.icon}</p>}
           </div>
 
           {/* Title */}
           <div className="mb-4">
-            <label htmlFor="ticker-title" className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label htmlFor="ticker-title" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Title
             </label>
             <input
@@ -158,18 +158,18 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
               value={form.title}
               onChange={handleChange("title")}
               placeholder="e.g. Free Shipping This Month"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.title
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
-            {errors.title && <p className="mt-1.5 text-[12px] text-red-400">{errors.title}</p>}
+            {errors.title && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.title}</p>}
           </div>
 
           {/* Display order */}
           <div className="mb-4">
-            <label htmlFor="ticker-order" className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label htmlFor="ticker-order" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Display Order
             </label>
             <input
@@ -178,45 +178,45 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
               min={0}
               value={form.displayOrder}
               onChange={handleChange("displayOrder")}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </div>
 
           {/* Validity */}
           <div className="mb-4 grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Start Date</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Start Date</label>
               <input
                 type="datetime-local"
                 value={form.startDateLocal}
                 onChange={handleChange("startDateLocal")}
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 [color-scheme:dark] ${
+                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark] ${
                   errors.startDateLocal
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                 }`}
               />
-              {errors.startDateLocal && <p className="mt-1.5 text-[11.5px] text-red-400">{errors.startDateLocal}</p>}
+              {errors.startDateLocal && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.startDateLocal}</p>}
             </div>
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">End Date</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">End Date</label>
               <input
                 type="datetime-local"
                 value={form.endDateLocal}
                 onChange={handleChange("endDateLocal")}
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 [color-scheme:dark] ${
+                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark] ${
                   errors.endDateLocal
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                 }`}
               />
-              {errors.endDateLocal && <p className="mt-1.5 text-[11.5px] text-red-400">{errors.endDateLocal}</p>}
+              {errors.endDateLocal && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.endDateLocal}</p>}
             </div>
           </div>
 
           {/* Status */}
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Status</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
             <div className="flex gap-2">
               {[
                 { label: "Active", value: true },
@@ -228,8 +228,8 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
                   onClick={() => setField("isActive", s.value)}
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.isActive === s.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s.label}
@@ -244,7 +244,7 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800 disabled:opacity-50"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -277,14 +277,14 @@ function TickerViewModal({ open, ticker, categories, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-neutral-50">Ticker Details</h2>
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Ticker Details</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -292,41 +292,41 @@ function TickerViewModal({ open, ticker, categories, onClose }) {
 
         <div className="px-5 py-5">
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
               {ticker.icon ? (
                 <img src={ticker.icon} alt={ticker.title} className="h-full w-full object-cover" />
               ) : (
-                <ImageIcon size={20} className="text-neutral-600" />
+                <ImageIcon size={20} className="text-neutral-400 dark:text-neutral-600" />
               )}
             </div>
             <div>
-              <p className="text-[16px] font-semibold text-neutral-50">{ticker.title}</p>
+              <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.title}</p>
               <StatusBadge status={ticker.isActive ? "Active" : "Inactive"} />
             </div>
           </div>
 
-          <p className="mt-3 text-[12.5px] text-sky-400">{redirectSummary(ticker.redirect, categories)}</p>
+          <p className="mt-3 text-[12.5px] text-sky-600 dark:text-sky-400">{redirectSummary(ticker.redirect, categories)}</p>
 
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
               <p className="text-[11px] uppercase tracking-wider text-neutral-500">Display Order</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50">{ticker.displayOrder ?? 0}</p>
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.displayOrder ?? 0}</p>
             </div>
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
               <p className="text-[11px] uppercase tracking-wider text-neutral-500">Status</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50">{ticker.isActive ? "Active" : "Inactive"}</p>
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.isActive ? "Active" : "Inactive"}</p>
             </div>
           </div>
 
-          <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
+          <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
             <p className="text-[11px] uppercase tracking-wider text-neutral-500">Validity</p>
-            <p className="mt-1 text-[13.5px] font-medium text-neutral-200">
+            <p className="mt-1 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">
               {formatDateTime(ticker.startDate)} → {formatDateTime(ticker.endDate)}
             </p>
           </div>
 
           {ticker.createdAt && (
-            <p className="mt-4 text-[11.5px] text-neutral-600">Created {formatDateTime(ticker.createdAt)}</p>
+            <p className="mt-4 text-[11.5px] text-neutral-400 dark:text-neutral-600">Created {formatDateTime(ticker.createdAt)}</p>
           )}
         </div>
       </div>
@@ -341,13 +341,13 @@ function TickerViewModal({ open, ticker, categories, onClose }) {
 function DeleteConfirmModal({ ticker, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
           </div>
           <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete ticker?</h3>
+            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete ticker?</h3>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
               This removes "{ticker.title}" and it will stop showing in the app.
             </p>
@@ -357,7 +357,7 @@ function DeleteConfirmModal({ ticker, deleting, onCancel, onConfirm }) {
           <button
             onClick={onCancel}
             disabled={deleting}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -564,11 +564,11 @@ export default function PromotionalTicker() {
       key: "icon",
       label: "Icon",
       render: (row) => (
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
           {row.icon ? (
             <img src={row.icon} alt={row.title} className="h-full w-full object-cover" />
           ) : (
-            <ImageIcon size={15} className="text-neutral-600" />
+            <ImageIcon size={15} className="text-neutral-400 dark:text-neutral-600" />
           )}
         </div>
       ),
@@ -576,13 +576,13 @@ export default function PromotionalTicker() {
     {
       key: "title",
       label: "Title",
-      render: (row) => <span className="font-medium text-neutral-50">{row.title}</span>,
+      render: (row) => <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.title}</span>,
     },
     {
       key: "redirect",
       label: "Redirect",
       render: (row) => (
-        <span className="max-w-[200px] truncate text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
+        <span className="max-w-[200px] truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
       ),
     },
     {
@@ -594,7 +594,7 @@ export default function PromotionalTicker() {
       key: "validity",
       label: "Validity",
       render: (row) => (
-        <span className="text-[12.5px] text-neutral-400">
+        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
           {formatDateTime(row.startDate)} → {formatDateTime(row.endDate)}
         </span>
       ),
@@ -613,21 +613,21 @@ export default function PromotionalTicker() {
           <button
             onClick={() => setViewTarget(row)}
             aria-label={`View ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
           >
             <Eye size={15} />
           </button>
           <button
             onClick={() => handleEdit(row)}
             aria-label={`Edit ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => setDeleteTarget(row)}
             aria-label={`Delete ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -637,12 +637,12 @@ export default function PromotionalTicker() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">Promotional Ticker</h1>
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Promotional Ticker</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Manage the scrolling promotional tickers shown in the app.
             </p>
@@ -657,26 +657,26 @@ export default function PromotionalTicker() {
         </div>
 
         {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs dark:border-neutral-800 dark:bg-neutral-900">
           <Search size={16} className="shrink-0 text-neutral-500" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search ticker..."
-            className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
           />
         </div>
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading tickers…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load tickers: {loadError}
           </div>
         )}

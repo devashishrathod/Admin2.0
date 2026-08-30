@@ -287,8 +287,8 @@ function StatusPill({ status }) {
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${
         active
-          ? "bg-emerald-400/10 text-emerald-400"
-          : "bg-neutral-700/40 text-neutral-400"
+          ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+          : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
       }`}
     >
       {active ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
@@ -303,8 +303,8 @@ function PlatformBadge({ platform }) {
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${
         isAndroid
-          ? "bg-lime-400/10 text-lime-400"
-          : "bg-sky-400/10 text-sky-400"
+          ? "bg-lime-400/10 text-lime-600 dark:text-lime-400"
+          : "bg-sky-400/10 text-sky-600 dark:text-sky-400"
       }`}
     >
       {isAndroid ? <Smartphone size={12} /> : <Apple size={12} />}
@@ -320,7 +320,7 @@ function StarRating({ rating }) {
         <Star
           key={n}
           size={13}
-          className={n <= rating ? "fill-amber-400 text-amber-400" : "text-neutral-700"}
+          className={n <= rating ? "fill-amber-400 text-amber-400" : "text-neutral-300 dark:text-neutral-700"}
         />
       ))}
     </div>
@@ -368,17 +368,17 @@ function CustomerFormModal({ open, initialData, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">Edit Customer</h2>
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Edit Customer</h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">Update this customer's details.</p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -386,49 +386,49 @@ function CustomerFormModal({ open, initialData, onClose, onSave }) {
 
         <form onSubmit={handleSubmit} className="px-5 py-5">
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Customer Name
             </label>
             <input
               value={form.name}
               onChange={handleChange("name")}
               placeholder="e.g. Rohit Sharma"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.name
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
-            {errors.name && <p className="mt-1.5 text-[12px] text-red-400">{errors.name}</p>}
+            {errors.name && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.name}</p>}
           </div>
 
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Email</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Email</label>
             <input
               value={form.email}
               onChange={handleChange("email")}
               placeholder="name@example.com"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.email
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
-            {errors.email && <p className="mt-1.5 text-[12px] text-red-400">{errors.email}</p>}
+            {errors.email && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.email}</p>}
           </div>
 
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Phone</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Phone</label>
             <input
               value={form.phone}
               onChange={handleChange("phone")}
               placeholder="+91 90000 00000"
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
           </div>
 
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Platform</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Platform</label>
             <div className="flex gap-2">
               {["Android", "iOS"].map((p) => (
                 <button
@@ -437,8 +437,8 @@ function CustomerFormModal({ open, initialData, onClose, onSave }) {
                   onClick={() => setForm((prev) => ({ ...prev, platform: p }))}
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.platform === p
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {p}
@@ -451,7 +451,7 @@ function CustomerFormModal({ open, initialData, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -508,14 +508,14 @@ function PlanFormModal({ open, initialData, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-neutral-50">Edit Membership Plan</h2>
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Edit Membership Plan</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -523,49 +523,49 @@ function PlanFormModal({ open, initialData, onClose, onSave }) {
 
         <form onSubmit={handleSubmit} className="px-5 py-5">
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Plan Name</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Plan Name</label>
             <input
               value={form.name}
               onChange={handleChange("name")}
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 ${
                 errors.name
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
-            {errors.name && <p className="mt-1.5 text-[12px] text-red-400">{errors.name}</p>}
+            {errors.name && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.name}</p>}
           </div>
 
           <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Tagline</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Tagline</label>
             <input
               value={form.tagline}
               onChange={handleChange("tagline")}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </div>
 
           <div className="mb-4 grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Price (₹)</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Price (₹)</label>
               <input
                 value={form.price}
                 onChange={handleChange("price")}
                 inputMode="numeric"
-                className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:outline-none focus:ring-1 ${
+                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 ${
                   errors.price
                     ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                 }`}
               />
-              {errors.price && <p className="mt-1.5 text-[12px] text-red-400">{errors.price}</p>}
+              {errors.price && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.price}</p>}
             </div>
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Billing Cycle</label>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Billing Cycle</label>
               <select
                 value={form.cycle}
                 onChange={handleChange("cycle")}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               >
                 <option>Yearly</option>
                 <option>Monthly</option>
@@ -574,7 +574,7 @@ function PlanFormModal({ open, initialData, onClose, onSave }) {
           </div>
 
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">Status</label>
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
             <div className="flex gap-2">
               {["Active", "Inactive"].map((s) => (
                 <button
@@ -583,8 +583,8 @@ function PlanFormModal({ open, initialData, onClose, onSave }) {
                   onClick={() => setForm((prev) => ({ ...prev, status: s }))}
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.status === s
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s}
@@ -597,7 +597,7 @@ function PlanFormModal({ open, initialData, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -622,15 +622,15 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
   return (
     <div
       onClick={() => onOpen(customer)}
-      className="group flex cursor-pointer flex-col gap-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 transition-colors hover:border-neutral-700 hover:bg-neutral-900/80"
+      className="group flex cursor-pointer flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700 dark:hover:bg-neutral-900/80"
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-neutral-800 text-[19px]">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-neutral-200 text-[19px] dark:bg-neutral-800">
             {customer.avatar}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[13.5px] font-semibold text-neutral-50">{customer.name}</p>
+            <p className="truncate text-[13.5px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.name}</p>
             <p className="truncate text-[12px] text-neutral-500">{customer.email}</p>
           </div>
         </div>
@@ -641,7 +641,7 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
               onEdit(customer);
             }}
             aria-label={`Edit ${customer.name}`}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
           >
             <Pencil size={13} />
           </button>
@@ -651,7 +651,7 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
               onDelete(customer);
             }}
             aria-label={`Delete ${customer.name}`}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={13} />
           </button>
@@ -662,14 +662,14 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
         <PlatformBadge platform={customer.platform} />
         <StatusPill status={customer.status} />
         {plan && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
             <Crown size={12} />
             {plan.name}
           </span>
         )}
       </div>
 
-      <div className="flex items-center justify-between border-t border-neutral-800 pt-3">
+      <div className="flex items-center justify-between border-t border-neutral-200 pt-3 dark:border-neutral-800">
         <div className="flex items-center gap-3 text-[11.5px] text-neutral-500">
           <span className="flex items-center gap-1">
             <Wallet size={12} /> {money(customer.wallet)}
@@ -718,22 +718,22 @@ function CustomerDetail({
     <div>
       <button
         onClick={onBack}
-        className="mb-5 flex items-center gap-1.5 text-[13px] font-medium text-neutral-400 transition-colors hover:text-neutral-100"
+        className="mb-5 flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
       >
         <ArrowLeft size={15} />
         Back to customers
       </button>
 
       {/* Profile header */}
-      <div className="mb-6 overflow-hidden rounded-2xl border border-neutral-800 bg-gradient-to-br from-emerald-500/10 via-neutral-900 to-neutral-900 p-6">
+      <div className="mb-6 overflow-hidden rounded-2xl border border-neutral-200 bg-gradient-to-br from-emerald-500/10 via-white to-white p-6 dark:border-neutral-800 dark:via-neutral-900 dark:to-neutral-900">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-neutral-800 text-[28px]">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-neutral-200 text-[28px] dark:bg-neutral-800">
               {customer.avatar}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-[19px] font-semibold text-neutral-50">{customer.name}</h2>
+                <h2 className="text-[19px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.name}</h2>
                 {customer.status === "Active" && (
                   <BadgeCheck size={16} className="text-emerald-400" />
                 )}
@@ -754,12 +754,12 @@ function CustomerDetail({
                     title="Only Super Admin can change status"
                   >
                     <StatusPill status={customer.status} />
-                    <Lock size={10} className="text-neutral-600" />
+                    <Lock size={10} className="text-neutral-500 dark:text-neutral-600" />
                   </span>
                 )}
 
                 {currentPlan && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                     <Crown size={12} />
                     {currentPlan.name}
                   </span>
@@ -769,36 +769,36 @@ function CustomerDetail({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 px-4 py-2.5 text-center">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <Wallet size={11} /> My Wallet
               </p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50">{money(customer.wallet)}</p>
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{money(customer.wallet)}</p>
             </div>
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 px-4 py-2.5 text-center">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <Coins size={11} /> Coins
               </p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50">{customer.coins}</p>
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.coins}</p>
             </div>
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 px-4 py-2.5 text-center">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <Users size={11} /> Followers
               </p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50">{customer.followers}</p>
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.followers}</p>
             </div>
-            <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 px-4 py-2.5 text-center">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <UserPlus size={11} /> Following
               </p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-50">{customer.following}</p>
+              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.following}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="mb-5 flex flex-wrap gap-2 border-b border-neutral-800 pb-3">
+      <div className="mb-5 flex flex-wrap gap-2 border-b border-neutral-200 pb-3 dark:border-neutral-800">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -811,8 +811,8 @@ function CustomerDetail({
               onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12.5px] font-medium transition-colors ${
                 isActive
-                  ? "bg-emerald-400/10 text-emerald-400"
-                  : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+                  ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                  : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-200"
               }`}
             >
               <Icon size={14} />
@@ -820,7 +820,7 @@ function CustomerDetail({
               {count !== null && (
                 <span
                   className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                    isActive ? "bg-emerald-400/20 text-emerald-300" : "bg-neutral-800 text-neutral-400"
+                    isActive ? "bg-emerald-400/20 text-emerald-700 dark:text-emerald-300" : "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
                   }`}
                 >
                   {count}
@@ -835,11 +835,11 @@ function CustomerDetail({
       {activeTab === "info" && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
           <div className="lg:col-span-3">
-            <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-50">
-              <ShieldCheck size={15} className="text-neutral-400" />
+            <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
+              <ShieldCheck size={15} className="text-neutral-500 dark:text-neutral-400" />
               Contact & Account
             </h3>
-            <div className="space-y-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+            <div className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
               <InfoRow icon={<Mail size={13} />} label="Email" value={customer.email} />
               <InfoRow icon={<Phone size={13} />} label="Phone" value={customer.phone} />
               <InfoRow
@@ -854,23 +854,23 @@ function CustomerDetail({
           </div>
 
           <div className="lg:col-span-2">
-            <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-50">
-              <Users size={15} className="text-neutral-400" />
+            <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
+              <Users size={15} className="text-neutral-500 dark:text-neutral-400" />
               Social & Persona
             </h3>
-            <div className="space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+            <div className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-neutral-950/60 p-3 text-center">
+                <div className="rounded-xl bg-neutral-50 p-3 text-center dark:bg-neutral-950/60">
                   <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                     <Users size={11} /> Followers
                   </p>
-                  <p className="mt-1 text-[16px] font-semibold text-neutral-50">{customer.followers}</p>
+                  <p className="mt-1 text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.followers}</p>
                 </div>
-                <div className="rounded-xl bg-neutral-950/60 p-3 text-center">
+                <div className="rounded-xl bg-neutral-50 p-3 text-center dark:bg-neutral-950/60">
                   <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                     <UserPlus size={11} /> Following
                   </p>
-                  <p className="mt-1 text-[16px] font-semibold text-neutral-50">{customer.following}</p>
+                  <p className="mt-1 text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.following}</p>
                 </div>
               </div>
 
@@ -879,13 +879,13 @@ function CustomerDetail({
                   <Sparkles size={12} /> Persona Tags
                 </p>
                 {customer.persona.length === 0 ? (
-                  <p className="text-[12.5px] text-neutral-600">No persona data yet.</p>
+                  <p className="text-[12.5px] text-neutral-500 dark:text-neutral-600">No persona data yet.</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {customer.persona.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-full border border-neutral-800 bg-neutral-950/60 px-2.5 py-1 text-[11px] font-medium text-neutral-300"
+                        className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-neutral-300"
                       >
                         {tag}
                       </span>
@@ -901,24 +901,24 @@ function CustomerDetail({
       {/* ---------------- Tab: Transactions ---------------- */}
       {activeTab === "transactions" && (
         <div>
-          <h3 className="mb-3 flex items-center justify-between text-[14.5px] font-semibold text-neutral-50">
+          <h3 className="mb-3 flex items-center justify-between text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
             <span className="flex items-center gap-2">
-              <Receipt size={15} className="text-neutral-400" />
+              <Receipt size={15} className="text-neutral-500 dark:text-neutral-400" />
               Transactions
             </span>
-            <span className="rounded-full bg-neutral-800 px-2.5 py-1 text-[11px] font-medium text-neutral-300">
+            <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
               {customer.transactions.length} total
             </span>
           </h3>
-          <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
+          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
             {customer.transactions.length === 0 ? (
               <p className="p-5 text-[13px] text-neutral-500">No transactions yet.</p>
             ) : (
-              <ul className="divide-y divide-neutral-800">
+              <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
                 {customer.transactions.map((tx) => (
                   <li key={tx.id} className="flex items-center justify-between px-4 py-3">
                     <div>
-                      <p className="text-[13px] font-medium text-neutral-200">{tx.label}</p>
+                      <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{tx.label}</p>
                       <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-neutral-500">
                         <Clock size={11} /> {tx.date}
                       </p>
@@ -926,7 +926,7 @@ function CustomerDetail({
                     <div className="text-right">
                       <p
                         className={`text-[13.5px] font-semibold ${
-                          tx.amount < 0 ? "text-neutral-200" : "text-emerald-400"
+                          tx.amount < 0 ? "text-neutral-800 dark:text-neutral-200" : "text-emerald-600 dark:text-emerald-400"
                         }`}
                       >
                         {tx.amount < 0 ? "-" : "+"}
@@ -935,10 +935,10 @@ function CustomerDetail({
                       <p
                         className={`mt-0.5 text-[11px] ${
                           tx.status === "Success"
-                            ? "text-emerald-400"
+                            ? "text-emerald-600 dark:text-emerald-400"
                             : tx.status === "Failed"
-                            ? "text-red-400"
-                            : "text-amber-400"
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-amber-600 dark:text-amber-400"
                         }`}
                       >
                         {tx.status}
@@ -955,35 +955,35 @@ function CustomerDetail({
       {/* ---------------- Tab: Reviews ---------------- */}
       {activeTab === "reviews" && (
         <div>
-          <h3 className="mb-3 flex items-center justify-between text-[14.5px] font-semibold text-neutral-50">
+          <h3 className="mb-3 flex items-center justify-between text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
             <span className="flex items-center gap-2">
               <Star size={15} className="text-amber-400" />
               Reviews given to brands
             </span>
             <span className="flex items-center gap-2">
               {avgRating && (
-                <span className="flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400">
+                <span className="flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                   <Star size={11} className="fill-amber-400" /> {avgRating} avg
                 </span>
               )}
-              <span className="rounded-full bg-neutral-800 px-2.5 py-1 text-[11px] font-medium text-neutral-300">
+              <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
                 {customer.reviews.length} total
               </span>
             </span>
           </h3>
-          <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
+          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
             {customer.reviews.length === 0 ? (
               <p className="p-5 text-[13px] text-neutral-500">This customer hasn't reviewed any brand yet.</p>
             ) : (
-              <ul className="divide-y divide-neutral-800">
+              <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
                 {customer.reviews.map((rev) => (
                   <li key={rev.id} className="px-4 py-3.5">
                     <div className="flex items-center justify-between">
-                      <p className="text-[13px] font-semibold text-neutral-100">{rev.brand}</p>
+                      <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{rev.brand}</p>
                       <StarRating rating={rev.rating} />
                     </div>
-                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-400">{rev.comment}</p>
-                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-neutral-600">
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-600 dark:text-neutral-400">{rev.comment}</p>
+                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-600">
                       <Clock size={11} /> {rev.date}
                     </p>
                   </li>
@@ -997,7 +997,7 @@ function CustomerDetail({
       {/* ---------------- Tab: Plans ---------------- */}
       {activeTab === "plans" && (
         <div>
-          <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-50">
+          <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
             <Crown size={15} className="text-amber-400" />
             Membership Plan
           </h3>
@@ -1010,7 +1010,7 @@ function CustomerDetail({
                   className={`relative flex flex-col rounded-2xl border p-4 ${
                     isCurrent
                       ? "border-emerald-400/60 bg-emerald-400/5"
-                      : "border-neutral-800 bg-neutral-900"
+                      : "border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
                   }`}
                 >
                   {plan.badge && (
@@ -1023,27 +1023,27 @@ function CustomerDetail({
                       Current Plan
                     </span>
                   )}
-                  <p className="mt-1 text-[14px] font-semibold text-neutral-50">{plan.name}</p>
+                  <p className="mt-1 text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</p>
                   <p className="mt-1 text-[12px] text-neutral-500">{plan.tagline}</p>
                   <div className="mt-3">
                     <StatusPill status={plan.status} />
                   </div>
-                  <p className="mt-3 text-[17px] font-semibold text-neutral-50">
+                  <p className="mt-3 text-[17px] font-semibold text-neutral-900 dark:text-neutral-50">
                     {money(plan.price)}
                     <span className="text-[12px] font-normal text-neutral-500">/{plan.cycle}</span>
                   </p>
-                  <p className="text-[11px] text-neutral-600">+ GST</p>
+                  <p className="text-[11px] text-neutral-400 dark:text-neutral-600">+ GST</p>
 
-                  <div className="mt-4 flex items-center gap-2 border-t border-neutral-800 pt-3">
+                  <div className="mt-4 flex items-center gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
                     <button
                       onClick={() => onEditPlan(plan)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-800 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
                     >
                       <Pencil size={12} /> Edit
                     </button>
                     <button
                       onClick={() => onDeletePlan(plan)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-800 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-red-400"
                     >
                       <Trash2 size={12} /> Delete
                     </button>
@@ -1055,28 +1055,28 @@ function CustomerDetail({
 
           {/* Plan history — shows upgrades / downgrades over time */}
           <div>
-            <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-50">
-              <History size={15} className="text-neutral-400" />
+            <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
+              <History size={15} className="text-neutral-500 dark:text-neutral-400" />
               Plan History
             </h3>
-            <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
+            <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
               {(!customer.planHistory || customer.planHistory.length === 0) ? (
                 <p className="p-5 text-[13px] text-neutral-500">No previous plan changes on record.</p>
               ) : (
-                <ul className="divide-y divide-neutral-800">
+                <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
                   {customer.planHistory.map((h) => (
                     <li key={h.id} className="flex items-center gap-3 px-4 py-3">
                       {h.type === "upgrade" && (
-                        <ArrowUpCircle size={16} className="shrink-0 text-emerald-400" />
+                        <ArrowUpCircle size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
                       )}
                       {h.type === "downgrade" && (
-                        <ArrowDownCircle size={16} className="shrink-0 text-red-400" />
+                        <ArrowDownCircle size={16} className="shrink-0 text-red-600 dark:text-red-400" />
                       )}
                       {(h.type === "start" || h.type === "renew") && (
-                        <Crown size={16} className="shrink-0 text-amber-400" />
+                        <Crown size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium text-neutral-200">{h.label}</p>
+                        <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{h.label}</p>
                         <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-neutral-500">
                           <Clock size={11} /> {h.date}
                         </p>
@@ -1095,12 +1095,12 @@ function CustomerDetail({
 
 function InfoRow({ icon, label, value }) {
   return (
-    <div className="flex items-center justify-between border-b border-neutral-800/70 pb-3 last:border-0 last:pb-0">
+    <div className="flex items-center justify-between border-b border-neutral-200/70 pb-3 last:border-0 last:pb-0 dark:border-neutral-800/70">
       <span className="flex items-center gap-1.5 text-[12px] text-neutral-500">
         {icon}
         {label}
       </span>
-      <span className="text-[12.5px] font-medium text-neutral-200">{value}</span>
+      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
     </div>
   );
 }
@@ -1207,8 +1207,8 @@ export default function Customer() {
       onClick={onClick}
       className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
         active
-          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-          : "border-neutral-800 text-neutral-400 hover:text-neutral-200"
+          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+          : "border-neutral-200 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
       }`}
     >
       {label}
@@ -1217,7 +1217,7 @@ export default function Customer() {
   );
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {selectedCustomer ? (
           <CustomerDetail
@@ -1234,29 +1234,17 @@ export default function Customer() {
             {/* Header */}
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">Customers</h1>
+                <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Customers</h1>
                 <p className="mt-1 text-[13px] text-neutral-500">
                   Manage mobile customers, their membership plans and activity.
                 </p>
               </div>
 
-              {/* Super Admin toggle — gates the active/inactive control */}
-              <button
-                onClick={() => setIsSuperAdmin((v) => !v)}
-                className={`flex h-10 items-center gap-2 rounded-xl border px-4 text-[13px] font-semibold transition-colors ${
-                  isSuperAdmin
-                    ? "border-amber-400/60 bg-amber-400/10 text-amber-400"
-                    : "border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-neutral-200"
-                }`}
-                title="Toggle Super Admin mode to enable/disable account status changes"
-              >
-                {isSuperAdmin ? <ShieldAlert size={16} /> : <ShieldCheck size={16} />}
-                {isSuperAdmin ? "Super Admin Mode: ON" : "Super Admin Mode: OFF"}
-              </button>
+             
             </div>
 
             {!isSuperAdmin && (
-              <div className="mb-5 flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-2.5 text-[12px] text-neutral-500">
+              <div className="mb-5 flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-[12px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/60">
                 <Lock size={13} />
                 Only Super Admin can activate or deactivate a customer account. Turn on Super Admin
                 Mode above to enable this control.
@@ -1265,13 +1253,13 @@ export default function Customer() {
 
             {/* Search + filters */}
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+              <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs dark:border-neutral-800 dark:bg-neutral-900">
                 <Search size={16} className="shrink-0 text-neutral-500" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search customer..."
-                  className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+                  className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
                 />
               </div>
 
@@ -1286,7 +1274,7 @@ export default function Customer() {
 
             {/* Cards grid */}
             {filtered.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-neutral-800 py-16 text-center">
+              <div className="rounded-2xl border border-dashed border-neutral-200 py-16 text-center dark:border-neutral-800">
                 <p className="text-[13.5px] text-neutral-500">No customers match these filters.</p>
               </div>
             ) : (

@@ -471,7 +471,7 @@ function StatusBadge({ status }) {
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] font-medium ring-1 ${
-        styles[status] || "bg-neutral-800 text-neutral-300 ring-neutral-700"
+        styles[status] || "bg-neutral-200 text-neutral-600 ring-neutral-300 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-neutral-700"
       }`}
     >
       {status}
@@ -496,7 +496,7 @@ function DueBadge({ schedule }) {
     ? "bg-cyan-400/10 text-cyan-400 ring-cyan-400/30"
     : schedule.isOverdue
     ? "bg-red-400/10 text-red-400 ring-red-400/30"
-    : "bg-neutral-800 text-neutral-300 ring-neutral-700";
+    : "bg-neutral-200 text-neutral-600 ring-neutral-300 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-neutral-700";
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium ring-1 ${cls}`}
@@ -511,18 +511,18 @@ function DueBadge({ schedule }) {
 
 function StatCard({ icon: Icon, label, amount, sub, live }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-      <div className="flex items-center gap-2 text-[12.5px] text-neutral-400">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
         <Icon size={15} className="text-emerald-400" />
         {label}
         {live && (
-          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             Live Update
           </span>
         )}
       </div>
-      <div className="mt-3 text-[22px] font-semibold text-neutral-50">
+      <div className="mt-3 text-[22px] font-semibold text-neutral-900 dark:text-neutral-50">
         {inr(amount)}
       </div>
       <div className="mt-1 text-[12px] text-neutral-500">{sub}</div>
@@ -546,13 +546,13 @@ function SettlementDetail({ settlement, onBack }) {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-[13.5px] font-medium text-neutral-300 hover:text-neutral-50"
+          className="flex items-center gap-2 text-[13.5px] font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-50"
         >
           <ArrowLeft size={16} />
           {settlement.id}
         </button>
         <div className="flex gap-2">
-          <button className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-800 px-3.5 text-[13px] font-medium text-neutral-300 hover:bg-neutral-800">
+          <button className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800">
             <TicketIcon size={14} />
             Create Ticket
           </button>
@@ -564,7 +564,7 @@ function SettlementDetail({ settlement, onBack }) {
       </div>
 
       {/* Settlement information */}
-      <section className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <section className="mb-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Settlement Information
         </h3>
@@ -585,7 +585,7 @@ function SettlementDetail({ settlement, onBack }) {
       </section>
 
       {/* Amount breakup */}
-      <section className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <section className="mb-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Amount Breakup Information
         </h3>
@@ -598,7 +598,7 @@ function SettlementDetail({ settlement, onBack }) {
           <Field label="Refund Fee" value={inr(b.refundFee)} />
         </div>
         <div className="mt-4 flex items-center justify-between rounded-xl bg-emerald-400/10 px-4 py-3">
-          <span className="text-[13px] text-neutral-300">
+          <span className="text-[13px] text-neutral-700 dark:text-neutral-300">
             Your intended amount has been credited
           </span>
           <span className="text-[14px] font-semibold text-emerald-400">
@@ -608,7 +608,7 @@ function SettlementDetail({ settlement, onBack }) {
       </section>
 
       {/* Transaction timeline */}
-      <section className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <section className="mb-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Transaction Information
         </h3>
@@ -628,15 +628,15 @@ function SettlementDetail({ settlement, onBack }) {
                 )}
               </div>
               <div className="pb-1">
-                <p className="text-[13.5px] font-medium text-neutral-50">
+                <p className="text-[13.5px] font-medium text-neutral-900 dark:text-neutral-50">
                   {t.title}
                 </p>
                 <p className="mt-0.5 text-[12px] text-neutral-500">{t.date}</p>
                 <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
                   {t.meta.map((m) => (
-                    <span key={m.label} className="text-[12px] text-neutral-400">
+                    <span key={m.label} className="text-[12px] text-neutral-500 dark:text-neutral-400">
                       {m.label}:{" "}
-                      <span className="text-neutral-200">{m.value}</span>
+                      <span className="text-neutral-700 dark:text-neutral-200">{m.value}</span>
                     </span>
                   ))}
                 </div>
@@ -647,7 +647,7 @@ function SettlementDetail({ settlement, onBack }) {
       </section>
 
       {/* Tickets */}
-      <section className="mb-8 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <section className="mb-8 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Ticket Raise
         </h3>
@@ -662,13 +662,13 @@ function SettlementDetail({ settlement, onBack }) {
               return (
                 <div
                   key={tk.id}
-                  className="rounded-xl border border-neutral-800 bg-neutral-950"
+                  className="rounded-xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950"
                 >
                   <button
                     onClick={() => setOpenTicket(open ? null : tk.id)}
                     className="flex w-full items-center justify-between px-4 py-3 text-left"
                   >
-                    <span className="text-[13px] font-medium text-neutral-200">
+                    <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
                       {tk.id}{" "}
                       <span className="ml-2 text-[11.5px] text-neutral-500">
                         {tk.date}
@@ -680,7 +680,7 @@ function SettlementDetail({ settlement, onBack }) {
                     </div>
                   </button>
                   {open && (
-                    <p className="border-t border-neutral-800 px-4 py-3 text-[12.5px] leading-relaxed text-neutral-400">
+                    <p className="border-t border-neutral-200 px-4 py-3 text-[12.5px] leading-relaxed text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
                       {tk.detail}
                     </p>
                   )}
@@ -700,7 +700,7 @@ function Field({ label, value, accent }) {
       <p className="text-[11.5px] text-neutral-500">{label}</p>
       <p
         className={`mt-0.5 truncate text-[13.5px] font-medium ${
-          accent ? "text-emerald-400" : "text-neutral-100"
+          accent ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-neutral-100"
         }`}
       >
         {value}
@@ -726,7 +726,7 @@ const NUMBER_FIELDS = [
 function TextField({ label, value, onChange, placeholder, error, type = "text" }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+      <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
         {label}
       </label>
       <input
@@ -734,10 +734,10 @@ function TextField({ label, value, onChange, placeholder, error, type = "text" }
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+        className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
           error
             ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-            : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+            : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
         }`}
       />
       {error && <p className="mt-1.5 text-[12px] text-red-400">{error}</p>}
@@ -799,12 +799,12 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-2xl rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
               {isEdit ? "Edit Settlement" : "Add Settlement"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -816,7 +816,7 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -827,13 +827,13 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
           {/* Vendor + identifiers */}
           <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
                 Vendor
               </label>
               <select
                 value={form.vendor}
                 onChange={setField("vendor")}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               >
                 {VENDOR_OPTIONS.map((v) => (
                   <option key={v} value={v}>
@@ -872,13 +872,13 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
               placeholder="e.g. Kotak Mahindra Bank"
             />
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
                 Status
               </label>
               <select
                 value={form.status}
                 onChange={setField("status")}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               >
                 {FORM_STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
@@ -908,7 +908,7 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
 
           {/* Amount breakup */}
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-[12.5px] font-medium text-neutral-300">
+            <label className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Amount Breakup
             </label>
             <button
@@ -948,7 +948,7 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -1119,19 +1119,19 @@ export default function Settlement() {
 
   if (selected) {
     return (
-      <div className="min-h-screen bg-neutral-950 p-6">
+      <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
         <SettlementDetail settlement={selected} onBack={() => setSelected(null)} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Settlement
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -1147,7 +1147,7 @@ export default function Settlement() {
               <Plus size={15} />
               Add Settlement
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 hover:bg-neutral-800">
+            <button className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800">
               <RefreshCw size={15} />
               Refresh
             </button>
@@ -1186,11 +1186,11 @@ export default function Settlement() {
 
         {/* Toolbar */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-[15px] font-semibold text-neutral-50">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
             Settlement Overview
           </h2>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
               <Search size={15} className="shrink-0 text-neutral-500" />
               <input
                 value={search}
@@ -1199,10 +1199,10 @@ export default function Settlement() {
                   setPage(1);
                 }}
                 placeholder="Search settlement id, vendor, txn id..."
-                className="w-56 bg-transparent text-[13px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+                className="w-56 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
               />
             </div>
-            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 px-1 py-1">
+            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-1 py-1 dark:border-neutral-800 dark:bg-neutral-900">
               <Filter size={14} className="ml-1.5 text-neutral-500" />
               {STATUS_OPTIONS.map((s) => (
                 <button
@@ -1213,8 +1213,8 @@ export default function Settlement() {
                   }}
                   className={`rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
                     statusFilter === s
-                      ? "bg-emerald-400/15 text-emerald-400"
-                      : "text-neutral-400 hover:text-neutral-200"
+                      ? "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400"
+                      : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s}
@@ -1228,19 +1228,19 @@ export default function Settlement() {
               }}
               className={`flex h-[38px] items-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
                 showTodayOnly
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-400"
-                  : "border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
+                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-600 dark:text-cyan-400"
+                  : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
               }`}
             >
               <CalendarClock size={14} />
               Due Today
               {todaySettlementStats.count > 0 && (
-                <span className="ml-0.5 rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[10.5px] font-semibold text-cyan-300">
+                <span className="ml-0.5 rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[10.5px] font-semibold text-cyan-700 dark:text-cyan-300">
                   {todaySettlementStats.count}
                 </span>
               )}
             </button>
-            <button className="flex h-[38px] items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 text-[13px] font-medium text-neutral-300 hover:bg-neutral-800">
+            <button className="flex h-[38px] items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800">
               <Download size={14} />
               Export
             </button>
@@ -1248,10 +1248,10 @@ export default function Settlement() {
         </div>
 
         {/* Table */}
-        <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
+        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-neutral-800 bg-neutral-950/60 text-[11.5px] uppercase tracking-wide text-neutral-500">
+              <tr className="border-b border-neutral-200 bg-neutral-50 text-[11.5px] uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/60">
                 <th className="px-4 py-3 font-medium">Settlement Id</th>
                 <th className="px-4 py-3 font-medium">Vendor</th>
                 <th className="px-4 py-3 font-medium">Payment Received</th>
@@ -1280,14 +1280,14 @@ export default function Settlement() {
                 return (
                   <React.Fragment key={s.id}>
                     <tr
-                      className={`border-b border-neutral-800/70 text-[13px] text-neutral-300 hover:bg-neutral-800/30 ${
+                      className={`border-b border-neutral-200/70 text-[13px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800/70 dark:text-neutral-300 dark:hover:bg-neutral-800/30 ${
                         schedule?.isToday ? "bg-cyan-400/[0.04]" : ""
                       }`}
                     >
                       <td className="px-4 py-3">
                         <button
                           onClick={() => setSelected(s)}
-                          className="font-medium text-emerald-400 hover:underline"
+                          className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
                         >
                           {s.id}
                         </button>
@@ -1298,7 +1298,7 @@ export default function Settlement() {
                         <DueBadge schedule={schedule} />
                       </td>
                       <td className="px-4 py-3">{s.transactionId}</td>
-                      <td className="px-4 py-3 text-right font-medium text-neutral-50">
+                      <td className="px-4 py-3 text-right font-medium text-neutral-900 dark:text-neutral-50">
                         {inr(s.amount)}
                       </td>
                       <td className="px-4 py-3">
@@ -1309,14 +1309,14 @@ export default function Settlement() {
                           <button
                             onClick={() => handleEdit(s)}
                             aria-label="Edit settlement"
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                           >
                             <Pencil size={14} />
                           </button>
                           <button
                             onClick={() => handleDelete(s)}
                             aria-label="Delete settlement"
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-red-500/10 hover:text-red-400"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1326,7 +1326,7 @@ export default function Settlement() {
                         <button
                           onClick={() => setExpandedId(open ? null : s.id)}
                           aria-label="Toggle breakup"
-                          className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                         >
                           {open ? (
                             <ChevronUp size={15} />
@@ -1337,7 +1337,7 @@ export default function Settlement() {
                       </td>
                     </tr>
                     {open && (
-                      <tr className="border-b border-neutral-800/70 bg-neutral-950/60">
+                      <tr className="border-b border-neutral-200/70 bg-neutral-50 dark:border-neutral-800/70 dark:bg-neutral-950/60">
                         <td colSpan={9} className="px-6 py-4">
                           <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                             Amount Breakup
@@ -1386,7 +1386,7 @@ export default function Settlement() {
                 setRowsPerPage(Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-200 focus:outline-none"
+              className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-neutral-800 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
             >
               {[10, 20, 50].map((n) => (
                 <option key={n} value={n}>
@@ -1403,7 +1403,7 @@ export default function Settlement() {
                 className={`flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-medium ${
                   page === n
                     ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-400 hover:bg-neutral-800"
+                    : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 }`}
               >
                 {n}

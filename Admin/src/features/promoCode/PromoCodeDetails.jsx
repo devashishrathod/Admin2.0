@@ -24,7 +24,7 @@ function formatDateTime(iso) {
 
 function StatCard({ icon: Icon, label, value, tint }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+    <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
       <div className="flex items-center gap-2">
         <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tint}`}>
           <Icon size={13} />
@@ -124,7 +124,7 @@ export default function PromoCodeDetails({ id, onBack }) {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex items-center gap-3">
@@ -136,7 +136,7 @@ export default function PromoCodeDetails({ id, onBack }) {
             <ArrowLeft size={16} />
           </button>
           {promo && (
-            <div className="flex flex-1 items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="flex flex-1 items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
                 <Tag size={18} />
               </span>
@@ -171,7 +171,7 @@ export default function PromoCodeDetails({ id, onBack }) {
         {!loading && !loadError && promo && (
           <>
             {/* Usage summary */}
-            <div className="mb-5 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="mb-5 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-[11.5px] font-semibold uppercase tracking-wider text-neutral-500">
                   Usage Summary
@@ -203,7 +203,7 @@ export default function PromoCodeDetails({ id, onBack }) {
             </div>
 
             {/* Recent usages */}
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-neutral-500">
                 <Receipt size={13} />
                 Recent Usages ({recentUsages.length})

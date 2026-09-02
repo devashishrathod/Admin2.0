@@ -363,7 +363,7 @@ function InfoRow({ icon: Icon, label, value }) {
 
 function SectionCard({ title, children }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       {title && <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{title}</p>}
       {children}
     </div>
@@ -380,7 +380,7 @@ function EmptyState({ label }) {
 
 function KpiCard({ icon: Icon, label, value, tint = "emerald" }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="mb-2.5 flex items-center justify-between">
         <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${TINTS[tint]}`}>
           <Icon size={16} />
@@ -761,27 +761,27 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <table className="w-full min-w-[820px] text-left text-[13px]">
-        <thead className="bg-neutral-100 text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+        <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
           <tr>
-            <th className="px-4 py-3 font-medium">Code</th>
-            <th className="px-4 py-3 font-medium">Title</th>
-            <th className="px-4 py-3 font-medium">Discount</th>
+            <th className="px-5 py-4 font-medium">Code</th>
+            <th className="px-5 py-4 font-medium">Title</th>
+            <th className="px-5 py-4 font-medium">Discount</th>
             {isReview ? (
-              <th className="px-4 py-3 font-medium">Submitted By</th>
+              <th className="px-5 py-4 font-medium">Submitted By</th>
             ) : (
-              <th className="px-4 py-3 font-medium">Usage</th>
+              <th className="px-5 py-4 font-medium">Usage</th>
             )}
-            <th className="px-4 py-3 font-medium">Validity</th>
-            <th className="px-4 py-3 font-medium">{isReview ? "Approval" : "Status"}</th>
-            <th className="px-4 py-3 text-right font-medium">Action</th>
+            <th className="px-5 py-4 font-medium">Validity</th>
+            <th className="px-5 py-4 font-medium">{isReview ? "Approval" : "Status"}</th>
+            <th className="px-5 py-4 text-right font-medium">Action</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+        <tbody className="bg-white dark:bg-neutral-950">
           {rows.map((row) => (
-            <tr key={row.id} className="transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-900/60">
-              <td className="px-4 py-3">
+            <tr key={row.id} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+              <td className="px-5 py-4">
                 <button
                   onClick={() => onView(row)}
                   className="font-semibold text-sky-600 transition-colors hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
@@ -789,22 +789,22 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
                   {row.code}
                 </button>
               </td>
-              <td className="px-4 py-3 text-neutral-700 dark:text-neutral-300">{row.title}</td>
-              <td className="px-4 py-3 font-semibold text-neutral-800 dark:text-neutral-200">{formatDiscount(row)}</td>
+              <td className="px-5 py-4 text-neutral-700 dark:text-neutral-300">{row.title}</td>
+              <td className="px-5 py-4 font-semibold text-neutral-800 dark:text-neutral-200">{formatDiscount(row)}</td>
               {isReview ? (
-                <td className="px-4 py-3 text-neutral-700 dark:text-neutral-300">{row.submittedBy}</td>
+                <td className="px-5 py-4 text-neutral-700 dark:text-neutral-300">{row.submittedBy}</td>
               ) : (
-                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
+                <td className="px-5 py-4 text-neutral-500 dark:text-neutral-400">
                   {row.usageCount ?? 0} / {row.usageLimit ?? "∞"}
                 </td>
               )}
-              <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
+              <td className="px-5 py-4 text-neutral-500 dark:text-neutral-400">
                 {row.validFrom} → {row.validTo}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-5 py-4">
                 <StatusPill status={isReview ? row.approvalStatus : row.status} />
               </td>
-              <td className="px-4 py-3">
+              <td className="px-5 py-4">
                 <div className="flex items-center justify-end gap-1.5">
                   {isReview && row.approvalStatus === "Pending" && (
                     <>
@@ -955,7 +955,7 @@ export default function CouponCode() {
   };
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header — matches the Analytics Report page style */}
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

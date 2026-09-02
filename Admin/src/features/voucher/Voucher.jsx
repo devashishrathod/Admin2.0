@@ -281,7 +281,7 @@ function InfoRow({ icon: Icon, label, value }) {
 
 function SectionCard({ title, children, className = "" }) {
   return (
-    <div className={`rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900 ${className}`}>
+    <div className={`rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
       {title && (
         <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{title}</p>
       )}
@@ -474,7 +474,7 @@ function EditModal({ item, type, onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Edit {type}</h2>
           <button
@@ -689,21 +689,21 @@ function ActivityTab({ item, type }) {
   if (!item.activity?.length)
     return <EmptyState label={`No ${meta.activityLabel.toLowerCase()} yet.`} />;
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <table className="w-full text-left text-[13px]">
-        <thead className="bg-neutral-100 text-[11.5px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+        <thead className="text-[11.5px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
           <tr>
-            <th className="px-4 py-3 font-medium">{meta.personLabel}</th>
-            <th className="px-4 py-3 font-medium">Date</th>
-            <th className="px-4 py-3 text-right font-medium">Amount</th>
+            <th className="px-5 py-4 font-medium">{meta.personLabel}</th>
+            <th className="px-5 py-4 font-medium">Date</th>
+            <th className="px-5 py-4 text-right font-medium">Amount</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+        <tbody className="bg-white dark:bg-neutral-950">
           {item.activity.map((r, i) => (
-            <tr key={i}>
-              <td className="px-4 py-3 text-neutral-700 dark:text-neutral-300">{r.name}</td>
-              <td className="px-4 py-3 text-neutral-500">{r.date}</td>
-              <td className="px-4 py-3 text-right font-medium text-neutral-800 dark:text-neutral-200">{r.amount}</td>
+            <tr key={i} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+              <td className="px-5 py-4 text-neutral-700 dark:text-neutral-300">{r.name}</td>
+              <td className="px-5 py-4 text-neutral-500">{r.date}</td>
+              <td className="px-5 py-4 text-right font-medium text-neutral-800 dark:text-neutral-200">{r.amount}</td>
             </tr>
           ))}
         </tbody>
@@ -765,7 +765,7 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
   };
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-4xl">
         <button
           onClick={onBack}
@@ -804,7 +804,7 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
         )}
 
         {/* Header card */}
-        <div className="mb-5 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="mb-5 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <TypeIcon type={type} size="lg" />
@@ -1108,7 +1108,7 @@ export default function Voucher() {
   }
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Page title */}
         <div className="mb-6">

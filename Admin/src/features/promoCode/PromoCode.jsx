@@ -82,7 +82,7 @@ function ChartTooltip({ active, payload, label }) {
 
 function KpiTile({ icon: Icon, label, value, caption, tint }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="flex items-center gap-2.5">
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tint}`}>
           <Icon size={16} />
@@ -754,7 +754,7 @@ export default function PromoCode() {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -937,7 +937,7 @@ export default function PromoCode() {
               <p className="mt-2 text-[10.5px] text-neutral-500">Most redeemed among the codes currently shown.</p>
             </div>
 
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                 <TrendingUp size={13} />
                 Top Codes by Redemptions
@@ -963,7 +963,7 @@ export default function PromoCode() {
               )}
             </div>
 
-            <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                 <Percent size={13} />
                 Redemptions by Discount Type

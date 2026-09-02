@@ -77,12 +77,21 @@ function mapVerification(raw) {
       businessRegistrationStatus: brand.businessRegistrationStatus || "",
       verificationAttemptCount: brand.verificationAttemptCount ?? 0,
     },
+    // Real vendor user record — this platform logs in via WhatsApp OTP, so
+    // there's no name/email/mobile field to map; uniqueId + whatsappNumber
+    // are the real identifiers.
     vendor: {
       id: vendor._id,
-      name: vendor.name || "",
-      email: vendor.email || "",
-      mobile: vendor.mobile || "",
+      uniqueId: vendor.uniqueId || "",
       role: vendor.role || "",
+      loginType: vendor.loginType || "",
+      whatsappNumber: vendor.whatsappNumber || "",
+      referralCode: vendor.referralCode || "",
+      walletBalance: vendor.walletBalance ?? 0,
+      tCoinsBalance: vendor.tCoinsBalance ?? 0,
+      isMobileVerified: Boolean(vendor.isMobileVerified),
+      isEmailVerified: Boolean(vendor.isEmailVerified),
+      isOnBoardingCompleted: Boolean(vendor.isOnBoardingCompleted),
       currentScreen: vendor.currentScreen || "",
     },
   };
@@ -220,7 +229,7 @@ export default function NewOnboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6">
@@ -279,7 +288,7 @@ export default function NewOnboarding() {
         {!loading && !loadError && (
           <>
             {filtered.length === 0 ? (
-              <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-10 text-center text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-2xl bg-white px-4 py-10 text-center text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                 No verifications found.
               </div>
             ) : (

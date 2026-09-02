@@ -156,8 +156,8 @@ const inputClass =
 function PlanCard({ plan, onEdit, onDelete }) {
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border bg-white p-5 dark:bg-neutral-900 ${
-        plan.popular ? "border-emerald-400/60" : "border-neutral-200 dark:border-neutral-800"
+      className={`relative flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${
+        plan.popular ? "ring-1 ring-emerald-400/60" : ""
       }`}
     >
       {plan.popular && (
@@ -232,7 +232,7 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-[13px]">
           <thead>
@@ -349,7 +349,7 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
             {isNew ? "Add Customer Plan" : `Edit Plan · ${draft.name}`}
@@ -494,7 +494,7 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
 function DeleteConfirmModal({ plan, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
@@ -538,7 +538,7 @@ function AddBenefitModal({ onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Add Benefit</h3>
           <button
@@ -693,7 +693,7 @@ export default function CustomerPlan() {
   };
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

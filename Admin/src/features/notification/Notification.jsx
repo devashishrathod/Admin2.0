@@ -121,7 +121,7 @@ function PushSetupCard() {
   };
 
   return (
-    <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
+    <div className="rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${registered ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"}`}>
@@ -285,7 +285,7 @@ function UserPicker({ selected, onChange }) {
         </div>
 
         {open && results.length > 0 && (
-          <div className="absolute z-10 mt-1.5 w-full overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-xl dark:shadow-black/40">
+          <div className="absolute z-10 mt-1.5 w-full overflow-hidden rounded-xl bg-white dark:bg-neutral-900 shadow-xl dark:shadow-black/40">
             {results.map((u) => (
               <button
                 key={u.id}
@@ -343,7 +343,7 @@ function TestPushCard() {
   const ToneIcon = result?.tone === "success" ? CheckCircle2 : AlertTriangle;
 
   return (
-    <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
+    <div className="rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
           <Smartphone size={17} />
@@ -476,7 +476,7 @@ function BroadcastSection() {
       : "No users selected yet";
 
   return (
-    <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
+    <div className="rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-400/10 text-sky-600 dark:text-sky-400">
           <Radio size={17} />
@@ -574,7 +574,7 @@ function BroadcastSection() {
           {/* ── Message ──────────────────────────────────────────── */}
           <div>
             <StepLabel n={3}>Message</StepLabel>
-            <div className="space-y-3 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/60 p-3.5">
+            <div className="space-y-3 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
               <Field label="Title" required>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
               </Field>
@@ -680,7 +680,7 @@ function BroadcastSection() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/60 p-3 text-[12px]">
+            <div className="mt-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 p-3 text-[12px] shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
               <p className="font-medium text-neutral-700 dark:text-neutral-300">Going to</p>
               <p className="mt-0.5 text-neutral-500 dark:text-neutral-400">{audienceSummary}</p>
             </div>
@@ -693,7 +693,7 @@ function BroadcastSection() {
 
 export default function Notification() {
   return (
-    <div className="min-h-screen bg-white dark:bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex items-center gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">

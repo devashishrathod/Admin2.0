@@ -54,15 +54,15 @@ export function Table({
       : "text-left";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] border-collapse text-[13.5px]">
           <thead>
-            <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800/40">
+            <tr>
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 ${alignClass(
+                  className={`px-5 py-4 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 ${alignClass(
                     col.align
                   )} ${col.width || ""}`}
                 >
@@ -76,7 +76,7 @@ export function Table({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-4 py-10 text-center text-neutral-500"
+                  className="px-5 py-10 text-center text-neutral-500"
                 >
                   {emptyMessage}
                 </td>
@@ -85,14 +85,14 @@ export function Table({
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className={`border-b border-neutral-200/70 transition-colors last:border-b-0 hover:bg-neutral-50 dark:border-neutral-800/70 dark:hover:bg-neutral-800/30 ${
+                  className={`transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/30 ${
                     row.isToday ? "bg-cyan-400/[0.04]" : ""
                   }`}
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-3 text-neutral-700 dark:text-neutral-300 ${alignClass(
+                      className={`px-5 py-4 text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
                       )}`}
                     >
@@ -250,7 +250,7 @@ function StatCard({ icon: Icon, label, amount, sub, tone = "emerald", live }) {
     red: "text-red-600 dark:text-red-400",
   }[tone];
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
         <Icon size={15} className={toneCls} />
         {label}
@@ -362,7 +362,7 @@ function TransactionDrawer({ txn, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="h-full w-full max-w-md overflow-y-auto border-l border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900"
+        className="h-full w-full max-w-md overflow-y-auto bg-white p-6 shadow-2xl dark:bg-neutral-900"
       >
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
@@ -536,7 +536,7 @@ export default function Transaction() {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -604,7 +604,7 @@ export default function Transaction() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl bg-white p-1.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           {TABS.map((t) => {
             const count =
               t.key === "all"
@@ -654,7 +654,7 @@ export default function Transaction() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-1 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="flex items-center gap-1.5 rounded-xl bg-white px-1 py-1 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <Filter size={14} className="ml-1.5 text-neutral-500" />
               {["All", ...PAYMENT_METHODS].map((m) => (
                 <button

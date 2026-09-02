@@ -40,7 +40,7 @@ const CAMPAIGN_REJECTION_REASONS = [
 
 function SectionCard({ title, icon: Icon, children, className = "" }) {
   return (
-    <div className={`rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900 ${className}`}>
+    <div className={`rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
       {title && (
         <p className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
           {Icon && <Icon size={12} />}
@@ -331,7 +331,7 @@ export default function CampaignDetails({
   const isApproved = campaign.approvalStatus === "Approved";
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-4xl">
         {/* Top bar */}
         <div className="mb-4 flex items-center justify-between">
@@ -355,7 +355,7 @@ export default function CampaignDetails({
         </div>
 
         {/* Header card */}
-        <div className="relative mb-5 overflow-hidden rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="relative mb-5 overflow-hidden rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -376,7 +376,7 @@ export default function CampaignDetails({
 
           {/* Quick stats */}
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-2xl bg-neutral-50 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Wallet size={13} />
               </span>
@@ -385,7 +385,7 @@ export default function CampaignDetails({
                 ₹{campaign.budget.toLocaleString("en-IN")}
               </p>
             </div>
-            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-2xl bg-neutral-50 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Wallet size={13} />
               </span>
@@ -394,14 +394,14 @@ export default function CampaignDetails({
                 ₹{(campaign.spentAmount || 0).toLocaleString("en-IN")}
               </p>
             </div>
-            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-2xl bg-neutral-50 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Calendar size={13} />
               </span>
               <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Start</p>
               <p className="mt-0.5 text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">{campaign.startDate}</p>
             </div>
-            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-2xl bg-neutral-50 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <span className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 <Calendar size={13} />
               </span>
@@ -413,7 +413,7 @@ export default function CampaignDetails({
 
         {/* Rejected banner */}
         {isRejected && campaign.rejectionReason && (
-          <SectionCard className="mb-4 border-red-500/30 bg-red-500/[0.04]">
+          <SectionCard className="mb-4 border border-red-500/30 bg-red-500/[0.04]">
             <div className="flex items-start gap-3">
               <MessageSquareWarning size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
               <div className="flex-1">
@@ -473,7 +473,7 @@ export default function CampaignDetails({
         </div>
 
         {/* Sticky-ish action bar */}
-        <div className="sticky bottom-4 mt-6 flex flex-wrap items-center justify-end gap-2.5 rounded-2xl border border-neutral-200 bg-white/95 p-4 backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/95">
+        <div className="sticky bottom-4 mt-6 flex flex-wrap items-center justify-end gap-2.5 rounded-2xl bg-white/95 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] backdrop-blur dark:bg-neutral-900/95 dark:shadow-black/20">
           {isPending && (
             <>
               <button

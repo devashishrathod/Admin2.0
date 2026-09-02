@@ -13,7 +13,9 @@ import {
   ThumbsDown,
   ListChecks,
   Loader2,
+  Eye,
 } from "lucide-react";
+import PlanDetails from "./PlanDetails";
 import {
   getPlans,
   addPlan,
@@ -98,7 +100,7 @@ function normalizeEntitlements(raw) {
   };
 }
 
-function normalizePlan(raw) {
+export function normalizePlan(raw) {
   return {
     id: raw?._id ?? raw?.id ?? uid(),
     name: raw?.name ?? "",
@@ -141,109 +143,121 @@ function Field({ label, children }) {
 const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
-function TypePill({ type }) {
-  return (
-    <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-      {type === "MONTHLY" ? "Monthly" : "Yearly"}
-    </span>
-  );
-}
-
 /* -------------------------------------------------------------------------
  * Plan card
  * ---------------------------------------------------------------------- */
 
-function PlanCard({ plan, onEdit, onDelete }) {
+function PlanCard({ plan, onView, onEdit, onDelete }) {
+  const hasDiscount = plan.strikePrice || Number(plan.discountPercent) > 0;
   return (
-    <div
-      className={`relative flex flex-col rounded-2xl border bg-white p-5 dark:bg-neutral-900 ${
-        plan.popular ? "border-emerald-400/60" : "border-neutral-200 dark:border-neutral-800"
-      }`}
-    >
+    <div className="relative flex flex-col overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       {plan.popular && (
-        <span className="absolute -top-3 left-5 flex items-center gap-1 rounded-full bg-emerald-400 px-2.5 py-0.5 text-[10.5px] font-semibold text-neutral-950">
+        <span className="absolute left-5 top-4 z-10 flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-700 shadow-sm">
           <Star size={10} fill="currentColor" />
           Most Popular
         </span>
       )}
 
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h3>
-          <p className="mt-0.5 text-[12px] text-neutral-500">{plan.description}</p>
+      {/* Balance-card style hero — bright green, decorative rings, big price */}
+      <div
+        className={`relative overflow-hidden p-5 pb-6 text-neutral-950 ${
+          plan.status === "Active" ? "bg-gradient-to-br from-emerald-400 to-emerald-500" : "bg-gradient-to-br from-neutral-300 to-neutral-400"
+        }`}
+      >
+        <div className="pointer-events-none absolute -left-12 -top-14 h-40 w-40 rounded-full border-[14px] border-white/15" />
+        <div className="pointer-events-none absolute -bottom-16 -right-10 h-48 w-48 rounded-full border-[14px] border-white/15" />
+        <div className="pointer-events-none absolute bottom-3 left-16 h-14 w-14 rounded-full bg-white/10" />
+
+        <div className="relative flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-neutral-950/80">{plan.name}</p>
+            <p className="mt-0.5 truncate text-[11px] text-neutral-950/55">{plan.description || "No description"}</p>
+          </div>
+          <span
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 ${
+              plan.status === "Active" ? "text-emerald-700" : "text-neutral-600"
+            }`}
+          >
+            {plan.status === "Active" ? <Check size={14} /> : <X size={14} />}
+          </span>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-            plan.status === "Active"
-              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-          }`}
-        >
-          {plan.status}
-        </span>
-      </div>
 
-      <div className="mt-4 flex items-baseline gap-2">
-        <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">
-          ₹{Number(plan.price || 0).toLocaleString("en-IN")}
-        </span>
-        <TypePill type={plan.type} />
-      </div>
-      <div className="mt-1 flex items-center gap-2">
-        {plan.strikePrice ? (
-          <span className="text-[12.5px] text-neutral-600 line-through">
-            ₹{Number(plan.strikePrice).toLocaleString("en-IN")}
+        <div className="relative mt-5 flex items-end gap-1.5">
+          <span className="text-[30px] font-bold leading-none tracking-tight">
+            ₹{Number(plan.price || 0).toLocaleString("en-IN")}
           </span>
-        ) : null}
-        {Number(plan.discountPercent) > 0 ? (
-          <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
-            {plan.discountType === "PERCENT"
-              ? `${plan.discountPercent}% OFF`
-              : `₹${plan.discountPercent} OFF`}
+          <span className="mb-0.5 text-[12px] font-bold uppercase text-neutral-950/60">
+            {plan.type === "MONTHLY" ? "/mo" : "/yr"}
           </span>
-        ) : null}
+        </div>
+
+        {hasDiscount && (
+          <div className="relative mt-1.5 flex items-center gap-2">
+            {plan.strikePrice ? (
+              <span className="text-[11.5px] text-neutral-950/50 line-through">
+                ₹{Number(plan.strikePrice).toLocaleString("en-IN")}
+              </span>
+            ) : null}
+            {Number(plan.discountPercent) > 0 ? (
+              <span className="rounded-md bg-neutral-950/10 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-950/80">
+                {plan.discountType === "PERCENT" ? `${plan.discountPercent}% OFF` : `₹${plan.discountPercent} OFF`}
+              </span>
+            ) : null}
+          </div>
+        )}
+
+        <div className="relative mt-5 flex items-center gap-2">
+          <button
+            onClick={() => onView(plan)}
+            className="flex items-center justify-center gap-1 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+          >
+            <Eye size={12} />
+            View
+          </button>
+          <button
+            onClick={() => onEdit(plan)}
+            className="flex items-center justify-center gap-1 rounded-full bg-neutral-950 px-3.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-neutral-800"
+          >
+            <Pencil size={12} />
+            Edit
+          </button>
+        </div>
       </div>
 
-      {plan.benefits.length > 0 && (
-        <ul className="mt-4 space-y-1.5">
-          {plan.benefits.slice(0, 3).map((b, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-500 dark:text-neutral-400">
-              <ThumbsUp size={12} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              {b}
-            </li>
-          ))}
-          {plan.benefits.length > 3 && (
-            <li className="text-[11.5px] text-neutral-600">+{plan.benefits.length - 3} more</li>
-          )}
-        </ul>
-      )}
-
-      {plan.limitations.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
-          {plan.limitations.slice(0, 2).map((l, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-600">
-              <ThumbsDown size={12} className="mt-0.5 shrink-0 text-red-600/70 dark:text-red-400/70" />
-              {l}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-5 flex items-center gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
-        <button
-          onClick={() => onEdit(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-400 dark:border-neutral-800 dark:text-neutral-300"
-        >
-          <Pencil size={13} />
-          Edit
-        </button>
+      {/* Benefits / limitations — white footer */}
+      <div className="relative p-5 pt-4">
         <button
           onClick={() => onDelete(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-red-500/60 hover:text-red-400 dark:border-neutral-800 dark:text-neutral-300"
+          aria-label="Delete plan"
+          className="absolute right-4 top-3 flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-500 dark:text-neutral-500"
         >
           <Trash2 size={13} />
-          Delete
         </button>
+
+        {plan.benefits.length > 0 && (
+          <ul className="space-y-1.5 pr-8">
+            {plan.benefits.slice(0, 3).map((b, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-500 dark:text-neutral-400">
+                <ThumbsUp size={12} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                {b}
+              </li>
+            ))}
+            {plan.benefits.length > 3 && (
+              <li className="text-[11.5px] text-neutral-600">+{plan.benefits.length - 3} more</li>
+            )}
+          </ul>
+        )}
+
+        {plan.limitations.length > 0 && (
+          <ul className="mt-2 space-y-1.5">
+            {plan.limitations.slice(0, 2).map((l, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-600">
+                <ThumbsDown size={12} className="mt-0.5 shrink-0 text-red-600/70 dark:text-red-400/70" />
+                {l}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -285,7 +299,7 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-[13px]">
           <thead>
@@ -619,7 +633,7 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
             {isNew ? "Add Plan" : `Edit Plan · ${draft.name}`}
@@ -803,7 +817,7 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
 function DeleteConfirmModal({ plan, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
@@ -853,6 +867,8 @@ export default function Plan() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [viewingPlanId, setViewingPlanId] = useState(null);
 
   // ── Load plans from the API on mount ─────────────────────────
   useEffect(() => {
@@ -1055,8 +1071,12 @@ export default function Plan() {
     }
   };
 
+  if (viewingPlanId) {
+    return <PlanDetails planId={viewingPlanId} onBack={() => setViewingPlanId(null)} />;
+  }
+
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1096,7 +1116,13 @@ export default function Plan() {
             {/* Plan cards */}
             <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {plans.map((plan) => (
-                <PlanCard key={plan.id} plan={plan} onEdit={openEdit} onDelete={setDeleteTarget} />
+                <PlanCard
+                  key={plan.id}
+                  plan={plan}
+                  onView={(p) => setViewingPlanId(p.id)}
+                  onEdit={openEdit}
+                  onDelete={setDeleteTarget}
+                />
               ))}
             </div>
 

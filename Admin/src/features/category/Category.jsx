@@ -9,7 +9,19 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   Loader2,
+  PieChart as PieChartIcon,
+  BarChart3,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  XAxis,
+  Tooltip,
+} from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
   createCategory,
@@ -80,7 +92,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
@@ -243,7 +255,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Category Details</h2>
@@ -289,7 +301,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
               )}
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+                <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
                   <p className="text-[11px] uppercase tracking-wider text-neutral-500">
                     Sub Categories
                   </p>
@@ -297,7 +309,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
                     {category.subCategoryCount ?? 0}
                   </p>
                 </div>
-                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+                <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
                   <p className="text-[11px] uppercase tracking-wider text-neutral-500">
                     Vouchers
                   </p>
@@ -327,7 +339,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
 function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl bg-neutral-900 p-6 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
             <AlertTriangle size={18} />
@@ -416,6 +428,24 @@ export default function Category() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // A broader, unpaginated snapshot used only for the overview charts —
+  // the paginated `categories` list above only ever holds one page, which
+  // would make a status/count chart misleading.
+  const [allCategories, setAllCategories] = useState([]);
+
+  const fetchAllCategories = useCallback(async () => {
+    try {
+      const res = await getCategories({ page: 1, limit: 200 });
+      setAllCategories((res?.data?.data ?? []).map(apiToRow));
+    } catch {
+      setAllCategories([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllCategories();
+  }, [fetchAllCategories]);
+
   const fetchCategories = useCallback(async () => {
     setLoading(true);
     setLoadError("");
@@ -498,6 +528,7 @@ export default function Category() {
       setModalOpen(false);
       setEditingCategory(null);
       fetchCategories();
+      fetchAllCategories();
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -511,12 +542,26 @@ export default function Category() {
       await deleteCategory(deleteTarget.id);
       setDeleteTarget(null);
       fetchCategories();
+      fetchAllCategories();
     } catch (err) {
       console.error("Failed to delete category:", err.message);
     } finally {
       setDeleting(false);
     }
   };
+
+  // Overview charts — derived from the broader allCategories snapshot, not
+  // the current paginated page, so they reflect the true full set.
+  const activeCount = allCategories.filter((c) => c.isActive).length;
+  const inactiveCount = allCategories.length - activeCount;
+  const statusMix = [
+    { name: "Active", value: activeCount, color: "#2FDE8C" },
+    { name: "Inactive", value: inactiveCount, color: "#A3A3A3" },
+  ].filter((s) => s.value > 0);
+
+  const topCategories = [...allCategories]
+    .sort((a, b) => (b.subCategoryCount + b.voucherCount) - (a.subCategoryCount + a.voucherCount))
+    .slice(0, 6);
 
   // Column config for the shared Table component.
   const columns = [
@@ -596,7 +641,7 @@ export default function Category() {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -617,8 +662,69 @@ export default function Category() {
           </button>
         </div>
 
+        {/* Overview charts — real data, independent of the table's filters */}
+        <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.4fr]">
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative h-[110px] w-[110px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusMix}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={34}
+                      outerRadius={52}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      {statusMix.map((s) => (
+                        <Cell key={s.name} fill={s.color} stroke="none" />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{allCategories.length}</span>
+                  <span className="text-[8.5px] text-neutral-500">Total</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {statusMix.map((s) => (
+                  <div key={s.name} className="flex items-center gap-1.5 text-[11.5px]">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="min-w-0 flex-1 truncate text-neutral-500">{s.name}</span>
+                    <span className="font-semibold text-neutral-900 dark:text-neutral-50">{s.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <BarChart3 size={14} className="text-emerald-500" /> Top Categories (Sub-Categories + Vouchers)
+            </div>
+            {topCategories.length ? (
+              <ResponsiveContainer width="100%" height={150}>
+                <BarChart data={topCategories} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 10.5 }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={40} />
+                  <Tooltip />
+                  <Bar dataKey="subCategoryCount" name="Sub-Categories" fill="#2FDE8C" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="voucherCount" name="Vouchers" fill="#38BDF8" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[150px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+            )}
+          </div>
+        </div>
+
         {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="mb-4 flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:max-w-xs">
           <Search size={16} className="shrink-0 text-neutral-500" />
           <input
             value={search}

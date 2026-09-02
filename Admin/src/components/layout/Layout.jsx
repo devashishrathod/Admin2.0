@@ -22,7 +22,7 @@ export default function Layout({ children }) {
 
   return (
     <div
-      className="flex h-screen overflow-hidden bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50"
+      className="flex h-screen overflow-hidden bg-[#F8FAF7] text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50"
       style={{ fontFamily: "'Inter', ui-sans-serif, sans-serif" }}
     >
       <Sidebar

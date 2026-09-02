@@ -114,11 +114,12 @@ export function MerchantTokenCard({ token }) {
   );
 }
 
-export function SectionCard({ title, children, className = "" }) {
+export function SectionCard({ title, icon: Icon, children, className = "" }) {
   return (
-    <div className={`rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900 ${className}`}>
+    <div className={`rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
       {title && (
-        <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
+        <p className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
+          {Icon && <Icon size={13} className="text-neutral-400 dark:text-neutral-500" />}
           {title}
         </p>
       )}
@@ -134,7 +135,7 @@ export function SectionCard({ title, children, className = "" }) {
 export function CollapsibleSectionCard({ title, children, defaultOpen = false, className = "" }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={`rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 ${className}`}>
+    <div className={`rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -248,6 +249,46 @@ export function StatChip({ icon: Icon, value, label, tint = "neutral" }) {
   );
 }
 
+const RING_TINTS = {
+  emerald: "stroke-emerald-400",
+  amber: "stroke-amber-400",
+  sky: "stroke-sky-400",
+  violet: "stroke-violet-400",
+  red: "stroke-red-400",
+};
+
+/* Compact "ring + label" stat pill — a circular progress ring with the
+   percentage centered, paired with a bold label and a lighter caption line.
+   Used at the top of detail pages for at-a-glance health/progress metrics. */
+export function RingStat({ pct, label, caption, tint = "emerald" }) {
+  const dash = 2 * Math.PI * 15;
+  const clamped = Math.max(0, Math.min(100, pct ?? 0));
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
+        <svg className="absolute inset-0 h-11 w-11 -rotate-90" viewBox="0 0 40 40">
+          <circle cx="20" cy="20" r="15" className="fill-none stroke-neutral-200 dark:stroke-neutral-800" strokeWidth="4" />
+          <circle
+            cx="20"
+            cy="20"
+            r="15"
+            className={`fill-none ${RING_TINTS[tint] || RING_TINTS.emerald}`}
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray={dash}
+            strokeDashoffset={dash * (1 - clamped / 100)}
+          />
+        </svg>
+        <span className="text-[10.5px] font-bold text-neutral-900 dark:text-neutral-50">{Math.round(clamped)}%</span>
+      </div>
+      <div className="min-w-0 leading-tight">
+        <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">{label}</p>
+        <p className="truncate text-[11px] text-neutral-500">{caption}</p>
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------
  * Reject Reason Modal
  * Shown whenever a super admin picks "Reject" so a reason is always
@@ -269,7 +310,7 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Reject Listing</h2>
@@ -371,7 +412,7 @@ export function ApprovalDropdown({ brand, onDecision, size = "md" }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+          <div className="absolute left-0 z-20 mt-2 w-44 overflow-hidden rounded-xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
             <button
               onClick={() => {
                 onDecision(brand, "Active", "");
@@ -429,7 +470,7 @@ export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="flex items-start gap-3">
           <span
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${

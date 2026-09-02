@@ -312,6 +312,7 @@ const COMBINED_TREND = MONTHS.map((month, i) => ({
   revenue: monthTotal("revenue", i),
   transactions: monthTotal("transactions", i),
   customers: monthTotal("customers", i),
+  vouchers: monthTotal("vouchers", i),
 }));
 
 /* Per-brand totals across the whole 6-month window, used by the comparison table */
@@ -442,7 +443,9 @@ function withMembershipFinancials(plan) {
  * Shared bits
  * ---------------------------------------------------------------------- */
 
-function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
+const KPI_TINT_HEX = { emerald: "#2FDE8C", amber: "#FBBF24", sky: "#38BDF8", pink: "#F472B6" };
+
+function KpiCard({ icon: Icon, label, value, delta, tint = "emerald", trend, dataKey }) {
   const tints = {
     emerald: "bg-emerald-400/10 text-emerald-400",
     amber: "bg-amber-400/10 text-amber-400",
@@ -450,8 +453,9 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
     pink: "bg-pink-400/10 text-pink-400",
   };
   const positive = delta === undefined || delta >= 0;
+  const sparkColor = KPI_TINT_HEX[tint] || KPI_TINT_HEX.emerald;
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="mb-2.5 flex items-center justify-between">
         <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tints[tint]}`}>
           <Icon size={16} />
@@ -469,6 +473,29 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
       </div>
       <p className="text-[20px] font-bold tracking-tight text-neutral-900 dark:text-neutral-50">{value}</p>
       <p className="mt-0.5 text-[11.5px] text-neutral-500">{label}</p>
+      {trend && trend.length > 1 && (
+        <div className="mt-2 h-9">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={trend} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`kpi-spark-${dataKey}-${tint}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={sparkColor} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={sparkColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area
+                type="natural"
+                dataKey={dataKey}
+                stroke={sparkColor}
+                strokeWidth={1.6}
+                fill={`url(#kpi-spark-${dataKey}-${tint})`}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
@@ -476,7 +503,7 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
 function ChartTooltip({ active, payload, label, currency = false }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[11.5px] shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+    <div className="rounded-lg bg-white px-3 py-2 text-[11.5px] shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
       <p className="mb-1 text-neutral-500">{label}</p>
       {payload.map((p) => (
         <p key={p.dataKey} className="font-semibold" style={{ color: p.color }}>
@@ -539,7 +566,7 @@ function DropdownFilter({ label, value, options, onChange }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+          <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
             {options.map((opt) => (
               <button
                 key={opt}
@@ -580,6 +607,8 @@ function OverviewTab() {
       value: formatNumber(monthTotal("customers", latest)),
       delta: pctChange(monthTotal("customers", latest), monthTotal("customers", prev)),
       tint: "emerald",
+      trend: COMBINED_TREND,
+      dataKey: "customers",
     },
     {
       icon: Tag,
@@ -587,6 +616,8 @@ function OverviewTab() {
       value: formatNumber(monthTotal("vouchers", latest)),
       delta: pctChange(monthTotal("vouchers", latest), monthTotal("vouchers", prev)),
       tint: "amber",
+      trend: COMBINED_TREND,
+      dataKey: "vouchers",
     },
     // {
     //   icon: Sparkles,
@@ -608,6 +639,8 @@ function OverviewTab() {
       value: formatNumber(monthTotal("transactions", latest)),
       delta: pctChange(monthTotal("transactions", latest), monthTotal("transactions", prev)),
       tint: "emerald",
+      trend: COMBINED_TREND,
+      dataKey: "transactions",
     },
     {
       icon: CreditCard,
@@ -615,6 +648,8 @@ function OverviewTab() {
       value: formatCurrency(monthTotal("revenue", latest)),
       delta: pctChange(monthTotal("revenue", latest), monthTotal("revenue", prev)),
       tint: "amber",
+      trend: COMBINED_TREND,
+      dataKey: "revenue",
     },
   ];
 
@@ -693,10 +728,55 @@ function OverviewTab() {
         <p className="mb-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
           BRAND ONBOARDING OVERVIEW
         </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {registrationKpis.map((k) => (
-            <KpiCard key={k.label} {...k} />
-          ))}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_1fr]">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {registrationKpis.map((k) => (
+              <KpiCard key={k.label} {...k} />
+            ))}
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <p className="mb-1 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">Brand Status</p>
+            <div className="flex items-center gap-3">
+              <div className="relative h-[92px] w-[92px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: "Active", value: activeBrands },
+                        { name: "Inactive", value: inactiveBrands },
+                      ].filter((d) => d.value > 0)}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={28}
+                      outerRadius={44}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      <Cell fill="#2FDE8C" stroke="none" />
+                      <Cell fill="#FBBF24" stroke="none" />
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[14px] font-bold text-neutral-900 dark:text-neutral-50">{totalBrands}</span>
+                  <span className="text-[8.5px] text-neutral-500">Brands</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5 text-[11.5px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                  <span className="min-w-0 flex-1 truncate text-neutral-500">Active</span>
+                  <span className="font-semibold text-neutral-900 dark:text-neutral-50">{activeBrands}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />
+                  <span className="min-w-0 flex-1 truncate text-neutral-500">Inactive</span>
+                  <span className="font-semibold text-neutral-900 dark:text-neutral-50">{inactiveBrands}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -722,7 +802,7 @@ function OverviewTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Receipt size={15} className="text-emerald-600 dark:text-emerald-400" /> Bill Amount, Discount &amp; Fees Trend
@@ -744,7 +824,7 @@ function OverviewTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <BarChart3 size={15} className="text-emerald-600 dark:text-emerald-400" /> Revenue &amp; Transactions Trend
@@ -771,7 +851,7 @@ function OverviewTab() {
             <Legend wrapperStyle={{ fontSize: 12, color: "#8C9A91" }} />
             <Area
               yAxisId="left"
-              type="monotone"
+              type="natural"
               dataKey="revenue"
               name="Revenue"
               stroke="#2FDE8C"
@@ -780,7 +860,7 @@ function OverviewTab() {
             />
             <Area
               yAxisId="right"
-              type="monotone"
+              type="natural"
               dataKey="transactions"
               name="Transactions"
               stroke="#38BDF8"
@@ -791,7 +871,7 @@ function OverviewTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-3.5 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Store size={15} className="text-emerald-600 dark:text-emerald-400" /> Top Performing Brands
@@ -860,9 +940,9 @@ function BrandAnalyticsTab() {
         />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[720px] text-left text-[13px]">
-          <thead className="bg-white text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Brand</th>
               <th className="px-4 py-3 text-right font-medium">Customers</th>
@@ -878,7 +958,7 @@ function BrandAnalyticsTab() {
               <th className="px-4 py-3 text-right font-medium">Trend</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 bg-neutral-50 dark:divide-neutral-800 dark:bg-neutral-950">
+          <tbody className="bg-neutral-50 dark:bg-neutral-950">
             {rows.map((b) => (
               <React.Fragment key={b.id}>
                 <tr
@@ -953,7 +1033,7 @@ function BrandTrendPanel({ brand }) {
   }));
 
   return (
-    <div className="grid grid-cols-1 gap-4 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:grid-cols-2">
       <div>
         <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
           Customers &amp; Transactions
@@ -968,8 +1048,8 @@ function BrandTrendPanel({ brand }) {
             </defs>
             <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 10.5 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Area type="monotone" dataKey="customers" name="Customers" stroke="#2FDE8C" strokeWidth={2} fill={`url(#cust-${brand.id})`} />
-            <Area type="monotone" dataKey="transactions" name="Transactions" stroke="#38BDF8" strokeWidth={2} fillOpacity={0} />
+            <Area type="natural" dataKey="customers" name="Customers" stroke="#2FDE8C" strokeWidth={2} fill={`url(#cust-${brand.id})`} />
+            <Area type="natural" dataKey="transactions" name="Transactions" stroke="#38BDF8" strokeWidth={2} fillOpacity={0} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -1103,7 +1183,7 @@ function DealPackTab() {
 
       <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
         <table className="w-full min-w-[760px] text-left text-[13px]">
-          <thead className="bg-neutral-100 text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period === "Month" ? "Month" : "Year"}</th>
               <th className="px-4 py-3 text-right font-medium">Items Sold</th>
@@ -1114,9 +1194,9 @@ function DealPackTab() {
               <th className="px-4 py-3 text-right font-medium">Net Payable</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {data.map((row) => (
-              <tr key={period === "Month" ? row.label : row.year}>
+              <tr key={period === "Month" ? row.label : row.year} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
                 <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{period === "Month" ? row.label : row.year}</td>
                 <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.itemsSold)}</td>
                 <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatCurrency(row.itemsTotal)}</td>
@@ -1243,7 +1323,7 @@ function MembershipTab() {
 
       <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
         <table className="w-full min-w-[780px] text-left text-[13px]">
-          <thead className="bg-neutral-100 text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Plan</th>
               <th className="px-4 py-3 text-right font-medium">Plan Price / Year</th>
@@ -1254,9 +1334,9 @@ function MembershipTab() {
               <th className="px-4 py-3 text-right font-medium">Net Payable</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {plans.map((p) => (
-              <tr key={p.name}>
+              <tr key={p.name} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PLAN_COLORS[p.name] }} />
@@ -1385,7 +1465,7 @@ function VouchersTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Tag size={15} className="text-emerald-400" /> Voucher Amount by {period}
@@ -1410,12 +1490,12 @@ function VouchersTab() {
             />
             <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip currency />} />
-            <Area type="monotone" dataKey="amount" name="Voucher Amount" stroke="#FBBF24" strokeWidth={2.2} fill="url(#voucherFill)" />
+            <Area type="natural" dataKey="amount" name="Voucher Amount" stroke="#FBBF24" strokeWidth={2.2} fill="url(#voucherFill)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Receipt size={15} className="text-emerald-400" /> Bill Amount, Platform Fee &amp; Trydood Discount by {period}
@@ -1442,9 +1522,9 @@ function VouchersTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[880px] text-left text-[13px]">
-          <thead className="bg-neutral-100 text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period === "Month" ? "Month" : "Year"}</th>
               <th className="px-4 py-3 text-right font-medium">Vouchers Used</th>
@@ -1455,9 +1535,9 @@ function VouchersTab() {
               <th className="px-4 py-3 text-right font-medium">Trydood Discount</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {data.map((row) => (
-              <tr key={period === "Month" ? row.label : row.year}>
+              <tr key={period === "Month" ? row.label : row.year} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
                 <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{period === "Month" ? row.label : row.year}</td>
                 <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.count)}</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(row.amount)}</td>
@@ -1529,7 +1609,7 @@ function TransactionTab() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-[12.5px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
+      <div className="rounded-2xl bg-white p-4 text-[12.5px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:text-neutral-400 dark:shadow-black/20">
         <span className="font-semibold text-neutral-800 dark:text-neutral-200">Avg. ticket size (Jul):</span> {formatCurrency(avgTicketSize)}{" "}
         <span
           className={`ml-1 font-semibold ${
@@ -1542,7 +1622,7 @@ function TransactionTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="min-w-0 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
               <Repeat size={15} className="text-emerald-400" /> Success vs Failed Transactions
@@ -1562,7 +1642,7 @@ function TransactionTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="min-w-0 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Smartphone size={15} className="text-emerald-400" /> Payment Method Split
           </div>
@@ -1599,7 +1679,7 @@ function TransactionTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
           <BarChart3 size={15} className="text-emerald-400" /> Transaction Value Trend
         </div>
@@ -1615,14 +1695,14 @@ function TransactionTab() {
             <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip currency />} />
-            <Area type="monotone" dataKey="amount" name="Transaction Value" stroke="#38BDF8" strokeWidth={2.2} fill="url(#txnValueFill)" />
+            <Area type="natural" dataKey="amount" name="Transaction Value" stroke="#38BDF8" strokeWidth={2.2} fill="url(#txnValueFill)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[680px] text-left text-[13px]">
-          <thead className="bg-neutral-100 text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Month</th>
               <th className="px-4 py-3 text-right font-medium">Total</th>
@@ -1632,9 +1712,9 @@ function TransactionTab() {
               <th className="px-4 py-3 text-right font-medium">Amount</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {TRANSACTION_HISTORY.map((row) => (
-              <tr key={row.month}>
+              <tr key={row.month} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
                 <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{row.month}</td>
                 <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.count)}</td>
                 <td className="px-4 py-3 text-right text-emerald-400">{formatNumber(row.success)}</td>
@@ -1699,7 +1779,7 @@ function SettlementAnalyticsTab() {
         <KpiCard icon={FileText} label="Total Settlement Records" value={formatNumber(totals.count)} tint="sky" />
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <BarChart3 size={15} className="text-emerald-400" /> Settlement Amount by {period}
@@ -1720,9 +1800,9 @@ function SettlementAnalyticsTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[560px] text-left text-[13px]">
-          <thead className="bg-neutral-100 text-[11px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period}</th>
               <th className="px-4 py-3 text-right font-medium">Paid</th>
@@ -1732,9 +1812,9 @@ function SettlementAnalyticsTab() {
               <th className="px-4 py-3 text-right font-medium">Records</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {buckets.map((b) => (
-              <tr key={b.key}>
+              <tr key={b.key} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
                 <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{b.label}</td>
                 <td className="px-4 py-3 text-right text-emerald-400">{formatCurrency(b.paid)}</td>
                 <td className="px-4 py-3 text-right text-amber-400">{formatCurrency(b.pending)}</td>
@@ -1765,7 +1845,7 @@ export default function AnalyticsReport() {
   const [tab, setTab] = useState("Overview");
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

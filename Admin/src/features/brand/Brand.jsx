@@ -171,7 +171,7 @@ function BrandCard({ brand, onOpen, onDelete }) {
   const outletCount = Number(String(brand.subBrandCount).split("/")[0]) || 0;
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-lg hover:shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700 dark:hover:shadow-black/30">
+    <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:shadow-black/30">
       <div className={`pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${accent} opacity-70`} />
 
       {brand.isTopBrand && (
@@ -193,7 +193,7 @@ function BrandCard({ brand, onOpen, onDelete }) {
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 z-20 mt-1.5 w-40 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+            <div className="absolute right-0 z-20 mt-1.5 w-40 overflow-hidden rounded-xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
               <button
                 onClick={() => { setMenuOpen(false); onDelete(brand); }}
                 className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
@@ -427,7 +427,7 @@ export default function Brand() {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -550,7 +550,7 @@ export default function Brand() {
               {planMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setPlanMenuOpen(false)} />
-                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
                     <button
                       onClick={() => { setPlanFilterAndReset("All Plans"); setPlanMenuOpen(false); }}
                       className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -592,7 +592,7 @@ export default function Brand() {
               {categoryMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setCategoryMenuOpen(false)} />
-                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
                     <button
                       onClick={() => { setCategoryFilterAndReset("All Categories"); setCategoryMenuOpen(false); }}
                       className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -664,13 +664,13 @@ export default function Brand() {
 
         {/* Loading state */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-16 text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white px-4 py-16 text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <Loader2 size={20} className="animate-spin" />
             Loading brands…
           </div>
         ) : view === "grid" ? (
           paged.length === 0 ? (
-            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-10 text-center text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white px-4 py-10 text-center text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               No brands found.
             </div>
           ) : (

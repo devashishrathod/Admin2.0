@@ -37,7 +37,7 @@ html, body {
 
 body {
   font-family: var(--font-sans);
-  background-color: #ffffff;
+  background-color: #dee9f4;
   color: #111827;
 }
 
@@ -84,4 +84,26 @@ body {
   display: none;
   width: 0;
   height: 0;
+}
+
+/* Reusable "export as PDF" support — any table page can wrap its
+   exportable content in a `print-area` div and add `no-print` to
+   controls that shouldn't appear in the printed/PDF output. Triggered by
+   printAsPdf() in src/utils/exportTable.js. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
 }

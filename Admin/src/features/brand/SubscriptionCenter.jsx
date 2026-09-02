@@ -146,7 +146,7 @@ export function GrantSubscriptionModal({ brand, action, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${meta.accent}`}>
@@ -301,7 +301,7 @@ export function CancelSubscriptionModal({ brand, onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-600 dark:text-red-400">
@@ -374,7 +374,7 @@ function ActionCard({ action, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="group flex items-start gap-3 rounded-2xl border border-neutral-200 bg-white p-4 text-left transition-colors hover:border-neutral-300 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700 dark:hover:bg-neutral-800/60"
+      className="group flex items-start gap-3 rounded-2xl bg-white p-4 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:bg-neutral-100 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:bg-neutral-800/60 dark:hover:shadow-black/30"
     >
       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.accent}`}>
         <meta.icon size={16} />
@@ -540,7 +540,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
           </div>
 
           {pricing && (
-            <div className="mt-4 overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+            <div className="mt-4 overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
               {/* Price Summary */}
               <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
@@ -631,7 +631,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
             {brand.invoices.map((inv) => (
               <div
                 key={inv.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
+                className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
               >
                 <div className="flex items-start gap-3">
                   <FileText size={16} className="mt-0.5 shrink-0 text-neutral-500" />

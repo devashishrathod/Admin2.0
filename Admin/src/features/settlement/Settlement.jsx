@@ -511,7 +511,7 @@ function DueBadge({ schedule }) {
 
 function StatCard({ icon: Icon, label, amount, sub, live }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
         <Icon size={15} className="text-emerald-400" />
         {label}
@@ -564,7 +564,7 @@ function SettlementDetail({ settlement, onBack }) {
       </div>
 
       {/* Settlement information */}
-      <section className="mb-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <section className="mb-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Settlement Information
         </h3>
@@ -585,7 +585,7 @@ function SettlementDetail({ settlement, onBack }) {
       </section>
 
       {/* Amount breakup */}
-      <section className="mb-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <section className="mb-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Amount Breakup Information
         </h3>
@@ -608,7 +608,7 @@ function SettlementDetail({ settlement, onBack }) {
       </section>
 
       {/* Transaction timeline */}
-      <section className="mb-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <section className="mb-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Transaction Information
         </h3>
@@ -647,7 +647,7 @@ function SettlementDetail({ settlement, onBack }) {
       </section>
 
       {/* Tickets */}
-      <section className="mb-8 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <section className="mb-8 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Ticket Raise
         </h3>
@@ -662,7 +662,7 @@ function SettlementDetail({ settlement, onBack }) {
               return (
                 <div
                   key={tk.id}
-                  className="rounded-xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950"
+                  className="rounded-xl bg-neutral-50 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20"
                 >
                   <button
                     onClick={() => setOpenTicket(open ? null : tk.id)}
@@ -799,7 +799,7 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
@@ -1119,14 +1119,14 @@ export default function Settlement() {
 
   if (selected) {
     return (
-      <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+      <div className="min-h-screen p-6">
         <SettlementDetail settlement={selected} onBack={() => setSelected(null)} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1248,19 +1248,19 @@ export default function Settlement() {
         </div>
 
         {/* Table */}
-        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50 text-[11.5px] uppercase tracking-wide text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950/60">
-                <th className="px-4 py-3 font-medium">Settlement Id</th>
-                <th className="px-4 py-3 font-medium">Vendor</th>
-                <th className="px-4 py-3 font-medium">Payment Received</th>
-                <th className="px-4 py-3 font-medium">Settlement Due (T+{SETTLEMENT_CYCLE_DAYS})</th>
-                <th className="px-4 py-3 font-medium">Transaction Id</th>
-                <th className="px-4 py-3 text-right font-medium">Amount</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Actions</th>
-                <th className="px-4 py-3 text-right font-medium">Info</th>
+              <tr className="text-[11.5px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+                <th className="px-5 py-4 font-medium">Settlement Id</th>
+                <th className="px-5 py-4 font-medium">Vendor</th>
+                <th className="px-5 py-4 font-medium">Payment Received</th>
+                <th className="px-5 py-4 font-medium">Settlement Due (T+{SETTLEMENT_CYCLE_DAYS})</th>
+                <th className="px-5 py-4 font-medium">Transaction Id</th>
+                <th className="px-5 py-4 text-right font-medium">Amount</th>
+                <th className="px-5 py-4 font-medium">Status</th>
+                <th className="px-5 py-4 font-medium">Actions</th>
+                <th className="px-5 py-4 text-right font-medium">Info</th>
               </tr>
             </thead>
             <tbody>
@@ -1280,11 +1280,11 @@ export default function Settlement() {
                 return (
                   <React.Fragment key={s.id}>
                     <tr
-                      className={`border-b border-neutral-200/70 text-[13px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800/70 dark:text-neutral-300 dark:hover:bg-neutral-800/30 ${
+                      className={`text-[13px] text-neutral-700 transition-colors hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800/30 ${
                         schedule?.isToday ? "bg-cyan-400/[0.04]" : ""
                       }`}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <button
                           onClick={() => setSelected(s)}
                           className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
@@ -1292,19 +1292,19 @@ export default function Settlement() {
                           {s.id}
                         </button>
                       </td>
-                      <td className="px-4 py-3">{s.vendor}</td>
-                      <td className="px-4 py-3">{s.paymentReceivedDate}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">{s.vendor}</td>
+                      <td className="px-5 py-4">{s.paymentReceivedDate}</td>
+                      <td className="px-5 py-4">
                         <DueBadge schedule={schedule} />
                       </td>
-                      <td className="px-4 py-3">{s.transactionId}</td>
-                      <td className="px-4 py-3 text-right font-medium text-neutral-900 dark:text-neutral-50">
+                      <td className="px-5 py-4">{s.transactionId}</td>
+                      <td className="px-5 py-4 text-right font-medium text-neutral-900 dark:text-neutral-50">
                         {inr(s.amount)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <StatusBadge status={s.status} />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleEdit(s)}
@@ -1322,7 +1322,7 @@ export default function Settlement() {
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-5 py-4 text-right">
                         <button
                           onClick={() => setExpandedId(open ? null : s.id)}
                           aria-label="Toggle breakup"
@@ -1337,7 +1337,7 @@ export default function Settlement() {
                       </td>
                     </tr>
                     {open && (
-                      <tr className="border-b border-neutral-200/70 bg-neutral-50 dark:border-neutral-800/70 dark:bg-neutral-950/60">
+                      <tr className="bg-neutral-50 dark:bg-neutral-950/60">
                         <td colSpan={9} className="px-6 py-4">
                           <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                             Amount Breakup

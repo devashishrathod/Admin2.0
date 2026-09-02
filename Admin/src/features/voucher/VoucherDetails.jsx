@@ -27,9 +27,9 @@ import {
   Globe,
   X,
 } from "lucide-react";
-import Table from "../../components/common/Table";
 import { computeStatus, VoucherStatusBadge } from "./VoucherList";
 import { VOUCHER_STATUSES } from "./services/VoucherApi";
+import { RingStat } from "../brand/BrandShared";
 
 /* -------------------------------------------------------------------------
  * VoucherDetails
@@ -86,67 +86,6 @@ const HISTORY_COLORS = {
   Archived: "text-neutral-500 dark:text-neutral-400 bg-neutral-200 dark:bg-neutral-700/40",
 };
 
-const OFFER_COLUMNS = [
-  { key: "title", label: "Offer", render: (o) => <span className="font-medium text-neutral-800 dark:text-neutral-100">{o.title}</span> },
-  {
-    key: "discount",
-    label: "Discount",
-    render: (o) => (
-      <span className="text-neutral-700 dark:text-neutral-300">
-        {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
-      </span>
-    ),
-  },
-  { key: "minBillAmount", label: "Min Bill", render: (o) => <span className="text-neutral-700 dark:text-neutral-300">₹{o.minBillAmount}</span> },
-  {
-    key: "maxDiscountAmount",
-    label: "Max Discount",
-    render: (o) => <span className="text-neutral-700 dark:text-neutral-300">₹{o.maxDiscountAmount}</span>,
-  },
-  { key: "usageType", label: "Usage", render: (o) => <span className="text-neutral-500 dark:text-neutral-400">{o.usageType}</span> },
-  {
-    key: "discountApplicableOn",
-    label: "Applicable On",
-    render: (o) => <span className="text-neutral-500 dark:text-neutral-400">{o.discountApplicableOn}</span>,
-  },
-  { key: "sortOrder", label: "Order", render: (o) => <span className="text-neutral-500 dark:text-neutral-400">{o.sortOrder ?? "—"}</span> },
-  {
-    key: "isActive",
-    label: "Active",
-    render: (o) =>
-      o.isActive ? (
-        <span className="text-emerald-600 dark:text-emerald-400">
-          <CheckCircle2 size={14} />
-        </span>
-      ) : (
-        <span className="text-neutral-400 dark:text-neutral-600">
-          <XCircle size={14} />
-        </span>
-      ),
-  },
-];
-
-const HISTORY_COLUMNS = [
-  {
-    key: "action",
-    label: "Action",
-    render: (h) => {
-      const Icon = HISTORY_ICONS[h.action] || Clock;
-      const color = HISTORY_COLORS[h.action] || "text-neutral-500 dark:text-neutral-400 bg-neutral-200 dark:bg-neutral-700/40";
-      return (
-        <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-100">
-          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${color}`}>
-            <Icon size={12} />
-          </span>
-          {h.action}
-        </span>
-      );
-    },
-  },
-  { key: "by", label: "By", render: (h) => <span className="text-neutral-700 dark:text-neutral-300">{h.by || "—"}</span> },
-  { key: "date", label: "Date", render: (h) => <span className="text-neutral-500 dark:text-neutral-400">{h.date}</span> },
-  { key: "remarks", label: "Remarks", render: (h) => <span className="text-neutral-500 dark:text-neutral-400">{h.remarks || "—"}</span> },
-];
 
 export default function VoucherDetails({ voucher, onBack, onApprove, onReject, onPublish, busy, actionError }) {
   const [rejectReason, setRejectReason] = useState("");
@@ -168,15 +107,15 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
   };
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
               aria-label="Back to vouchers"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-500 transition-colors hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-colors hover:text-neutral-900 dark:bg-neutral-900 dark:text-neutral-400 dark:shadow-black/20 dark:hover:text-neutral-100"
             >
               <ArrowLeft size={16} />
             </button>
@@ -190,10 +129,25 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
               </p>
             </div>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <RingStat
+              pct={voucher.isActive ? 100 : 0}
+              label="Status"
+              caption={voucher.isActive ? "Active" : "Inactive"}
+              tint={voucher.isActive ? "emerald" : "red"}
+            />
+            <RingStat
+              pct={voucher.isImmutable ? 100 : 0}
+              label="Editable"
+              caption={voucher.isImmutable ? "Locked" : "Open"}
+              tint={voucher.isImmutable ? "amber" : "sky"}
+            />
+          </div>
         </div>
 
         {actionError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
+          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />
             {actionError}
           </div>
@@ -221,7 +175,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
               </div>
             )}
 
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                 Voucher Details
               </p>
@@ -293,7 +247,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
             {(voucher.categoryDetails || voucher.subCategoryDetails) && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {voucher.categoryDetails && (
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">Category</p>
                     <div className="flex items-center gap-3">
                       {voucher.categoryDetails.image ? (
@@ -319,7 +273,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                   </div>
                 )}
                 {voucher.subCategoryDetails && (
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">Sub-Category</p>
                     <div className="flex items-center gap-3">
                       {voucher.subCategoryDetails.image ? (
@@ -348,12 +302,48 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
             )}
 
             {/* Offers */}
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                 Offers ({voucher.offers?.length ?? 0})
               </p>
               {voucher.offers?.length ? (
-                <Table columns={OFFER_COLUMNS} data={voucher.offers} rowKey="_id" emptyMessage="No offers on this version." />
+                <div className="space-y-2.5">
+                  {voucher.offers.map((o) => (
+                    <div key={o._id} className="rounded-xl bg-neutral-50 p-3.5 dark:bg-neutral-950/60">
+                      <div className="mb-2.5 flex items-center justify-between gap-2">
+                        <span className="font-medium text-neutral-800 dark:text-neutral-100">{o.title}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[15px] font-bold text-emerald-600 dark:text-emerald-400">
+                            {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
+                          </span>
+                          {o.isActive ? (
+                            <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <XCircle size={14} className="text-neutral-400 dark:text-neutral-600" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11.5px] sm:grid-cols-4">
+                        <div>
+                          <p className="text-neutral-500">Min Bill</p>
+                          <p className="font-medium text-neutral-800 dark:text-neutral-200">₹{o.minBillAmount}</p>
+                        </div>
+                        <div>
+                          <p className="text-neutral-500">Max Discount</p>
+                          <p className="font-medium text-neutral-800 dark:text-neutral-200">₹{o.maxDiscountAmount}</p>
+                        </div>
+                        <div>
+                          <p className="text-neutral-500">Usage</p>
+                          <p className="font-medium text-neutral-800 dark:text-neutral-200">{o.usageType}</p>
+                        </div>
+                        <div>
+                          <p className="text-neutral-500">Applicable On</p>
+                          <p className="font-medium text-neutral-800 dark:text-neutral-200">{o.discountApplicableOn}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <p className="text-[12.5px] text-neutral-500">No offers on this version.</p>
               )}
@@ -361,18 +351,43 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
 
             {/* History timeline */}
             {voucher.history?.length > 0 && (
-              <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                   Approval History
                 </p>
-                <Table columns={HISTORY_COLUMNS} data={voucher.history} rowKey="action" emptyMessage="No history yet." />
+                <div>
+                  {voucher.history.map((h, i) => {
+                    const Icon = HISTORY_ICONS[h.action] || Clock;
+                    const color = HISTORY_COLORS[h.action] || "text-neutral-500 dark:text-neutral-400 bg-neutral-200 dark:bg-neutral-700/40";
+                    const isLast = i === voucher.history.length - 1;
+                    return (
+                      <div key={`${h.action}-${i}`} className={`relative flex gap-3 ${isLast ? "" : "pb-4"}`}>
+                        {!isLast && <span className="absolute bottom-0 left-[11px] top-6 w-px bg-neutral-200 dark:bg-neutral-800" />}
+                        <span className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-4 ring-white dark:ring-neutral-900 ${color}`}>
+                          <Icon size={12} />
+                        </span>
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                            <p className="text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-100">{h.action}</p>
+                            <span className="text-[11px] text-neutral-500">{h.date}</span>
+                          </div>
+                          <p className="mt-0.5 text-[11.5px] text-neutral-500">
+                            {h.by ? <>by <span className="font-medium text-neutral-700 dark:text-neutral-300">{h.by}</span></> : null}
+                            {h.by && h.remarks ? " · " : null}
+                            {h.remarks || (!h.by ? "—" : null)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
 
           {/* Right: Super Admin approval panel + brand + quick facts */}
           <div className="min-w-0 space-y-4">
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <div className="mb-4 flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
                 <ShieldCheck size={16} className="text-emerald-500 dark:text-emerald-400" /> Super Admin Approval
               </div>
@@ -396,7 +411,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                     <button
                       onClick={() => setShowRejectBox(true)}
                       disabled={busy}
-                      className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/40 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+                      className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-red-500/10 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
                     >
                       <XCircle size={15} /> Reject
                     </button>
@@ -468,7 +483,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
 
             {/* Brand */}
             {voucher.brand && (
-              <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                   Brand
                 </p>
@@ -567,7 +582,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
 
             {/* Created By (vendor user) */}
             {voucher.creatorUser && (
-              <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                   Created By (Vendor User)
                 </p>
@@ -615,7 +630,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
 
             {/* Parent voucher record */}
             {voucher.parentVoucher && (
-              <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                   Parent Voucher Record
                 </p>
@@ -647,7 +662,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
             )}
 
             {/* Quick facts */}
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                 Quick Facts
               </p>
@@ -676,7 +691,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
             </div>
 
             {!voucher.images?.length && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-dashed border-neutral-200 px-4 py-6 text-[12px] text-neutral-500 dark:border-neutral-800">
+              <div className="flex items-center gap-2.5 rounded-2xl bg-neutral-50 px-4 py-6 text-[12px] text-neutral-500 dark:bg-neutral-950/60">
                 <ImageIcon size={16} className="shrink-0" />
                 No images uploaded for this voucher.
               </div>
@@ -687,7 +702,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
 
       {showRejectBox && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <div className="mb-4 flex items-start justify-between">
               <div className="flex items-start gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-600 dark:text-red-400">
@@ -707,7 +722,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                   setRejectError("");
                 }}
                 aria-label="Close"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
               >
                 <X size={15} />
               </button>
@@ -727,10 +742,8 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                   rows={3}
                   placeholder="e.g. Discount exceeds category cap. Please revise."
                   disabled={busy}
-                  className={`w-full resize-none rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                    rejectError
-                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                      : "border-neutral-200 focus:border-red-400/60 focus:ring-red-400/60 dark:border-neutral-800"
+                  className={`w-full resize-none rounded-xl bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
+                    rejectError ? "ring-1 ring-red-500/60 focus:ring-red-500/60" : "focus:ring-red-400/60"
                   }`}
                 />
                 {rejectError && (
@@ -740,7 +753,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -748,7 +761,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                     setRejectError("");
                   }}
                   disabled={busy}
-                  className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+                  className="rounded-xl bg-neutral-100 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-800 disabled:opacity-60 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
                 >
                   Cancel
                 </button>

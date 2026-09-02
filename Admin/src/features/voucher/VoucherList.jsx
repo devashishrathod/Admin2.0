@@ -7,9 +7,24 @@ import {
   SlidersHorizontal,
   Loader2,
   AlertTriangle,
+  FileDown,
+  Printer,
+  PieChart as PieChartIcon,
+  TrendingUp,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  XAxis,
+  Tooltip,
+} from "recharts";
 import Table from "../../components/common/Table";
 import VoucherDetails from "./VoucherDetails";
+import { downloadCsv, printAsPdf } from "../../utils/exportTable";
 import {
   getVouchers,
   approveVoucher,
@@ -56,6 +71,17 @@ const STATUS_STYLES = {
   [VOUCHER_STATUSES.EXPIRED]: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
   [VOUCHER_STATUSES.PAUSED]: { dot: "bg-orange-400", text: "text-orange-600 dark:text-orange-400", bg: "bg-orange-400/10" },
   [VOUCHER_STATUSES.ARCHIVED]: { dot: "bg-neutral-600", text: "text-neutral-500", bg: "bg-neutral-200 dark:bg-neutral-800" },
+};
+
+const STATUS_HEX = {
+  [VOUCHER_STATUSES.DRAFT]: "#737373",
+  [VOUCHER_STATUSES.UNDER_REVIEW]: "#FBBF24",
+  [VOUCHER_STATUSES.APPROVED]: "#38BDF8",
+  [VOUCHER_STATUSES.PUBLISHED]: "#2FDE8C",
+  [VOUCHER_STATUSES.REJECTED]: "#F87171",
+  [VOUCHER_STATUSES.EXPIRED]: "#A3A3A3",
+  [VOUCHER_STATUSES.PAUSED]: "#FB923C",
+  [VOUCHER_STATUSES.ARCHIVED]: "#525252",
 };
 
 export function VoucherStatusBadge({ status }) {
@@ -224,6 +250,7 @@ function apiVersionToRow(v) {
     attachedSubBrandsCount: v.attachedSubBrandsCount ?? 0,
     // Date + time (not just the date) — shown in both the table and the
     // details page.
+    createdAt: v.createdAt || null,
     createdAtDisplay: formatDateTime(v.createdAt),
     updatedAtDisplay: formatDateTime(v.updatedAt),
     // No fallback to createdAt here — a DRAFT/never-published version has
@@ -297,6 +324,8 @@ export default function VoucherListing() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedId, setSelectedId] = useState(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -331,7 +360,54 @@ export default function VoucherListing() {
     });
   }, [vouchers, search, statusFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pagedRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
   const selectedVoucher = vouchers.find((v) => v.id === selectedId) || null;
+
+  // Real status mix + monthly creation trend — both derived straight from
+  // the already-loaded vouchers, no separate endpoint needed.
+  const statusMix = useMemo(() => {
+    const counts = new Map();
+    vouchers.forEach((v) => {
+      const key = v.approvalStatus || VOUCHER_STATUSES.DRAFT;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([status, count]) => ({ status, count, color: STATUS_HEX[status] || "#A3A3A3" }))
+      .sort((a, b) => b.count - a.count);
+  }, [vouchers]);
+
+  const monthlyTrend = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const dt = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return { y: dt.getFullYear(), m: dt.getMonth(), label: dt.toLocaleString("en-US", { month: "short" }) };
+    });
+    const counts = months.map(() => 0);
+    vouchers.forEach((v) => {
+      if (!v.createdAt) return;
+      const d = new Date(v.createdAt);
+      if (Number.isNaN(d.getTime())) return;
+      const idx = months.findIndex((mo) => mo.y === d.getFullYear() && mo.m === d.getMonth());
+      if (idx !== -1) counts[idx] += 1;
+    });
+    return months.map((mo, i) => ({ d: mo.label, vouchers: counts[i] }));
+  }, [vouchers]);
+
+  const handleExportCsv = () => {
+    downloadCsv("vouchers", [
+      { label: "Title", key: "title" },
+      { label: "Version Code", key: "versionCode" },
+      { label: "Brand", key: "brandName" },
+      { label: "Category", key: "category" },
+      { label: "Offer", key: "discount" },
+      { label: "Start Date", key: "startDate" },
+      { label: "End Date", key: "endDate" },
+      { label: "Created", key: "createdAtDisplay" },
+      { label: "Status", key: "approvalStatus" },
+    ], filtered);
+  };
 
   const handleDelete = async (voucher) => {
     setActionError("");
@@ -408,7 +484,7 @@ export default function VoucherListing() {
       key: "sno",
       label: "S.No",
       width: "w-14",
-      render: (_row, index) => <span className="text-neutral-500">{index + 1}</span>,
+      render: (_row, index) => <span className="text-neutral-500">{(page - 1) * pageSize + index + 1}</span>,
     },
     {
       key: "title",
@@ -501,35 +577,126 @@ export default function VoucherListing() {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Vouchers</h1>
-          <p className="mt-1 text-[13px] text-neutral-500 dark:text-neutral-400">
-            Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.
-          </p>
+        <div className="no-print mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Vouchers</h1>
+            <p className="mt-1 text-[13px] text-neutral-500 dark:text-neutral-400">
+              Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={handleExportCsv}
+              className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-3.5 py-2 text-[12.5px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+            >
+              <FileDown size={14} />
+              Export CSV
+            </button>
+            <button
+              onClick={printAsPdf}
+              className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-emerald-600"
+            >
+              <Printer size={14} />
+              Download PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Overview charts — real data, independent of the filters below */}
+        <div className="no-print mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.4fr]">
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative h-[110px] w-[110px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusMix}
+                      dataKey="count"
+                      nameKey="status"
+                      innerRadius={34}
+                      outerRadius={52}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      {statusMix.map((s) => (
+                        <Cell key={s.status} fill={s.color} stroke="none" />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{vouchers.length}</span>
+                  <span className="text-[8.5px] text-neutral-500">Total</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {statusMix.map((s) => (
+                  <div key={s.status} className="flex items-center gap-1.5 text-[11.5px]">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="min-w-0 flex-1 truncate text-neutral-500">{STATUS_LABELS[s.status] || s.status}</span>
+                    <span className="font-semibold text-neutral-900 dark:text-neutral-50">{s.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+                <TrendingUp size={14} className="text-emerald-500" /> Vouchers Created
+              </div>
+              <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800/60 dark:text-neutral-400">
+                Last 6 Months
+              </span>
+            </div>
+            <ResponsiveContainer width="100%" height={150}>
+              <AreaChart data={monthlyTrend} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="voucherTrendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2FDE8C" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#2FDE8C" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="d" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Area type="natural" dataKey="vouchers" stroke="#2FDE8C" strokeWidth={2.4} fill="url(#voucherTrendFill)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Search + status filter */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs">
+        <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:max-w-xs">
             <Search size={16} className="shrink-0 text-neutral-500" />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search voucher, brand or code..."
               className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex items-center gap-1.5 overflow-x-auto rounded-full bg-white p-1.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <SlidersHorizontal size={14} className="ml-1 shrink-0 text-neutral-500" />
             {STATUS_FILTERS.map((s) => (
               <button
                 key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                onClick={() => {
+                  setStatusFilter(s);
+                  setPage(1);
+                }}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
                   statusFilter === s
                     ? "bg-emerald-400 text-neutral-950"
                     : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
@@ -542,7 +709,7 @@ export default function VoucherListing() {
         </div>
 
         {actionError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
+          <div className="no-print mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />
             {actionError}
           </div>
@@ -550,21 +717,32 @@ export default function VoucherListing() {
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
+          <div className="flex items-center justify-center gap-2 rounded-2xl bg-white py-14 text-[13px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <Loader2 size={16} className="animate-spin" />
             Loading vouchers…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
+          <div className="rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load vouchers: {loadError}
           </div>
         )}
 
         {/* Table */}
         {!loading && !loadError && (
-          <Table columns={columns} data={filtered} emptyMessage="No vouchers match your filters." />
+          <div className="print-area">
+            <Table
+              columns={columns}
+              data={pagedRows}
+              emptyMessage="No vouchers match your filters."
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              total={filtered.length}
+              pageSize={pageSize}
+            />
+          </div>
         )}
       </div>
     </div>

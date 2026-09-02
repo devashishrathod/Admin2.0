@@ -241,6 +241,7 @@ export function mapBrandListItem(raw) {
       : '—',
     category: raw.category?.name || raw.subCategory?.name || '—',
     liveSince: raw.joinedDate ? new Date(raw.joinedDate).getFullYear().toString() : '—',
+    joinedDate: raw.joinedDate || null,
     active: status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
@@ -320,6 +321,7 @@ export function mapBrandDetail(raw) {
       : '—',
     category: raw.category?.name || raw.subCategory?.name || '—',
     liveSince: raw.joinedDate ? new Date(raw.joinedDate).getFullYear().toString() : '—',
+    joinedDate: raw.joinedDate || null,
     active: raw.isActive ?? status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
@@ -329,6 +331,26 @@ export function mapBrandDetail(raw) {
 
     contactPhone: raw.user?.whatsappNumber ? `+91 ${raw.user.whatsappNumber}` : '—',
     contactEmail: raw.email || '—',
+
+    // Full real vendor/user record — this platform logs in via WhatsApp
+    // OTP, so uniqueId + whatsappNumber are the real identifiers, not a
+    // name/email/mobile the API doesn't actually return.
+    vendorUser: raw.user
+      ? {
+          id: raw.user._id,
+          uniqueId: raw.user.uniqueId || '—',
+          role: raw.user.role || '—',
+          loginType: raw.user.loginType || '—',
+          whatsappNumber: raw.user.whatsappNumber || '—',
+          referralCode: raw.user.referralCode || '—',
+          walletBalance: raw.user.walletBalance ?? 0,
+          tCoinsBalance: raw.user.tCoinsBalance ?? 0,
+          isEmailVerified: Boolean(raw.user.isEmailVerified),
+          isMobileVerified: Boolean(raw.user.isMobileVerified),
+          isOnBoardingCompleted: Boolean(raw.user.isOnBoardingCompleted),
+          currentScreen: raw.user.currentScreen || '—',
+        }
+      : null,
 
     planPrice: subscribed?.price != null ? formatCurrency(subscribed.price) : '—',
     planType: subscribed?.durationInDays === 365 ? 'Annual' : 'Custom',

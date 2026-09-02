@@ -2,7 +2,7 @@ import React from "react";
 
 const BankAccountCard = ({ account, isSelected, onSelect }) => {
   return (
-    <div className="rounded-xl border border-gray-100">
+    <div className="rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
       <button
         type="button"
         onClick={() => onSelect(account.id)}

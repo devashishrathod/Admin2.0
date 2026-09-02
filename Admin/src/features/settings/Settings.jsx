@@ -291,7 +291,7 @@ export default function Settings() {
   const section = SECTIONS.find((s) => s.id === activeSection);
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6">
@@ -318,7 +318,7 @@ export default function Settings() {
           <div className="flex flex-col gap-5 lg:flex-row">
             {/* Left: section nav, sidebar-style */}
             <div className="shrink-0 lg:w-60">
-              <div className="space-y-1 rounded-2xl border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900 lg:sticky lg:top-6">
+              <div className="space-y-1 rounded-2xl bg-white p-2 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:sticky lg:top-6">
                 {SECTIONS.map((s) => {
                   const active = activeSection === s.id;
                   return (
@@ -369,7 +369,7 @@ export default function Settings() {
 
               {/* General */}
               {activeSection === "general" && (
-                <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                   <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Settings Active</label>
                   <div className="flex gap-2">
                     {[
@@ -399,7 +399,7 @@ export default function Settings() {
 
               {/* Voucher */}
               {activeSection === "voucher" && (
-                <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                   <p className="mb-4 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                     Vendor Voucher Limits
                   </p>
@@ -429,7 +429,7 @@ export default function Settings() {
               {/* Showcase */}
               {activeSection === "showcase" && (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <div className="mb-4 flex items-center justify-between">
                       <p className="text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                         Vendor Showcase Limits
@@ -483,7 +483,7 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <p className="mb-4 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                       Allowed Media Types
                     </p>
@@ -508,7 +508,7 @@ export default function Settings() {
               {/* Subscription */}
               {activeSection === "subscription" && (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <p className="mb-4 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                       Company &amp; Tax Details
                     </p>
@@ -568,7 +568,7 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <p className="mb-4 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                       Lifecycle Rules
                     </p>
@@ -605,7 +605,7 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <p className="mb-4 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                       Notifications
                     </p>

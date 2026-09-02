@@ -368,7 +368,7 @@ function CustomerFormModal({ open, initialData, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
@@ -508,7 +508,7 @@ function PlanFormModal({ open, initialData, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Edit Membership Plan</h2>
@@ -622,7 +622,7 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
   return (
     <div
       onClick={() => onOpen(customer)}
-      className="group flex cursor-pointer flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700 dark:hover:bg-neutral-900/80"
+      className="group flex cursor-pointer flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-colors hover:bg-neutral-50 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:bg-neutral-900/80"
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -725,7 +725,7 @@ function CustomerDetail({
       </button>
 
       {/* Profile header */}
-      <div className="mb-6 overflow-hidden rounded-2xl border border-neutral-200 bg-gradient-to-br from-emerald-500/10 via-white to-white p-6 dark:border-neutral-800 dark:via-neutral-900 dark:to-neutral-900">
+      <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500/10 via-white to-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:via-neutral-900 dark:to-neutral-900 dark:shadow-black/20">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-neutral-200 text-[28px] dark:bg-neutral-800">
@@ -769,25 +769,25 @@ function CustomerDetail({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-xl bg-neutral-50/60 px-4 py-2.5 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <Wallet size={11} /> My Wallet
               </p>
               <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{money(customer.wallet)}</p>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-xl bg-neutral-50/60 px-4 py-2.5 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <Coins size={11} /> Coins
               </p>
               <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.coins}</p>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-xl bg-neutral-50/60 px-4 py-2.5 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <Users size={11} /> Followers
               </p>
               <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.followers}</p>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-center dark:border-neutral-800 dark:bg-neutral-950/60">
+            <div className="rounded-xl bg-neutral-50/60 px-4 py-2.5 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950/60 dark:shadow-black/20">
               <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
                 <UserPlus size={11} /> Following
               </p>
@@ -839,7 +839,7 @@ function CustomerDetail({
               <ShieldCheck size={15} className="text-neutral-500 dark:text-neutral-400" />
               Contact & Account
             </h3>
-            <div className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="space-y-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <InfoRow icon={<Mail size={13} />} label="Email" value={customer.email} />
               <InfoRow icon={<Phone size={13} />} label="Phone" value={customer.phone} />
               <InfoRow
@@ -858,7 +858,7 @@ function CustomerDetail({
               <Users size={15} className="text-neutral-500 dark:text-neutral-400" />
               Social & Persona
             </h3>
-            <div className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="space-y-4 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-neutral-50 p-3 text-center dark:bg-neutral-950/60">
                   <p className="flex items-center justify-center gap-1 text-[11px] text-neutral-500">
@@ -910,7 +910,7 @@ function CustomerDetail({
               {customer.transactions.length} total
             </span>
           </h3>
-          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             {customer.transactions.length === 0 ? (
               <p className="p-5 text-[13px] text-neutral-500">No transactions yet.</p>
             ) : (
@@ -971,7 +971,7 @@ function CustomerDetail({
               </span>
             </span>
           </h3>
-          <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             {customer.reviews.length === 0 ? (
               <p className="p-5 text-[13px] text-neutral-500">This customer hasn't reviewed any brand yet.</p>
             ) : (
@@ -1007,10 +1007,10 @@ function CustomerDetail({
               return (
                 <div
                   key={plan.id}
-                  className={`relative flex flex-col rounded-2xl border p-4 ${
+                  className={`relative flex flex-col rounded-2xl p-4 ${
                     isCurrent
-                      ? "border-emerald-400/60 bg-emerald-400/5"
-                      : "border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
+                      ? "border border-emerald-400/60 bg-emerald-400/5"
+                      : "bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
                   }`}
                 >
                   {plan.badge && (
@@ -1059,7 +1059,7 @@ function CustomerDetail({
               <History size={15} className="text-neutral-500 dark:text-neutral-400" />
               Plan History
             </h3>
-            <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               {(!customer.planHistory || customer.planHistory.length === 0) ? (
                 <p className="p-5 text-[13px] text-neutral-500">No previous plan changes on record.</p>
               ) : (
@@ -1217,7 +1217,7 @@ export default function Customer() {
   );
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {selectedCustomer ? (
           <CustomerDetail
@@ -1244,7 +1244,7 @@ export default function Customer() {
             </div>
 
             {!isSuperAdmin && (
-              <div className="mb-5 flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50/60 px-4 py-2.5 text-[12px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/60">
+              <div className="mb-5 flex items-center gap-2 rounded-xl bg-neutral-50/60 px-4 py-2.5 text-[12px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900/60 dark:shadow-black/20">
                 <Lock size={13} />
                 Only Super Admin can activate or deactivate a customer account. Turn on Super Admin
                 Mode above to enable this control.

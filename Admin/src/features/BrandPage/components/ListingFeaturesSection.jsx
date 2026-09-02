@@ -28,10 +28,10 @@ const ListingFeaturesSection = ({
         </button>
       </div>
 
-      <div className="mt-5 overflow-x-auto rounded-xl border border-gray-100">
+      <div className="mt-5 overflow-x-auto rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+            <tr className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
               <th className="px-5 py-3">S.NO</th>
               <th className="px-5 py-3">Icon Png</th>
               <th className="px-5 py-3">LF Name</th>
@@ -43,7 +43,7 @@ const ListingFeaturesSection = ({
             {listingFeatures.features.map((feature) => (
               <tr
                 key={feature.id}
-                className="border-b border-gray-50 last:border-b-0"
+                className="transition-colors hover:bg-neutral-50"
               >
                 <td className="px-5 py-4 text-gray-800">{feature.sNo}</td>
                 <td className="px-5 py-4">

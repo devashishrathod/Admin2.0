@@ -45,7 +45,7 @@ const BrandPage = ({ merchantToken = Branddata.merchantToken }) => {
   const ActivePage = TAB_PAGES[activeTab];
 
   return (
-    <div className="min-h-screen bg-white px-6 py-8 md:px-10">
+    <div className="min-h-screen px-6 py-8 md:px-10">
       <div className="mx-auto max-w-6xl">
         <BrandHeader
           brandName={brand.brandName}

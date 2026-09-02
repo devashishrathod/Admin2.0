@@ -10,7 +10,19 @@ import {
   Layers,
   AlertTriangle,
   Loader2,
+  PieChart as PieChartIcon,
+  BarChart3,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  XAxis,
+  Tooltip,
+} from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
   createSubCategory,
@@ -130,7 +142,7 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
@@ -293,7 +305,7 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Sub-Category Details</h2>
@@ -345,7 +357,7 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
                 </p>
               )}
 
-              <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="mt-5 rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
                 <p className="text-[11px] uppercase tracking-wider text-neutral-500">
                   Voucher Count
                 </p>
@@ -374,7 +386,7 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
 function DeleteConfirmModal({ subCategory, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
@@ -468,6 +480,23 @@ export default function SubCategory() {
   const [deleting, setDeleting] = useState(false);
 
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || "—";
+
+  // A broader, unpaginated snapshot used only for the overview charts —
+  // the paginated `subCategories` list only ever holds one page.
+  const [allSubCategories, setAllSubCategories] = useState([]);
+
+  const fetchAllSubCategories = useCallback(async () => {
+    try {
+      const res = await getSubCategories({ page: 1, limit: 200 });
+      setAllSubCategories((res?.data?.data ?? []).map(apiToRow));
+    } catch {
+      setAllSubCategories([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllSubCategories();
+  }, [fetchAllSubCategories]);
 
   // ── Load parent categories once (for the dropdown + filter) ────
   useEffect(() => {
@@ -576,6 +605,7 @@ export default function SubCategory() {
       setModalOpen(false);
       setEditingSubCategory(null);
       fetchSubCategories();
+      fetchAllSubCategories();
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -589,12 +619,30 @@ export default function SubCategory() {
       await deleteSubCategory(deleteTarget.id);
       setDeleteTarget(null);
       fetchSubCategories();
+      fetchAllSubCategories();
     } catch (err) {
       console.error("Failed to delete sub-category:", err.message);
     } finally {
       setDeleting(false);
     }
   };
+
+  // Overview charts — derived from the broader allSubCategories snapshot.
+  const activeSubCount = allSubCategories.filter((s) => s.isActive).length;
+  const inactiveSubCount = allSubCategories.length - activeSubCount;
+  const statusMix = [
+    { name: "Active", value: activeSubCount, color: "#2FDE8C" },
+    { name: "Inactive", value: inactiveSubCount, color: "#A3A3A3" },
+  ].filter((s) => s.value > 0);
+
+  const perCategoryMix = categories
+    .map((c) => ({
+      name: c.name,
+      subCategories: allSubCategories.filter((s) => s.categoryId === c.id).length,
+    }))
+    .filter((c) => c.subCategories > 0)
+    .sort((a, b) => b.subCategories - a.subCategories)
+    .slice(0, 6);
 
   const columns = [
     {
@@ -676,7 +724,7 @@ export default function SubCategory() {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -697,9 +745,69 @@ export default function SubCategory() {
           </button>
         </div>
 
+        {/* Overview charts — real data, independent of the table's filters */}
+        <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.4fr]">
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative h-[110px] w-[110px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusMix}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={34}
+                      outerRadius={52}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      {statusMix.map((s) => (
+                        <Cell key={s.name} fill={s.color} stroke="none" />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{allSubCategories.length}</span>
+                  <span className="text-[8.5px] text-neutral-500">Total</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {statusMix.map((s) => (
+                  <div key={s.name} className="flex items-center gap-1.5 text-[11.5px]">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="min-w-0 flex-1 truncate text-neutral-500">{s.name}</span>
+                    <span className="font-semibold text-neutral-900 dark:text-neutral-50">{s.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <BarChart3 size={14} className="text-emerald-500" /> Sub-Categories per Category
+            </div>
+            {perCategoryMix.length ? (
+              <ResponsiveContainer width="100%" height={150}>
+                <BarChart data={perCategoryMix} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 10.5 }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={40} />
+                  <Tooltip />
+                  <Bar dataKey="subCategories" name="Sub-Categories" fill="#2FDE8C" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[150px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+            )}
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs sm:flex-1 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:max-w-xs sm:flex-1">
             <Search size={16} className="shrink-0 text-neutral-500" />
             <input
               value={search}
@@ -712,7 +820,7 @@ export default function SubCategory() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13px] text-neutral-700 focus:border-emerald-400/60 focus:outline-none sm:w-56 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
+            className="rounded-full bg-white px-3.5 py-2.5 text-[13px] text-neutral-700 shadow-[0_1px_3px_rgba(15,23,42,0.06)] focus:outline-none dark:bg-neutral-900 dark:text-neutral-300 dark:shadow-black/20 sm:w-56"
           >
             <option value="All">All Categories</option>
             {categories.map((cat) => (

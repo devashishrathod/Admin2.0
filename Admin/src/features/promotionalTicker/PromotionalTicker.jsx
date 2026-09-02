@@ -104,7 +104,7 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
@@ -277,7 +277,7 @@ function TickerViewModal({ open, ticker, categories, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Ticker Details</h2>
@@ -308,17 +308,17 @@ function TickerViewModal({ open, ticker, categories, onClose }) {
           <p className="mt-3 text-[12.5px] text-sky-600 dark:text-sky-400">{redirectSummary(ticker.redirect, categories)}</p>
 
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+            <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
               <p className="text-[11px] uppercase tracking-wider text-neutral-500">Display Order</p>
               <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.displayOrder ?? 0}</p>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+            <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
               <p className="text-[11px] uppercase tracking-wider text-neutral-500">Status</p>
               <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.isActive ? "Active" : "Inactive"}</p>
             </div>
           </div>
 
-          <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+          <div className="mt-3 rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
             <p className="text-[11px] uppercase tracking-wider text-neutral-500">Validity</p>
             <p className="mt-1 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">
               {formatDateTime(ticker.startDate)} → {formatDateTime(ticker.endDate)}
@@ -341,7 +341,7 @@ function TickerViewModal({ open, ticker, categories, onClose }) {
 function DeleteConfirmModal({ ticker, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
@@ -637,7 +637,7 @@ export default function PromotionalTicker() {
   ];
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

@@ -56,6 +56,7 @@ import {
   inputClass,
   StatusBadge,
   StatChip,
+  RingStat,
 } from "./BrandShared";
 import { SubscriptionTab } from "./SubscriptionCenter";
 import { getVouchers } from "../voucher/services/VoucherApi";
@@ -115,7 +116,7 @@ function EditBrandModal({ brand, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-[18px] font-semibold text-neutral-900 dark:text-neutral-50">Edit Brand Details</h2>
@@ -289,7 +290,7 @@ function TopBrandModal({ brand, onClose, onSubmit }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-600 dark:text-amber-400">
@@ -383,7 +384,7 @@ function OverviewTab({ brand }) {
   return (
     <div className="space-y-4">
       {brand.status === "Rejected" && brand.rejectionReason && (
-        <SectionCard className="border-red-500/30 bg-red-500/[0.04]">
+        <SectionCard className="border border-red-500/30 bg-red-500/[0.04]">
           <div className="flex items-start gap-3">
             <MessageSquareWarning size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
             <div>
@@ -395,7 +396,7 @@ function OverviewTab({ brand }) {
       )}
 
       {incomplete && (
-        <SectionCard className="border-amber-400/30 bg-amber-400/[0.04]">
+        <SectionCard className="border border-amber-400/30 bg-amber-400/[0.04]">
           <div className="flex items-start gap-3">
             <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
             <div className="flex-1">
@@ -506,7 +507,7 @@ function OverviewTab({ brand }) {
   )
 }
 
-<div className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+<div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
   <span className="flex items-center overflow-hidden rounded-lg text-[13px] font-extrabold tracking-tight">
     <span className="bg-pink-500 px-1.5 py-0.5 text-white">S</span>
     <span className="bg-purple-500 px-1.5 py-0.5 text-white">M</span>
@@ -522,7 +523,7 @@ function OverviewTab({ brand }) {
 
 function OverviewStat({ icon: Icon, label, value, strike = false }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-3.5 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
         <Icon size={14} />
       </span>
@@ -694,7 +695,7 @@ function SubBrandTab({ brand }) {
       {brand.outlets.map((outlet, i) => (
         <div
           key={i}
-          className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
+          className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
         >
           <div className="flex flex-wrap items-start justify-between capitalize gap-3">
             <div className="flex min-w-0 items-start gap-3">
@@ -934,7 +935,7 @@ function ListingsTab({ brand }) {
         return (
           <div
             key={v._id}
-            className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
+            className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -977,23 +978,23 @@ function ListingsTab({ brand }) {
 function SettlementsTab({ brand }) {
   if (!brand.settlements?.length) return <EmptyState label="No settlements recorded." />;
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <table className="w-full text-left text-[13px]">
-        <thead className="bg-white text-[11.5px] uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
+        <thead className="text-[11.5px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
           <tr>
-            <th className="px-4 py-3 font-medium">Settlement ID</th>
-            <th className="px-4 py-3 font-medium">Date</th>
-            <th className="px-4 py-3 font-medium">Amount</th>
-            <th className="px-4 py-3 text-right font-medium">Status</th>
+            <th className="px-5 py-4 font-medium">Settlement ID</th>
+            <th className="px-5 py-4 font-medium">Date</th>
+            <th className="px-5 py-4 font-medium">Amount</th>
+            <th className="px-5 py-4 text-right font-medium">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-neutral-200 bg-neutral-50 dark:divide-neutral-800 dark:bg-neutral-950">
+        <tbody className="bg-white dark:bg-neutral-950">
           {brand.settlements.map((s) => (
-            <tr key={s.id}>
-              <td className="px-4 py-3 text-neutral-700 dark:text-neutral-300">{s.id}</td>
-              <td className="px-4 py-3 text-neutral-500">{s.date}</td>
-              <td className="px-4 py-3 font-medium text-neutral-800 dark:text-neutral-200">{s.amount}</td>
-              <td className="px-4 py-3 text-right">
+            <tr key={s.id} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+              <td className="px-5 py-4 text-neutral-700 dark:text-neutral-300">{s.id}</td>
+              <td className="px-5 py-4 text-neutral-500">{s.date}</td>
+              <td className="px-5 py-4 font-medium text-neutral-800 dark:text-neutral-200">{s.amount}</td>
+              <td className="px-5 py-4 text-right">
                 <StatusBadge status={s.status} activeLabel="Paid" />
               </td>
             </tr>
@@ -1009,7 +1010,7 @@ function ReviewTab({ brand }) {
   return (
     <div className="space-y-3">
       {brand.reviews.map((r, i) => (
-        <div key={i} className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <div key={i} className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="flex items-center justify-between">
             <p className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{r.author}</p>
             <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
@@ -1399,13 +1400,18 @@ export default function BrandDetails({
   const incomplete = brand.onboardingComplete === false;
   const accent = STATUS_ACCENTS[brand.status] || "from-neutral-500/20 via-neutral-500/0";
 
+  const [outletsUsedStr, outletsLimitStr] = String(brand.subBrandCount || "0/0").split("/");
+  const outletsUsed = Number(outletsUsedStr) || 0;
+  const outletsLimit = Number(outletsLimitStr);
+  const outletUsagePct = Number.isFinite(outletsLimit) && outletsLimit > 0 ? (outletsUsed / outletsLimit) * 100 : 100;
+
   const handleSetTopBrand = async (brandArg, payload) => {
     if (!onSetTopBrand) return;
     await onSetTopBrand(brandArg, payload);
   };
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <button
@@ -1447,7 +1453,7 @@ export default function BrandDetails({
         </div>
 
         {/* Header card */}
-        <div className="relative mb-5 overflow-hidden rounded-3xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="relative mb-5 overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div
             className={`pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${accent} opacity-70`}
           />
@@ -1493,7 +1499,23 @@ export default function BrandDetails({
                 </div>
               </div>
             </div>
-            <div className="shrink-0">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.5">
+              {!incomplete && (
+                <>
+                  <RingStat
+                    pct={brand.remainderPercent}
+                    label="Plan Active"
+                    caption={`${brand.expiredInDays}d left`}
+                    tint="emerald"
+                  />
+                  <RingStat
+                    pct={outletUsagePct}
+                    label="Outlets"
+                    caption={brand.subBrandCount}
+                    tint="sky"
+                  />
+                </>
+              )}
               <ToggleSwitch
                 checked={brand.active}
                 onChange={() => setShowToggleConfirm(true)}

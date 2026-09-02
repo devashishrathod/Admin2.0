@@ -112,7 +112,7 @@ const fmtINR = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
 
 function KpiCard({ icon: Icon, label, value, delta, deltaGood = true }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="flex items-center justify-between">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
           <Icon size={16} />
@@ -138,7 +138,7 @@ function KpiCard({ icon: Icon, label, value, delta, deltaGood = true }) {
 
 function ChartCard({ title, subtitle, children }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="min-w-0 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="mb-4">
         <h3 className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">{title}</h3>
         {subtitle && <p className="mt-0.5 text-[11.5px] text-neutral-500">{subtitle}</p>}
@@ -169,7 +169,7 @@ export default function VendorPlanAnalytics() {
   );
 
   return (
-    <div className="min-h-screen bg-white p-6 dark:bg-neutral-950">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -370,7 +370,7 @@ export default function VendorPlanAnalytics() {
         </div>
 
         {/* Plan performance table */}
-        <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+        <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
           <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-5 py-4 dark:border-neutral-800 dark:bg-neutral-900">
             <h3 className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">Plan Performance</h3>
             <button className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">

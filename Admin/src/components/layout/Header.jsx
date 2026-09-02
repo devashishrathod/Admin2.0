@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, X, Search, Bell, ChevronDown, LogOut, User, Settings as SettingsIcon } from "lucide-react";
+import { Menu, X, Bell, ChevronDown, LogOut, User, Settings as SettingsIcon } from "lucide-react";
 import { useAuthStore } from "../../features/auth/store/authStore";
 import ThemeToggle from "../common/ThemeToggle";
 
@@ -41,25 +41,24 @@ export default function Header({ mobileOpen, setMobileOpen }) {
   }
 
   const iconButtonClass =
-    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50";
+    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-neutral-500 transition-colors hover:bg-white hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50";
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-neutral-200/80 bg-white/80 px-3 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-950/70 sm:gap-3 sm:px-5">
+    <header className="sticky top-0 z-20 flex h-[72px] items-center gap-2 bg-white px-4 backdrop-blur-md dark:bg-neutral-950/80 sm:gap-3 sm:px-6">
       <button
         onClick={() => setMobileOpen((v) => !v)}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50 lg:hidden"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-neutral-500 transition-colors hover:bg-white hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50 lg:hidden"
         aria-label={mobileOpen ? "Close menu" : "Open menu"}
       >
         {mobileOpen ? <X size={19} /> : <Menu size={19} />}
       </button>
 
-      <label className="hidden w-full max-w-sm items-center gap-2.5 rounded-full border border-transparent bg-neutral-100 px-4 py-2.5 text-neutral-500 transition-colors focus-within:border-emerald-500/50 focus-within:bg-white focus-within:shadow-sm dark:bg-neutral-900 dark:focus-within:border-emerald-500/40 dark:focus-within:bg-neutral-900 md:flex">
-        <Search size={16} className="shrink-0" />
-        <input
-          placeholder="Search projects, people, tasks…"
-          className="w-full bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-500 dark:text-neutral-50"
-        />
-      </label>
+      <div className="hidden min-w-0 flex-col lg:flex">
+        <p className="truncate text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
+          {displayName ? `Welcome back, ${displayName.split(" ")[0]}` : "Welcome back"}
+        </p>
+        <p className="truncate text-[11.5px] text-neutral-500">Here's what's happening today</p>
+      </div>
 
       <div className="flex-1" />
 
@@ -84,7 +83,7 @@ export default function Header({ mobileOpen, setMobileOpen }) {
             onClick={() => setUserMenu((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={userMenu}
-            className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-[12.5px] font-semibold text-neutral-900 transition-colors hover:bg-neutral-100 dark:text-neutral-50 dark:hover:bg-neutral-800 sm:pr-2.5"
+            className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 text-[12.5px] font-semibold text-neutral-900 transition-colors hover:bg-white dark:text-neutral-50 dark:hover:bg-neutral-800 sm:pr-2.5"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-lime-400 text-[11px] font-bold text-neutral-950">
               {initials}
@@ -124,7 +123,7 @@ export default function Header({ mobileOpen, setMobileOpen }) {
               <button
                 role="menuitem"
                 onClick={() => setUserMenu(false)}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] text-neutral-600 transition-colors hover:bg-[#f4f7fb] dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 <User size={14} className="text-neutral-500" />
                 Profile
@@ -136,7 +135,7 @@ export default function Header({ mobileOpen, setMobileOpen }) {
                   setUserMenu(false);
                   navigate("/settings");
                 }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12.5px] text-neutral-600 transition-colors hover:bg-[#f4f7fb] dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 <SettingsIcon size={14} className="text-neutral-500" />
                 Settings

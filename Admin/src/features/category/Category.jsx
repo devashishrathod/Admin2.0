@@ -21,6 +21,7 @@ import {
   ResponsiveContainer,
   XAxis,
   Tooltip,
+  LabelList,
 } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
@@ -432,13 +433,16 @@ export default function Category() {
   // the paginated `categories` list above only ever holds one page, which
   // would make a status/count chart misleading.
   const [allCategories, setAllCategories] = useState([]);
+  const [chartsError, setChartsError] = useState("");
 
   const fetchAllCategories = useCallback(async () => {
+    setChartsError("");
     try {
-      const res = await getCategories({ page: 1, limit: 200 });
+      const res = await getCategories({ page: 1, limit: 100 });
       setAllCategories((res?.data?.data ?? []).map(apiToRow));
-    } catch {
+    } catch (err) {
       setAllCategories([]);
+      setChartsError(err.message);
     }
   }, []);
 
@@ -559,8 +563,11 @@ export default function Category() {
     { name: "Inactive", value: inactiveCount, color: "#A3A3A3" },
   ].filter((s) => s.value > 0);
 
-  const topCategories = [...allCategories]
-    .sort((a, b) => (b.subCategoryCount + b.voucherCount) - (a.subCategoryCount + a.voucherCount))
+  const topBySubCategories = [...allCategories]
+    .sort((a, b) => b.subCategoryCount - a.subCategoryCount)
+    .slice(0, 6);
+  const topByVouchers = [...allCategories]
+    .sort((a, b) => b.voucherCount - a.voucherCount)
     .slice(0, 6);
 
   // Column config for the shared Table component.
@@ -663,12 +670,18 @@ export default function Category() {
         </div>
 
         {/* Overview charts — real data, independent of the table's filters */}
-        <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.4fr]">
+        {chartsError && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            Couldn't load chart data: {chartsError}
+          </div>
+        )}
+        <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
           <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
               <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center">
               <div className="relative h-[110px] w-[110px] shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -692,12 +705,11 @@ export default function Category() {
                   <span className="text-[8.5px] text-neutral-500">Total</span>
                 </div>
               </div>
-              <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
                 {statusMix.map((s) => (
-                  <div key={s.name} className="flex items-center gap-1.5 text-[11.5px]">
+                  <div key={s.name} className="flex items-center gap-1.5 text-[11px] text-neutral-500">
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                    <span className="min-w-0 flex-1 truncate text-neutral-500">{s.name}</span>
-                    <span className="font-semibold text-neutral-900 dark:text-neutral-50">{s.value}</span>
+                    {s.name} · {s.value}
                   </div>
                 ))}
               </div>
@@ -706,15 +718,45 @@ export default function Category() {
 
           <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
-              <BarChart3 size={14} className="text-emerald-500" /> Top Categories (Sub-Categories + Vouchers)
+              <BarChart3 size={14} className="text-violet-500" /> Top by Sub-Categories
             </div>
-            {topCategories.length ? (
+            {topBySubCategories.length ? (
               <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={topCategories} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 10.5 }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={40} />
-                  <Tooltip />
-                  <Bar dataKey="subCategoryCount" name="Sub-Categories" fill="#2FDE8C" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="voucherCount" name="Vouchers" fill="#38BDF8" radius={[4, 4, 0, 0]} />
+                <BarChart data={topBySubCategories} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
+                  <XAxis dataKey="name" hide />
+                  <Tooltip
+                    formatter={(v) => [v, "Sub-Categories"]}
+                    labelFormatter={(name) => name}
+                    contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
+                    cursor={{ fill: "rgba(139,92,246,0.06)" }}
+                  />
+                  <Bar dataKey="subCategoryCount" fill="#a78bfa" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="subCategoryCount" position="top" style={{ fontSize: 10, fill: "#525252" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[150px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <BarChart3 size={14} className="text-sky-500" /> Top by Vouchers
+            </div>
+            {topByVouchers.length ? (
+              <ResponsiveContainer width="100%" height={150}>
+                <BarChart data={topByVouchers} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
+                  <XAxis dataKey="name" hide />
+                  <Tooltip
+                    formatter={(v) => [v, "Vouchers"]}
+                    labelFormatter={(name) => name}
+                    contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
+                    cursor={{ fill: "rgba(56,189,248,0.06)" }}
+                  />
+                  <Bar dataKey="voucherCount" fill="#38BDF8" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="voucherCount" position="top" style={{ fontSize: 10, fill: "#525252" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (

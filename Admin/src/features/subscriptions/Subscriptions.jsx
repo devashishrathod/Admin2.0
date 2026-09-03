@@ -16,6 +16,7 @@ import {
   IndianRupee,
   Hash,
   Calendar,
+  Tag,
 } from "lucide-react";
 import {
   AreaChart,
@@ -134,16 +135,16 @@ function SectionLabel({ children }) {
   return <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{children}</p>;
 }
 
-/* label-left / value-right row — only renders when `value` is present, so
- * each section naturally adapts to whichever fields a given record has
- * (a PAYMENT-sourced record carries pricing + transactionId, an
- * ADMIN_MANUAL grant carries adminNote + grantedByAdminId instead). */
+/* bento tile — only renders when `value` is present, so each section
+ * naturally adapts to whichever fields a given record has (a
+ * PAYMENT-sourced record carries pricing + transactionId, an ADMIN_MANUAL
+ * grant carries adminNote + grantedByAdminId instead). */
 function InfoRow({ label, value }) {
   if (value == null || value === "") return null;
   return (
-    <div className="flex items-center justify-between gap-3 py-2 text-[12.5px]">
-      <span className="text-neutral-500">{label}</span>
-      <span className="font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
+    <div className="rounded-xl bg-white p-3 dark:bg-neutral-900">
+      <p className="truncate text-[10.5px] text-neutral-500">{label}</p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value}</p>
     </div>
   );
 }
@@ -306,7 +307,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
         <div className="space-y-5">
           <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-950/60 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
             <SectionLabel>Brand</SectionLabel>
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800/80">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <InfoRow label="Brand Name" value={row.brand?.brandName} />
               <InfoRow label="Merchant ID" value={row.brand?.merchantId} />
               <InfoRow label="Brand ID" value={row.brand?._id} />
@@ -317,7 +318,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
 
           <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-950/60 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
             <SectionLabel>Plan</SectionLabel>
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800/80">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <InfoRow label="Plan Name" value={row.plan?.name} />
               <InfoRow label="Plan Type" value={row.plan?.type} />
               <InfoRow label="List Price" value={formatCurrency(row.plan?.price)} />
@@ -329,7 +330,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
 
           <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-950/60 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
             <SectionLabel>Validity</SectionLabel>
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800/80">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <InfoRow label="Start Date" value={formatDateTime(row.startDate)} />
               <InfoRow label="End Date" value={formatDateTime(row.endDate)} />
               <InfoRow label="Days Remaining" value={row.isLapsed ? "Expired" : row.daysRemaining} />
@@ -339,7 +340,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
 
           <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-950/60 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
             <SectionLabel>Payment</SectionLabel>
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800/80">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <InfoRow label="Plan Price" value={formatCurrency(row.price)} />
               <InfoRow label="Paid Amount" value={formatCurrency(row.paidAmount)} />
               <InfoRow label="Due Amount" value={row.dueAmount ? formatCurrency(row.dueAmount) : null} />
@@ -353,7 +354,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
                 <Receipt size={13} className="text-neutral-500" />
                 <SectionLabel>Pricing &amp; Tax Breakdown</SectionLabel>
               </div>
-              <div className="divide-y divide-neutral-200 dark:divide-neutral-800/80">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <InfoRow label="Currency" value={p.currency} />
                 <InfoRow label="List Price" value={formatCurrency(p.listPrice)} />
                 <InfoRow
@@ -387,7 +388,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
                 <UserCog size={13} className="text-neutral-500" />
                 <SectionLabel>Admin Grant</SectionLabel>
               </div>
-              <div className="divide-y divide-neutral-200 dark:divide-neutral-800/80">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <InfoRow label="Granted By (Admin ID)" value={row.grantedByAdminId} />
                 <InfoRow label="Note" value={row.adminNote} />
               </div>
@@ -561,7 +562,35 @@ export default function Subscriptions() {
       counts[name] = (counts[name] || 0) + 1;
     });
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    return top ? { name: top[0], count: top[1] } : null;
+    if (!top) return null;
+    const total = Object.values(counts).reduce((s, n) => s + n, 0);
+    return {
+      name: top[0],
+      count: top[1],
+      mix: [
+        { name: top[0], value: top[1] },
+        { name: "Others", value: total - top[1] },
+      ].filter((d) => d.value > 0),
+    };
+  })();
+  const topSourceEntry = (() => {
+    const counts = {};
+    rows.forEach((r) => {
+      const source = r.source;
+      if (!source) return;
+      counts[source] = (counts[source] || 0) + 1;
+    });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    if (!top) return null;
+    const total = Object.values(counts).reduce((s, n) => s + n, 0);
+    return {
+      name: top[0],
+      count: top[1],
+      mix: [
+        { name: top[0], value: top[1] },
+        { name: "Others", value: total - top[1] },
+      ].filter((d) => d.value > 0),
+    };
   })();
 
   return (
@@ -587,22 +616,74 @@ export default function Subscriptions() {
           <StatCardMini icon={Wallet} tint="violet" label="Due (this page)" value={formatCurrency(dueTotal)} />
         </div>
 
-        {/* Plan hero card + revenue trend */}
-        <div className="mb-5 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.6fr]">
-          <div className="relative flex flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-5 text-white">
-            <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10" />
-            <p className="relative text-[11px] font-medium uppercase tracking-wider text-emerald-100">Most Subscribed Plan</p>
-            {topPlanEntry ? (
-              <>
-                <p className="relative mt-2 text-[22px] font-bold leading-tight">{topPlanEntry.name}</p>
-                <p className="relative mt-1 text-[12px] text-emerald-100">
-                  {topPlanEntry.count} of {rows.length} on this page
-                </p>
-              </>
+        {/* Plan hero card + top source card + revenue trend */}
+        <div className="mb-5 grid grid-cols-1 gap-3.5 lg:grid-cols-[0.8fr_0.8fr_1.6fr]">
+          <div className="relative flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-4 text-white">
+            <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
+            <div className="relative min-w-0 flex-1">
+              <p className="text-[10.5px] font-medium uppercase tracking-wider text-emerald-100">Most Subscribed Plan</p>
+              {topPlanEntry ? (
+                <>
+                  <p className="mt-2 truncate text-[17px] font-bold leading-tight">{topPlanEntry.name}</p>
+                  <p className="mt-1 text-[11.5px] text-emerald-100">
+                    {topPlanEntry.count} of {rows.length} on this page
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-[12.5px] text-emerald-100">No plan data on this page.</p>
+              )}
+            </div>
+            {topPlanEntry && topPlanEntry.mix.length > 1 ? (
+              <div className="relative h-16 w-16 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={topPlanEntry.mix} dataKey="value" innerRadius={20} outerRadius={30} paddingAngle={2} stroke="none">
+                      <Cell fill="#ffffff" />
+                      <Cell fill="#ffffff" opacity={0.25} />
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold">
+                  {Math.round((topPlanEntry.count / rows.length) * 100)}%
+                </div>
+              </div>
             ) : (
-              <p className="relative mt-2 text-[13px] text-emerald-100">No plan data on this page.</p>
+              <CreditCard size={22} className="relative shrink-0 text-emerald-100" />
             )}
-            <CreditCard size={20} className="relative mt-auto pt-6 text-emerald-100" />
+          </div>
+
+          <div className="relative flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 to-sky-800 p-4 text-white">
+            <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
+            <div className="relative min-w-0 flex-1">
+              <p className="text-[10.5px] font-medium uppercase tracking-wider text-sky-100">Top Source</p>
+              {topSourceEntry ? (
+                <>
+                  <p className="mt-2 truncate text-[17px] font-bold leading-tight">{topSourceEntry.name}</p>
+                  <p className="mt-1 text-[11.5px] text-sky-100">
+                    {topSourceEntry.count} of {rows.length} on this page
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-[12.5px] text-sky-100">No source data on this page.</p>
+              )}
+            </div>
+            {topSourceEntry && topSourceEntry.mix.length > 1 ? (
+              <div className="relative h-16 w-16 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={topSourceEntry.mix} dataKey="value" innerRadius={20} outerRadius={30} paddingAngle={2} stroke="none">
+                      <Cell fill="#ffffff" />
+                      <Cell fill="#ffffff" opacity={0.25} />
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold">
+                  {Math.round((topSourceEntry.count / rows.length) * 100)}%
+                </div>
+              </div>
+            ) : (
+              <Tag size={22} className="relative shrink-0 text-sky-100" />
+            )}
           </div>
 
           <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">

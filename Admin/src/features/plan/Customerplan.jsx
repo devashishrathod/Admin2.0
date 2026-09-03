@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Plus,
   Pencil,
@@ -10,6 +10,7 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 
 /* -------------------------------------------------------------------------
  * Feature matrix definition (rows of the comparison table)
@@ -692,6 +693,19 @@ export default function CustomerPlan() {
     setDeleteTarget(null);
   };
 
+  const statusMix = useMemo(() => {
+    const active = plans.filter((p) => p.status === "Active").length;
+    return [
+      { name: "Active", value: active },
+      { name: "Inactive", value: plans.length - active },
+    ].filter((d) => d.value > 0);
+  }, [plans]);
+
+  const priceCompare = useMemo(
+    () => plans.map((p) => ({ name: p.name, price: Number(p.price) || 0 })),
+    [plans]
+  );
+
   return (
     <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
@@ -713,6 +727,43 @@ export default function CustomerPlan() {
             Add Plan
           </button>
         </div>
+
+        {/* Charts */}
+        {plans.length > 0 && (
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
+              <div className="relative flex h-[130px] items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
+                      {statusMix.map((entry) => (
+                        <Cell key={entry.name} fill={entry.name === "Active" ? "#34d399" : "#d4d4d4"} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="text-[18px] font-bold text-neutral-800 dark:text-neutral-100">{plans.length}</p>
+                  <p className="text-[10px] text-neutral-500">Plans</p>
+                </div>
+              </div>
+            </div>
+            <div className="sm:col-span-2 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Price Comparison</p>
+              <div className="h-[130px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={priceCompare} barCategoryGap="30%">
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Price"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                    <Bar dataKey="price" fill="#34d399" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Plan cards */}
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

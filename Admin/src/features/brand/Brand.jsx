@@ -18,7 +18,19 @@ import {
   ChevronLeft,
   Loader2,
   Sparkles,
+  PieChart as PieChartIcon,
+  BarChart3,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  XAxis,
+  Tooltip,
+} from "recharts";
 import Table from "../../components/common/Table";
 import { useBrands } from "./BrandContext";
 
@@ -153,7 +165,7 @@ const STATUS_ACCENTS = {
 
 function StatChip({ icon: Icon, value, label }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-neutral-200/80 bg-neutral-50/60 px-2.5 py-1.5 dark:border-neutral-800/80 dark:bg-neutral-950/60">
+    <div className="flex items-center gap-2 rounded-xl bg-neutral-50/60 px-2.5 py-1.5 dark:bg-neutral-950/60">
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
         <Icon size={12} />
       </span>
@@ -239,6 +251,21 @@ function BrandCard({ brand, onOpen, onDelete }) {
           <StatChip icon={Users} value={brand.followers} label="Followers" />
           <StatChip icon={Store} value={brand.subBrandCount} label={outletCount === 1 ? "Outlet" : "Outlets"} />
         </div>
+
+        {Number(brand.remainderPercent) > 0 && (
+          <div className="mb-2.5">
+            <div className="mb-1 flex items-center justify-between text-[9.5px] text-neutral-500">
+              <span>Plan Remaining</span>
+              <span className="font-semibold text-neutral-700 dark:text-neutral-300">{Math.round(brand.remainderPercent)}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
+                style={{ width: `${Math.min(100, brand.remainderPercent)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-2 rounded-xl bg-neutral-50 px-3 py-2.5 dark:bg-neutral-950/60">
           <span className="flex min-w-0 items-center gap-2">
@@ -342,6 +369,33 @@ export default function Brand() {
       acc[b.subscriptionPlan] = (acc[b.subscriptionPlan] || 0) + 1;
       return acc;
     }, {});
+
+  // Overview charts — real, derived from the full brand list (not the
+  // current page/filter), so they always reflect the true totals.
+  const activeCount = brands.filter((b) => b.active && !isExpiredBrand(b)).length;
+  const deactiveCount = brands.filter((b) => !b.active && !isExpiredBrand(b)).length;
+  const expiredCount = brands.filter(isExpiredBrand).length;
+  const statusMix = [
+    { name: "Active", value: activeCount, color: "#2FDE8C" },
+    { name: "Deactive", value: deactiveCount, color: "#A3A3A3" },
+    { name: "Expired", value: expiredCount, color: "#F87171" },
+  ].filter((s) => s.value > 0);
+
+  const topBrandsByFollowers = [...brands]
+    .sort((a, b) => (Number(b.followers) || 0) - (Number(a.followers) || 0))
+    .slice(0, 5)
+    .map((b) => ({ name: b.brandName, followers: Number(b.followers) || 0 }));
+
+  const planMix = Object.entries(
+    brands.reduce((acc, b) => {
+      const plan = b.subscriptionPlan || "—";
+      acc[plan] = (acc[plan] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
 
   const deleteBrand = useConfirmDelete((brand) => {
     deleteBrandById(brand);
@@ -471,8 +525,86 @@ export default function Brand() {
           </div>
         </div>
 
+        {/* Overview charts — real data, independent of filters; kept small */}
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
+              <PieChartIcon size={13} className="text-emerald-500" /> Status Mix
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="relative h-[78px] w-[78px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusMix}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={24}
+                      outerRadius={38}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      {statusMix.map((s) => (
+                        <Cell key={s.name} fill={s.color} stroke="none" />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[12px] font-bold text-neutral-900 dark:text-neutral-50">{brands.length}</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                {statusMix.map((s) => (
+                  <div key={s.name} className="flex items-center gap-1.5 text-[10.5px]">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="min-w-0 flex-1 truncate text-neutral-500">{s.name}</span>
+                    <span className="font-semibold text-neutral-900 dark:text-neutral-50">{s.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
+              <BarChart3 size={13} className="text-emerald-500" /> Top Brands
+            </div>
+            <p className="mb-1 text-[10px] text-neutral-500">By followers</p>
+            {topBrandsByFollowers.length ? (
+              <ResponsiveContainer width="100%" height={90}>
+                <BarChart data={topBrandsByFollowers} margin={{ top: 2, right: 2, left: -22, bottom: 0 }}>
+                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9 }} axisLine={false} tickLine={false} interval={0} tickFormatter={(v) => v.slice(0, 6)} />
+                  <Tooltip />
+                  <Bar dataKey="followers" name="Followers" fill="#2FDE8C" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[90px] items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
+              <BarChart3 size={13} className="text-emerald-500" /> Summary Report
+            </div>
+            <p className="mb-1 text-[10px] text-neutral-500">Brands per plan</p>
+            {planMix.length ? (
+              <ResponsiveContainer width="100%" height={90}>
+                <BarChart data={planMix} margin={{ top: 2, right: 2, left: -22, bottom: 0 }}>
+                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9 }} axisLine={false} tickLine={false} interval={0} tickFormatter={(v) => v.slice(0, 6)} />
+                  <Tooltip />
+                  <Bar dataKey="count" name="Brands" fill="#38BDF8" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[90px] items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
+            )}
+          </div>
+        </div>
+
         {error && (
-          <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-500/[0.06] px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
+          <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl bg-red-500/[0.06] px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <span className="flex items-center gap-2"><AlertTriangle size={14} /> {error}</span>
             <button onClick={() => fetchBrands()} className="font-semibold underline underline-offset-2">
               Retry

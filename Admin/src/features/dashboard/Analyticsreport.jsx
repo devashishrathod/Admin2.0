@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Users,
   Tag,
@@ -28,6 +28,7 @@ import {
   Smartphone,
   Building,
   CircleSlash,
+  MapPin,
 } from "lucide-react";
 import {
   AreaChart,
@@ -43,8 +44,11 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
 } from "recharts";
 import { useBrands } from "../brand/BrandContext";
+import { getPlans } from "../plan/services/planApi";
+import { getVouchers } from "../voucher/services/VoucherApi";
 
 /* -------------------------------------------------------------------------
  * Mock data
@@ -183,14 +187,6 @@ const REPORT_TABS = ["Overview", "Brand", "Voucher", "Transaction", "Settlements
 const PERIODS = ["Week", "Month", "Year"];
 // Only used by the commented-out DealPackTab/MembershipTab fake data below.
 // const GST_RATE = 18; // %
-
-/* Vendor / plan snapshot — feeds the Overview KPI row. Brand counts (All /
-   Active / Inactive) come from the real BrandContext instead, further down;
-   these two are still fake pending a real vendors/plans endpoint. */
-const REGISTRATION_STATS = {
-  totalVendorsRegistered: 24,
-  totalPlans: 4,
-};
 
 /* Billing overview — the money view behind every transaction: what the
    customer was billed, how much was knocked off by discounts/coupons, how
@@ -403,17 +399,17 @@ function aggregateDealPacksByYear(history) {
 }
 */
 
-/* Adds derived bill amount / platform fee / Trydood-borne discount fields to
-   a raw voucher record. billAmount is the underlying order value the
-   voucher was redeemed against (avg. order ~3.2x the voucher amount);
-   platformFee is Trydood's cut of that bill (5%); trydoodDiscount is the
-   slice of the voucher's discount value that Trydood itself subsidizes
-   (40%) vs. the merchant absorbing the rest. */
+/* billAmount / platformFee / trydoodDiscount have no real data source on
+   the voucher record (no order/settlement linkage exists yet) — rather
+   than fabricate them from a formula, default to 0 so the Billing
+   Breakdown cards/chart/table are honest about what isn't tracked yet. */
 function withVoucherFinancials(row) {
-  const billAmount = Math.round(row.amount * 3.2);
-  const platformFee = Math.round(billAmount * 0.05);
-  const trydoodDiscount = Math.round(row.amount * 0.4);
-  return { ...row, billAmount, platformFee, trydoodDiscount };
+  return {
+    ...row,
+    billAmount: row.billAmount ?? 0,
+    platformFee: row.platformFee ?? 0,
+    trydoodDiscount: row.trydoodDiscount ?? 0,
+  };
 }
 
 function aggregateVouchersByYear(history) {
@@ -597,6 +593,25 @@ function OverviewTab() {
   const activeBrands = brands.filter((b) => b.active).length;
   const inactiveBrands = totalBrands - activeBrands;
 
+  // Real subscription-plan count — GET /subscriptions/get-all, no mock
+  // fallback needed since Plan already has a confirmed real endpoint.
+  const [plansCount, setPlansCount] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getPlans();
+        const list = res?.data?.data ?? res?.data ?? [];
+        if (!cancelled) setPlansCount(Array.isArray(list) ? list.length : 0);
+      } catch {
+        if (!cancelled) setPlansCount(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const latest = MONTHS.length - 1;
   const prev = latest - 1;
 
@@ -653,21 +668,17 @@ function OverviewTab() {
     },
   ];
 
-  const topBrands = [...BRAND_TOTALS].sort((a, b) => b.revenue - a.revenue).slice(0, 4);
+  // Real brands, ranked by followers (the only real "popularity" signal we
+  // have) — no real revenue-per-brand endpoint exists yet.
+  const topBrands = [...brands].sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 4);
 
   const registrationKpis = [
     {
       icon: Users,
       label: "Brand Onboarded",
-      value: formatNumber(REGISTRATION_STATS.totalVendorsRegistered),
+      value: formatNumber(totalBrands),
       tint: "sky",
     },
-    // {
-    //   icon: BadgeCheck,
-    //   label: "All Brands",
-    //   value: formatNumber(totalBrands),
-    //   tint: "emerald",
-    // },
     {
       icon: Check,
       label: "Active Brands",
@@ -683,7 +694,7 @@ function OverviewTab() {
     {
       icon: Layers,
       label: "Subscription Plans",
-      value: formatNumber(REGISTRATION_STATS.totalPlans),
+      value: plansCount != null ? formatNumber(plansCount) : "—",
       tint: "pink",
     },
   ];
@@ -874,38 +885,41 @@ function OverviewTab() {
       <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-3.5 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
-            <Store size={15} className="text-emerald-600 dark:text-emerald-400" /> Top Performing Brands
+            <Store size={15} className="text-emerald-600 dark:text-emerald-400" /> Top Brands
           </div>
-          <span className="text-[12px] text-neutral-500">By July revenue</span>
+          <span className="text-[12px] text-neutral-500">By followers</span>
         </div>
         <div className="space-y-2.5">
-          {topBrands.map((b, i) => (
-            <div
-              key={b.id}
-              className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/60 px-3.5 py-2.5 dark:border-neutral-800/80 dark:bg-neutral-950/60"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-[11.5px] font-bold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                  {i + 1}
-                </span>
-                <div>
-                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{b.name}</p>
-                  <p className="text-[11px] text-neutral-500">{b.category}</p>
+          {topBrands.length ? (
+            topBrands.map((b, i) => (
+              <div
+                key={b.id}
+                className="flex items-center justify-between rounded-xl bg-neutral-50/60 px-3.5 py-2.5 dark:bg-neutral-950/60"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-[11.5px] font-bold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{b.brandName}</p>
+                    <p className="text-[11px] text-neutral-500">{b.category}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{formatNumber(b.followers ?? 0)} followers</p>
+                  <span
+                    className={`text-[11px] font-medium ${
+                      b.active ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-500"
+                    }`}
+                  >
+                    {b.status}
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{formatCurrency(b.revenue)}</p>
-                <span
-                  className={`flex items-center justify-end gap-1 text-[11px] font-medium ${
-                    b.revenueChange >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-                  }`}
-                >
-                  {b.revenueChange >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                  {Math.abs(b.revenueChange).toFixed(1)}% MoM
-                </span>
-              </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="py-6 text-center text-[12.5px] text-neutral-500">No brands yet.</p>
+          )}
         </div>
       </div>
     </div>
@@ -917,16 +931,35 @@ function OverviewTab() {
  * ---------------------------------------------------------------------- */
 
 function BrandAnalyticsTab() {
+  const { brands } = useBrands();
   const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState(BRAND_ANALYTICS[0]?.id ?? null);
+  const [expandedId, setExpandedId] = useState(null);
 
-  const rows = BRAND_TOTALS.filter(
+  // Real brand identity (name/category, from the same Brand API as the
+  // Brand list page) paired with the existing demo financial/trend dataset
+  // — there's no real per-brand revenue/customers/transactions endpoint
+  // yet, so those numbers still reuse BRAND_TOTALS/BRAND_ANALYTICS, cycling
+  // through it if there are more real brands than demo entries.
+  const combined = brands.map((real, i) => {
+    const totals = BRAND_TOTALS[i % BRAND_TOTALS.length];
+    const analytics = BRAND_ANALYTICS[i % BRAND_ANALYTICS.length];
+    return {
+      ...totals,
+      id: real.id,
+      name: real.brandName,
+      category: real.category,
+      monthly: analytics.monthly,
+      realBrand: real,
+    };
+  });
+
+  const rows = combined.filter(
     (b) =>
-      b.name.toLowerCase().includes(search.toLowerCase()) ||
-      b.category.toLowerCase().includes(search.toLowerCase())
+      b.name?.toLowerCase().includes(search.toLowerCase()) ||
+      b.category?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const expandedBrand = BRAND_ANALYTICS.find((b) => b.id === expandedId);
+  const expandedBrand = combined.find((b) => b.id === expandedId);
 
   return (
     <div className="space-y-4">
@@ -968,7 +1001,7 @@ function BrandAnalyticsTab() {
                   }`}
                 >
                   <td className="px-4 py-3">
-                    <p className="font-medium text-neutral-900 dark:text-neutral-50">{b.name}</p>
+                    <p className="font-medium text-neutral-900 dark:text-neutral-50 capitalize">{b.name}</p>
                     <p className="text-[11px] text-neutral-500">{b.category}</p>
                   </td>
                   <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.customers)}</td>
@@ -1001,8 +1034,9 @@ function BrandAnalyticsTab() {
 
                 {expandedId === b.id && expandedBrand && (
                   <tr>
-                    <td colSpan={6} className="bg-neutral-50 px-4 pb-5 pt-1 dark:bg-neutral-950">
+                    <td colSpan={6} className="space-y-3 bg-neutral-50 px-4 pb-5 pt-1 dark:bg-neutral-950">
                       <BrandTrendPanel brand={expandedBrand} />
+                      <BrandFactsPanel brand={expandedBrand.realBrand} />
                     </td>
                   </tr>
                 )}
@@ -1072,6 +1106,96 @@ function BrandTrendPanel({ brand }) {
             */}
           </BarChart>
         </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/* Real chart + graph per brand, shown below the demo trend panel above —
+ * no per-brand revenue/customer time series exists on the backend, so
+ * instead of fabricating more numbers this charts what's actually real on
+ * the brand record: renewal window and followers/outlets reach. */
+function BrandFactsPanel({ brand }) {
+  const renewalData = [
+    { name: "Remaining", value: brand.remainderPercent },
+    { name: "Elapsed", value: Math.max(0, 100 - brand.remainderPercent) },
+  ].filter((d) => d.value > 0);
+
+  const [outletsUsedStr, outletsLimitStr] = String(brand.subBrandCount || "0/0").split("/");
+  const reachData = [
+    { name: "Followers", value: brand.followers || 0 },
+    { name: "Outlets Used", value: Number(outletsUsedStr) || 0 },
+    { name: "Outlets Limit", value: outletsLimitStr === "∞" ? Number(outletsUsedStr) || 0 : Number(outletsLimitStr) || 0 },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Real Brand Data</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Renewal Window</p>
+          {renewalData.length ? (
+            <div className="relative flex h-[110px] items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={renewalData} dataKey="value" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
+                    <Cell fill="#2FDE8C" />
+                    <Cell fill="#e5e7eb" opacity={0.6} />
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-100">{brand.expiredInDays}d</p>
+                <p className="text-[9.5px] text-neutral-500">left</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-[110px] items-center justify-center text-[12px] text-neutral-500">No active plan window.</div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Reach</p>
+          <div className="h-[110px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={reachData} margin={{ top: 18, right: 4, left: -18, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9.5 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                <Bar dataKey="value" fill="#38BDF8" radius={[4, 4, 0, 0]} minPointSize={2}>
+                  <LabelList dataKey="value" position="top" style={{ fontSize: 10.5, fill: "#525252" }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:grid-cols-4">
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <CreditCard size={11} /> Plan Price
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.planPrice}</p>
+        </div>
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <Calendar size={11} /> Plan Term
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.subscriptionTerm}</p>
+        </div>
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <Calendar size={11} /> Live Since
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.liveSince}</p>
+        </div>
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <MapPin size={11} /> Location
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.location}</p>
+        </div>
       </div>
     </div>
   );
@@ -1374,20 +1498,56 @@ function MembershipTab() {
  * Voucher tab — redemption value per month and per year
  * ---------------------------------------------------------------------- */
 
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function VouchersTab() {
   const [period, setPeriod] = useState("Month");
+  const [vouchers, setVouchers] = useState([]);
 
-  const monthly = VOUCHER_HISTORY.map((h) =>
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getVouchers({ page: 1, limit: 100 });
+        if (!cancelled) setVouchers(res?.data?.data ?? []);
+      } catch {
+        if (!cancelled) setVouchers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Real per-month counts, over the same Jan 2025 – Jul 2026 window the UI
+  // already shows — 0 for any month with no real vouchers created in it,
+  // rather than the old fabricated growth curve. "Amount" only sums FLAT-
+  // type offers (a real ₹ value); PERCENTAGE offers aren't a ₹ amount so
+  // they aren't added in, keeping this an honest (if partial) real figure.
+  const history = VOUCHER_HISTORY.map(({ year, month }) => {
+    const monthIndex = MONTH_ABBR.indexOf(month);
+    const createdThisMonth = vouchers.filter((v) => {
+      const d = v.createdAt ? new Date(v.createdAt) : null;
+      return d && d.getFullYear() === year && d.getMonth() === monthIndex;
+    });
+    const amount = createdThisMonth.reduce((sum, v) => {
+      const offer = v.offers?.[0];
+      return sum + (offer?.discountType === "FLAT" ? Number(offer.discountValue) || 0 : 0);
+    }, 0);
+    return { year, month, count: createdThisMonth.length, amount };
+  });
+
+  const monthly = history.map((h) =>
     withVoucherFinancials({ ...h, label: `${h.month} '${String(h.year).slice(2)}` })
   );
-  const yearly = aggregateVouchersByYear(VOUCHER_HISTORY);
+  const yearly = aggregateVouchersByYear(history);
 
-  const latest = withVoucherFinancials(VOUCHER_HISTORY[VOUCHER_HISTORY.length - 1]);
-  const prevMonth = withVoucherFinancials(VOUCHER_HISTORY[VOUCHER_HISTORY.length - 2]);
+  const latest = withVoucherFinancials(history[history.length - 1]);
+  const prevMonth = withVoucherFinancials(history[history.length - 2]);
   const ytd2026 = yearly.find((y) => y.year === 2026);
   const fy2025 = yearly.find((y) => y.year === 2025);
 
-  const avgDiscount = latest.amount / latest.count;
+  const avgDiscount = latest.count ? latest.amount / latest.count : 0;
 
   const kpis = [
     {
@@ -1541,7 +1701,7 @@ function VouchersTab() {
                 <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{period === "Month" ? row.label : row.year}</td>
                 <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.count)}</td>
                 <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(row.amount)}</td>
-                <td className="px-4 py-3 text-right text-neutral-500 dark:text-neutral-400">{formatCurrency(row.amount / row.count)}</td>
+                <td className="px-4 py-3 text-right text-neutral-500 dark:text-neutral-400">{formatCurrency(row.count ? row.amount / row.count : 0)}</td>
                 <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatCurrency(row.billAmount)}</td>
                 <td className="px-4 py-3 text-right text-sky-400">+{formatCurrency(row.platformFee)}</td>
                 <td className="px-4 py-3 text-right text-pink-400">-{formatCurrency(row.trydoodDiscount)}</td>

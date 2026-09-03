@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import {
   MapPin,
   Phone,
   Mail,
   Users,
-  Star,
   CreditCard,
   Building2,
   Calendar,
@@ -20,7 +20,6 @@ import {
   Briefcase,
   Activity,
   Image as ImageIcon,
-  PlayCircle,
   Pencil,
   Store,
   X,
@@ -32,6 +31,8 @@ import {
   HandCoins,
   Repeat,
   UserCog,
+  Plus,
+  Upload,
 } from "lucide-react";
 import {
   BUSINESS_STATUSES,
@@ -45,6 +46,7 @@ import {
   ToggleActiveConfirmModal,
   InfoRow,
   VerificationRow,
+  DetailTile,
   MerchantTokenCard,
   SectionCard,
   CollapsibleSectionCard,
@@ -60,6 +62,14 @@ import {
 } from "./BrandShared";
 import { SubscriptionTab } from "./SubscriptionCenter";
 import { getVouchers } from "../voucher/services/VoucherApi";
+import { isNotFoundMessage } from "../../utils/helpers";
+import {
+  getBrandShowcase,
+  createShowcaseSection,
+  deleteShowcaseSection,
+  addShowcaseMedia,
+  deleteShowcaseMedia,
+} from "./services/showcaseApi";
 
 const STATUS_ACCENTS = {
   Active: "from-emerald-400/25 via-emerald-400/0",
@@ -432,92 +442,87 @@ function OverviewTab({ brand }) {
         </SectionCard>
       )}
 
-      {/* Quick stat grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <OverviewStat icon={Tag} label="Brand Id" value={brand.brandId} />
-        <OverviewStat icon={Store} label="Sub Brand" value={`${brand.subBrandCount} Outlets`} />
-        <OverviewStat
-          icon={CreditCard}
-          label="Plan Price"
-          value={brand.planPrice}
-          strike={!incomplete}
-        />
-        <OverviewStat icon={Building2} label="Plan Type" value={brand.planType} />
-        <OverviewStat icon={Tag} label="Category" value={brand.category} />
+      {/* Bento grid — one big snapshot tile + small stat tiles, matching
+          the card-grid pattern from New Onboarding's VerificationDetails. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
+        <div className="col-span-2 row-span-2 flex flex-col justify-between rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                {brand.category}
+              </span>
+              {brand.isTopBrand && (
+                <span className="flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[10.5px] font-semibold text-amber-600 dark:text-amber-400">
+                  <Sparkles size={10} /> Top #{brand.topOrder}
+                </span>
+              )}
+            </div>
+            <p className="flex items-center gap-1.5 text-[11.5px] text-neutral-500">
+              <Tag size={11} /> {brand.brandId}
+            </p>
+            <p className="mt-3 text-[13px] leading-relaxed text-neutral-600 dark:text-neutral-400">
+              {brand.about || brand.tagline || "No description added yet."}
+            </p>
+          </div>
+          <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
+            <Store size={14} className="shrink-0 text-neutral-500" />
+            <span className="text-[12.5px] text-neutral-700 dark:text-neutral-300">{brand.subBrandCount} outlets</span>
+          </div>
+        </div>
+
+        <OverviewStat icon={CreditCard} label="Plan Price" value={brand.planPrice} strike={!incomplete} />
         <OverviewStat icon={BadgeCheck} label="Plan" value={brand.subscriptionPlan} />
+        <OverviewStat icon={Building2} label="Plan Type" value={brand.planType} />
         <OverviewStat icon={Calendar} label="Term" value={brand.subscriptionTerm} />
-        <OverviewStat
-          icon={Calendar}
-          label="Expiry"
-          value={`${brand.expiredInDays} days to go`}
-        />
       </div>
 
-      <SectionCard title="Contact">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[13px] text-neutral-700 dark:text-neutral-300">{brand.contactPhone}</p>
-            <p className="mt-0.5 text-[13px] text-neutral-700 dark:text-neutral-300">{brand.contactEmail}</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <OverviewStat icon={Calendar} label="Expiry" value={`${brand.expiredInDays} days to go`} />
+
+        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:col-span-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Contact</p>
+              <p className="mt-1 text-[13px] text-neutral-700 dark:text-neutral-300">{brand.contactPhone}</p>
+              <p className="mt-0.5 text-[13px] text-neutral-700 dark:text-neutral-300">{brand.contactEmail}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={`tel:${brand.contactPhone}`}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
+                aria-label="Call brand"
+              >
+                <Phone size={14} />
+              </a>
+              <a
+                href={`mailto:${brand.contactEmail}`}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
+                aria-label="Email brand"
+              >
+                <Mail size={14} />
+              </a>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-<a
-            href={`tel:${brand.contactPhone}`}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
-            aria-label="Call brand"
-            >
-            <Phone size={14} />
-          </a>
-<a
-          href={`mailto:${brand.contactEmail}`}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
-          aria-label="Email brand"
-            >
-          <Mail size={14} />
-        </a>
-    </div>
-        </div >
-      </SectionCard >
-
-    {!incomplete && (
-      <SectionCard>
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] text-neutral-500">Renewal Window</p>
-          <p className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-300">
-            {brand.remainderPercent}%
-          </p>
         </div>
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-lime-400"
-            style={{ width: `${brand.remainderPercent}%` }}
-          />
+      </div>
+
+      {!incomplete && (
+        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-neutral-500">Renewal Window</p>
+            <p className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-300">
+              {brand.remainderPercent}%
+            </p>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-lime-400"
+              style={{ width: `${brand.remainderPercent}%` }}
+            />
+          </div>
         </div>
-      </SectionCard>
-    )
-}
-
-{
-  brand.isTopBrand && (
-    <div className="flex items-center gap-2.5 rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3">
-      <Sparkles size={15} className="shrink-0 text-amber-600 dark:text-amber-400" />
-      <p className="text-[12.5px] text-amber-700 dark:text-amber-400">
-        Featured as a <span className="font-semibold">Top Brand</span> — display order {brand.topOrder}.
-      </p>
+      )}
     </div>
-  )
-}
-
-<div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-  <span className="flex items-center overflow-hidden rounded-lg text-[13px] font-extrabold tracking-tight">
-    <span className="bg-pink-500 px-1.5 py-0.5 text-white">S</span>
-    <span className="bg-purple-500 px-1.5 py-0.5 text-white">M</span>
-    <span className="bg-blue-500 px-1.5 py-0.5 text-white">A</span>
-    <span className="bg-amber-500 px-1.5 py-0.5 text-white">R</span>
-    <span className="bg-emerald-500 px-1.5 py-0.5 text-white">T</span>
-  </span>
-  <span className="text-[13px] font-semibold text-neutral-700 dark:text-neutral-300">1K</span>
-</div>
-    </div >
   );
 }
 
@@ -541,13 +546,31 @@ function OverviewStat({ icon: Icon, label, value, strike = false }) {
 /* Brand Info tab — full brand-identity, business, verification & media view */
 function BrandInfoTab({ brand }) {
   return (
-    <div className="space-y-4">
-      <SectionCard title="About">
-        <p className="text-[13.5px] leading-relaxed text-neutral-700 dark:text-neutral-300">{brand.about || "No description added yet."}</p>
-      </SectionCard>
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="sm:col-span-2">
+          <SectionCard title="About">
+            <p className="text-[13.5px] leading-relaxed text-neutral-700 dark:text-neutral-300">{brand.about || "No description added yet."}</p>
+          </SectionCard>
+        </div>
+        <SectionCard title="Brand Photo / Logo">
+          <div className="flex items-center gap-3">
+            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-neutral-200 dark:bg-neutral-800">
+              {brand.logo ? (
+                <img src={brand.logo} alt={brand.brandName} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-neutral-500">
+                  <ImageIcon size={18} />
+                </div>
+              )}
+            </div>
+            <p className="text-[11.5px] text-neutral-500">Shown on cards, invoices and the brand header.</p>
+          </div>
+        </SectionCard>
+      </div>
 
       <SectionCard title="Brand Identity">
-        <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+        <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
           <InfoRow icon={Tag} label="Business Name" value={brand.ownerName} />
           <InfoRow icon={Tag} label="Short Name" value={brand.shortName || "—"} />
           <InfoRow icon={Building2} label="Category" value={brand.category} />
@@ -560,65 +583,49 @@ function BrandInfoTab({ brand }) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Business Details">
-        <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-          <InfoRow icon={Briefcase} label="Business Type" value={brand.businessType || "—"} />
-          <InfoRow icon={Activity} label="Business Status" value={brand.businessStatus || "—"} />
-          {brand.legalBusinessName && brand.legalBusinessName !== "—" && (
-            <InfoRow icon={Building2} label="Legal Business Name" value={brand.legalBusinessName} />
-          )}
-          {"hasAcceptedPartnershipDeed" in brand && (
-            <InfoRow
-              icon={ShieldCheck}
-              label="Partnership Deed Accepted"
-              value={brand.hasAcceptedPartnershipDeed ? "Yes" : "No"}
-            />
-          )}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Tax & Bank Verification">
-        <div className="space-y-2">
-          <VerificationRow
-            icon={ShieldCheck}
-            label="GST Number"
-            value={brand.gstNumber}
-            verified={brand.gstVerified}
-          />
-          <VerificationRow
-            icon={BadgeCheck}
-            label="PAN Number"
-            value={brand.panNumber}
-            verified={brand.panVerified}
-          />
-          <VerificationRow
-            icon={Landmark}
-            label={`Bank Account · ${brand.bankName}`}
-            value={brand.accountHolder}
-            verified={brand.bankVerified}
-          />
-        </div>
-      </SectionCard>
-
-      <MerchantTokenCard token={brand.merchantToken} />
-
-      <SectionCard title="Brand Photo / Logo">
-        <div className="flex items-center gap-4">
-          <div className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl bg-neutral-200 shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-800 dark:ring-neutral-800">
-            {brand.logo ? (
-              <img src={brand.logo} alt={brand.brandName} className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-neutral-500">
-                <ImageIcon size={20} />
-              </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SectionCard title="Business Details">
+          <div className="space-y-0">
+            <InfoRow icon={Briefcase} label="Business Type" value={brand.businessType || "—"} />
+            <InfoRow icon={Activity} label="Business Status" value={brand.businessStatus || "—"} />
+            {brand.legalBusinessName && brand.legalBusinessName !== "—" && (
+              <InfoRow icon={Building2} label="Legal Business Name" value={brand.legalBusinessName} />
+            )}
+            {"hasAcceptedPartnershipDeed" in brand && (
+              <InfoRow
+                icon={ShieldCheck}
+                label="Partnership Deed Accepted"
+                value={brand.hasAcceptedPartnershipDeed ? "Yes" : "No"}
+              />
             )}
           </div>
-          <div>
-            <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">Primary logo</p>
-            <p className="text-[11.5px] text-neutral-500">Shown on cards, invoices and the brand header.</p>
+        </SectionCard>
+
+        <SectionCard title="Tax & Bank Verification">
+          <div className="space-y-2">
+            <VerificationRow
+              icon={ShieldCheck}
+              label="GST Number"
+              value={brand.gstNumber}
+              verified={brand.gstVerified}
+            />
+            <VerificationRow
+              icon={BadgeCheck}
+              label="PAN Number"
+              value={brand.panNumber}
+              verified={brand.panVerified}
+            />
+            <VerificationRow
+              icon={Landmark}
+              label={`Bank Account · ${brand.bankName}`}
+              value={brand.accountHolder}
+              verified={brand.bankVerified}
+            />
           </div>
-        </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
+
+      <MerchantTokenCard token={brand.merchantToken} />
 
       <SectionCard title="Tags">
         {brand.tags?.length ? (
@@ -643,47 +650,292 @@ function BrandInfoTab({ brand }) {
 
 /* Ambience tab — photos + video, split out of Brand Info into its own tab
    so the media gallery has room to breathe. */
-function AmbienceTab({ brand }) {
+/* One media item (photo or video) inside a Showcase section — field names
+ * defensively normalized since the exact GET response shape wasn't in the
+ * Postman screenshots the API was built from. */
+function normalizeShowcaseMediaItem(item) {
+  return {
+    id: item?._id ?? item?.id,
+    url: item?.url ?? "",
+    isVideo: item?.type === "VIDEO",
+    duration: item?.duration,
+  };
+}
+
+function formatMediaDuration(seconds) {
+  if (seconds == null || Number.isNaN(seconds)) return "";
+  const total = Math.round(seconds);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/* One Showcase album — a premium-styled card showing its cover, real photo/
+ * video counts, and a media grid where videos play directly (no static
+ * thumbnail placeholder). Lets the admin upload new photos/videos (POST
+ * .../add-media) or delete existing ones. */
+function ShowcaseSectionCard({ brand, section, onChanged }) {
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deletingSection, setDeletingSection] = useState(false);
+  const [error, setError] = useState("");
+
+  const media = (section.medias ?? []).map(normalizeShowcaseMediaItem).filter((m) => m.url);
+
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    setUploading(true);
+    setError("");
+    try {
+      await addShowcaseMedia(section._id, files, { brandId: brand.id });
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteMedia = async (mediaId) => {
+    setDeletingId(mediaId);
+    setError("");
+    try {
+      await deleteShowcaseMedia(section._id, mediaId, brand.id);
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteSection = async () => {
+    if (!window.confirm(`Delete the "${section.title}" album and all its media?`)) return;
+    setDeletingSection(true);
+    setError("");
+    try {
+      await deleteShowcaseSection(section._id, brand.id);
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+      setDeletingSection(false);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <SectionCard title="Ambience Photos">
-        {brand.ambiencePhotos?.length ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {brand.ambiencePhotos.map((src, i) => (
-              <div
-                key={i}
-                className="group aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-200 shadow-sm ring-1 ring-neutral-200 transition-shadow hover:shadow-md dark:bg-neutral-800 dark:ring-neutral-800"
-              >
+    <div className="overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-neutral-200 dark:bg-neutral-800">
+            {section.coverImage ? (
+              <img src={section.coverImage} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-neutral-400">
+                <ImageIcon size={16} />
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-200">{section.title}</p>
+            <p className="mt-0.5 text-[11.5px] text-neutral-500">
+              {section.photoCount ?? 0} photo{section.photoCount === 1 ? "" : "s"} · {section.videoCount ?? 0} video
+              {section.videoCount === 1 ? "" : "s"}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-2 text-[11.5px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
+          >
+            {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+            {uploading ? "Uploading…" : "Add Media"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteSection}
+            disabled={deletingSection}
+            aria-label={`Delete ${section.title} album`}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-500"
+          >
+            {deletingSection ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={13} />}
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} className="hidden" />
+        </div>
+      </div>
+
+      {error && <p className="px-4 pb-2 text-[11.5px] text-red-600 dark:text-red-400">{error}</p>}
+
+      {media.length ? (
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+          {media.map((m) => (
+            <div key={m.id} className="group relative aspect-video overflow-hidden bg-neutral-950">
+              {m.isVideo ? (
+                <>
+                  <video src={m.url} className="h-full w-full object-cover" controls muted playsInline preload="metadata" />
+                  {m.duration != null && (
+                    <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {formatMediaDuration(m.duration)}
+                    </span>
+                  )}
+                </>
+              ) : (
                 <img
-                  src={src}
-                  alt={`${brand.brandName} ambience ${i + 1}`}
+                  src={m.url}
+                  alt=""
                   className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
-              </div>
+              )}
+              <button
+                type="button"
+                onClick={() => handleDeleteMedia(m.id)}
+                disabled={deletingId === m.id}
+                aria-label="Delete media"
+                className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 disabled:opacity-100"
+              >
+                {deletingId === m.id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mx-4 mb-4 flex flex-col items-center gap-2 rounded-2xl bg-neutral-50 py-8 text-center dark:bg-neutral-950/60">
+          <ImageIcon size={18} className="text-neutral-400 dark:text-neutral-600" />
+          <p className="text-[12px] text-neutral-500">No media in this album yet.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Ambience tab — the admin-managed Showcase album system: real albums
+ * (sections) with real media, fetched via GET /showcase/get-brand-showcase
+ * and editable via the add-media/delete-media/delete-section endpoints. */
+function AmbienceTab({ brand }) {
+  const [sections, setSections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const [addingSection, setAddingSection] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  const fetchShowcase = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const res = await getBrandShowcase(brand.id);
+      const list = res?.data?.sections ?? res?.sections ?? res?.data ?? [];
+      setSections(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [brand.id]);
+
+  useEffect(() => {
+    fetchShowcase();
+  }, [fetchShowcase]);
+
+  const handleCreateSection = async (e) => {
+    e.preventDefault();
+    if (!newTitle.trim() || creating) return;
+    setCreating(true);
+    setCreateError("");
+    try {
+      await createShowcaseSection({ brandId: brand.id, title: newTitle.trim(), sortOrder: sections.length + 1 });
+      setNewTitle("");
+      setAddingSection(false);
+      fetchShowcase();
+    } catch (err) {
+      setCreateError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">Showcase</p>
+            <p className="mt-0.5 text-[12px] text-neutral-500">Real ambience, menu and event albums shown on this brand's profile.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddingSection((v) => !v)}
+            className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-2 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
+          >
+            <Plus size={13} />
+            Add Album
+          </button>
+        </div>
+
+        {addingSection && (
+          <form
+            onSubmit={handleCreateSection}
+            className="mb-3 flex flex-col gap-2 rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:flex-row sm:items-center"
+          >
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Album title, e.g. Ambience Photos"
+              className={`${inputClass} sm:flex-1`}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={!newTitle.trim() || creating}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-400 px-4 py-2.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {creating && <Loader2 size={13} className="animate-spin" />}
+                {creating ? "Creating…" : "Create"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingSection(false);
+                  setNewTitle("");
+                  setCreateError("");
+                }}
+                className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:hover:text-neutral-200"
+              >
+                Cancel
+              </button>
+            </div>
+            {createError && <p className="text-[11.5px] text-red-600 dark:text-red-400 sm:basis-full">{createError}</p>}
+          </form>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-10 text-[13px] text-neutral-500 dark:border-neutral-800">
+            <Loader2 size={16} className="animate-spin" />
+            Loading showcase…
+          </div>
+        ) : loadError ? (
+          <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            Couldn't load showcase: {loadError}
+          </div>
+        ) : sections.length ? (
+          <div className="space-y-3">
+            {sections.map((s) => (
+              <ShowcaseSectionCard key={s._id} brand={brand} section={s} onChanged={fetchShowcase} />
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-neutral-200 py-8 text-center dark:border-neutral-800">
-            <ImageIcon size={20} className="text-neutral-400 dark:text-neutral-600" />
-            <p className="text-[12.5px] text-neutral-500">No ambience photos uploaded yet.</p>
-          </div>
+          <EmptyState label="No showcase albums yet. Add one to upload photos or videos." />
         )}
-      </SectionCard>
-
-      <SectionCard title="Ambience Video">
-        {brand.ambienceVideo ? (
-          <video
-            src={brand.ambienceVideo}
-            controls
-            className="w-full rounded-2xl bg-neutral-100 shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-950 dark:ring-neutral-800"
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-neutral-200 py-8 text-center dark:border-neutral-800">
-            <PlayCircle size={20} className="text-neutral-400 dark:text-neutral-600" />
-            <p className="text-[12.5px] text-neutral-500">No ambience video uploaded yet.</p>
-          </div>
-        )}
-      </SectionCard>
+      </div>
     </div>
   );
 }
@@ -691,13 +943,13 @@ function AmbienceTab({ brand }) {
 function SubBrandTab({ brand }) {
   if (!brand.outlets?.length) return <EmptyState label="No outlets added yet." />;
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {brand.outlets.map((outlet, i) => (
         <div
           key={i}
           className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
         >
-          <div className="flex flex-wrap items-start justify-between capitalize gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
               <Store size={16} className="mt-0.5 shrink-0 text-neutral-500" />
               <div className="min-w-0">
@@ -706,59 +958,43 @@ function SubBrandTab({ brand }) {
                 {outlet.landmark && outlet.landmark !== "—" && (
                   <p className="mt-0.5 text-[11.5px] text-neutral-400">Landmark: {outlet.landmark}</p>
                 )}
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {outlet.uniqueId && outlet.uniqueId !== "—" && (
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-neutral-500 dark:bg-neutral-800">
-                      {outlet.uniqueId}
-                    </span>
-                  )}
-                  {outlet.storeId && outlet.storeId !== "—" && (
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-neutral-500 dark:bg-neutral-800">
-                      Store ID: {outlet.storeId}
-                    </span>
-                  )}
-                  {outlet.outletType && outlet.outletType !== "—" && (
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-neutral-500 dark:bg-neutral-800">
-                      {outlet.outletType}
-                    </span>
-                  )}
-                  {outlet.whatsappNumber && outlet.whatsappNumber !== "—" && (
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-neutral-500 dark:bg-neutral-800">
-                      +91 {outlet.whatsappNumber}
-                    </span>
-                  )}
-                  {outlet.joinedDate && outlet.joinedDate !== "—" && (
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] text-neutral-500 dark:bg-neutral-800">
-                      Joined {outlet.joinedDate}
-                    </span>
-                  )}
-                  {outlet.isDeleted && (
-                    <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10.5px] font-medium text-red-600 dark:text-red-400">
-                      Deleted
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
-            <StatusBadge status={outlet.status} activeLabel="Active" />
+            <div className="flex shrink-0 items-center gap-1.5">
+              {outlet.isDeleted && (
+                <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10.5px] font-medium text-red-600 dark:text-red-400">
+                  Deleted
+                </span>
+              )}
+              <StatusBadge status={outlet.status} activeLabel="Active" />
+            </div>
           </div>
 
-          {/* Full address details */}
+          {/* Quick facts — bento tile row */}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <DetailTile icon={Tag} label="Unique ID" value={outlet.uniqueId} />
+            <DetailTile icon={Tag} label="Store ID" value={outlet.storeId} />
+            <DetailTile icon={Building2} label="Outlet Type" value={outlet.outletType} />
+            <DetailTile icon={Phone} label="WhatsApp" value={outlet.whatsappNumber ? `+91 ${outlet.whatsappNumber}` : "—"} />
+            <DetailTile icon={Calendar} label="Joined" value={outlet.joinedDate} />
+          </div>
+
+          {/* Full address details — bento tile grid */}
           {outlet.location && (
-            <div className="mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+            <div className="mt-3">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
                 Address
               </p>
-              <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-                <InfoRow icon={MapPin} label="Address Line 1" value={outlet.location.addressLine1} />
-                <InfoRow icon={MapPin} label="Address Line 2" value={outlet.location.addressLine2} />
-                <InfoRow icon={Tag} label="Address Type" value={outlet.location.addressType} />
-                <InfoRow icon={MapPin} label="City" value={outlet.location.city} />
-                <InfoRow icon={MapPin} label="District" value={outlet.location.district} />
-                <InfoRow icon={MapPin} label="State" value={outlet.location.state} />
-                <InfoRow icon={Globe} label="Country" value={outlet.location.country} />
-                <InfoRow icon={MapPin} label="Zipcode" value={outlet.location.zipcode} />
-                {outlet.geo && outlet.geo !== "—" && <InfoRow icon={MapPin} label="Coordinates" value={outlet.geo} />}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <DetailTile icon={MapPin} label="Address Line 1" value={outlet.location.addressLine1} />
+                <DetailTile icon={MapPin} label="Address Line 2" value={outlet.location.addressLine2} />
+                <DetailTile icon={Tag} label="Address Type" value={outlet.location.addressType} />
+                <DetailTile icon={MapPin} label="City" value={outlet.location.city} />
+                <DetailTile icon={MapPin} label="District" value={outlet.location.district} />
+                <DetailTile icon={MapPin} label="State" value={outlet.location.state} />
+                <DetailTile icon={Globe} label="Country" value={outlet.location.country} />
+                <DetailTile icon={MapPin} label="Zipcode" value={outlet.location.zipcode} />
+                {outlet.geo && outlet.geo !== "—" && <DetailTile icon={MapPin} label="Coordinates" value={outlet.geo} />}
               </div>
               <div className="mt-2.5 flex flex-wrap gap-1.5">
                 {outlet.location.isDefault && (
@@ -828,7 +1064,7 @@ function SubBrandTab({ brand }) {
           )} */}
 
           {outlet.workHours && (
-            <div className="mt-4 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+            <div className="mt-4 rounded-xl bg-neutral-50 p-3.5 dark:bg-neutral-950/60">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
                 Work Hours
               </p>
@@ -898,7 +1134,13 @@ function ListingsTab({ brand }) {
         const res = await getVouchers({ brandId: brand.id, page: 1, limit: 50 });
         if (!cancelled) setVouchers(res?.data?.data ?? []);
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {
+          if (isNotFoundMessage(err.message)) {
+            setVouchers([]);
+          } else {
+            setError(err.message);
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -977,51 +1219,166 @@ function ListingsTab({ brand }) {
 
 function SettlementsTab({ brand }) {
   if (!brand.settlements?.length) return <EmptyState label="No settlements recorded." />;
+  const paidCount = brand.settlements.filter((s) => s.status === "Paid").length;
   return (
-    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-      <table className="w-full text-left text-[13px]">
-        <thead className="text-[11.5px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-          <tr>
-            <th className="px-5 py-4 font-medium">Settlement ID</th>
-            <th className="px-5 py-4 font-medium">Date</th>
-            <th className="px-5 py-4 font-medium">Amount</th>
-            <th className="px-5 py-4 text-right font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white dark:bg-neutral-950">
-          {brand.settlements.map((s) => (
-            <tr key={s.id} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
-              <td className="px-5 py-4 text-neutral-700 dark:text-neutral-300">{s.id}</td>
-              <td className="px-5 py-4 text-neutral-500">{s.date}</td>
-              <td className="px-5 py-4 font-medium text-neutral-800 dark:text-neutral-200">{s.amount}</td>
-              <td className="px-5 py-4 text-right">
-                <StatusBadge status={s.status} activeLabel="Paid" />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SectionCard title="Total Settlements">
+          <p className="text-[20px] font-bold text-neutral-800 dark:text-neutral-200">{brand.settlements.length}</p>
+        </SectionCard>
+        <SectionCard title="Paid">
+          <p className="text-[20px] font-bold text-emerald-600 dark:text-emerald-400">{paidCount}</p>
+        </SectionCard>
+        <SectionCard title="Pending" className="col-span-2 sm:col-span-1">
+          <p className="text-[20px] font-bold text-amber-600 dark:text-amber-400">{brand.settlements.length - paidCount}</p>
+        </SectionCard>
+      </div>
+
+      <div className="space-y-2.5">
+        {brand.settlements.map((s) => (
+          <div
+            key={s.id}
+            className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                <HandCoins size={15} />
+              </div>
+              <div>
+                <p className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{s.id}</p>
+                <p className="text-[11.5px] text-neutral-500">{s.date}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <p className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">{s.amount}</p>
+              <StatusBadge status={s.status} activeLabel="Paid" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ReviewTab({ brand }) {
-  if (!brand.reviews?.length) return <EmptyState label="No reviews yet." />;
+/* A real coupon/ticket-style card — a colored discount "stub" punched out
+ * of the main card by two circular notches, separated from the details by
+ * a dashed line, the way an actual physical voucher looks. */
+function VoucherTicketCard({ voucher }) {
+  const primaryOffer = voucher.offers?.[0];
+  const discountLabel = primaryOffer
+    ? primaryOffer.discountType === "PERCENTAGE"
+      ? `${primaryOffer.discountValue}%`
+      : `₹${primaryOffer.discountValue}`
+    : "—";
+
+  return (
+    <div className="flex overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="relative flex w-24 shrink-0 flex-col items-center justify-center gap-0.5 bg-gradient-to-br from-emerald-400 to-emerald-500 px-2 py-4 text-neutral-950">
+        <p className="text-[22px] font-extrabold leading-none">{discountLabel}</p>
+        <p className="text-[9.5px] font-semibold uppercase tracking-wide text-neutral-950/70">Off</p>
+        <span className="absolute -top-2.5 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full bg-white dark:bg-neutral-900" />
+        <span className="absolute -bottom-2.5 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full bg-white dark:bg-neutral-900" />
+      </div>
+
+      <div className="min-w-0 flex-1 border-l border-dashed border-neutral-300 p-4 dark:border-neutral-700">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">{voucher.name}</p>
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-neutral-500">
+              <Tag size={10} /> {voucher.versionCode || "—"}
+            </p>
+          </div>
+          <VoucherStatusPill status={voucher.status} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11.5px] text-neutral-500">
+          <span className="flex items-center gap-1">
+            <Calendar size={11} />
+            {formatShortDate(voucher.startAt)} → {formatShortDate(voucher.endAt)}
+          </span>
+          {voucher.category?.name && (
+            <span className="flex items-center gap-1">
+              <Store size={11} />
+              {voucher.category.name}
+              {voucher.subCategory?.name ? ` · ${voucher.subCategory.name}` : ""}
+            </span>
+          )}
+          {voucher.offers?.length > 1 && (
+            <span className="text-neutral-400">+{voucher.offers.length - 1} more offer{voucher.offers.length > 2 ? "s" : ""}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Review tab repurposed to show this brand's real vouchers (no review
+ * endpoint exists), styled as actual coupon/ticket cards — pulled live
+ * from the same GET /vouchers/versions/get-all?brandId=... as Listings. */
+function VoucherTab({ brand }) {
+  const [vouchers, setVouchers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await getVouchers({ brandId: brand.id, page: 1, limit: 50 });
+        if (!cancelled) setVouchers(res?.data?.data ?? []);
+      } catch (err) {
+        if (!cancelled) {
+          if (isNotFoundMessage(err.message)) {
+            setVouchers([]);
+          } else {
+            setError(err.message);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [brand.id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
+        <Loader2 size={16} className="animate-spin" />
+        Loading vouchers…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
+        <AlertTriangle size={14} className="shrink-0" />
+        Failed to load vouchers: {error}
+      </div>
+    );
+  }
+
+  if (!vouchers.length) return <EmptyState label="No vouchers created by this brand yet." />;
+
+  const publishedCount = vouchers.filter((v) => v.status === "PUBLISHED").length;
+
   return (
     <div className="space-y-3">
-      {brand.reviews.map((r, i) => (
-        <div key={i} className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-          <div className="flex items-center justify-between">
-            <p className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{r.author}</p>
-            <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-              {Array.from({ length: 5 }).map((_, s) => (
-                <Star key={s} size={12} fill={s < r.rating ? "currentColor" : "none"} />
-              ))}
-            </div>
-          </div>
-          <p className="mt-1.5 text-[13px] text-neutral-500 dark:text-neutral-400">{r.comment}</p>
-          <p className="mt-1.5 text-[11.5px] text-neutral-400 dark:text-neutral-600">{r.date}</p>
-        </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SectionCard title="Total Vouchers">
+          <p className="text-[20px] font-bold text-neutral-800 dark:text-neutral-200">{vouchers.length}</p>
+        </SectionCard>
+        <SectionCard title="Published">
+          <p className="text-[20px] font-bold text-emerald-600 dark:text-emerald-400">{publishedCount}</p>
+        </SectionCard>
+      </div>
+
+      {vouchers.map((v) => (
+        <VoucherTicketCard key={v._id} voucher={v} />
       ))}
     </div>
   );
@@ -1030,9 +1387,20 @@ function ReviewTab({ brand }) {
 function AccountDetailsTab({ brand }) {
   return (
     <div className="space-y-4">
-      <SectionCard title="Brand">
-        <InfoRow icon={Users} label="Legal Name" value={brand.ownerName} />
-      </SectionCard>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
+        <div className="col-span-2 row-span-2 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Brand &amp; Contact</p>
+          <div className="space-y-0">
+            <InfoRow icon={Users} label="Legal Name" value={brand.ownerName} />
+            <InfoRow icon={Phone} label="Phone" value={brand.contactPhone} />
+            <InfoRow icon={Mail} label="Email" value={brand.contactEmail} />
+          </div>
+        </div>
+        <OverviewStat icon={ShieldCheck} label="GST Status" value={brand.gstVerified ? "Verified" : "Unverified"} />
+        <OverviewStat icon={BadgeCheck} label="PAN Status" value={brand.panVerified ? "Verified" : "Unverified"} />
+        <OverviewStat icon={Landmark} label="Bank Status" value={brand.bankVerified ? "Verified" : "Unverified"} />
+        <OverviewStat icon={Tag} label="Bank Name" value={brand.bankName || "—"} />
+      </div>
 
       <SectionCard title="Business Verification">
         <div className="space-y-2">
@@ -1059,69 +1427,62 @@ function AccountDetailsTab({ brand }) {
 
       {brand.panNumber && brand.panNumber !== "—" && (
         <CollapsibleSectionCard title="PAN Details" defaultOpen={false}>
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            <InfoRow icon={BadgeCheck} label="PAN Number" value={brand.panNumber} />
-            <InfoRow icon={Tag} label="PAN Type" value={brand.panType} />
-            <InfoRow icon={Users} label="Full Name" value={brand.panFullName} />
-            <InfoRow icon={Globe} label="Country" value={brand.panCountry} />
-            <InfoRow icon={ShieldCheck} label="Verification Message" value={brand.panVerificationMessage} />
-            <InfoRow icon={ShieldCheck} label="Verification Provider" value={brand.panVerificationProvider} />
-            <InfoRow icon={Calendar} label="Verified At" value={brand.panVerifiedAtDisplay} />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <DetailTile icon={BadgeCheck} label="PAN Number" value={brand.panNumber} />
+            <DetailTile icon={Tag} label="PAN Type" value={brand.panType} />
+            <DetailTile icon={Users} label="Full Name" value={brand.panFullName} />
+            <DetailTile icon={Globe} label="Country" value={brand.panCountry} />
+            <DetailTile icon={ShieldCheck} label="Verification Message" value={brand.panVerificationMessage} />
+            <DetailTile icon={ShieldCheck} label="Verification Provider" value={brand.panVerificationProvider} />
+            <DetailTile icon={Calendar} label="Verified At" value={brand.panVerifiedAtDisplay} />
           </div>
         </CollapsibleSectionCard>
       )}
 
       {brand.gstNumber && brand.gstNumber !== "—" && (
         <CollapsibleSectionCard title="GST Details" defaultOpen={false}>
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            <InfoRow icon={ShieldCheck} label="GST Number" value={brand.gstNumber} />
-            <InfoRow icon={Tag} label="Legal Name" value={brand.gstLegalName} />
-            <InfoRow icon={Tag} label="Trade Name" value={brand.gstTradeName} />
-            <InfoRow icon={Briefcase} label="Constitution" value={brand.gstConstitution} />
-            <InfoRow icon={Activity} label="Taxpayer Type" value={brand.gstTaxpayerType} />
-            <InfoRow
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <DetailTile icon={ShieldCheck} label="GST Number" value={brand.gstNumber} />
+            <DetailTile icon={Tag} label="Legal Name" value={brand.gstLegalName} />
+            <DetailTile icon={Tag} label="Trade Name" value={brand.gstTradeName} />
+            <DetailTile icon={Briefcase} label="Constitution" value={brand.gstConstitution} />
+            <DetailTile icon={Activity} label="Taxpayer Type" value={brand.gstTaxpayerType} />
+            <DetailTile
               icon={Calendar}
               label="Registration Date"
               value={brand.gstRegistrationDate ? new Date(brand.gstRegistrationDate).toLocaleDateString("en-IN") : "—"}
             />
-            <InfoRow icon={ShieldCheck} label="Registration Status" value={brand.gstRegistrationStatus} />
+            <DetailTile icon={ShieldCheck} label="Registration Status" value={brand.gstRegistrationStatus} />
             {brand.gstNatureOfBusiness?.length > 0 && (
-              <InfoRow icon={Briefcase} label="Nature of Business" value={brand.gstNatureOfBusiness.join(", ")} />
+              <DetailTile icon={Briefcase} label="Nature of Business" value={brand.gstNatureOfBusiness.join(", ")} />
             )}
-            <InfoRow icon={Landmark} label="Jurisdiction" value={brand.gstStateJurisdiction} />
-            <InfoRow icon={MapPin} label="Registered Address" value={brand.gstAddress} />
-            <InfoRow icon={ShieldCheck} label="Verification Message" value={brand.gstVerificationMessage} />
-            <InfoRow icon={ShieldCheck} label="Verification Provider" value={brand.gstVerificationProvider} />
-            <InfoRow icon={Calendar} label="Verified At" value={brand.gstVerifiedAtDisplay} />
+            <DetailTile icon={Landmark} label="Jurisdiction" value={brand.gstStateJurisdiction} />
+            <DetailTile icon={MapPin} label="Registered Address" value={brand.gstAddress} />
+            <DetailTile icon={ShieldCheck} label="Verification Message" value={brand.gstVerificationMessage} />
+            <DetailTile icon={ShieldCheck} label="Verification Provider" value={brand.gstVerificationProvider} />
+            <DetailTile icon={Calendar} label="Verified At" value={brand.gstVerifiedAtDisplay} />
           </div>
         </CollapsibleSectionCard>
       )}
 
       {brand.bankName && brand.bankName !== "—" && (
         <CollapsibleSectionCard title="Bank Details" defaultOpen={false}>
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            <InfoRow icon={Landmark} label="Bank Name" value={brand.bankName} />
-            <InfoRow icon={Users} label="Account Holder" value={brand.accountHolder} />
-            <InfoRow icon={Landmark} label="Branch" value={brand.bankBranch} />
-            <InfoRow icon={CreditCard} label="Account Number" value={brand.maskedAccountNumber} />
-            <InfoRow icon={CreditCard} label="IFSC Code" value={brand.ifscCode} />
-            <InfoRow icon={CreditCard} label="Account Type" value={brand.accountType} />
-            <InfoRow icon={MapPin} label="Bank Address" value={brand.bankAddress} />
-            <InfoRow icon={Activity} label="Payment Mode" value={brand.bankPaymentMode} />
-            <InfoRow icon={ShieldCheck} label="Recommended Action" value={brand.bankRecommendedAction} />
-            <InfoRow icon={ShieldCheck} label="Verification Message" value={brand.bankVerificationMessage} />
-            <InfoRow icon={ShieldCheck} label="Verification Provider" value={brand.bankVerificationProvider} />
-            <InfoRow icon={Calendar} label="Verified At" value={brand.bankVerifiedAtDisplay} />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <DetailTile icon={Landmark} label="Bank Name" value={brand.bankName} />
+            <DetailTile icon={Users} label="Account Holder" value={brand.accountHolder} />
+            <DetailTile icon={Landmark} label="Branch" value={brand.bankBranch} />
+            <DetailTile icon={CreditCard} label="Account Number" value={brand.maskedAccountNumber} />
+            <DetailTile icon={CreditCard} label="IFSC Code" value={brand.ifscCode} />
+            <DetailTile icon={CreditCard} label="Account Type" value={brand.accountType} />
+            <DetailTile icon={MapPin} label="Bank Address" value={brand.bankAddress} />
+            <DetailTile icon={Activity} label="Payment Mode" value={brand.bankPaymentMode} />
+            <DetailTile icon={ShieldCheck} label="Recommended Action" value={brand.bankRecommendedAction} />
+            <DetailTile icon={ShieldCheck} label="Verification Message" value={brand.bankVerificationMessage} />
+            <DetailTile icon={ShieldCheck} label="Verification Provider" value={brand.bankVerificationProvider} />
+            <DetailTile icon={Calendar} label="Verified At" value={brand.bankVerifiedAtDisplay} />
           </div>
         </CollapsibleSectionCard>
       )}
-
-      <SectionCard title="Contact">
-        <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-          <InfoRow icon={Phone} label="Phone" value={brand.contactPhone} />
-          <InfoRow icon={Mail} label="Email" value={brand.contactEmail} />
-        </div>
-      </SectionCard>
     </div>
   );
 }
@@ -1130,83 +1491,131 @@ function SystemVerificationTab({ brand }) {
   const sv = brand.systemVerify;
   if (!sv) return <EmptyState label="No system verification record yet." />;
 
+  const gaugeData =
+    sv.score != null
+      ? [
+          { name: "score", value: sv.score },
+          { name: "rest", value: 100 - sv.score },
+        ]
+      : [];
+  const gaugeColor = sv.score >= 80 ? "#34d399" : sv.score >= 50 ? "#fbbf24" : "#f87171";
+
   return (
     <div className="space-y-4">
-      <SectionCard title="Trust Score">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-[12.5px] text-neutral-500">Attempt #{sv.attemptNumber}</span>
-          <span className="text-[16px] font-bold text-neutral-800 dark:text-neutral-200">
-            {sv.score != null ? `${sv.score}/100` : "—"}
-          </span>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <SectionCard title="Trust Score">
+          {sv.score != null ? (
+            <div className="relative h-[110px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={gaugeData}
+                    dataKey="value"
+                    startAngle={180}
+                    endAngle={0}
+                    cx="50%"
+                    cy="90%"
+                    innerRadius={42}
+                    outerRadius={58}
+                    stroke="none"
+                  >
+                    <Cell fill={gaugeColor} />
+                    <Cell fill="#e5e7eb" opacity={0.6} />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-x-0 bottom-1 flex flex-col items-center">
+                <p className="text-[19px] font-bold text-neutral-800 dark:text-neutral-100">{sv.score}</p>
+                <p className="text-[10px] text-neutral-500">out of 100</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-[110px] items-center justify-center text-[12.5px] text-neutral-500">No score yet.</div>
+          )}
+        </SectionCard>
+
+        <div className="sm:col-span-2">
+          <SectionCard title="Verification Status">
+            <p className="mb-3 text-[12.5px] text-neutral-500">Attempt #{sv.attemptNumber}</p>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                {sv.status?.replace(/_/g, " ")}
+              </span>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  sv.isAdminApproved
+                    ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                    : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
+                }`}
+              >
+                {sv.isAdminApproved ? "Admin Approved" : "Not Admin Approved"}
+              </span>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  sv.isReviewed
+                    ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
+                    : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
+                }`}
+              >
+                {sv.isReviewed ? "Reviewed" : "Not Reviewed"}
+              </span>
+              {sv.isRejected && (
+                <span className="inline-flex items-center rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                  Rejected
+                </span>
+              )}
+              {sv.isRevoked && (
+                <span className="inline-flex items-center rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                  Revoked
+                </span>
+              )}
+              {sv.isSuperseded && (
+                <span className="inline-flex items-center rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                  Superseded
+                </span>
+              )}
+            </div>
+          </SectionCard>
         </div>
-        {sv.score != null && (
-          <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-            <div
-              className={`h-full rounded-full ${
-                sv.score >= 80 ? "bg-emerald-400" : sv.score >= 50 ? "bg-amber-400" : "bg-red-400"
-              }`}
-              style={{ width: `${sv.score}%` }}
-            />
-          </div>
-        )}
-        <div className="flex flex-wrap gap-1.5">
-          <span className="inline-flex items-center rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-            {sv.status?.replace(/_/g, " ")}
-          </span>
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-              sv.isAdminApproved
-                ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-            }`}
-          >
-            {sv.isAdminApproved ? "Admin Approved" : "Not Admin Approved"}
-          </span>
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-              sv.isReviewed
-                ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
-                : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-            }`}
-          >
-            {sv.isReviewed ? "Reviewed" : "Not Reviewed"}
-          </span>
-          {sv.isRejected && (
-            <span className="inline-flex items-center rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
-              Rejected
-            </span>
-          )}
-          {sv.isRevoked && (
-            <span className="inline-flex items-center rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
-              Revoked
-            </span>
-          )}
-          {sv.isSuperseded && (
-            <span className="inline-flex items-center rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-              Superseded
-            </span>
-          )}
-        </div>
-      </SectionCard>
+      </div>
 
       {sv.nameMatch && (
         <SectionCard title="Name Match Scores">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">PAN ↔ GST</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.panGstScore}%</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="h-[130px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[
+                    { name: "PAN↔GST", value: sv.nameMatch.panGstScore },
+                    { name: "PAN↔Brand", value: sv.nameMatch.panBrandScore },
+                    { name: "GST↔Brand", value: sv.nameMatch.gstBrandScore },
+                    { name: "Avg", value: sv.nameMatch.averageScore },
+                  ]}
+                  barCategoryGap="25%"
+                >
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v) => [`${v}%`, "Score"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                  <Bar dataKey="value" fill="#34d399" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">PAN ↔ Brand</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.panBrandScore}%</p>
-            </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">GST ↔ Brand</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.gstBrandScore}%</p>
-            </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">Average</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.averageScore}%</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">PAN ↔ GST</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.panGstScore}%</p>
+              </div>
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">PAN ↔ Brand</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.panBrandScore}%</p>
+              </div>
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">GST ↔ Brand</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.gstBrandScore}%</p>
+              </div>
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">Average</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.nameMatch.averageScore}%</p>
+              </div>
             </div>
           </div>
         </SectionCard>
@@ -1214,22 +1623,41 @@ function SystemVerificationTab({ brand }) {
 
       {sv.bankNameMatch && (
         <SectionCard title="Bank Name Match Scores">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">Bank ↔ PAN</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.bankPanScore}%</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="h-[130px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[
+                    { name: "Bank↔PAN", value: sv.bankNameMatch.bankPanScore },
+                    { name: "Bank↔GST", value: sv.bankNameMatch.bankGstScore },
+                    { name: "Bank↔Brand", value: sv.bankNameMatch.bankBrandScore },
+                    { name: "Highest", value: sv.bankNameMatch.highestScore },
+                  ]}
+                  barCategoryGap="25%"
+                >
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v) => [`${v}%`, "Score"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                  <Bar dataKey="value" fill="#38bdf8" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">Bank ↔ GST</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.bankGstScore}%</p>
-            </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">Bank ↔ Brand</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.bankBrandScore}%</p>
-            </div>
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <p className="text-[10.5px] text-neutral-500">Highest</p>
-              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.highestScore}%</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">Bank ↔ PAN</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.bankPanScore}%</p>
+              </div>
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">Bank ↔ GST</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.bankGstScore}%</p>
+              </div>
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">Bank ↔ Brand</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.bankBrandScore}%</p>
+              </div>
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+                <p className="text-[10.5px] text-neutral-500">Highest</p>
+                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{sv.bankNameMatch.highestScore}%</p>
+              </div>
             </div>
           </div>
         </SectionCard>
@@ -1237,14 +1665,10 @@ function SystemVerificationTab({ brand }) {
 
       {sv.entityMatch && (
         <SectionCard title="Business Entity Match">
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            <InfoRow icon={Briefcase} label="GST Constitution" value={sv.entityMatch.gstConstitution} />
-            <InfoRow icon={Building2} label="Brand Entity Type" value={sv.entityMatch.brandEntityType} />
-            <InfoRow
-              icon={ShieldCheck}
-              label="Matched"
-              value={sv.entityMatch.matched ? "Yes" : "No"}
-            />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <DetailTile icon={Briefcase} label="GST Constitution" value={sv.entityMatch.gstConstitution} />
+            <DetailTile icon={Building2} label="Brand Entity Type" value={sv.entityMatch.brandEntityType} />
+            <DetailTile icon={ShieldCheck} label="Matched" value={sv.entityMatch.matched ? "Yes" : "No"} />
           </div>
         </SectionCard>
       )}
@@ -1290,49 +1714,77 @@ function SystemVerificationTab({ brand }) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Verification Flags">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {[
-            ["PAN Verified", sv.flags?.panVerified],
-            ["GST Verified", sv.flags?.gstVerified],
-            ["Bank Verified", sv.flags?.bankVerified],
-            ["PAN ↔ GST Match", sv.flags?.panMatchedWithGST],
-            ["PAN ↔ Brand Match", sv.flags?.panMatchedWithBrand],
-            ["GST ↔ Brand Match", sv.flags?.gstMatchedWithBrand],
-            ["Bank Matched", sv.flags?.bankMatched],
-            ["Entity Type Matched", sv.flags?.businessEntityMatched],
-            ["GST Active", sv.flags?.gstActive],
-          ].map(([label, ok]) => (
-            <div
-              key={label}
-              className={`rounded-lg px-2.5 py-2 text-center text-[10.5px] font-medium ${
-                ok
-                  ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                  : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-              }`}
-            >
-              {label}
-              <br />
-              {ok ? "Yes" : "No"}
+      {(() => {
+        const flagList = [
+          ["PAN Verified", sv.flags?.panVerified],
+          ["GST Verified", sv.flags?.gstVerified],
+          ["Bank Verified", sv.flags?.bankVerified],
+          ["PAN ↔ GST Match", sv.flags?.panMatchedWithGST],
+          ["PAN ↔ Brand Match", sv.flags?.panMatchedWithBrand],
+          ["GST ↔ Brand Match", sv.flags?.gstMatchedWithBrand],
+          ["Bank Matched", sv.flags?.bankMatched],
+          ["Entity Type Matched", sv.flags?.businessEntityMatched],
+          ["GST Active", sv.flags?.gstActive],
+        ];
+        const passCount = flagList.filter(([, ok]) => ok).length;
+        const flagsChartData = [
+          { name: "Passed", value: passCount },
+          { name: "Failed", value: flagList.length - passCount },
+        ];
+        return (
+          <SectionCard title="Verification Flags">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="relative flex h-[110px] items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={flagsChartData} dataKey="value" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
+                      <Cell fill="#34d399" />
+                      <Cell fill="#e5e7eb" opacity={0.6} />
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="text-[15px] font-bold text-neutral-800 dark:text-neutral-100">
+                    {passCount}/{flagList.length}
+                  </p>
+                  <p className="text-[9.5px] text-neutral-500">Passed</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:grid-cols-3">
+                {flagList.map(([label, ok]) => (
+                  <div
+                    key={label}
+                    className={`rounded-lg px-2.5 py-2 text-center text-[10.5px] font-medium ${
+                      ok
+                        ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+                    }`}
+                  >
+                    {label}
+                    <br />
+                    {ok ? "Yes" : "No"}
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-      </SectionCard>
+          </SectionCard>
+        );
+      })()}
 
       <SectionCard title="Review Trail">
-        <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-          <InfoRow icon={ShieldCheck} label="Verified By" value={sv.verifiedBy} />
-          <InfoRow icon={Calendar} label="Verified At" value={sv.verifiedAtDisplay} />
-          {sv.reviewedAtDisplay && <InfoRow icon={Calendar} label="Reviewed At" value={sv.reviewedAtDisplay} />}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <DetailTile icon={ShieldCheck} label="Verified By" value={sv.verifiedBy} />
+          <DetailTile icon={Calendar} label="Verified At" value={sv.verifiedAtDisplay} />
+          {sv.reviewedAtDisplay && <DetailTile icon={Calendar} label="Reviewed At" value={sv.reviewedAtDisplay} />}
           {sv.adminApprovedAtDisplay && (
-            <InfoRow icon={Calendar} label="Admin Approved At" value={sv.adminApprovedAtDisplay} />
+            <DetailTile icon={Calendar} label="Admin Approved At" value={sv.adminApprovedAtDisplay} />
           )}
-          {sv.rejectedAtDisplay && <InfoRow icon={Calendar} label="Rejected At" value={sv.rejectedAtDisplay} />}
-          {sv.rejectionReason && <InfoRow icon={AlertTriangle} label="Rejection Reason" value={sv.rejectionReason} />}
-          {sv.revokedAtDisplay && <InfoRow icon={Calendar} label="Revoked At" value={sv.revokedAtDisplay} />}
-          {sv.revokeReason && <InfoRow icon={AlertTriangle} label="Revoke Reason" value={sv.revokeReason} />}
-          <InfoRow icon={Calendar} label="Created" value={sv.createdAtDisplay} />
-          <InfoRow icon={Calendar} label="Last Updated" value={sv.updatedAtDisplay} />
+          {sv.rejectedAtDisplay && <DetailTile icon={Calendar} label="Rejected At" value={sv.rejectedAtDisplay} />}
+          {sv.rejectionReason && <DetailTile icon={AlertTriangle} label="Rejection Reason" value={sv.rejectionReason} />}
+          {sv.revokedAtDisplay && <DetailTile icon={Calendar} label="Revoked At" value={sv.revokedAtDisplay} />}
+          {sv.revokeReason && <DetailTile icon={AlertTriangle} label="Revoke Reason" value={sv.revokeReason} />}
+          <DetailTile icon={Calendar} label="Created" value={sv.createdAtDisplay} />
+          <DetailTile icon={Calendar} label="Last Updated" value={sv.updatedAtDisplay} />
         </div>
       </SectionCard>
     </div>
@@ -1347,7 +1799,7 @@ const TAB_ICONS = {
   "Sub-Brand": Store,
   Listings: Ticket,
   Settlements: HandCoins,
-  Review: Star,
+  Voucher: Ticket,
   Subscription: Repeat,
   "System Verification": ShieldCheck,
   "Account Details": UserCog,
@@ -1391,7 +1843,7 @@ export default function BrandDetails({
     "Sub-Brand": <SubBrandTab brand={brand} />,
     Listings: <ListingsTab brand={brand} />,
     Settlements: <SettlementsTab brand={brand} />,
-    Review: <ReviewTab brand={brand} />,
+    Voucher: <VoucherTab brand={brand} />,
     Subscription: <SubscriptionTab brand={brand} onUpdate={onUpdate} />,
     "System Verification": <SystemVerificationTab brand={brand} />,
     "Account Details": <AccountDetailsTab brand={brand} />,
@@ -1422,7 +1874,7 @@ export default function BrandDetails({
             Back to Brands
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {onSetTopBrand && (
               <button
                 onClick={() => setShowTopBrandModal(true)}
@@ -1432,7 +1884,8 @@ export default function BrandDetails({
                   }`}
               >
                 <Sparkles size={13} />
-                {brand.isTopBrand ? `Top Brand · #${brand.topOrder}` : "Mark as Top Brand"}
+                <span className="hidden sm:inline">{brand.isTopBrand ? `Top Brand · #${brand.topOrder}` : "Mark as Top Brand"}</span>
+                <span className="sm:hidden">{brand.isTopBrand ? `#${brand.topOrder}` : "Top Brand"}</span>
               </button>
             )}
             <button
@@ -1440,31 +1893,32 @@ export default function BrandDetails({
               className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/40 hover:text-emerald-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-emerald-400"
             >
               <Pencil size={13} />
-              Edit Brand Details
+              <span className="hidden sm:inline">Edit Brand Details</span>
+              <span className="sm:hidden">Edit</span>
             </button>
             <button
               onClick={() => onDelete(brand)}
               className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-red-400"
             >
               <Trash2 size={13} />
-              Delete Brand
+              <span className="hidden sm:inline">Delete Brand</span>
             </button>
           </div>
         </div>
 
         {/* Header card */}
         <div className="relative mb-5 overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-          <div
-            className={`pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${accent} opacity-70`}
-          />
+          <div className={`pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-br ${accent} opacity-80`} />
+          <div className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/40 blur-2xl dark:bg-white/5" />
+          <div className="pointer-events-none absolute right-24 top-4 h-16 w-16 rounded-full bg-white/30 blur-xl dark:bg-white/5" />
 
-          <div className="relative flex items-start justify-between gap-4 p-6">
+          <div className="relative flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="rounded-2xl shadow-sm ring-4 ring-neutral-50 dark:ring-neutral-950">
                 <BrandAvatar brand={brand} size="xl" className="shadow-inner" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-[19px] font-semibold text-neutral-900 dark:text-neutral-50 capitalize">{brand.brandName}</h1>
                   {brand.isTopBrand && (
                     <span className="flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-amber-600 dark:text-amber-400">
@@ -1499,7 +1953,7 @@ export default function BrandDetails({
                 </div>
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.5">
+            <div className="flex w-full shrink-0 flex-wrap items-center gap-2.5 sm:w-auto sm:justify-end">
               {!incomplete && (
                 <>
                   <RingStat
@@ -1524,13 +1978,13 @@ export default function BrandDetails({
             </div>
           </div>
 
-          {/* Quick-glance stat strip — visible no matter which tab is open */}
+          {/* Quick-glance stat strip — visible no matter which tab is open.
+              Only shows fields the header rings above don't already cover
+              (they already surface expiry days and outlet count). */}
           {!incomplete && (
-            <div className="relative flex flex-wrap gap-2 border-t border-neutral-200/80 px-6 py-3 dark:border-neutral-800/80">
+            <div className="relative flex flex-wrap gap-2 bg-neutral-50/70 px-6 py-3 dark:bg-neutral-950/40">
               <StatChip icon={BadgeCheck} value={brand.subscriptionPlan} label="Plan" tint="emerald" />
               <StatChip icon={CreditCard} value={brand.planPrice} label="Price" tint="violet" />
-              <StatChip icon={Calendar} value={`${brand.expiredInDays}d`} label="Expiry" tint="sky" />
-              <StatChip icon={Store} value={brand.subBrandCount} label="Sub-Brand" tint="amber" />
             </div>
           )}
 

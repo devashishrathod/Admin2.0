@@ -76,6 +76,21 @@ export function InfoRow({ icon: Icon, label, value }) {
   );
 }
 
+/* Small bento tile for a single label/value pair — used instead of a
+   divide-y line list wherever a detail dump (PAN/GST/Bank...) needs a
+   borderless, line-free card grid look. */
+export function DetailTile({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+    </div>
+  );
+}
+
 export function VerificationRow({ icon: Icon, label, value, verified }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">

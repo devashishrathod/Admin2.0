@@ -382,6 +382,22 @@ export async function deleteVoucher(voucherId) {
     }
 }
 
+// ── Admin: mark/unmark a voucher as "Suggested" ──────────────────
+// PUT {{TryDood2.0BaseUrl}}/vouchers/admin/suggestions/:voucherId
+// body when suggesting:   { isSuggested: true, suggestionOrder }
+// body when un-suggesting: { isSuggested: false }
+export async function updateVoucherSuggestion(voucherId, { isSuggested, suggestionOrder } = {}) {
+    try {
+        if (!voucherId) throw new Error('voucherId is required');
+        const body = { isSuggested: Boolean(isSuggested) };
+        if (isSuggested && suggestionOrder != null) body.suggestionOrder = suggestionOrder;
+        const { data } = await api.put(`/vouchers/admin/suggestions/${voucherId}`, body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 // ── Delete a single already-uploaded voucher image ──────────────
 // DELETE {{TryDood2.0BaseUrl}}/vouchers/:id/images/:imageId/delete
 // NOTE: not in the Postman screenshot — included as a convenience for the

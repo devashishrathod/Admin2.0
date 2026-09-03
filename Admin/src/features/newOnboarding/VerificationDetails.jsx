@@ -21,12 +21,13 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
-import { BrandAvatar, StatusBadge, InfoRow, SectionCard, EmptyState, ToggleSwitch, StatChip, RingStat } from "../brand/BrandShared";
+import { BrandAvatar, StatusBadge, SectionCard, EmptyState, ToggleSwitch, StatChip, RingStat } from "../brand/BrandShared";
 import { REJECTION_REASONS } from "../brand/data/BrandData";
 import { getBrandDetails } from "../brand/services/brandApi";
 import { mapBrandDetail } from "../brand/brandMapper";
 import { getVouchers } from "../voucher/services/VoucherApi";
 import { getVerificationHistory } from "./services/NewOnboardingApi";
+import { isNotFoundMessage } from "../../utils/helpers";
 
 const STATUS_LABELS = {
   APPROVED: "Approved",
@@ -53,6 +54,21 @@ function scoreColor(score) {
   if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
   if (score >= 50) return "text-amber-600 dark:text-amber-400";
   return "text-red-600 dark:text-red-400";
+}
+
+// Local bento-tile variant of BrandShared's InfoRow. Not reusing InfoRow
+// itself here since it's shared across other layouts that still want the
+// plain divider-row look.
+function DetailTile({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+    </div>
+  );
 }
 
 // Every automated check the backend ran for this attempt — the duplicate
@@ -396,7 +412,7 @@ export default function VerificationDetails({
         // — that's a normal empty state, not a real failure, so don't show
         // it as an error.
         if (!cancelled) {
-          if (/found/i.test(err.message)) setVouchers([]);
+          if (isNotFoundMessage(err.message)) setVouchers([]);
           else setVouchersError(err.message);
         }
       } finally {
@@ -1037,14 +1053,14 @@ export default function VerificationDetails({
 
             {/* Brand */}
             <SectionCard title="Brand">
-              <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-                <InfoRow icon={Hash} label="Merchant ID" value={brand.merchantId || "—"} />
-                <InfoRow icon={Phone} label="Mobile" value={brand.mobile || "—"} />
-                <InfoRow icon={Phone} label="WhatsApp" value={brand.whatsappNumber || "—"} />
-                <InfoRow icon={Mail} label="Email" value={brand.email || "—"} />
-                <InfoRow icon={Store} label="Entity Type" value={brand.businessEntityType || "—"} />
-                <InfoRow icon={Store} label="Registration" value={brand.businessRegistrationStatus || "—"} />
-                <InfoRow icon={RotateCcw} label="Verification Attempts" value={brand.verificationAttemptCount ?? 0} />
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <DetailTile icon={Hash} label="Merchant ID" value={brand.merchantId || "—"} />
+                <DetailTile icon={Phone} label="Mobile" value={brand.mobile || "—"} />
+                <DetailTile icon={Phone} label="WhatsApp" value={brand.whatsappNumber || "—"} />
+                <DetailTile icon={Mail} label="Email" value={brand.email || "—"} />
+                <DetailTile icon={Store} label="Entity Type" value={brand.businessEntityType || "—"} />
+                <DetailTile icon={Store} label="Registration" value={brand.businessRegistrationStatus || "—"} />
+                <DetailTile icon={RotateCcw} label="Verification Attempts" value={brand.verificationAttemptCount ?? 0} />
               </div>
             </SectionCard>
 

@@ -68,11 +68,11 @@ export default function Table({
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-[13.5px]" style={{ minWidth: minWidth ? `${minWidth}px` : undefined }}>
           <thead>
-            <tr className="bg-neutral-50/70 dark:bg-neutral-950/40">
+            <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-5 py-4 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 ${alignClass(
+                  className={`px-5 py-4 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
                     col.align
                   )} ${col.width || ""}`}
                 >
@@ -95,7 +95,7 @@ export default function Table({
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/30"
+                  className="transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/40"
                 >
                   {columns.map((col) => (
                     <td

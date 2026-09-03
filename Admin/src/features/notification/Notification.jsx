@@ -6,7 +6,6 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle2,
-  Smartphone,
   Radio,
   FlaskConical,
   Users,
@@ -18,7 +17,7 @@ import {
   Info,
   Eye,
 } from "lucide-react";
-import { sendTestPush, broadcastNotification } from "./services/NotificationApi";
+import { broadcastNotification } from "./services/NotificationApi";
 import { registerDeviceToken, unregisterDeviceToken } from "./services/DeviceTokenApi";
 import { getPushToken, getBrowserDeviceId, FCM_TOKEN_STORAGE_KEY } from "../../config/firebaseMessaging";
 
@@ -61,18 +60,38 @@ function StepLabel({ n, children }) {
 /* -------------------------------------------------------------------------
  * Push Setup — registers/unregisters this admin's own browser as a push
  * device via Firebase (config/firebaseMessaging.js) + POST/PUT
- * /deviceTokens/register|unregister. Test Push (below) sends to whatever
- * device is registered here, so without this step it has nothing to hit.
+ * /deviceTokens/register|unregister. Broadcasts (below) with "Send push"
+ * checked reach whatever device is registered here.
  * ---------------------------------------------------------------------- */
 const FCM_TOKEN_IS_REAL_KEY = "trydood-admin-fcm-token-is-real";
+
+function BentoFact({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-950/60 p-3.5">
+      <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
+        <Icon size={14} />
+      </span>
+      <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">{label}</p>
+      <p className="mt-0.5 truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">{value}</p>
+    </div>
+  );
+}
 
 function PushSetupCard() {
   const [token, setToken] = useState(() => localStorage.getItem(FCM_TOKEN_STORAGE_KEY) || "");
   const [isReal, setIsReal] = useState(() => localStorage.getItem(FCM_TOKEN_IS_REAL_KEY) === "true");
+  const [deviceId] = useState(() => getBrowserDeviceId());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const registered = Boolean(token);
+  const browserLabel = navigator.userAgent.includes("Chrome")
+    ? "Chrome"
+    : navigator.userAgent.includes("Firefox")
+    ? "Firefox"
+    : navigator.userAgent.includes("Safari")
+    ? "Safari"
+    : "This browser";
 
   const handleEnable = async () => {
     setBusy(true);
@@ -121,54 +140,61 @@ function PushSetupCard() {
   };
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${registered ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"}`}>
-            {registered ? <Bell size={17} /> : <BellOff size={17} />}
-          </span>
-          <div>
-            <p className="text-[14.5px] font-semibold text-neutral-800 dark:text-neutral-100">Push Setup (this browser)</p>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-              {registered
-                ? isReal
-                  ? "This browser is registered — Test Push below will reach it."
-                  : "Registered with a placeholder token — the device row exists, but it can't receive real push yet."
-                : "Register this browser to receive push here, and to make Test Push work."}
-            </p>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
+      <div className="col-span-2 row-span-2 rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${registered ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"}`}>
+              {registered ? <Bell size={17} /> : <BellOff size={17} />}
+            </span>
+            <div>
+              <p className="text-[14.5px] font-semibold text-neutral-800 dark:text-neutral-100">Push Setup (this browser)</p>
+              <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
+                {registered
+                  ? isReal
+                    ? "This browser is registered and can receive real push."
+                    : "Registered with a placeholder token — the device row exists, but it can't receive real push yet."
+                  : "Register this browser so broadcasts with push enabled can reach it."}
+              </p>
+            </div>
           </div>
+
+          <button
+            onClick={registered ? handleDisable : handleEnable}
+            disabled={busy}
+            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+              registered
+                ? "border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                : "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
+            }`}
+          >
+            {busy && <Loader2 size={13} className="animate-spin" />}
+            {registered ? "Disable" : "Enable Push"}
+          </button>
         </div>
 
-        <button
-          onClick={registered ? handleDisable : handleEnable}
-          disabled={busy}
-          className={`flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-            registered
-              ? "border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              : "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
-          }`}
-        >
-          {busy && <Loader2 size={13} className="animate-spin" />}
-          {registered ? "Disable" : "Enable Push"}
-        </button>
+        {registered && !isReal && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-3.5 py-2.5 text-[12.5px] text-amber-600 dark:text-amber-400">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            No VAPID key set yet, so this registered with a placeholder token (not a real FCM token). The API
+            call works and shows up in the backend, but push won't actually deliver here until{" "}
+            <code className="rounded bg-neutral-200 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">VITE_FIREBASE_VAPID_KEY</code> is
+            set and this is re-enabled.
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/[0.06] px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            {error}
+          </div>
+        )}
       </div>
 
-      {registered && !isReal && (
-        <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-3.5 py-2.5 text-[12.5px] text-amber-600 dark:text-amber-400">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-          No VAPID key set yet, so this registered with a placeholder token (not a real FCM token). The API
-          call works and shows up in the backend, but Test Push won't actually deliver here until{" "}
-          <code className="rounded bg-neutral-200 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">VITE_FIREBASE_VAPID_KEY</code> is
-          set and this is re-enabled.
-        </div>
-      )}
-
-      {error && (
-        <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/[0.06] px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-          {error}
-        </div>
-      )}
+      <BentoFact icon={Radio} label="Status" value={registered ? "Registered" : "Not Registered"} />
+      <BentoFact icon={Globe} label="Browser" value={browserLabel} />
+      <BentoFact icon={ShieldCheck} label="Token Type" value={registered ? (isReal ? "Real FCM" : "Placeholder") : "—"} />
+      <BentoFact icon={Users} label="Device ID" value={deviceId.replace("web_", "").slice(0, 13)} />
     </div>
   );
 }
@@ -302,86 +328,6 @@ function UserPicker({ selected, onChange }) {
         )}
       </div>
       <p className="mt-1.5 text-[11px] text-neutral-400 dark:text-neutral-600">Placeholder list — will switch to live user search once that API exists.</p>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
- * Test Push — POST /deviceTokens/test, sends to the logged-in admin's own
- * registered devices only. Fully wired to the real backend.
- * ---------------------------------------------------------------------- */
-function TestPushCard() {
-  const [title, setTitle] = useState("Test notification");
-  const [body, setBody] = useState("If you can read this, push notifications are working.");
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState(null); // { tone: 'success' | 'warning' | 'error', message }
-
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!title.trim() || !body.trim() || sending) return;
-    setSending(true);
-    setResult(null);
-    try {
-      const data = await sendTestPush({ title: title.trim(), body: body.trim() });
-      const stale = data?.staleTokens?.length > 0 || data?.message?.toLowerCase().includes("stale");
-      setResult({
-        tone: stale ? "warning" : "success",
-        message: data?.message || (stale ? "Reached the provider, but the token was stale." : "Push delivered to your devices."),
-      });
-    } catch (err) {
-      setResult({ tone: "error", message: err.message });
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const toneStyles = {
-    success: "border-emerald-400/30 bg-emerald-400/[0.06] text-emerald-600 dark:text-emerald-400",
-    warning: "border-amber-400/30 bg-amber-400/[0.06] text-amber-600 dark:text-amber-400",
-    error: "border-red-500/30 bg-red-500/[0.06] text-red-600 dark:text-red-400",
-  };
-  const ToneIcon = result?.tone === "success" ? CheckCircle2 : AlertTriangle;
-
-  return (
-    <div className="rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
-          <Smartphone size={17} />
-        </span>
-        <div>
-          <p className="text-[14.5px] font-semibold text-neutral-800 dark:text-neutral-100">Test Push</p>
-          <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-            Sends to your own registered devices only — use this to confirm push is configured before broadcasting.
-          </p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSend} className="mt-4 space-y-3">
-        <Field label="Title" required>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required className={inputClass} />
-        </Field>
-        <Field label="Body" required>
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} required className={inputClass} />
-        </Field>
-
-        {result && (
-          <div className={`flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] ${toneStyles[result.tone]}`}>
-            <ToneIcon size={13} className="mt-0.5 shrink-0" />
-            {result.message}
-          </div>
-        )}
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={sending}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-            {sending ? "Sending…" : "Send Test Push"}
-          </button>
-        </div>
-      </form>
     </div>
   );
 }
@@ -701,15 +647,12 @@ export default function Notification() {
           </span>
           <div>
             <h1 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Notifications</h1>
-            <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">Push notification testing and broadcast tools.</p>
+            <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">Push notification setup and broadcast tools.</p>
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <PushSetupCard />
-            <TestPushCard />
-          </div>
+          <PushSetupCard />
           <BroadcastSection />
         </div>
       </div>

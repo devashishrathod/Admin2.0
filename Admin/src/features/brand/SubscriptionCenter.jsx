@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   X,
   Gift,
@@ -14,8 +14,13 @@ import {
   Download,
   ChevronRight,
   Receipt,
+  ShieldCheck,
+  Clock3,
+  IndianRupee,
+  Wallet,
 } from "lucide-react";
-import { Field, inputClass, SectionCard, CollapsibleSectionCard, EmptyState, StatusBadge, InfoRow } from "./BrandShared";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
+import { Field, inputClass, SectionCard, CollapsibleSectionCard, EmptyState, StatusBadge, DetailTile } from "./BrandShared";
 import { getPlans } from "../plan/services/planApi";
 import { grantSubscription, cancelSubscription } from "./services/subscriptionApi";
 
@@ -406,13 +411,57 @@ function PriceStat({ label, value, accent = false }) {
 
 /* -------------------------------------------------------------------------
  * SubscriptionTab — current plan summary, grant/downgrade/cancel actions,
- * and the grant/payment history feed.
+ * and the grant/payment history feed. Styled to match the platform-wide
+ * Subscriptions list page: a small stat row, then a gradient hero card
+ * with an embedded share-style donut, next to a white chart card.
  * ---------------------------------------------------------------------- */
+const PRICING_SLICE_COLORS = ["#34d399", "#f59e0b", "#38bdf8"];
+
+const STAT_TINTS = {
+  emerald: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
+  amber: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
+  sky: "bg-sky-400/10 text-sky-600 dark:text-sky-400",
+  violet: "bg-violet-400/10 text-violet-600 dark:text-violet-400",
+};
+
+function StatTile({ icon: Icon, label, value, tint = "emerald" }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${STAT_TINTS[tint]}`}>
+        <Icon size={16} />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[16px] font-bold leading-tight text-neutral-900 dark:text-neutral-50">{value}</p>
+        <p className="truncate text-[11px] text-neutral-500">{label}</p>
+      </div>
+    </div>
+  );
+}
+
 export function SubscriptionTab({ brand, onUpdate }) {
   const [modalAction, setModalAction] = useState(null); // null | 'free' | 'offline' | 'downgrade' | 'change-tier'
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const pricing = brand.subscriptionDetail?.pricing;
+
+  const pricingBreakdown = useMemo(() => {
+    if (!pricing) return [];
+    return [
+      { name: "Taxable Value", value: Number(pricing.taxableValue) || 0 },
+      { name: "GST", value: Number(pricing.gstAmount) || 0 },
+      { name: "You Saved", value: Number(pricing.youSaved) || 0 },
+    ].filter((d) => d.value > 0);
+  }, [pricing]);
+
+  const historyTrend = useMemo(() => {
+    if (!brand.invoices?.length) return [];
+    return [...brand.invoices]
+      .reverse()
+      .map((inv) => ({
+        date: inv.date,
+        amount: Number(String(inv.amount).replace(/[^\d.]/g, "")) || 0,
+      }));
+  }, [brand.invoices]);
 
   const recordHistory = (entry) => {
     const history = [entry, ...(brand.invoices || [])];
@@ -457,52 +506,121 @@ export function SubscriptionTab({ brand, onUpdate }) {
         </div>
       )}
 
-      <SectionCard title="Current Plan">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-[15px] font-semibold text-neutral-800 dark:text-neutral-100">{brand.subscriptionPlan}</p>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500">
-              {brand.planPrice} · {brand.subscriptionTerm}
-            </p>
-          </div>
-          <StatusBadge status={brand.status} activeLabel="Active" />
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        <StatTile icon={ShieldCheck} tint="emerald" label="Status" value={brand.status} />
+        <StatTile icon={Clock3} tint="amber" label="Days Left" value={brand.expiredInDays > 0 ? brand.expiredInDays : "—"} />
+        <StatTile
+          icon={IndianRupee}
+          tint="sky"
+          label="Paid"
+          value={brand.subscriptionDetail ? `₹${Number(brand.subscriptionDetail.paidAmount || 0).toLocaleString("en-IN")}` : "—"}
+        />
+        <StatTile
+          icon={Wallet}
+          tint="violet"
+          label="Due"
+          value={brand.subscriptionDetail ? `₹${Number(brand.subscriptionDetail.dueAmount || 0).toLocaleString("en-IN")}` : "—"}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
+        <div className="relative col-span-2 row-span-2 flex flex-col justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-5 text-white">
+          <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-white/10" />
+          <p className="relative text-[10.5px] font-medium uppercase tracking-wider text-emerald-100">Current Plan</p>
+          <p className="relative mt-1.5 truncate text-[20px] font-bold leading-tight">{brand.subscriptionPlan || "—"}</p>
+          <p className="relative mt-1 text-[12.5px] text-emerald-100">
+            {brand.planPrice || "—"} · {brand.subscriptionTerm || "—"}
+          </p>
+          <span className="relative mt-3 w-fit rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold">{brand.status}</span>
         </div>
-        {brand.expiredInDays > 0 && (
-          <div className="mt-4">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] text-neutral-500">Renewal Window</p>
-              <p className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-300">{brand.expiredInDays} days left</p>
+
+        <div className="rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Renewal</p>
+          {brand.expiredInDays > 0 ? (
+            <div className="relative mt-1 flex h-[64px] items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: "left", value: brand.remainderPercent },
+                      { name: "used", value: 100 - brand.remainderPercent },
+                    ]}
+                    dataKey="value"
+                    innerRadius={20}
+                    outerRadius={30}
+                    stroke="none"
+                  >
+                    <Cell fill="#34d399" />
+                    <Cell fill="#e5e7eb" opacity={0.6} />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold text-neutral-800 dark:text-neutral-100">
+                {brand.expiredInDays}d
+              </div>
             </div>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-lime-400"
-                style={{ width: `${brand.remainderPercent}%` }}
-              />
+          ) : (
+            <p className="mt-3 text-[13px] font-semibold text-neutral-400">—</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Price Split</p>
+          {pricingBreakdown.length ? (
+            <div className="relative flex h-[64px] items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pricingBreakdown} dataKey="value" innerRadius={20} outerRadius={30} paddingAngle={3} stroke="none">
+                    {pricingBreakdown.map((entry, i) => (
+                      <Cell key={entry.name} fill={PRICING_SLICE_COLORS[i % PRICING_SLICE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v, n) => [`₹${Number(v).toLocaleString("en-IN")}`, n]}
+                    contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        )}
-      </SectionCard>
+          ) : (
+            <p className="mt-3 text-[13px] font-semibold text-neutral-400">—</p>
+          )}
+        </div>
+
+        <StatTile
+          icon={IndianRupee}
+          tint="emerald"
+          label="Total Payable"
+          value={pricing ? `₹${Number(pricing.totalPayable).toLocaleString("en-IN")}` : "—"}
+        />
+        <StatTile
+          icon={Wallet}
+          tint="sky"
+          label="You Saved"
+          value={pricing ? `₹${Number(pricing.youSaved || 0).toLocaleString("en-IN")}` : "—"}
+        />
+      </div>
 
       {brand.subscriptionDetail && (
         <CollapsibleSectionCard title="Subscription Details" defaultOpen={false}>
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            <InfoRow icon={Receipt} label="Subscription ID" value={brand.subscriptionDetail.subscriptionId} />
-            <InfoRow icon={Receipt} label="Transaction ID" value={brand.subscriptionDetail.transactionId} />
-            <InfoRow icon={Calendar} label="Duration" value={`${brand.subscriptionDetail.durationInDays} days`} />
-            <InfoRow icon={Calendar} label="Start Date" value={brand.subscriptionDetail.startDateDisplay} />
-            <InfoRow icon={Calendar} label="End Date" value={brand.subscriptionDetail.endDateDisplay} />
-            <InfoRow icon={Calendar} label="Activated At" value={brand.subscriptionDetail.activatedAtDisplay} />
-            <InfoRow icon={FileText} label="Price" value={`₹${Number(brand.subscriptionDetail.price).toLocaleString("en-IN")}`} />
-            <InfoRow icon={FileText} label="Discount" value={`₹${Number(brand.subscriptionDetail.discount).toLocaleString("en-IN")}`} />
-            <InfoRow icon={FileText} label="Paid Amount" value={`₹${Number(brand.subscriptionDetail.paidAmount).toLocaleString("en-IN")}`} />
-            <InfoRow icon={FileText} label="Due Amount" value={`₹${Number(brand.subscriptionDetail.dueAmount).toLocaleString("en-IN")}`} />
-            <InfoRow icon={ArrowLeftRight} label="Source" value={brand.subscriptionDetail.source} />
-            <InfoRow icon={TrendingDown} label="Number of Upgrades" value={brand.subscriptionDetail.numberOfUpgrade} />
-            <InfoRow icon={Calendar} label="Forfeited Days" value={brand.subscriptionDetail.forfeitedDays} />
-            <InfoRow icon={FileText} label="Forfeited Value" value={`₹${Number(brand.subscriptionDetail.forfeitedValue).toLocaleString("en-IN")}`} />
-            <InfoRow icon={FileText} label="Reminders Sent" value={brand.subscriptionDetail.remindersSentCount} />
-            <InfoRow icon={Calendar} label="Created" value={brand.subscriptionDetail.createdAtDisplay} />
-            <InfoRow icon={Calendar} label="Last Updated" value={brand.subscriptionDetail.updatedAtDisplay} />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <DetailTile icon={Receipt} label="Subscription ID" value={brand.subscriptionDetail.subscriptionId} />
+            <DetailTile icon={Receipt} label="Transaction ID" value={brand.subscriptionDetail.transactionId} />
+            <DetailTile icon={Calendar} label="Duration" value={`${brand.subscriptionDetail.durationInDays} days`} />
+            <DetailTile icon={Calendar} label="Start Date" value={brand.subscriptionDetail.startDateDisplay} />
+            <DetailTile icon={Calendar} label="End Date" value={brand.subscriptionDetail.endDateDisplay} />
+            <DetailTile icon={Calendar} label="Activated At" value={brand.subscriptionDetail.activatedAtDisplay} />
+            <DetailTile icon={FileText} label="Price" value={`₹${Number(brand.subscriptionDetail.price).toLocaleString("en-IN")}`} />
+            <DetailTile icon={FileText} label="Discount" value={`₹${Number(brand.subscriptionDetail.discount).toLocaleString("en-IN")}`} />
+            <DetailTile icon={FileText} label="Paid Amount" value={`₹${Number(brand.subscriptionDetail.paidAmount).toLocaleString("en-IN")}`} />
+            <DetailTile icon={FileText} label="Due Amount" value={`₹${Number(brand.subscriptionDetail.dueAmount).toLocaleString("en-IN")}`} />
+            <DetailTile icon={ArrowLeftRight} label="Source" value={brand.subscriptionDetail.source} />
+            <DetailTile icon={TrendingDown} label="Number of Upgrades" value={brand.subscriptionDetail.numberOfUpgrade} />
+            <DetailTile icon={Calendar} label="Forfeited Days" value={brand.subscriptionDetail.forfeitedDays} />
+            <DetailTile icon={FileText} label="Forfeited Value" value={`₹${Number(brand.subscriptionDetail.forfeitedValue).toLocaleString("en-IN")}`} />
+            <DetailTile icon={FileText} label="Reminders Sent" value={brand.subscriptionDetail.remindersSentCount} />
+            <DetailTile icon={Calendar} label="Created" value={brand.subscriptionDetail.createdAtDisplay} />
+            <DetailTile icon={Calendar} label="Last Updated" value={brand.subscriptionDetail.updatedAtDisplay} />
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
@@ -627,7 +745,24 @@ export function SubscriptionTab({ brand, onUpdate }) {
         {!brand.invoices?.length ? (
           <EmptyState label="No invoices or grants recorded yet." />
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
+            {historyTrend.length > 1 && historyTrend.some((d) => d.amount > 0) && (
+              <SectionCard title="Amount Over Time">
+                <div className="h-[110px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={historyTrend} barCategoryGap="30%">
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Amount"]}
+                        contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
+                      />
+                      <Bar dataKey="amount" fill="#34d399" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </SectionCard>
+            )}
+            <div className="space-y-2.5">
             {brand.invoices.map((inv) => (
               <div
                 key={inv.id}
@@ -655,6 +790,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
                 </div>
               </div>
             ))}
+            </div>
           </div>
         )}
       </div>

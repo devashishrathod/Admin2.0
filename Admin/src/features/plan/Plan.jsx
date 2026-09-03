@@ -15,6 +15,7 @@ import {
   Loader2,
   Eye,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, LabelList } from "recharts";
 import PlanDetails from "./PlanDetails";
 import {
   getPlans,
@@ -143,6 +144,22 @@ function Field({ label, children }) {
 const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
+/* Small colored-dot legend under a donut chart — so a mix with only one
+ * populated segment still reads as "N Active, 0 Inactive" instead of a
+ * plain, unlabeled ring. */
+function MixLegend({ items }) {
+  return (
+    <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
+      {items.map((item) => (
+        <span key={item.name} className="flex items-center gap-1.5 text-[11px] text-neutral-600 dark:text-neutral-400">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+          {item.name} · {item.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------
  * Plan card
  * ---------------------------------------------------------------------- */
@@ -150,114 +167,96 @@ const inputClass =
 function PlanCard({ plan, onView, onEdit, onDelete }) {
   const hasDiscount = plan.strikePrice || Number(plan.discountPercent) > 0;
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+    <div
+      className={`relative flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${
+        plan.popular ? "ring-1 ring-emerald-400/60" : ""
+      }`}
+    >
       {plan.popular && (
-        <span className="absolute left-5 top-4 z-10 flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-700 shadow-sm">
+        <span className="absolute -top-3 left-5 flex items-center gap-1 rounded-full bg-emerald-400 px-2.5 py-0.5 text-[10.5px] font-semibold text-neutral-950">
           <Star size={10} fill="currentColor" />
           Most Popular
         </span>
       )}
 
-      {/* Balance-card style hero — bright green, decorative rings, big price */}
-      <div
-        className={`relative overflow-hidden p-5 pb-6 text-neutral-950 ${
-          plan.status === "Active" ? "bg-gradient-to-br from-emerald-400 to-emerald-500" : "bg-gradient-to-br from-neutral-300 to-neutral-400"
-        }`}
-      >
-        <div className="pointer-events-none absolute -left-12 -top-14 h-40 w-40 rounded-full border-[14px] border-white/15" />
-        <div className="pointer-events-none absolute -bottom-16 -right-10 h-48 w-48 rounded-full border-[14px] border-white/15" />
-        <div className="pointer-events-none absolute bottom-3 left-16 h-14 w-14 rounded-full bg-white/10" />
-
-        <div className="relative flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold text-neutral-950/80">{plan.name}</p>
-            <p className="mt-0.5 truncate text-[11px] text-neutral-950/55">{plan.description || "No description"}</p>
-          </div>
-          <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 ${
-              plan.status === "Active" ? "text-emerald-700" : "text-neutral-600"
-            }`}
-          >
-            {plan.status === "Active" ? <Check size={14} /> : <X size={14} />}
-          </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h3>
+          <p className="mt-0.5 truncate text-[12px] text-neutral-500">{plan.description || "No description"}</p>
         </div>
-
-        <div className="relative mt-5 flex items-end gap-1.5">
-          <span className="text-[30px] font-bold leading-none tracking-tight">
-            ₹{Number(plan.price || 0).toLocaleString("en-IN")}
-          </span>
-          <span className="mb-0.5 text-[12px] font-bold uppercase text-neutral-950/60">
-            {plan.type === "MONTHLY" ? "/mo" : "/yr"}
-          </span>
-        </div>
-
-        {hasDiscount && (
-          <div className="relative mt-1.5 flex items-center gap-2">
-            {plan.strikePrice ? (
-              <span className="text-[11.5px] text-neutral-950/50 line-through">
-                ₹{Number(plan.strikePrice).toLocaleString("en-IN")}
-              </span>
-            ) : null}
-            {Number(plan.discountPercent) > 0 ? (
-              <span className="rounded-md bg-neutral-950/10 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-950/80">
-                {plan.discountType === "PERCENT" ? `${plan.discountPercent}% OFF` : `₹${plan.discountPercent} OFF`}
-              </span>
-            ) : null}
-          </div>
-        )}
-
-        <div className="relative mt-5 flex items-center gap-2">
-          <button
-            onClick={() => onView(plan)}
-            className="flex items-center justify-center gap-1 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
-          >
-            <Eye size={12} />
-            View
-          </button>
-          <button
-            onClick={() => onEdit(plan)}
-            className="flex items-center justify-center gap-1 rounded-full bg-neutral-950 px-3.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-neutral-800"
-          >
-            <Pencil size={12} />
-            Edit
-          </button>
-        </div>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+            plan.status === "Active"
+              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
+          }`}
+        >
+          {plan.status}
+        </span>
       </div>
 
-      {/* Benefits / limitations — white footer */}
-      <div className="relative p-5 pt-4">
+      <div className="mt-4 flex items-baseline gap-2">
+        <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">
+          ₹{Number(plan.price || 0).toLocaleString("en-IN")}
+        </span>
+        <span className="text-[12px] text-neutral-500">/{plan.type === "MONTHLY" ? "mo" : "yr"}</span>
+      </div>
+      {hasDiscount && (
+        <div className="mt-1 flex items-center gap-2">
+          {plan.strikePrice ? (
+            <span className="rounded-md bg-neutral-200 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-500 line-through dark:bg-neutral-800 dark:text-neutral-400">
+              ₹{Number(plan.strikePrice).toLocaleString("en-IN")}
+            </span>
+          ) : null}
+          {Number(plan.discountPercent) > 0 ? (
+            <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+              {plan.discountType === "PERCENT"
+                ? `${Math.round(Number(plan.discountPercent))}% OFF`
+                : `₹${Number(plan.discountPercent).toLocaleString("en-IN")} OFF`}
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {(plan.benefits.length > 0 || plan.limitations.length > 0) && (
+        <div className="mt-4 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          {plan.benefits.slice(0, 2).map((b, i) => (
+            <p key={i} className="flex items-start gap-1.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+              <ThumbsUp size={11} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              {b}
+            </p>
+          ))}
+          {plan.limitations.slice(0, 1).map((l, i) => (
+            <p key={i} className="mt-1 flex items-start gap-1.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+              <ThumbsDown size={11} className="mt-0.5 shrink-0 text-red-600/70 dark:text-red-400/70" />
+              {l}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-5 flex items-center gap-2 pt-1">
+        <button
+          onClick={() => onView(plan)}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-sky-400/60 hover:text-sky-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-sky-400"
+        >
+          <Eye size={13} />
+          View
+        </button>
+        <button
+          onClick={() => onEdit(plan)}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
+        >
+          <Pencil size={13} />
+          Edit
+        </button>
         <button
           onClick={() => onDelete(plan)}
-          aria-label="Delete plan"
-          className="absolute right-4 top-3 flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-500 dark:text-neutral-500"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-red-500/60 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-red-400"
         >
           <Trash2 size={13} />
+          Delete
         </button>
-
-        {plan.benefits.length > 0 && (
-          <ul className="space-y-1.5 pr-8">
-            {plan.benefits.slice(0, 3).map((b, i) => (
-              <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-500 dark:text-neutral-400">
-                <ThumbsUp size={12} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                {b}
-              </li>
-            ))}
-            {plan.benefits.length > 3 && (
-              <li className="text-[11.5px] text-neutral-600">+{plan.benefits.length - 3} more</li>
-            )}
-          </ul>
-        )}
-
-        {plan.limitations.length > 0 && (
-          <ul className="mt-2 space-y-1.5">
-            {plan.limitations.slice(0, 2).map((l, i) => (
-              <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-600">
-                <ThumbsDown size={12} className="mt-0.5 shrink-0 text-red-600/70 dark:text-red-400/70" />
-                {l}
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </div>
   );
@@ -1075,6 +1074,23 @@ export default function Plan() {
     return <PlanDetails planId={viewingPlanId} onBack={() => setViewingPlanId(null)} />;
   }
 
+  const statusMix = [
+    { name: "Active", value: plans.filter((p) => p.status === "Active").length, color: "#34d399" },
+    { name: "Inactive", value: plans.filter((p) => p.status !== "Active").length, color: "#d4d4d4" },
+  ];
+
+  const priceCompare = plans.map((p) => ({ name: p.name, price: Number(p.price) || 0 }));
+
+  const billingMix = [
+    { name: "Monthly", value: plans.filter((p) => p.type === "MONTHLY").length, color: "#38bdf8" },
+    { name: "Yearly", value: plans.filter((p) => p.type !== "MONTHLY").length, color: "#34d399" },
+  ];
+
+  const featureCoverage = plans.map((p) => ({
+    name: p.name,
+    available: p.features.filter((f) => f.available).length,
+  }));
+
   return (
     <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
@@ -1113,6 +1129,88 @@ export default function Plan() {
 
         {!loading && !loadError && (
           <>
+            {/* Charts — one row, four equal cards */}
+            {plans.length > 0 && (
+              <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
+                  <div className="relative flex h-[110px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
+                          {statusMix.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-100">{plans.length}</p>
+                      <p className="text-[9.5px] text-neutral-500">Plans</p>
+                    </div>
+                  </div>
+                  <MixLegend items={statusMix} />
+                </div>
+
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Billing Type Mix</p>
+                  <div className="relative flex h-[110px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={billingMix} dataKey="value" nameKey="name" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
+                          {billingMix.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-100">{plans.length}</p>
+                      <p className="text-[9.5px] text-neutral-500">Plans</p>
+                    </div>
+                  </div>
+                  <MixLegend items={billingMix} />
+                </div>
+
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Price Comparison</p>
+                  <div className="h-[150px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={priceCompare} barCategoryGap="30%" margin={{ top: 18, left: 0, right: 0, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 9.5, fill: "#a3a3a3" }} axisLine={false} tickLine={false} interval={0} />
+                        <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Price"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                        <Bar dataKey="price" fill="#34d399" radius={[6, 6, 0, 0]}>
+                          <LabelList
+                            dataKey="price"
+                            position="top"
+                            formatter={(v) => `₹${Number(v).toLocaleString("en-IN")}`}
+                            style={{ fontSize: 9.5, fill: "#525252" }}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Feature Coverage</p>
+                  <div className="h-[150px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={featureCoverage} barCategoryGap="30%" margin={{ top: 18, left: 0, right: 0, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 9.5, fill: "#a3a3a3" }} axisLine={false} tickLine={false} interval={0} />
+                        <Tooltip formatter={(v) => [`${v} feature${v === 1 ? "" : "s"}`, "Available"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                        <Bar dataKey="available" fill="#38bdf8" radius={[6, 6, 0, 0]}>
+                          <LabelList dataKey="available" position="top" style={{ fontSize: 9.5, fill: "#525252" }} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Plan cards */}
             <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {plans.map((plan) => (

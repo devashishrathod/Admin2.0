@@ -15,7 +15,11 @@ import {
   Gift,
   Headphones,
   Calendar,
+  ClipboardList,
+  IndianRupee,
+  ShieldCheck,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getPlanById } from "./services/planApi";
 import { normalizePlan } from "./Plan";
 import { RingStat } from "../brand/BrandShared";
@@ -63,6 +67,40 @@ function InfoRow({ icon: Icon, label, value }) {
   );
 }
 
+/* Small summary-report stat tile — used for the at-a-glance report row. */
+function SummaryStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+        <Icon size={14} />
+      </span>
+      <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">{label}</p>
+      <p className="mt-0.5 truncate text-[15px] font-semibold text-neutral-900 dark:text-neutral-100">{value}</p>
+    </div>
+  );
+}
+
+/* bento tile for the Features list — mirrors InfoRow's icon/label/value shape
+ * but also carries the per-feature availability icon. */
+function FeatureTile({ icon: Icon, label, value, available }) {
+  return (
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">
+        <span className="truncate">{value || "—"}</span>
+        {available ? (
+          <CheckCircle2 size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <XCircle size={13} className="shrink-0 text-red-500/70 dark:text-red-400/70" />
+        )}
+      </p>
+    </div>
+  );
+}
+
 export default function PlanDetails({ planId, onBack }) {
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -88,9 +126,39 @@ export default function PlanDetails({ planId, onBack }) {
     };
   }, [planId]);
 
+  const availableFeatures = plan?.features.filter((f) => f.available).length ?? 0;
+  const totalFeatures = plan?.features.length ?? 0;
+  const booleanEntitlements = plan
+    ? [
+        plan.entitlements.vouchers.isEnabled,
+        plan.entitlements.dealPack.isEnabled,
+        plan.entitlements.prioritySupport.isEnabled,
+        plan.entitlements.showcase.isEnabled,
+      ]
+    : [];
+  const enabledEntitlements = booleanEntitlements.filter(Boolean).length;
+  const savings =
+    plan && plan.strikePrice
+      ? Math.max(0, Number(plan.strikePrice) - Number(plan.price || 0))
+      : 0;
+
+  const featureCoverageData = totalFeatures
+    ? [
+        { name: "Available", value: availableFeatures },
+        { name: "Unavailable", value: totalFeatures - availableFeatures },
+      ].filter((d) => d.value > 0)
+    : [];
+
+  const entitlementsData = booleanEntitlements.length
+    ? [
+        { name: "Enabled", value: enabledEntitlements },
+        { name: "Disabled", value: booleanEntitlements.length - enabledEntitlements },
+      ].filter((d) => d.value > 0)
+    : [];
+
   return (
     <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -174,8 +242,8 @@ export default function PlanDetails({ planId, onBack }) {
                 {Number(plan.discountPercent) > 0 ? (
                   <span className="mb-1 rounded-md bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                     {plan.discountType === "PERCENT"
-                      ? `${plan.discountPercent}% OFF`
-                      : `₹${plan.discountPercent} OFF`}
+                      ? `${Math.round(Number(plan.discountPercent))}% OFF`
+                      : `₹${Number(plan.discountPercent).toLocaleString("en-IN")} OFF`}
                   </span>
                 ) : null}
               </div>
@@ -186,6 +254,95 @@ export default function PlanDetails({ planId, onBack }) {
                   Valid for {plan.durationInDays} days
                 </p>
               ) : null}
+            </div>
+
+            {/* Summary Report */}
+            <div>
+              <p className="mb-2.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Summary Report</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <SummaryStat icon={ClipboardList} label="Features" value={`${availableFeatures}/${totalFeatures}`} />
+                <SummaryStat icon={ThumbsUp} label="Benefits" value={plan.benefits.length} />
+                <SummaryStat icon={ThumbsDown} label="Limitations" value={plan.limitations.length} />
+                <SummaryStat icon={ShieldCheck} label="Entitlements" value={`${enabledEntitlements}/${booleanEntitlements.length}`} />
+                <SummaryStat
+                  icon={IndianRupee}
+                  label="You Save"
+                  value={savings > 0 ? `₹${savings.toLocaleString("en-IN")}` : "—"}
+                />
+              </div>
+            </div>
+
+            {/* Charts */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SectionCard title="Feature Coverage">
+                {featureCoverageData.length ? (
+                  <div className="relative flex h-[140px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={featureCoverageData}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius={40}
+                          outerRadius={58}
+                          paddingAngle={3}
+                          stroke="none"
+                        >
+                          {featureCoverageData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.name === "Available" ? "#34d399" : "#d4d4d4"} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-[18px] font-bold text-neutral-800 dark:text-neutral-100">
+                        {availableFeatures}/{totalFeatures}
+                      </p>
+                      <p className="text-[10px] text-neutral-500">Available</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="flex h-[140px] items-center justify-center text-[12.5px] text-neutral-500">
+                    No features added yet.
+                  </p>
+                )}
+              </SectionCard>
+
+              <SectionCard title="Entitlements Enabled">
+                {entitlementsData.length ? (
+                  <div className="relative flex h-[140px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={entitlementsData}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius={40}
+                          outerRadius={58}
+                          paddingAngle={3}
+                          stroke="none"
+                        >
+                          {entitlementsData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.name === "Enabled" ? "#38bdf8" : "#d4d4d4"} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-[18px] font-bold text-neutral-800 dark:text-neutral-100">
+                        {enabledEntitlements}/{booleanEntitlements.length}
+                      </p>
+                      <p className="text-[10px] text-neutral-500">Enabled</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="flex h-[140px] items-center justify-center text-[12.5px] text-neutral-500">
+                    No entitlements configured.
+                  </p>
+                )}
+              </SectionCard>
             </div>
 
             {/* Benefits / Limitations */}
@@ -224,22 +381,9 @@ export default function PlanDetails({ planId, onBack }) {
             {/* Features */}
             <SectionCard title="Features">
               {plan.features.length ? (
-                <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                   {plan.features.map((f) => (
-                    <div key={f.id} className="flex items-center justify-between py-2.5">
-                      <span className="flex items-center gap-2 text-[13px] text-neutral-700 dark:text-neutral-300">
-                        <ListChecks size={13} className="text-neutral-500" />
-                        {f.title || "—"}
-                      </span>
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-[12.5px] text-neutral-500">{f.value || "—"}</span>
-                        {f.available ? (
-                          <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <XCircle size={15} className="text-red-500/70 dark:text-red-400/70" />
-                        )}
-                      </div>
-                    </div>
+                    <FeatureTile key={f.id} icon={ListChecks} label={f.title || "—"} value={f.value} available={f.available} />
                   ))}
                 </div>
               ) : (
@@ -249,7 +393,7 @@ export default function PlanDetails({ planId, onBack }) {
 
             {/* Entitlements */}
             <SectionCard title="Entitlements">
-              <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
                 <InfoRow
                   icon={Store}
                   label="Sub Brands"

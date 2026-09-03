@@ -914,9 +914,9 @@ function CustomerDetail({
             {customer.transactions.length === 0 ? (
               <p className="p-5 text-[13px] text-neutral-500">No transactions yet.</p>
             ) : (
-              <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+              <ul className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2">
                 {customer.transactions.map((tx) => (
-                  <li key={tx.id} className="flex items-center justify-between px-4 py-3">
+                  <li key={tx.id} className="flex items-center justify-between rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
                     <div>
                       <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{tx.label}</p>
                       <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-neutral-500">
@@ -975,9 +975,9 @@ function CustomerDetail({
             {customer.reviews.length === 0 ? (
               <p className="p-5 text-[13px] text-neutral-500">This customer hasn't reviewed any brand yet.</p>
             ) : (
-              <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+              <ul className="grid grid-cols-1 gap-2 p-3">
                 {customer.reviews.map((rev) => (
-                  <li key={rev.id} className="px-4 py-3.5">
+                  <li key={rev.id} className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
                     <div className="flex items-center justify-between">
                       <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{rev.brand}</p>
                       <StarRating rating={rev.rating} />
@@ -1063,9 +1063,9 @@ function CustomerDetail({
               {(!customer.planHistory || customer.planHistory.length === 0) ? (
                 <p className="p-5 text-[13px] text-neutral-500">No previous plan changes on record.</p>
               ) : (
-                <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                <ul className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2">
                   {customer.planHistory.map((h) => (
-                    <li key={h.id} className="flex items-center gap-3 px-4 py-3">
+                    <li key={h.id} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
                       {h.type === "upgrade" && (
                         <ArrowUpCircle size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
                       )}

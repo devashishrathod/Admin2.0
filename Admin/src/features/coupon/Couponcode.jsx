@@ -351,12 +351,12 @@ function TypeIcon({ type, size = "md" }) {
 
 function InfoRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
-      <span className="flex items-center gap-2 text-[12.5px] text-neutral-500">
-        {Icon && <Icon size={13} />}
-        {label}
-      </span>
-      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value}</p>
     </div>
   );
 }
@@ -723,7 +723,7 @@ function ViewModal({ coupon, type, onClose, onApprove, onReject }) {
           </SectionCard>
 
           <SectionCard title="Discount Details">
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <InfoRow icon={Percent} label="Discount" value={formatDiscount(coupon)} />
               <InfoRow icon={IndianRupee} label="Min Purchase" value={formatRupee(coupon.minPurchase)} />
               <InfoRow icon={IndianRupee} label="Max Discount" value={formatRupee(coupon.maxDiscount)} />
@@ -732,7 +732,7 @@ function ViewModal({ coupon, type, onClose, onApprove, onReject }) {
           </SectionCard>
 
           <SectionCard title="Validity">
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <InfoRow icon={Calendar} label="Valid From" value={coupon.validFrom} />
               <InfoRow icon={Calendar} label="Valid To" value={coupon.validTo} />
               {isReview ? (

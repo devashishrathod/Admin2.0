@@ -45,6 +45,16 @@ function daysUntil(dateString) {
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
+// The list endpoint's embedded `subscription` doesn't return
+// `durationInDays` directly (only startDate/endDate/endsInDays) — derive it
+// from the date range instead of showing a dash when it's genuinely
+// computable from real data already on the record.
+function daysBetween(startDate, endDate) {
+  if (!startDate || !endDate) return null;
+  const diffMs = new Date(endDate).getTime() - new Date(startDate).getTime();
+  return diffMs > 0 ? Math.round(diffMs / (1000 * 60 * 60 * 24)) : null;
+}
+
 function formatDateTime(dateString) {
   if (!dateString) return '—';
   const d = new Date(dateString);
@@ -204,7 +214,11 @@ function computeRemainderPercentFromDates(startDate, endDate) {
    whichever fields are present on either the list or detail payload. */
 function deriveBrandStatus(raw) {
   if (raw.isRejected || raw.status === 'REJECTED') return 'Rejected';
-  if (raw.status === 'PENDING' || raw.isApproved === false) return 'Pending';
+  if (raw.isRevoked || raw.status === 'REVOKED') return 'Revoked';
+  // `isApproved` stays false even on revoked/rejected/deactivated brands —
+  // it only means "has an admin ever approved this", not "still pending" —
+  // so PENDING must be judged from `status` alone, not `isApproved`.
+  if (raw.status === 'PENDING') return 'Pending';
 
   const endsInDays =
     raw.subscription?.endsInDays ??
@@ -259,9 +273,10 @@ export function mapBrandListItem(raw) {
     planPrice: raw.subscription?.paidAmount != null ? formatCurrency(raw.subscription.paidAmount) : '—',
     planType: raw.subscription?.planType || 'Annual',
     subscriptionPlan: raw.subscription?.planName || '—',
-    subscriptionTerm: raw.subscription?.durationInDays
-      ? formatDurationTerm(raw.subscription.durationInDays)
-      : '—',
+    subscriptionTerm: (() => {
+      const days = raw.subscription?.durationInDays ?? daysBetween(raw.subscription?.startDate, raw.subscription?.endDate);
+      return days ? formatDurationTerm(days) : '—';
+    })(),
     expiredInDays: raw.subscription?.endsInDays ?? 0,
     remainderPercent: raw.subscription?.startDate
       ? computeRemainderPercentFromDates(raw.subscription.startDate, raw.subscription.endDate)

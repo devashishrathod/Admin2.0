@@ -6,6 +6,7 @@ import {
   updateTopBrand,
 } from "./services/brandApi";
 import { mapBrandListItem, mapBrandDetail } from "./brandMapper";
+import { getPlanById } from "../plan/services/planApi";
 
 /* -------------------------------------------------------------------------
  * BrandContext.jsx
@@ -52,6 +53,21 @@ export function BrandProvider({ children }) {
     try {
       const res = await getBrandDetails(id);
       const detailed = mapBrandDetail(res?.data || res);
+
+      // /brands/get only returns the subscribed record's `subscriptionId`,
+      // not an expanded plan — look the plan up so "Plan" doesn't show as a
+      // dash everywhere it's displayed (header chip, Subscription tab).
+      const subscriptionId = detailed.subscriptionDetail?.subscriptionId;
+      if (subscriptionId && subscriptionId !== "—" && detailed.subscriptionPlan === "—") {
+        try {
+          const planRes = await getPlanById(subscriptionId);
+          const planData = planRes?.data?.plan ?? planRes?.data ?? planRes?.plan ?? planRes;
+          if (planData?.name) detailed.subscriptionPlan = planData.name;
+        } catch {
+          // Best-effort — keep the dash if the plan lookup fails.
+        }
+      }
+
       setBrands((prev) => {
         const exists = prev.some((b) => b.id === detailed.id);
         return exists

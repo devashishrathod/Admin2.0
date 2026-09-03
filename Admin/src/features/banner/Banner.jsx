@@ -12,7 +12,9 @@ import {
   Link as LinkIcon,
   AlertTriangle,
   Loader2,
+  Clock3,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
   createBanner,
@@ -124,8 +126,6 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
     if (form.redirectType === REDIRECT_TYPES.EXTERNAL_URL && !form.url.trim()) {
       nextErrors.url = "A URL is required for redirect type External URL";
     }
-    if (!form.startDateLocal) nextErrors.startDateLocal = "Start date is required";
-    if (!form.endDateLocal) nextErrors.endDateLocal = "End date is required";
     if (form.startDateLocal && form.endDateLocal && form.startDateLocal > form.endDateLocal) {
       nextErrors.endDateLocal = "End date must be after start date";
     }
@@ -581,6 +581,9 @@ function apiToRow(banner) {
     redirect,
     startDate: banner.startDate,
     endDate: banner.endDate,
+    // Computed once at fetch time (not during render) so the "expiring
+    // soon" chart never calls Date.now() from inside the component body.
+    daysLeft: banner.endDate ? (new Date(banner.endDate).getTime() - Date.now()) / 86400000 : null,
     isActive: Boolean(banner.isActive),
     status: banner.isActive ? "Active" : "Inactive",
     createdAt: banner.createdAt,
@@ -612,6 +615,11 @@ export default function Banner() {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+
+  // Unpaginated snapshot used only to power the summary charts above the
+  // table — never build a summary from a single paginated page of rows.
+  const [allBanners, setAllBanners] = useState([]);
+  const [chartsError, setChartsError] = useState("");
 
   const [categories, setCategories] = useState([]);
 
@@ -655,6 +663,22 @@ export default function Banner() {
       setLoading(false);
     }
   }, [page, limit, search]);
+
+  const fetchAllBanners = useCallback(async () => {
+    setChartsError("");
+    try {
+      const res = await getBanners({ page: 1, limit: 100 });
+      setAllBanners((res?.data?.data ?? []).map(apiToRow));
+    } catch (err) {
+      // Table above still works even if this fails — just surface why the
+      // chart row is missing instead of silently leaving it blank.
+      setChartsError(err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllBanners();
+  }, [fetchAllBanners]);
 
   // Debounce search so we don't hit the API on every keystroke
   useEffect(() => {
@@ -711,6 +735,7 @@ export default function Banner() {
       setModalOpen(false);
       setEditingBanner(null);
       fetchBanners();
+      fetchAllBanners();
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -724,12 +749,33 @@ export default function Banner() {
       await deleteBanner(deleteTarget.id);
       setDeleteTarget(null);
       fetchBanners();
+      fetchAllBanners();
     } catch (err) {
       console.error("Failed to delete banner:", err.message);
     } finally {
       setDeleting(false);
     }
   };
+
+  // Chart data — derived from the unpaginated `allBanners` snapshot.
+  const statusMix = [
+    { name: "Active", value: allBanners.filter((b) => b.isActive).length },
+    { name: "Inactive", value: allBanners.filter((b) => !b.isActive).length },
+  ].filter((d) => d.value > 0);
+
+  const typeMix = TYPE_OPTIONS.map((t) => ({
+    name: t.label,
+    count: allBanners.filter((b) => b.type === t.value).length,
+  }));
+
+  const expiringCount = allBanners.filter(
+    (b) => b.isActive && b.daysLeft != null && b.daysLeft >= 0 && b.daysLeft <= 7
+  ).length;
+  const expiringMix = [
+    { name: "Expiring ≤ 7 days", value: expiringCount },
+    { name: "Others", value: allBanners.length - expiringCount },
+  ];
+  const expiringData = expiringMix.filter((d) => d.value > 0);
 
   // Column config for the shared Table component.
   const columns = [
@@ -838,6 +884,74 @@ export default function Banner() {
             Add Banner
           </button>
         </div>
+
+        {/* Charts */}
+        {chartsError && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            Couldn't load chart data: {chartsError}
+          </div>
+        )}
+        {allBanners.length > 0 && (
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
+              <div className="relative flex h-[130px] items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
+                      {statusMix.map((entry) => (
+                        <Cell key={entry.name} fill={entry.name === "Active" ? "#34d399" : "#d4d4d4"} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="text-[18px] font-bold text-neutral-800 dark:text-neutral-100">{allBanners.length}</p>
+                  <p className="text-[10px] text-neutral-500">Banners</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Type Mix</p>
+              <div className="h-[130px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={typeMix} barCategoryGap="30%">
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                    <Bar dataKey="count" fill="#38bdf8" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Expiring Soon</p>
+              {expiringData.length ? (
+                <div className="relative flex h-[130px] items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={expiringData} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
+                        {expiringData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.name === "Expiring ≤ 7 days" ? "#f59e0b" : "#d4d4d4"} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <Clock3 size={14} className="mb-0.5 text-amber-500" />
+                    <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-100">{expiringMix[0].value}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-[130px] items-center justify-center text-[12.5px] text-neutral-500">No banners yet.</div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Search */}
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs">

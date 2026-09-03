@@ -22,6 +22,7 @@ import {
   ResponsiveContainer,
   XAxis,
   Tooltip,
+  LabelList,
 } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
@@ -484,13 +485,16 @@ export default function SubCategory() {
   // A broader, unpaginated snapshot used only for the overview charts —
   // the paginated `subCategories` list only ever holds one page.
   const [allSubCategories, setAllSubCategories] = useState([]);
+  const [chartsError, setChartsError] = useState("");
 
   const fetchAllSubCategories = useCallback(async () => {
+    setChartsError("");
     try {
-      const res = await getSubCategories({ page: 1, limit: 200 });
+      const res = await getSubCategories({ page: 1, limit: 100 });
       setAllSubCategories((res?.data?.data ?? []).map(apiToRow));
-    } catch {
+    } catch (err) {
       setAllSubCategories([]);
+      setChartsError(err.message);
     }
   }, []);
 
@@ -746,6 +750,12 @@ export default function SubCategory() {
         </div>
 
         {/* Overview charts — real data, independent of the table's filters */}
+        {chartsError && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            Couldn't load chart data: {chartsError}
+          </div>
+        )}
         <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.4fr]">
           <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
@@ -793,10 +803,16 @@ export default function SubCategory() {
             </div>
             {perCategoryMix.length ? (
               <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={perCategoryMix} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 10.5 }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={40} />
-                  <Tooltip />
-                  <Bar dataKey="subCategories" name="Sub-Categories" fill="#2FDE8C" radius={[4, 4, 0, 0]} />
+                <BarChart data={perCategoryMix} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
+                  <XAxis dataKey="name" hide />
+                  <Tooltip
+                    formatter={(v) => [v, "Sub-Categories"]}
+                    labelFormatter={(name) => name}
+                    contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
+                  />
+                  <Bar dataKey="subCategories" fill="#2FDE8C" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="subCategories" position="top" style={{ fontSize: 10, fill: "#525252" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (

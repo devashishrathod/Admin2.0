@@ -61,6 +61,20 @@ function InfoRow({ label, value }) {
   );
 }
 
+// Bento-tile variant of InfoRow, used only where a group of fields is
+// displayed as a tile grid instead of the plain divider-row list above.
+function DetailTile({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------
  * Reject Reason Modal — mirrors the pattern used on the Brand approvals so
  * a rejection can never go out without a stated reason.
@@ -226,9 +240,9 @@ function AdAccountChecklistCard({ campaign, onToggleField }) {
           <InfoRow label="Account ID" value={campaign.adAccount?.accountId} />
         </div>
       </div>
-      <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-        <InfoRow label="Account Name" value={campaign.adAccount?.accountName} />
-        <InfoRow label="Ad Platform" value={campaign.adAccount?.platform} />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <DetailTile label="Account Name" value={campaign.adAccount?.accountName} />
+        <DetailTile label="Ad Platform" value={campaign.adAccount?.platform} />
       </div>
 
       <div className="mt-4 space-y-2">

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Trash2,
@@ -11,6 +11,9 @@ import {
   Printer,
   PieChart as PieChartIcon,
   TrendingUp,
+  Star,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import {
   AreaChart,
@@ -25,12 +28,14 @@ import {
 import Table from "../../components/common/Table";
 import VoucherDetails from "./VoucherDetails";
 import { downloadCsv, printAsPdf } from "../../utils/exportTable";
+import { isNotFoundMessage } from "../../utils/helpers";
 import {
   getVouchers,
   approveVoucher,
   rejectVoucher,
   publishVoucher,
   deleteVoucher,
+  updateVoucherSuggestion,
   VOUCHER_STATUSES,
 } from "./services/VoucherApi";
 
@@ -248,6 +253,9 @@ function apiVersionToRow(v) {
     minBillAmount: primaryOffer?.minBillAmount ?? 0,
     maxDiscountAmount: primaryOffer?.maxDiscountAmount ?? 0,
     attachedSubBrandsCount: v.attachedSubBrandsCount ?? 0,
+    // Admin curation — PUT /vouchers/admin/suggestions/:voucherId
+    isSuggested: Boolean(voucher.isSuggested ?? v.isSuggested),
+    suggestionOrder: voucher.suggestionOrder ?? v.suggestionOrder ?? null,
     // Date + time (not just the date) — shown in both the table and the
     // details page.
     createdAt: v.createdAt || null,
@@ -323,6 +331,8 @@ export default function VoucherListing() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef(null);
   const [selectedId, setSelectedId] = useState(null);
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -338,7 +348,11 @@ export default function VoucherListing() {
       const rows = (res?.data?.data ?? []).map(apiVersionToRow);
       setVouchers(rows);
     } catch (err) {
-      setLoadError(err.message);
+      if (isNotFoundMessage(err.message)) {
+        setVouchers([]);
+      } else {
+        setLoadError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -347,6 +361,18 @@ export default function VoucherListing() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  // Close the status dropdown on outside click.
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const handleClick = (e) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target)) {
+        setStatusMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [statusMenuOpen]);
 
   const filtered = useMemo(() => {
     return vouchers.filter((v) => {
@@ -463,6 +489,23 @@ export default function VoucherListing() {
     }
   };
 
+  /* ---- Admin curation — feature/un-feature on the "Suggested" rail --- */
+  const handleToggleSuggested = async (voucher) => {
+    setActionError("");
+    setActionBusy(true);
+    try {
+      await updateVoucherSuggestion(voucher.voucherId, {
+        isSuggested: !voucher.isSuggested,
+        suggestionOrder: 1,
+      });
+      await fetchList();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   /* ---- Detail view --------------------------------------------------- */
   if (selectedVoucher) {
     return (
@@ -491,7 +534,10 @@ export default function VoucherListing() {
       label: "Voucher",
       render: (row) => (
         <button onClick={() => setSelectedId(row.id)} className="text-left hover:underline">
-          <p className="font-medium text-neutral-900 dark:text-neutral-50">{row.title}</p>
+          <p className="flex items-center gap-1.5 font-medium text-neutral-900 dark:text-neutral-50">
+            {row.title}
+            {row.isSuggested && <Star size={11} className="shrink-0 text-amber-500" fill="currentColor" />}
+          </p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-neutral-500">
             <Tag size={10} /> {row.versionCode}
           </p>
@@ -554,6 +600,19 @@ export default function VoucherListing() {
       align: "right",
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
+          <button
+            onClick={() => handleToggleSuggested(row)}
+            disabled={actionBusy}
+            aria-label={row.isSuggested ? `Remove ${row.title} from suggestions` : `Suggest ${row.title}`}
+            title={row.isSuggested ? "Remove from Suggested" : "Mark as Suggested"}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${
+              row.isSuggested
+                ? "text-amber-500 hover:bg-amber-400/10"
+                : "text-neutral-400 hover:bg-neutral-100 hover:text-amber-500 dark:text-neutral-500 dark:hover:bg-neutral-800"
+            }`}
+          >
+            <Star size={15} fill={row.isSuggested ? "currentColor" : "none"} />
+          </button>
           <button
             onClick={() => setSelectedId(row.id)}
             aria-label={`View ${row.title}`}
@@ -687,24 +746,50 @@ export default function VoucherListing() {
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto rounded-full bg-white p-1.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            <SlidersHorizontal size={14} className="ml-1 shrink-0 text-neutral-500" />
-            {STATUS_FILTERS.map((s) => (
-              <button
-                key={s}
-                onClick={() => {
-                  setStatusFilter(s);
-                  setPage(1);
-                }}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                  statusFilter === s
-                    ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                }`}
-              >
-                {s === "All" ? "All" : STATUS_LABELS[s] || s}
-              </button>
-            ))}
+          <div className="relative shrink-0" ref={statusMenuRef}>
+            <button
+              onClick={() => setStatusMenuOpen((o) => !o)}
+              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12.5px] font-medium text-neutral-700 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-colors hover:bg-neutral-50 dark:bg-neutral-900 dark:text-neutral-300 dark:shadow-black/20 dark:hover:bg-neutral-800"
+            >
+              <SlidersHorizontal size={14} className="text-neutral-500" />
+              {statusFilter === "All" ? (
+                "All Statuses"
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${STATUS_STYLES[statusFilter]?.dot}`} />
+                  {STATUS_LABELS[statusFilter] || statusFilter}
+                </span>
+              )}
+              <ChevronDown size={13} className={`text-neutral-400 transition-transform ${statusMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {statusMenuOpen && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-52 overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
+                {STATUS_FILTERS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      setStatusFilter(s);
+                      setPage(1);
+                      setStatusMenuOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-[13px] transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+                      statusFilter === s ? "font-semibold text-neutral-900 dark:text-neutral-50" : "text-neutral-600 dark:text-neutral-400"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {s === "All" ? (
+                        <span className="h-1.5 w-1.5 rounded-full bg-neutral-300 dark:bg-neutral-600" />
+                      ) : (
+                        <span className={`h-1.5 w-1.5 rounded-full ${STATUS_STYLES[s]?.dot}`} />
+                      )}
+                      {s === "All" ? "All Statuses" : STATUS_LABELS[s] || s}
+                    </span>
+                    {statusFilter === s && <Check size={13} className="text-emerald-500" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

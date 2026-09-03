@@ -279,6 +279,18 @@ function InfoRow({ icon: Icon, label, value }) {
   );
 }
 
+function DetailTile({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+    </div>
+  );
+}
+
 function SectionCard({ title, children, className = "" }) {
   return (
     <div className={`rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
@@ -599,41 +611,38 @@ function OverviewTab({ item, type }) {
   return (
     <div className="space-y-4">
       <SectionCard>
-        <div className="grid grid-cols-2 gap-x-6 divide-y divide-neutral-200 dark:divide-neutral-800">
-          <div className="col-span-1">
-            <p className="pt-0 pb-1 text-[11px] text-neutral-500">{type} Id :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.itemId}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">{type} Id</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.itemId}</p>
           </div>
-          <div className="col-span-1">
-            <p className="pt-0 pb-1 text-[11px] text-neutral-500">Code :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.code}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Code</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.code}</p>
           </div>
-
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">{meta.priceLabel} :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.priceValue}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">{meta.priceLabel}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.priceValue}</p>
           </div>
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">{meta.valueLabel} :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.secondaryValue}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">{meta.valueLabel}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.secondaryValue}</p>
           </div>
-
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Published Date :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.publishedDate}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Published Date</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.publishedDate}</p>
           </div>
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Time :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.time}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Time</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.time}</p>
           </div>
-
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Valid From :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.validFrom}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Valid From</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.validFrom}</p>
           </div>
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Valid To :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{item.validTo}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Valid To</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.validTo}</p>
           </div>
         </div>
 
@@ -662,11 +671,11 @@ function InfoTab({ item }) {
       </SectionCard>
 
       <SectionCard title="Details">
-        <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-          <InfoRow icon={Tag} label="Category" value={item.category} />
-          <InfoRow icon={IndianRupee} label="Min Purchase" value={item.minPurchase} />
-          <InfoRow icon={IndianRupee} label="Max Discount" value={item.maxDiscount} />
-          <InfoRow icon={Clock} label="Usage Limit" value={item.usageLimit} />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <DetailTile icon={Tag} label="Category" value={item.category} />
+          <DetailTile icon={IndianRupee} label="Min Purchase" value={item.minPurchase} />
+          <DetailTile icon={IndianRupee} label="Max Discount" value={item.maxDiscount} />
+          <DetailTile icon={Clock} label="Usage Limit" value={item.usageLimit} />
         </div>
       </SectionCard>
 
@@ -720,9 +729,9 @@ function MerchantTab({ item }) {
       </SectionCard>
 
       <SectionCard title="Contact">
-        <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-          <InfoRow icon={Phone} label="Phone" value={item.merchantContact.phone} />
-          <InfoRow icon={Mail} label="Email" value={item.merchantContact.email} />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <DetailTile icon={Phone} label="Phone" value={item.merchantContact.phone} />
+          <DetailTile icon={Mail} label="Email" value={item.merchantContact.email} />
         </div>
       </SectionCard>
 

@@ -54,14 +54,12 @@ import { RingStat } from "../brand/BrandShared";
 
 function InfoRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-start gap-2.5 py-2">
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-        <Icon size={12} />
-      </span>
-      <div>
-        <p className="text-[11px] uppercase tracking-wide text-neutral-500">{label}</p>
-        <p className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-100">{value}</p>
-      </div>
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
     </div>
   );
 }
@@ -179,7 +177,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
               <p className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                 Voucher Details
               </p>
-              <div className="divide-y divide-neutral-200 dark:divide-neutral-800/70">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <InfoRow icon={Hash} label="Voucher Code" value={voucher.voucherCode} />
                 <InfoRow
                   icon={Layers3}
@@ -500,7 +498,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                     <p className="text-[11.5px] text-neutral-500">{voucher.brand.legalName}</p>
                   </div>
                 </div>
-                <div className="mt-2 divide-y divide-neutral-200 dark:divide-neutral-800/70">
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <InfoRow icon={BadgeCheck} label="Brand ID" value={voucher.brand.uniqueId} />
                   <InfoRow icon={Store} label="Merchant ID" value={voucher.brand.merchantId} />
                   <InfoRow icon={Phone} label="WhatsApp" value={voucher.brand.whatsappNumber} />
@@ -586,7 +584,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                   Created By (Vendor User)
                 </p>
-                <div className="divide-y divide-neutral-200 dark:divide-neutral-800/70">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <InfoRow icon={UserRound} label="Unique ID" value={voucher.creatorUser.uniqueId} />
                   <InfoRow icon={BadgeCheck} label="Role" value={voucher.creatorUser.role} />
                   <InfoRow icon={Smartphone} label="Login Type" value={voucher.creatorUser.loginType} />
@@ -634,7 +632,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                   Parent Voucher Record
                 </p>
-                <div className="divide-y divide-neutral-200 dark:divide-neutral-800/70">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <InfoRow icon={FileText} label="Normalized Name" value={voucher.parentVoucher.normalizedName} />
                   <InfoRow icon={Globe} label="Timezone" value={voucher.parentVoucher.timezone} />
                   <InfoRow icon={Layers3} label="Current Version" value={voucher.parentVoucher.currentVersion} />

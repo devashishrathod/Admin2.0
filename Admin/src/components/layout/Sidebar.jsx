@@ -21,6 +21,7 @@ import {
   UserCog,
   ClipboardList,
   ArrowLeftRight,
+  Undo2,
   HandCoins,
   Tag,
   Megaphone,
@@ -69,6 +70,7 @@ const NAV_GROUPS = [
     label: "Sales",
     items: [
       { id: "transaction", label: "Transacation", icon: ArrowLeftRight, path: "/transaction" },
+      { id: "refund", label: "Refunds", icon: Undo2, path: "/refund" },
       { id: "settlements", label: "Settlements", icon: HandCoins, path: "/settlements" },
       { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
       { id: "settings", label: "Feature Campaign", icon: Megaphone, path: "/feature_campaign" },
@@ -214,7 +216,7 @@ export default function Sidebar({
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3.5">
+        <nav className="no-scrollbar flex flex-1 flex-col gap-5 overflow-y-auto p-3.5">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="flex flex-col gap-1">
               <div

@@ -35,6 +35,8 @@ import {
 } from "recharts";
 import { useBrands } from "../brand/BrandContext";
 import { BrandAvatar } from "../brand/BrandShared";
+import { getTopBrands } from "../brand/services/brandApi";
+import { mapBrandListItem } from "../brand/brandMapper";
 import { getBrandVerifications } from "../newOnboarding/services/NewOnboardingApi";
 
 /* -------------------------------------------------------------------------
@@ -60,12 +62,6 @@ const ACTIVITY_FEED = [
   { id: 3, icon: Tag, tint: "amber", who: "FitZone Gym", what: "customer redeemed a ₹150 voucher", when: "1h ago" },
   { id: 4, icon: Package, tint: "pink", who: "GlowUp Cosmetics", what: "sold 3 Deal Packs", when: "2h ago" },
   { id: 5, icon: Users, tint: "sky", who: "TechHub Electronics", what: "onboarded as a new vendor", when: "3h ago" },
-];
-
-const BRAND_GOALS = [
-  { id: 1, name: "Spice Route Kitchen", revenue: 8200, goal: 10000 },
-  { id: 2, name: "Jr Unisex Salon", revenue: 5400, goal: 7000 },
-  { id: 3, name: "FitZone Gym", revenue: 3100, goal: 5000 },
 ];
 
 const DONUT_COLORS = { Active: "#2FDE8C", Inactive: "#F59E0B", Rejected: "#F43F5E" };
@@ -300,6 +296,30 @@ export default function Dashboard() {
     fetchPending();
   }, [fetchPending]);
 
+  // Real curated "Top Brands" — GET /brands/admin/top-brands, the same
+  // list an admin builds via the Brand page's "Set as Top Brand" action
+  // (updateTopBrand). Mapped through the same brandMapper the rest of the
+  // app uses so the shape (followers, logo, brandName...) stays consistent.
+  const [topBrands, setTopBrands] = useState([]);
+  const [topBrandsLoading, setTopBrandsLoading] = useState(true);
+
+  const fetchTopBrands = React.useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setTopBrandsLoading(true);
+    try {
+      const res = await getTopBrands({ limit: 5 });
+      const rows = (res?.data?.data ?? res?.data ?? []).map(mapBrandListItem);
+      setTopBrands(rows);
+    } catch {
+      setTopBrands([]);
+    } finally {
+      if (!silent) setTopBrandsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTopBrands();
+  }, [fetchTopBrands]);
+
   // Date range — controls how many months the Vendor Growth chart shows.
   const [dateRangeKey, setDateRangeKey] = useState("6M");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
@@ -318,15 +338,24 @@ export default function Dashboard() {
 
   const handleManualRefresh = async () => {
     setRefreshSpinning(true);
-    await fetchPending({ silent: true });
+    await Promise.all([fetchPending({ silent: true }), fetchTopBrands({ silent: true })]);
     setTimeout(() => setRefreshSpinning(false), 500);
   };
 
   const vendorGrowth = useMemo(() => buildVendorGrowth(brands, dateRange.months), [brands, dateRange.months]);
   const categoryMix = useMemo(() => buildCategoryMix(brands), [brands]);
 
-  const avgGoalProgress =
-    BRAND_GOALS.reduce((s, b) => s + Math.min(100, (b.revenue / b.goal) * 100), 0) / BRAND_GOALS.length;
+  // "Brand Targets" ring — no real revenue-goal source exists (this
+  // dashboard has never had a revenue endpoint), so it's driven by the
+  // same real Top Brands list, scored on followers relative to the
+  // strongest of the group rather than an invented target number.
+  const avgGoalProgress = useMemo(() => {
+    if (!topBrands.length) return 0;
+    const maxFollowers = Math.max(1, ...topBrands.map((b) => b.followers || 0));
+    return (
+      topBrands.reduce((s, b) => s + Math.min(100, ((b.followers || 0) / maxFollowers) * 100), 0) / topBrands.length
+    );
+  }, [topBrands]);
   const activeRatio = totalVendors ? (activeVendors / totalVendors) * 100 : 0;
   const revenueGoalPct = (weekRevenue / 25000) * 100;
   const clearancePct = 100 - Math.min(100, (pending.length / 10) * 100);
@@ -524,7 +553,10 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Top Brands — same real revenue-goal data, styled as a location/leaderboard list */}
+        {/* Top Brands — real curated list, GET /brands/admin/top-brands.
+            Progress bar shows each brand's followers relative to the
+            strongest brand in the list (no revenue endpoint exists to
+            drive a real revenue-goal bar). */}
         <div className={cardClass}>
           <div className="mb-3.5 flex items-center justify-between">
             <div className="text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">Top Brands</div>
@@ -535,30 +567,49 @@ export default function Dashboard() {
               View all
             </button>
           </div>
-          <div className="space-y-3.5">
-            {BRAND_GOALS.map((b) => {
-              const progress = Math.min(100, Math.round((b.revenue / b.goal) * 100));
-              return (
-                <div key={b.id} className="flex items-center gap-2.5">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
-                    {b.name.charAt(0)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between text-[12px]">
-                      <span className="truncate font-medium text-neutral-800 dark:text-neutral-200">{b.name}</span>
-                      <span className="shrink-0 pl-2 font-semibold text-neutral-900 dark:text-neutral-50">{progress}%</span>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-1000"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {topBrandsLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-[12.5px] text-neutral-500">
+              <Loader2 size={14} className="animate-spin" /> Loading…
+            </div>
+          ) : topBrands.length ? (
+            <div className="space-y-3.5">
+              {(() => {
+                const maxFollowers = Math.max(1, ...topBrands.map((b) => b.followers || 0));
+                return topBrands.map((b) => {
+                  const progress = Math.min(100, Math.round(((b.followers || 0) / maxFollowers) * 100));
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => navigate(`/brands/${b.id}`)}
+                      className="flex w-full items-center gap-2.5 text-left"
+                    >
+                      <BrandAvatar brand={b} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between text-[12px]">
+                          <span className="truncate font-medium text-neutral-800 dark:text-neutral-200">
+                            {b.brandName}
+                          </span>
+                          <span className="shrink-0 pl-2 font-semibold text-neutral-900 dark:text-neutral-50">
+                            {b.followers} followers
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-1000"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-[12.5px] text-neutral-500">
+              No brands marked as Top Brand yet.
+            </p>
+          )}
         </div>
 
         {/* Category mix — real, from each onboarded brand's category */}

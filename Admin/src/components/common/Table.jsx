@@ -65,14 +65,14 @@ export default function Table({
 
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="overflow-x-auto">
+      <div className="no-scrollbar overflow-x-auto">
         <table className="w-full border-collapse text-[13.5px]" style={{ minWidth: minWidth ? `${minWidth}px` : undefined }}>
           <thead>
             <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-5 py-4 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
+                  className={`px-5 py-[18px] text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
                     col.align
                   )} ${col.width || ""}`}
                 >
@@ -100,7 +100,7 @@ export default function Table({
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-5 py-4 text-neutral-700 dark:text-neutral-300 ${alignClass(
+                      className={`px-5 py-[18px] text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
                       )}`}
                     >

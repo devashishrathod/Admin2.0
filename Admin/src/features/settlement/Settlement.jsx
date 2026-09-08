@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search,
   Filter,
@@ -10,8 +10,6 @@ import {
   Wallet,
   Landmark,
   Receipt,
-  CreditCard,
-  Building2,
   CheckCircle2,
   Clock3,
   Plus,
@@ -20,192 +18,11 @@ import {
   Trash2,
   X,
   CalendarClock,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
+import { getSettlements, getSettlementById, getSettlementTransactions, raiseTicket } from "./services/SettlementApi";
 
-/* -------------------------------------------------------------------------
- * Mock data — replace with API data (e.g. GET /admin/settlements)
- * ---------------------------------------------------------------------- */
-
-const SUMMARY = {
-  previousSettlement: { amount: 45826, label: "Deposited on Feb 3, 2025" },
-  availableBalance: { amount: 2738, label: "No. of Count : 10" },
-  gstBalance: { amount: 899, label: "No. of Count : 01" },
-};
-
-const INITIAL_SETTLEMENTS = [
-  {
-    id: "setl_5B0l3QnFcYotMb",
-    vendor: "Rajwada Sweets & Namkeen",
-    paymentReceivedDate: "28 Feb 2025",
-    settlementDate: "02 Mar 2025",
-    transactionId: "05B00076",
-    amount: 45828,
-    status: "Settlement done",
-    bankName: "Kotak Mahindra Bank",
-    requestId: "0245847614589814",
-    breakup: {
-      discount: 51234,
-      dealPack: 22107,
-      membership: 6589,
-      gst: 6906,
-      processingFee: 0,
-      serviceCharge: 0,
-      refundFee: 0,
-      paid: 45828,
-    },
-    transactions: [
-      {
-        stage: "Collection Payment",
-        title: "Payment received from customer",
-        date: "Sat, 28 Feb 2025 · 2:04pm",
-        meta: [
-          { label: "Payment Platform", value: "RazorPay" },
-          { label: "Payment Received", value: "Vyapaal App" },
-        ],
-      },
-      {
-        stage: "Settlement Processed",
-        title: "Vyapaal processed your settlement",
-        date: "Mon, 03 Mar 2025 · 09:39pm",
-        meta: [{ label: "Credit Bank", value: "IDFC Bank (SWIFT)" }],
-      },
-      {
-        stage: "Settlement Done",
-        title: "Amount credited to your account",
-        date: "Mon, 03 Mar 2025 · 03:41pm",
-        meta: [
-          { label: "Settlement Transaction Id", value: "setl_5B0l3QnFcYotMb" },
-          { label: "Transaction Id", value: "0F0007076" },
-        ],
-      },
-    ],
-    tickets: [
-      {
-        id: "Ticket# 42538839588",
-        date: "05/10/2024",
-        status: "Open",
-        detail:
-          "Vendor is asking why processing fee was applied to this settlement. Awaiting response from finance team.",
-      },
-    ],
-  },
-  {
-    id: "setl_9K2mZ8pLwQrTnc",
-    vendor: "Kavya Mehndi Art Studio",
-    paymentReceivedDate: "27 Feb 2025",
-    settlementDate: "01 Mar 2025",
-    transactionId: "8B003005",
-    amount: 14892,
-    status: "Settlement done",
-    bankName: "HDFC Bank",
-    requestId: "0245847614589907",
-    breakup: {
-      discount: 18200,
-      dealPack: 5400,
-      membership: 1200,
-      gst: 1620,
-      processingFee: 40,
-      serviceCharge: 0,
-      refundFee: 0,
-      paid: 14892,
-    },
-    transactions: [
-      {
-        stage: "Collection Payment",
-        title: "Payment received from customer",
-        date: "Thu, 27 Feb 2025 · 11:22am",
-        meta: [
-          { label: "Payment Platform", value: "PayU" },
-          { label: "Payment Received", value: "Vyapaal App" },
-        ],
-      },
-      {
-        stage: "Settlement Done",
-        title: "Amount credited to your account",
-        date: "Sat, 01 Mar 2025 · 10:05am",
-        meta: [
-          { label: "Settlement Transaction Id", value: "setl_9K2mZ8pLwQrTnc" },
-          { label: "Transaction Id", value: "8B003005" },
-        ],
-      },
-    ],
-    tickets: [],
-  },
-  {
-    id: "setl_7Qf1YbVh4xLpAe",
-    vendor: "UrbanFit Studio",
-    paymentReceivedDate: "26 Feb 2025",
-    settlementDate: "—",
-    transactionId: "6E902114",
-    amount: 27201,
-    status: "Processing",
-    bankName: "ICICI Bank",
-    requestId: "0245847614589918",
-    breakup: {
-      discount: 30500,
-      dealPack: 9800,
-      membership: 2300,
-      gst: 2790,
-      processingFee: 0,
-      serviceCharge: 0,
-      refundFee: 0,
-      paid: 27201,
-    },
-    transactions: [
-      {
-        stage: "Collection Payment",
-        title: "Payment received from customer",
-        date: "Wed, 26 Feb 2025 · 4:47pm",
-        meta: [
-          { label: "Payment Platform", value: "Razor Pay" },
-          { label: "Payment Received", value: "Vyapaal App" },
-        ],
-      },
-    ],
-    tickets: [],
-  },
-  {
-    id: "setl_3Nc6RtDs2VbYuh",
-    vendor: "Rajwada Sweets & Namkeen",
-    paymentReceivedDate: "25 Feb 2025",
-    settlementDate: "27 Feb 2025",
-    transactionId: "3B87039",
-    amount: 98918,
-    status: "On hold",
-    bankName: "Kotak Mahindra Bank",
-    requestId: "0245847614589922",
-    breakup: {
-      discount: 105300,
-      dealPack: 15200,
-      membership: 4100,
-      gst: 6482,
-      processingFee: 200,
-      serviceCharge: 0,
-      refundFee: 0,
-      paid: 98918,
-    },
-    transactions: [
-      {
-        stage: "Collection Payment",
-        title: "Payment received from customer",
-        date: "Tue, 25 Feb 2025 · 1:15pm",
-        meta: [
-          { label: "Payment Platform", value: "PhonePe" },
-          { label: "Payment Received", value: "Vyapaal App" },
-        ],
-      },
-    ],
-    tickets: [
-      {
-        id: "Ticket# 42538841120",
-        date: "27/02/2025",
-        status: "Open",
-        detail:
-          "Bank account verification pending — settlement held until KYC document is re-uploaded by vendor.",
-      },
-    ],
-  },
-];
 
 /* -------------------------------------------------------------------------
  * T+2 day settlement logic
@@ -312,118 +129,90 @@ function getSettlementSchedule(settlement, today = new Date()) {
   };
 }
 
-/**
- * Demo rows so "Today Settlement" / T+2 pending states are visible
- * whenever this screen is opened — dates are generated relative to the
- * real current date. Remove this once real API data is wired in.
- */
-function buildTodayDemoSettlements() {
-  const now = new Date();
-  const twoDaysAgo = formatDMY(addDays(now, -SETTLEMENT_CYCLE_DAYS)); // due exactly today
-  const yesterday = formatDMY(addDays(now, -1)); // due tomorrow
-  const todayStr = formatDMY(now); // due in 2 days
 
-  return [
-    {
-      id: "setl_TD" + Math.random().toString(36).slice(2, 8).toUpperCase(),
-      vendor: "UrbanFit Studio",
-      paymentReceivedDate: twoDaysAgo,
-      settlementDate: "—",
-      transactionId: "9T004512",
-      amount: 18650,
-      status: "Processing",
-      bankName: "ICICI Bank",
-      requestId: "0245847614590044",
-      breakup: {
-        discount: 21000,
-        dealPack: 4200,
-        membership: 900,
-        gst: 1550,
-        processingFee: 0,
-        serviceCharge: 0,
-        refundFee: 0,
-        paid: 18650,
-      },
-      transactions: [
-        {
-          stage: "Collection Payment",
-          title: "Payment received from customer",
-          date: `${twoDaysAgo} · 1:10pm`,
-          meta: [
-            { label: "Payment Platform", value: "RazorPay" },
-            { label: "Payment Received", value: "Vyapaal App" },
-          ],
-        },
-      ],
-      tickets: [],
-    },
-    {
-      id: "setl_TD" + Math.random().toString(36).slice(2, 8).toUpperCase(),
-      vendor: "Kavya Mehndi Art Studio",
-      paymentReceivedDate: yesterday,
-      settlementDate: "—",
-      transactionId: "9T004599",
-      amount: 9200,
-      status: "Processing",
-      bankName: "HDFC Bank",
-      requestId: "0245847614590077",
-      breakup: {
-        discount: 11000,
-        dealPack: 2100,
-        membership: 500,
-        gst: 780,
-        processingFee: 0,
-        serviceCharge: 0,
-        refundFee: 0,
-        paid: 9200,
-      },
-      transactions: [
-        {
-          stage: "Collection Payment",
-          title: "Payment received from customer",
-          date: `${yesterday} · 6:40pm`,
-          meta: [
-            { label: "Payment Platform", value: "PayU" },
-            { label: "Payment Received", value: "Vyapaal App" },
-          ],
-        },
-      ],
-      tickets: [],
-    },
-    {
-      id: "setl_TD" + Math.random().toString(36).slice(2, 8).toUpperCase(),
-      vendor: "Rajwada Sweets & Namkeen",
-      paymentReceivedDate: todayStr,
-      settlementDate: "—",
-      transactionId: "9T004621",
-      amount: 12400,
-      status: "Processing",
-      bankName: "Kotak Mahindra Bank",
-      requestId: "0245847614590099",
-      breakup: {
-        discount: 14200,
-        dealPack: 2600,
-        membership: 700,
-        gst: 1050,
-        processingFee: 0,
-        serviceCharge: 0,
-        refundFee: 0,
-        paid: 12400,
-      },
-      transactions: [
-        {
-          stage: "Collection Payment",
-          title: "Payment received from customer",
-          date: `${todayStr} · 11:05am`,
-          meta: [
-            { label: "Payment Platform", value: "PhonePe" },
-            { label: "Payment Received", value: "Vyapaal App" },
-          ],
-        },
-      ],
-      tickets: [],
-    },
-  ];
+// ISO datetime -> "28 Feb 2025", matching the DMY string shape the T+2
+// schedule math and the rest of this page already work with.
+function formatDMYFromISO(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return formatDMY(d);
+}
+
+// Real backend status enums aren't confirmed yet, so this maps any
+// reasonable variant onto the 3 states this UI already renders
+// (StatusBadge / DueBadge / STATUS_OPTIONS) — unrecognized values fall
+// back to "Processing" rather than crashing the badge lookup.
+function mapSettlementStatus(raw) {
+  const s = String(raw || "").toUpperCase();
+  if (["COMPLETED", "DONE", "SETTLED", "SUCCESS", "SETTLEMENT_DONE"].includes(s)) return "Settlement done";
+  if (["ON_HOLD", "HOLD", "ONHOLD"].includes(s)) return "On hold";
+  return "Processing";
+}
+
+// Normalizes the amount-breakup sub-object — field names aren't confirmed
+// against a real response yet, so this tries a few reasonable aliases and
+// defaults every unknown figure to 0 rather than inventing one.
+function normalizeBreakup(raw) {
+  const b = raw.breakup || raw.amountBreakup || {};
+  return {
+    discount: Number(b.discount ?? b.discountAmount) || 0,
+    dealPack: Number(b.dealPack ?? b.dealPackAmount) || 0,
+    membership: Number(b.membership ?? b.membershipAmount) || 0,
+    gst: Number(b.gst ?? b.gstAmount) || 0,
+    processingFee: Number(b.processingFee) || 0,
+    serviceCharge: Number(b.serviceCharge) || 0,
+    refundFee: Number(b.refundFee) || 0,
+    paid: Number(b.paid ?? b.settledAmount ?? raw.amount) || 0,
+  };
+}
+
+// Normalizes one real settlement record (GET /settlements or
+// /settlements/:id) into the flat shape this page's table/detail view
+// already expect. Since no real response body was confirmed for this
+// endpoint yet, field names use defensive fallbacks — tighten these once
+// a real response is pasted, same as every other page in this app.
+function normalizeSettlement(raw) {
+  return {
+    id: raw._id || raw.settlementId || raw.id || "—",
+    vendor: raw.vendor || raw.brand?.brandName || raw.brandName || "—",
+    paymentReceivedDate:
+      formatDMYFromISO(raw.paymentReceivedDate || raw.paymentReceivedAt || raw.createdAt) || "—",
+    settlementDate: formatDMYFromISO(raw.settlementDate || raw.settledAt) || "—",
+    transactionId: raw.transactionId || raw.txnId || "—",
+    amount: Number(raw.amount ?? raw.settledAmount) || 0,
+    status: mapSettlementStatus(raw.status),
+    bankName: raw.bankName || raw.bankAccount?.bankName || "—",
+    requestId: raw.requestId || raw.settlementRequestId || "—",
+    breakup: normalizeBreakup(raw),
+    transactions: [],
+    tickets: [],
+  };
+}
+
+// Normalizes one statement line (GET /settlements/:id/transactions) into
+// the timeline-step shape SettlementDetail already renders.
+function normalizeSettlementTransaction(raw) {
+  const ts = raw.createdAt || raw.date || raw.occurredAt;
+  const d = ts ? new Date(ts) : null;
+  const dateLabel =
+    d && !Number.isNaN(d.getTime())
+      ? d.toLocaleString("en-IN", {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : raw.date || "—";
+  const metaSource = raw.meta && typeof raw.meta === "object" ? raw.meta : {};
+  return {
+    stage: raw.stage || raw.type || "Transaction",
+    title: raw.title || raw.description || raw.label || "Transaction",
+    date: dateLabel,
+    meta: Object.entries(metaSource).map(([label, value]) => ({ label, value: String(value) })),
+  };
 }
 
 const STATUS_OPTIONS = ["All", "Settlement done", "Processing", "On hold"];
@@ -534,12 +323,26 @@ function StatCard({ icon: Icon, label, amount, sub, live }) {
  * Detail view (mirrors the vendor-side settlement detail screen)
  * ---------------------------------------------------------------------- */
 
-function SettlementDetail({ settlement, onBack }) {
+function SettlementDetail({ settlement, detailLoading, onBack }) {
   const b = settlement.breakup;
   const [openTicket, setOpenTicket] = useState(
     settlement.tickets[0]?.id || null
   );
+  const [ticketSubmitting, setTicketSubmitting] = useState(false);
+  const [ticketError, setTicketError] = useState("");
   const schedule = useMemo(() => getSettlementSchedule(settlement), [settlement]);
+
+  const handleCreateTicket = async () => {
+    setTicketSubmitting(true);
+    setTicketError("");
+    try {
+      await raiseTicket(settlement.id);
+    } catch (err) {
+      setTicketError(err.message);
+    } finally {
+      setTicketSubmitting(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -551,9 +354,19 @@ function SettlementDetail({ settlement, onBack }) {
           <ArrowLeft size={16} />
           {settlement.id}
         </button>
-        <div className="flex gap-2">
-          <button className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800">
-            <TicketIcon size={14} />
+        <div className="flex items-center gap-2">
+          {detailLoading && (
+            <span className="flex items-center gap-1.5 text-[12px] text-neutral-500">
+              <Loader2 size={13} className="animate-spin" />
+              Refreshing…
+            </span>
+          )}
+          <button
+            onClick={handleCreateTicket}
+            disabled={ticketSubmitting}
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            {ticketSubmitting ? <Loader2 size={14} className="animate-spin" /> : <TicketIcon size={14} />}
             Create Ticket
           </button>
           <button className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300">
@@ -562,6 +375,13 @@ function SettlementDetail({ settlement, onBack }) {
           </button>
         </div>
       </div>
+
+      {ticketError && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-4 py-3 text-[13px] text-red-600 dark:text-red-400">
+          <AlertTriangle size={14} className="shrink-0" />
+          {ticketError}
+        </div>
+      )}
 
       {/* Settlement information */}
       <section className="mb-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -970,10 +790,9 @@ function SettlementFormModal({ open, initialData, onClose, onSave }) {
  * ---------------------------------------------------------------------- */
 
 export default function Settlement() {
-  const [settlements, setSettlements] = useState(() => [
-    ...buildTodayDemoSettlements(),
-    ...INITIAL_SETTLEMENTS,
-  ]);
+  const [settlements, setSettlements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [showTodayOnly, setShowTodayOnly] = useState(false);
@@ -981,8 +800,53 @@ export default function Settlement() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null); // -> detail view
+  const [detailLoading, setDetailLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSettlement, setEditingSettlement] = useState(null);
+
+  const fetchSettlements = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const res = await getSettlements({ page: 1, limit: 100 });
+      const rows = (res?.data?.data ?? res?.data ?? []).map(normalizeSettlement);
+      setSettlements(rows);
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSettlements();
+  }, [fetchSettlements]);
+
+  // List rows are lightweight — pull the full breakup + real statement
+  // lines (transactions) once a settlement is opened, same lightweight-list
+  // -> full-detail pattern as Brand/Customer.
+  const handleOpenSettlement = useCallback(async (row) => {
+    setSelected(row);
+    setDetailLoading(true);
+    try {
+      const [detailRes, txnRes] = await Promise.all([
+        getSettlementById(row.id),
+        getSettlementTransactions(row.id, { page: 1, limit: 50 }),
+      ]);
+      const rawDetail = detailRes?.data?.settlement ?? detailRes?.data ?? null;
+      const txnRows = (txnRes?.data?.data ?? txnRes?.data ?? []).map(normalizeSettlementTransaction);
+      setSelected((prev) => ({
+        ...prev,
+        ...(rawDetail ? normalizeSettlement(rawDetail) : {}),
+        transactions: txnRows,
+        tickets: prev?.tickets || [],
+      }));
+    } catch {
+      // Keep showing the lightweight list row if the detail fetch fails.
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
 
   // T+2 schedule computed fresh against "now" whenever settlements change
   const schedules = useMemo(() => {
@@ -1002,6 +866,17 @@ export default function Settlement() {
       count: dueToday.length,
     };
   }, [settlements, schedules]);
+
+  // Most recently completed settlement (real, derived from the fetched
+  // list) drives the "Previous settlement" stat card. Available/GST
+  // balance have no per-settlement source in the 3 confirmed endpoints —
+  // shown as 0 rather than invented until a real balance endpoint exists.
+  const previousSettlement = useMemo(() => {
+    const done = settlements
+      .filter((s) => s.status === "Settlement done" && parseDMY(s.settlementDate))
+      .sort((a, b) => parseDMY(b.settlementDate) - parseDMY(a.settlementDate));
+    return done[0] || null;
+  }, [settlements]);
 
   const handleAddClick = () => {
     setEditingSettlement(null);
@@ -1120,7 +995,11 @@ export default function Settlement() {
   if (selected) {
     return (
       <div className="min-h-screen p-6">
-        <SettlementDetail settlement={selected} onBack={() => setSelected(null)} />
+        <SettlementDetail
+          settlement={selected}
+          detailLoading={detailLoading}
+          onBack={() => setSelected(null)}
+        />
       </div>
     );
   }
@@ -1147,8 +1026,12 @@ export default function Settlement() {
               <Plus size={15} />
               Add Settlement
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800">
-              <RefreshCw size={15} />
+            <button
+              onClick={fetchSettlements}
+              disabled={loading}
+              className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
@@ -1159,8 +1042,8 @@ export default function Settlement() {
           <StatCard
             icon={Wallet}
             label="Previous settlement"
-            amount={SUMMARY.previousSettlement.amount}
-            sub={SUMMARY.previousSettlement.label}
+            amount={previousSettlement?.amount || 0}
+            sub={previousSettlement ? `Settled on ${previousSettlement.settlementDate}` : "No settlements yet"}
           />
           <StatCard
             icon={CalendarClock}
@@ -1172,15 +1055,14 @@ export default function Settlement() {
           <StatCard
             icon={Landmark}
             label="Available balance"
-            amount={SUMMARY.availableBalance.amount}
-            sub={SUMMARY.availableBalance.label}
-            live
+            amount={0}
+            sub="No live balance API yet"
           />
           <StatCard
             icon={Receipt}
             label="GST balance"
-            amount={SUMMARY.gstBalance.amount}
-            sub={SUMMARY.gstBalance.label}
+            amount={0}
+            sub="No live balance API yet"
           />
         </div>
 
@@ -1248,6 +1130,17 @@ export default function Settlement() {
         </div>
 
         {/* Table */}
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
+            <Loader2 size={16} className="animate-spin" />
+            Loading settlements…
+          </div>
+        ) : loadError ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={14} className="shrink-0" />
+            Failed to load settlements: {loadError}
+          </div>
+        ) : (
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <table className="w-full text-left">
             <thead>
@@ -1286,7 +1179,7 @@ export default function Settlement() {
                     >
                       <td className="px-5 py-4">
                         <button
-                          onClick={() => setSelected(s)}
+                          onClick={() => handleOpenSettlement(s)}
                           className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
                         >
                           {s.id}
@@ -1375,6 +1268,7 @@ export default function Settlement() {
             </tbody>
           </table>
         </div>
+        )}
 
         {/* Pagination */}
         <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">

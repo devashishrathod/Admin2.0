@@ -16,6 +16,9 @@ import CustomerPlanAnalytics from './features/plan/Customerplananalytics'
 import Settlement from './features/settlement/Settlement'
 import Customer from './features/customer/Customer'
 import Transaction from './features/transaction/Transaction'
+import TransactionDetails from './features/transaction/TransactionDetails'
+import Refund from './features/refund/Refund'
+import RefundDetails from './features/refund/RefundDetails'
 
 import VoucherDetails from './features/voucher/VoucherDetails'
 import VoucherListing from './features/voucher/VoucherList'
@@ -230,6 +233,33 @@ function App() {
                 element={
                   <Layout>
                     <Transaction />
+                  </Layout>
+                }
+              />
+
+                 <Route
+                path="/transaction/:claimId"
+                element={
+                  <Layout>
+                    <TransactionDetails />
+                  </Layout>
+                }
+              />
+
+                 <Route
+                path="/refund"
+                element={
+                  <Layout>
+                    <Refund />
+                  </Layout>
+                }
+              />
+
+                 <Route
+                path="/refund/:refundRequestId"
+                element={
+                  <Layout>
+                    <RefundDetails />
                   </Layout>
                 }
               />

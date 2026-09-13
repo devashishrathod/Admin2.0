@@ -21,7 +21,7 @@ import {
   ResponsiveContainer,
   XAxis,
   Tooltip,
-  LabelList,
+  Legend,
 } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
@@ -302,22 +302,23 @@ function CategoryViewModal({ open, category, loading, onClose }) {
               )}
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    Sub Categories
-                  </p>
-                  <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-                    {category.subCategoryCount ?? 0}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    Vouchers
-                  </p>
-                  <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-                    {category.voucherCount ?? 0}
-                  </p>
-                </div>
+                {[
+                  { label: "Sub Categories", stat: category.stats?.subCategories },
+                  { label: "Brands", stat: category.stats?.brands },
+                  { label: "Vouchers", stat: category.stats?.vouchers },
+                  { label: "Promo Codes", stat: category.stats?.promoCodes },
+                ].map(({ label, stat }) => (
+                  <div
+                    key={label}
+                    className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20"
+                  >
+                    <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
+                    <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
+                      {stat?.total ?? 0}
+                    </p>
+                    <p className="text-[10.5px] text-neutral-500">{stat?.active ?? 0} active</p>
+                  </div>
+                ))}
               </div>
 
               {category.createdAt && (
@@ -379,6 +380,15 @@ function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
  * ---------------------------------------------------------------------- */
 
 function apiToRow(cat) {
+  const stats = cat.stats || {};
+  const subCategories = {
+    total: stats.subCategories?.total ?? cat.subCategoryCount ?? 0,
+    active: stats.subCategories?.active ?? 0,
+  };
+  const brands = { total: stats.brands?.total ?? 0, active: stats.brands?.active ?? 0 };
+  const vouchers = { total: stats.vouchers?.total ?? cat.voucherCount ?? 0, active: stats.vouchers?.active ?? 0 };
+  const promoCodes = { total: stats.promoCodes?.total ?? 0, active: stats.promoCodes?.active ?? 0 };
+
   return {
     id: cat._id ?? cat.id,
     name: cat.name,
@@ -386,10 +396,23 @@ function apiToRow(cat) {
     image: cat.image,
     isActive: cat.isActive,
     status: cat.isActive ? "Active" : "Inactive",
-    subCategoryCount: cat.subCategoryCount ?? 0,
-    voucherCount: cat.voucherCount ?? 0,
+    stats: { subCategories, brands, vouchers, promoCodes },
+    subCategoryCount: subCategories.total,
+    voucherCount: vouchers.total,
+    brandCount: brands.total,
+    promoCodeCount: promoCodes.total,
     createdAt: cat.createdAt,
   };
+}
+
+// A small "total + active" pair shown in table cells and the view modal.
+function StatCell({ total, active }) {
+  return (
+    <div className="leading-tight">
+      <div className="font-semibold text-neutral-900 dark:text-neutral-50">{total}</div>
+      <div className="text-[10.5px] text-neutral-500">{active} active</div>
+    </div>
+  );
 }
 
 function rowToFormDraft(row) {
@@ -563,11 +586,22 @@ export default function Category() {
     { name: "Inactive", value: inactiveCount, color: "#A3A3A3" },
   ].filter((s) => s.value > 0);
 
-  const topBySubCategories = [...allCategories]
-    .sort((a, b) => b.subCategoryCount - a.subCategoryCount)
-    .slice(0, 6);
-  const topByVouchers = [...allCategories]
-    .sort((a, b) => b.voucherCount - a.voucherCount)
+  // One combined breakdown chart (rather than 4 separate single-metric
+  // charts) so all real stats — sub-categories, brands, vouchers, promo
+  // codes — are visible side-by-side per category.
+  const topByStats = [...allCategories]
+    .map((c) => ({
+      name: c.name,
+      subCategories: c.stats.subCategories.total,
+      brands: c.stats.brands.total,
+      vouchers: c.stats.vouchers.total,
+      promoCodes: c.stats.promoCodes.total,
+    }))
+    .sort(
+      (a, b) =>
+        b.subCategories + b.brands + b.vouchers + b.promoCodes -
+        (a.subCategories + a.brands + a.vouchers + a.promoCodes)
+    )
     .slice(0, 6);
 
   // Column config for the shared Table component.
@@ -602,13 +636,27 @@ export default function Category() {
     },
     {
       key: "subCategoryCount",
-      label: "Sub Category Count",
+      label: "Sub Categories",
       align: "center",
+      render: (row) => <StatCell total={row.stats.subCategories.total} active={row.stats.subCategories.active} />,
+    },
+    {
+      key: "brandCount",
+      label: "Brands",
+      align: "center",
+      render: (row) => <StatCell total={row.stats.brands.total} active={row.stats.brands.active} />,
     },
     {
       key: "voucherCount",
-      label: "Voucher Count",
+      label: "Vouchers",
       align: "center",
+      render: (row) => <StatCell total={row.stats.vouchers.total} active={row.stats.vouchers.active} />,
+    },
+    {
+      key: "promoCodeCount",
+      label: "Promo Codes",
+      align: "center",
+      render: (row) => <StatCell total={row.stats.promoCodes.total} active={row.stats.promoCodes.active} />,
     },
     {
       key: "status",
@@ -716,51 +764,27 @@ export default function Category() {
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:col-span-2">
             <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
-              <BarChart3 size={14} className="text-violet-500" /> Top by Sub-Categories
+              <BarChart3 size={14} className="text-violet-500" /> Category Stats Overview
             </div>
-            {topBySubCategories.length ? (
-              <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={topBySubCategories} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
+            {topByStats.length ? (
+              <ResponsiveContainer width="100%" height={190}>
+                <BarChart data={topByStats} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
                   <XAxis dataKey="name" hide />
                   <Tooltip
-                    formatter={(v) => [v, "Sub-Categories"]}
                     labelFormatter={(name) => name}
                     contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
-                    cursor={{ fill: "rgba(139,92,246,0.06)" }}
                   />
-                  <Bar dataKey="subCategoryCount" fill="#a78bfa" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="subCategoryCount" position="top" style={{ fontSize: 10, fill: "#525252" }} />
-                  </Bar>
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="subCategories" name="Sub-Categories" fill="#a78bfa" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="brands" name="Brands" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="vouchers" name="Vouchers" fill="#38BDF8" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="promoCodes" name="Promo Codes" fill="#2FDE8C" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[150px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
-            )}
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
-              <BarChart3 size={14} className="text-sky-500" /> Top by Vouchers
-            </div>
-            {topByVouchers.length ? (
-              <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={topByVouchers} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
-                  <XAxis dataKey="name" hide />
-                  <Tooltip
-                    formatter={(v) => [v, "Vouchers"]}
-                    labelFormatter={(name) => name}
-                    contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
-                    cursor={{ fill: "rgba(56,189,248,0.06)" }}
-                  />
-                  <Bar dataKey="voucherCount" fill="#38BDF8" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="voucherCount" position="top" style={{ fontSize: 10, fill: "#525252" }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-[150px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+              <div className="flex h-[190px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
             )}
           </div>
         </div>
@@ -797,6 +821,8 @@ export default function Category() {
               columns={columns}
               data={categories}
               emptyMessage="No categories yet. Add one to get started."
+              dense
+              minWidth={920}
             />
 
             {/* Pagination */}

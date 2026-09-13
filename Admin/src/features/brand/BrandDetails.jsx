@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import {
   MapPin,
@@ -31,8 +31,6 @@ import {
   HandCoins,
   Repeat,
   UserCog,
-  Plus,
-  Upload,
 } from "lucide-react";
 import {
   BUSINESS_STATUSES,
@@ -63,13 +61,7 @@ import {
 import { SubscriptionTab } from "./SubscriptionCenter";
 import { getVouchers } from "../voucher/services/VoucherApi";
 import { isNotFoundMessage } from "../../utils/helpers";
-import {
-  getBrandShowcase,
-  createShowcaseSection,
-  deleteShowcaseSection,
-  addShowcaseMedia,
-  deleteShowcaseMedia,
-} from "./services/showcaseApi";
+import ShowcaseAlbums from "./ShowcaseAlbums";
 
 const STATUS_ACCENTS = {
   Active: "from-emerald-400/25 via-emerald-400/0",
@@ -649,295 +641,11 @@ function BrandInfoTab({ brand }) {
 }
 
 /* Ambience tab — photos + video, split out of Brand Info into its own tab
-   so the media gallery has room to breathe. */
-/* One media item (photo or video) inside a Showcase section — field names
- * defensively normalized since the exact GET response shape wasn't in the
- * Postman screenshots the API was built from. */
-function normalizeShowcaseMediaItem(item) {
-  return {
-    id: item?._id ?? item?.id,
-    url: item?.url ?? "",
-    isVideo: item?.type === "VIDEO",
-    duration: item?.duration,
-  };
-}
-
-function formatMediaDuration(seconds) {
-  if (seconds == null || Number.isNaN(seconds)) return "";
-  const total = Math.round(seconds);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-/* One Showcase album — a premium-styled card showing its cover, real photo/
- * video counts, and a media grid where videos play directly (no static
- * thumbnail placeholder). Lets the admin upload new photos/videos (POST
- * .../add-media) or delete existing ones. */
-function ShowcaseSectionCard({ brand, section, onChanged }) {
-  const fileInputRef = useRef(null);
-  const [uploading, setUploading] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [deletingSection, setDeletingSection] = useState(false);
-  const [error, setError] = useState("");
-
-  const media = (section.medias ?? []).map(normalizeShowcaseMediaItem).filter((m) => m.url);
-
-  const handleFiles = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = "";
-    if (!files.length) return;
-    setUploading(true);
-    setError("");
-    try {
-      await addShowcaseMedia(section._id, files, { brandId: brand.id });
-      onChanged();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDeleteMedia = async (mediaId) => {
-    setDeletingId(mediaId);
-    setError("");
-    try {
-      await deleteShowcaseMedia(section._id, mediaId, brand.id);
-      onChanged();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const handleDeleteSection = async () => {
-    if (!window.confirm(`Delete the "${section.title}" album and all its media?`)) return;
-    setDeletingSection(true);
-    setError("");
-    try {
-      await deleteShowcaseSection(section._id, brand.id);
-      onChanged();
-    } catch (err) {
-      setError(err.message);
-      setDeletingSection(false);
-    }
-  };
-
-  return (
-    <div className="overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-neutral-200 dark:bg-neutral-800">
-            {section.coverImage ? (
-              <img src={section.coverImage} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-neutral-400">
-                <ImageIcon size={16} />
-              </div>
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-200">{section.title}</p>
-            <p className="mt-0.5 text-[11.5px] text-neutral-500">
-              {section.photoCount ?? 0} photo{section.photoCount === 1 ? "" : "s"} · {section.videoCount ?? 0} video
-              {section.videoCount === 1 ? "" : "s"}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-2 text-[11.5px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
-          >
-            {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-            {uploading ? "Uploading…" : "Add Media"}
-          </button>
-          <button
-            type="button"
-            onClick={handleDeleteSection}
-            disabled={deletingSection}
-            aria-label={`Delete ${section.title} album`}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-neutral-500"
-          >
-            {deletingSection ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={13} />}
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} className="hidden" />
-        </div>
-      </div>
-
-      {error && <p className="px-4 pb-2 text-[11.5px] text-red-600 dark:text-red-400">{error}</p>}
-
-      {media.length ? (
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-          {media.map((m) => (
-            <div key={m.id} className="group relative aspect-video overflow-hidden bg-neutral-950">
-              {m.isVideo ? (
-                <>
-                  <video src={m.url} className="h-full w-full object-cover" controls muted playsInline preload="metadata" />
-                  {m.duration != null && (
-                    <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                      {formatMediaDuration(m.duration)}
-                    </span>
-                  )}
-                </>
-              ) : (
-                <img
-                  src={m.url}
-                  alt=""
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => handleDeleteMedia(m.id)}
-                disabled={deletingId === m.id}
-                aria-label="Delete media"
-                className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 disabled:opacity-100"
-              >
-                {deletingId === m.id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="mx-4 mb-4 flex flex-col items-center gap-2 rounded-2xl bg-neutral-50 py-8 text-center dark:bg-neutral-950/60">
-          <ImageIcon size={18} className="text-neutral-400 dark:text-neutral-600" />
-          <p className="text-[12px] text-neutral-500">No media in this album yet.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* Ambience tab — the admin-managed Showcase album system: real albums
- * (sections) with real media, fetched via GET /showcase/get-brand-showcase
- * and editable via the add-media/delete-media/delete-section endpoints. */
+   so the media gallery has room to breathe. The actual staged-upload /
+   click-to-preview / drag-and-drop-reorder logic lives in ShowcaseAlbums.jsx
+   (ported from the VenderPanel Showcase Details flow). */
 function AmbienceTab({ brand }) {
-  const [sections, setSections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
-  const [addingSection, setAddingSection] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState("");
-
-  const fetchShowcase = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getBrandShowcase(brand.id);
-      const list = res?.data?.sections ?? res?.sections ?? res?.data ?? [];
-      setSections(Array.isArray(list) ? list : []);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [brand.id]);
-
-  useEffect(() => {
-    fetchShowcase();
-  }, [fetchShowcase]);
-
-  const handleCreateSection = async (e) => {
-    e.preventDefault();
-    if (!newTitle.trim() || creating) return;
-    setCreating(true);
-    setCreateError("");
-    try {
-      await createShowcaseSection({ brandId: brand.id, title: newTitle.trim(), sortOrder: sections.length + 1 });
-      setNewTitle("");
-      setAddingSection(false);
-      fetchShowcase();
-    } catch (err) {
-      setCreateError(err.message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">Showcase</p>
-            <p className="mt-0.5 text-[12px] text-neutral-500">Real ambience, menu and event albums shown on this brand's profile.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAddingSection((v) => !v)}
-            className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-2 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
-          >
-            <Plus size={13} />
-            Add Album
-          </button>
-        </div>
-
-        {addingSection && (
-          <form
-            onSubmit={handleCreateSection}
-            className="mb-3 flex flex-col gap-2 rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:flex-row sm:items-center"
-          >
-            <input
-              autoFocus
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="Album title, e.g. Ambience Photos"
-              className={`${inputClass} sm:flex-1`}
-            />
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                disabled={!newTitle.trim() || creating}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-400 px-4 py-2.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {creating && <Loader2 size={13} className="animate-spin" />}
-                {creating ? "Creating…" : "Create"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddingSection(false);
-                  setNewTitle("");
-                  setCreateError("");
-                }}
-                className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:hover:text-neutral-200"
-              >
-                Cancel
-              </button>
-            </div>
-            {createError && <p className="text-[11.5px] text-red-600 dark:text-red-400 sm:basis-full">{createError}</p>}
-          </form>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-10 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading showcase…
-          </div>
-        ) : loadError ? (
-          <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={13} className="shrink-0" />
-            Couldn't load showcase: {loadError}
-          </div>
-        ) : sections.length ? (
-          <div className="space-y-3">
-            {sections.map((s) => (
-              <ShowcaseSectionCard key={s._id} brand={brand} section={s} onChanged={fetchShowcase} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState label="No showcase albums yet. Add one to upload photos or videos." />
-        )}
-      </div>
-    </div>
-  );
+  return <ShowcaseAlbums brand={brand} />;
 }
 
 function SubBrandTab({ brand }) {
@@ -1994,7 +1702,7 @@ export default function BrandDetails({
           <div className="relative border-t border-neutral-200/80 px-4 py-2.5 dark:border-neutral-800/80">
             <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-white to-transparent dark:from-neutral-900" />
             <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-white to-transparent dark:from-neutral-900" />
-            <div className="flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="no-scrollbar flex gap-1 overflow-x-auto">
               {DETAIL_TABS.map((t) => {
                 const TabIcon = TAB_ICONS[t];
                 return (

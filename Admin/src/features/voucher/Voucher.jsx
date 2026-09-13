@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Download,
@@ -19,8 +19,11 @@ import {
   Phone,
   Mail,
   Star,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
+import { getVouchers } from "./services/VoucherApi";
 
 /* -------------------------------------------------------------------------
  * Type configuration — Voucher / Deal Pack / Membership share the same
@@ -63,79 +66,16 @@ const APPROVAL_FILTERS = ["All", "Pending", "Approved", "Rejected"];
 const DETAIL_TABS = (type) => ["Overview", `${type} Info`, TYPE_META[type].activityLabel, "Merchant"];
 
 /* -------------------------------------------------------------------------
- * Mock data — vendor-submitted items awaiting / holding admin approval.
- * Only items with approvalStatus "Approved" (and status "Active") are
- * meant to be visible in the live app; everything else is admin-only.
+ * Mock data — Deal Pack / Membership have no real API yet, so these two
+ * stay mock. Voucher is real — see normalizeRealVoucher()/fetchVouchers()
+ * below, which populate dataByType.Voucher from GET
+ * /vouchers/versions/get-all instead of this object.
  *
  * `topSuggestion` marks an item as a featured "Top Suggestion" for its
  * type (Top Voucher / Top Deal Pack / Top Membership).
  * ---------------------------------------------------------------------- */
 
 const INITIAL_DATA = {
-  Voucher: [
-    {
-      id: 1,
-      itemId: "#V35122345",
-      merchant: "Arent",
-      title: "New resort 50% off all bills",
-      publishedDate: "1-7-2026",
-      priceValue: "50%",
-      secondaryValue: "₹200.00",
-      approvalStatus: "Approved",
-      status: "Active",
-      topSuggestion: true,
-      time: "2/7/2026",
-      code: "ARENT50",
-      category: "Travel & Resorts",
-      description:
-        "Get 50% off on all bills at Arent Resort. Applicable on room stays, dining and spa services. Valid for a limited time only.",
-      terms: [
-        "Valid on minimum billing of ₹1,000.",
-        "Cannot be combined with any other offer or promotion.",
-        "Applicable once per customer per month.",
-        "Management reserves the right to withdraw the offer anytime.",
-      ],
-      minPurchase: "₹1,000",
-      maxDiscount: "₹2,000",
-      validFrom: "2026-07-01",
-      validTo: "2026-08-31",
-      usageLimit: 500,
-      usageCount: 128,
-      merchantContact: { phone: "+91 98765 43210", email: "partnerships@arentresorts.com" },
-      outlets: ["Arent Resort - Lake View, Nainital", "Arent Resort - Hilltop, Mussoorie"],
-      activity: [
-        { name: "Ishita R.", date: "2026-07-10", amount: "₹1,850" },
-        { name: "Kabir M.", date: "2026-07-06", amount: "₹2,400" },
-        { name: "Priya D.", date: "2026-07-03", amount: "₹1,200" },
-      ],
-    },
-    {
-      id: 2,
-      itemId: "#V35122998",
-      merchant: "Spice Route Kitchen",
-      title: "Flat ₹100 off on thali combos",
-      publishedDate: "9-7-2026",
-      priceValue: "₹100",
-      secondaryValue: "₹499.00",
-      approvalStatus: "Pending",
-      status: "Inactive",
-      topSuggestion: false,
-      time: "9/7/2026",
-      code: "THALI100",
-      category: "Food & Beverage",
-      description: "Flat ₹100 off on all thali combo orders above ₹499, dine-in and takeaway both.",
-      terms: ["Valid on minimum billing of ₹499.", "One redemption per table per visit."],
-      minPurchase: "₹499",
-      maxDiscount: "₹100",
-      validFrom: "2026-07-15",
-      validTo: "2026-09-15",
-      usageLimit: 300,
-      usageCount: 0,
-      merchantContact: { phone: "+91 91234 56789", email: "contact@spiceroute.in" },
-      outlets: ["Spice Route - Hazratganj, Lucknow"],
-      activity: [],
-    },
-  ],
   "Deal Pack": [
     {
       id: 1,
@@ -914,11 +854,112 @@ function exportToCsv(type, items) {
 }
 
 /* -------------------------------------------------------------------------
+ * Real Voucher data — GET /vouchers/versions/get-all (getVouchers), the
+ * same confirmed endpoint/shape VoucherList.jsx's apiVersionToRow already
+ * uses. Normalizes each real voucher-version into the exact flat shape
+ * this page's table/columns/ItemDetails/EditModal already expect, so none
+ * of that shared UI needed to change — only where its data comes from.
+ * ---------------------------------------------------------------------- */
+
+const inr = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
+
+function formatDMYFromISO(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "-");
+}
+
+function fmtTimeFromISO(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+}
+
+// Real voucher-version workflow status (DRAFT/UNDER_REVIEW/APPROVED/
+// PUBLISHED/REJECTED/EXPIRED/PAUSED/ARCHIVED) collapsed onto the 3-state
+// admin approval concept this page's ApprovalBadge already renders.
+function mapVoucherApproval(status) {
+  const s = String(status || "").toUpperCase();
+  if (["APPROVED", "PUBLISHED"].includes(s)) return "Approved";
+  if (s === "REJECTED") return "Rejected";
+  return "Pending"; // DRAFT, UNDER_REVIEW, EXPIRED, PAUSED, ARCHIVED
+}
+
+function normalizeRealVoucher(v) {
+  const voucher = v.voucher || {};
+  const brand = v.brand || null;
+  const primaryOffer = v.offers?.[0];
+  const publishedIso = v.publishedAt || v.createdAt;
+
+  return {
+    id: v._id,
+    itemId: `#${voucher.voucherCode || v.versionCode || v._id}`,
+    merchant: brand?.brandName || "—",
+    title: v.name || "—",
+    publishedDate: formatDMYFromISO(publishedIso),
+    priceValue:
+      primaryOffer?.title ||
+      (primaryOffer
+        ? primaryOffer.discountType === "PERCENTAGE"
+          ? `${primaryOffer.discountValue}%`
+          : inr(primaryOffer.discountValue)
+        : "—"),
+    secondaryValue: primaryOffer?.maxDiscountAmount != null ? inr(primaryOffer.maxDiscountAmount) : "—",
+    approvalStatus: mapVoucherApproval(v.status),
+    status: String(v.status || "").toUpperCase() === "PUBLISHED" ? "Active" : "Inactive",
+    topSuggestion: Boolean(voucher.isSuggested ?? v.isSuggested),
+    time: fmtTimeFromISO(publishedIso),
+    code: voucher.voucherCode || "—",
+    category: v.category?.name || "—",
+    description: v.description || "",
+    // No real per-item source yet for terms, redemption activity or an
+    // outlet-name list from this endpoint — left empty rather than
+    // invented; the detail tabs already render an empty state for these.
+    terms: [],
+    minPurchase: primaryOffer?.minBillAmount != null ? inr(primaryOffer.minBillAmount) : "—",
+    maxDiscount: primaryOffer?.maxDiscountAmount != null ? inr(primaryOffer.maxDiscountAmount) : "—",
+    validFrom: formatDMYFromISO(v.startAt),
+    validTo: formatDMYFromISO(v.endAt),
+    usageLimit: 0,
+    usageCount: 0,
+    merchantContact: {
+      phone: brand?.whatsappNumber ? `+91 ${brand.whatsappNumber}` : "—",
+      email: "—",
+    },
+    outlets: [],
+    activity: [],
+  };
+}
+
+/* -------------------------------------------------------------------------
  * Main page
  * ---------------------------------------------------------------------- */
 
 export default function Voucher() {
-  const [dataByType, setDataByType] = useState(INITIAL_DATA);
+  const [dataByType, setDataByType] = useState({ Voucher: [], ...INITIAL_DATA });
+  const [voucherLoading, setVoucherLoading] = useState(true);
+  const [voucherError, setVoucherError] = useState("");
+
+  const fetchVouchers = useCallback(async () => {
+    setVoucherLoading(true);
+    setVoucherError("");
+    try {
+      const res = await getVouchers({ page: 1, limit: 100 });
+      const rows = (res?.data?.data ?? []).map(normalizeRealVoucher);
+      setDataByType((prev) => ({ ...prev, Voucher: rows }));
+    } catch (err) {
+      setVoucherError(err.message);
+    } finally {
+      setVoucherLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchVouchers();
+  }, [fetchVouchers]);
+
   const [activeType, setActiveType] = useState("Voucher");
   const [approvalFilter, setApprovalFilter] = useState("All");
   const [topOnly, setTopOnly] = useState(false);
@@ -1162,7 +1203,24 @@ export default function Voucher() {
         />
 
         {/* Table */}
-        <Table columns={columns} data={filtered} emptyMessage={`No ${activeType.toLowerCase()}s found.`} />
+        {activeType === "Voucher" && voucherLoading ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
+            <Loader2 size={16} className="animate-spin" />
+            Loading vouchers…
+          </div>
+        ) : activeType === "Voucher" && voucherError ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={14} className="shrink-0" />
+            Failed to load vouchers: {voucherError}
+          </div>
+        ) : (
+          <Table
+            columns={columns}
+            data={filtered}
+            emptyMessage={`No ${activeType.toLowerCase()}s found.`}
+            dense
+          />
+        )}
 
         {/* Footer */}
         <EntriesFooter pageSize={pageSize} onPageSizeChange={setPageSize} total={filtered.length} />

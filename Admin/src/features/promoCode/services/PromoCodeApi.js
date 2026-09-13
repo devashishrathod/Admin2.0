@@ -29,41 +29,30 @@ function handleError(error) {
     throw new Error(message);
 }
 
-export const DISCOUNT_TYPES = Object.freeze({
-    PERCENT: 'PERCENT',
-    FLAT: 'FLAT',
-});
-
-// Effective status, computed server-side from validFrom/validTill — not
-// something the admin sets directly.
-export const PROMO_STATUSES = Object.freeze({
-    LIVE: 'LIVE',
-    SCHEDULED: 'SCHEDULED',
-    EXPIRED: 'EXPIRED',
-});
-
-// Confirmed values only — the "applicableActions" enum may have more than
-// these two, but only NEW/UPGRADE have been shown so far.
-export const APPLICABLE_ACTIONS = Object.freeze({
-    NEW: 'NEW',
-    UPGRADE: 'UPGRADE',
-});
-
 /* -------------------------------------------------------------------------
- * Payload shape sent to / received from the API
+ * Payload shape sent to / received from the API — matches the backend's
+ * real Joi validator (validateCreatePromoCode) exactly. Enums live in
+ * ../promoCodeEnums.js, not here — this file is HTTP calls only.
  *
  * Create body:
  * {
- *   code, description, discountType: "PERCENT" | "FLAT",
- *   discountPercent (used when PERCENT), discountAmount (used when FLAT),
- *   maxDiscountAmount (cap applied to a PERCENT discount), minOrderValue,
- *   applicableActions: string[], firstTimeOnly: boolean,
- *   validFrom: "YYYY-MM-DD", validTill: "YYYY-MM-DD",
- *   totalUsageLimit, perBrandUsageLimit, isActive: boolean
+ *   code, discountType: "PERCENT" | "FLAT",
+ *   description?, discountPercent?, discountAmount?, maxDiscountAmount?,
+ *   minOrderValue?, subscriptionIds?: string[],
+ *   applicableActions?: ("NEW"|"RENEW"|"UPGRADE"|"DOWNGRADE")[],
+ *   firstTimeOnly?, audience?: "VENDOR" | "CUSTOMER",
+ *
+ *   // customer-scope (only meaningful when audience is CUSTOMER)
+ *   voucherIds?: string[], brandIds?: string[], categoryIds?: string[],
+ *   perCustomerUsageLimit?, firstOrderOnly?, minBillAmount?,
+ *   appliesTo?: "NET_BILL" | "CONVENIENCE_FEE",
+ *   costBearing?: { mode: "PLATFORM"|"VENDOR"|"SHARED", vendorPercent? },
+ *
+ *   validFrom?, validTill?, totalUsageLimit?, perBrandUsageLimit?, isActive?
  * }
  *
- * Update body: any subset of the above (confirmed example only sent
- * { totalUsageLimit, validTill, isActive }) — partial update.
+ * Update body: any subset of the above (partial update) — code is never
+ * included, it can't be changed after creation.
  *
  * List response, each record (confirmed from a real getAll call):
  * {
@@ -73,6 +62,10 @@ export const APPLICABLE_ACTIONS = Object.freeze({
  *   totalUsageLimit, perBrandUsageLimit, usedCount, createdBy, isActive,
  *   isDeleted, createdAt, updatedAt, updatedBy, consumedCount,
  *   reservedCount, remainingUses, isExpired
+ *   // audience/appliesTo/costBearing/voucherIds/brandIds/categoryIds/
+ *   // perCustomerUsageLimit/firstOrderOnly/minBillAmount are real schema
+ *   // fields per the Joi validator, but weren't in the last confirmed
+ *   // list-response sample — normalized defensively in PromoCode.jsx.
  * }
  *
  * Get-by-id response (confirmed):
@@ -160,7 +153,4 @@ export default {
     getPromoCodes,
     updatePromoCode,
     getPromoCodeById,
-    DISCOUNT_TYPES,
-    PROMO_STATUSES,
-    APPLICABLE_ACTIONS,
 };

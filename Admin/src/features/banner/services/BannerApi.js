@@ -137,7 +137,7 @@ export async function getBanners({ page = 1, limit = 10, search = '' } = {}) {
     try {
         const params = { page, limit };
         if (search) params.search = search;
-        const { data } = await api.get('/banners/get-all',);
+        const { data } = await api.get('/banners/get-all', { params });
         return data;
     } catch (error) {
         handleError(error);

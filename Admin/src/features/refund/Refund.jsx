@@ -12,6 +12,7 @@ import {
   X,
   Check,
   Ban,
+  Eye,
 } from "lucide-react";
 import { getRefundWorklist, approveRefund, rejectRefund } from "./services/RefundApi";
 import { formatDate, fmtTime, inr, todayStr } from "../transaction/transactionUtils";
@@ -27,14 +28,14 @@ function Table({ columns = [], data = [], emptyMessage = "No records found.", ro
 
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[13.5px]">
+      <div className="no-scrollbar overflow-x-auto">
+        <table className="w-full min-w-[900px] border-collapse text-[13px]">
           <thead>
-            <tr>
+            <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-5 py-4 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 ${alignClass(
+                  className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
                     col.align
                   )} ${col.width || ""}`}
                 >
@@ -54,12 +55,12 @@ function Table({ columns = [], data = [], emptyMessage = "No records found.", ro
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/30"
+                  className="border-t border-neutral-100 transition-colors hover:bg-neutral-50 dark:border-neutral-800/60 dark:hover:bg-neutral-800/30"
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-5 py-4 text-neutral-700 dark:text-neutral-300 ${alignClass(col.align)}`}
+                      className={`whitespace-nowrap px-4 py-3.5 text-neutral-700 dark:text-neutral-300 ${alignClass(col.align)}`}
                     >
                       {col.render ? col.render(row, rowIndex) : row[col.key]}
                     </td>
@@ -75,31 +76,86 @@ function Table({ columns = [], data = [], emptyMessage = "No records found.", ro
 }
 
 /* -------------------------------------------------------------------------
- * Real data — GET /refunds (see ./services/RefundApi). Response shape is
- * modeled on the sibling voucher-claims list (flat rows with embedded
- * brand/outlet/claim summaries) since the real body wasn't confirmed yet —
- * tighten these fallbacks once a real response is pasted.
+ * Real data — GET /refunds (see ./services/RefundApi). Confirmed real
+ * response: { total, totalPages, page, limit, data: [...] }, each row a
+ * flat refund document — no embedded brand/claim/outlet summaries, just
+ * raw ids (claimId, transactionId, customerId, brandId) — so "Brand" and
+ * "Customer" show the id rather than a fabricated name.
  * ---------------------------------------------------------------------- */
 
+// "OUTLET_CLOSED" -> "Outlet Closed"
+function humanizeEnum(value) {
+  if (!value) return "—";
+  return String(value)
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// Buckets the real status values into the 3 tabs/stat groups this page
+// shows. COMPLETED/ADMIN_APPROVED (statusLabel "Refunded" / "Approved -
+// processing") count as "approved". AWAITING_BANK_DETAILS still needs
+// admin/customer follow-up, so it stays "pending".
+function bucketRefundStatus(status) {
+  switch (status) {
+    case "APPROVED":
+    case "ADMIN_APPROVED":
+    case "COMPLETED":
+      return "approved";
+    case "REJECTED":
+    case "ADMIN_REJECTED":
+    case "FAILED":
+    case "CANCELLED":
+      return "rejected";
+    default:
+      return "pending";
+  }
+}
+
 function normalizeRefundRow(raw) {
-  const ts = raw.createdAt || raw.requestedAt || null;
+  const ts = raw.createdAt || null;
   const d = ts ? new Date(ts) : null;
   const dateStr = d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : todayStr();
-  const claim = raw.claim || {};
+  const status = String(raw.status || "PENDING").toUpperCase();
+  const split = raw.split || {};
 
   return {
-    id: raw._id || raw.refundRequestId || "—",
-    claimCode: claim.claimCode || raw.claimCode || "—",
-    voucherName: claim.voucherSnapshot?.name || raw.voucherSnapshot?.name || "—",
-    vendor: raw.brand?.brandName || claim.brandSnapshot?.name || "—",
-    customer: raw.customerId || claim.customerId || "—",
-    outlet: raw.outlet?.uniqueId || claim.outletSnapshot?.uniqueId || "—",
+    id: raw._id || "—",
+    claimId: raw.claimId || "—",
+    transactionId: raw.transactionId || "—",
+    claimCode: raw.claimCode || "—",
+    brandId: raw.brandId || "—",
+    customerId: raw.customerId || "—",
     date: dateStr,
     time: d && !Number.isNaN(d.getTime()) ? fmtTime(ts) : "—",
-    requestedAmount: Number(raw.requestedAmount ?? raw.amount) || 0,
+    requestedAmount: Number(raw.requestedAmount) || 0,
     approvedAmount: raw.approvedAmount != null ? Number(raw.approvedAmount) : null,
-    reason: raw.reason || raw.note || "—",
-    status: String(raw.status || "PENDING").toUpperCase(),
+    isFullRefund: Boolean(split.isFullRefund),
+    reason: humanizeEnum(raw.reason),
+    reasonNote: raw.reasonNote || "",
+    method: raw.method || "—",
+    status,
+    statusLabel: raw.statusLabel || humanizeEnum(status),
+    statusBucket: bucketRefundStatus(status),
+    isOpen: Boolean(raw.isOpen),
+    canDecide: Boolean(raw.canDecide),
+    canWithdraw: Boolean(raw.canWithdraw),
+    // Not real API flags — inferred from the confirmed status values:
+    // once an admin has approved a refund it can be paid out via /pay, or
+    // (if that fails, or it's a manual-bank refund) sent to
+    // /request-bank-details instead. Both stay available until the
+    // refund reaches a terminal state.
+    canPay: status === "ADMIN_APPROVED",
+    canRequestBankDetails: status === "ADMIN_APPROVED",
+    razorpayRefundId: raw.razorpayRefundId || "—",
+    completedAt: raw.completedAt || null,
+    adminDecisionAt: raw.adminDecisionAt || null,
+    adminNote: raw.adminNote || "",
+    remindersSent: Number(raw.remindersSent) || 0,
+    attemptCount: Number(raw.attemptCount) || 0,
+    isOverride: Boolean(raw.isOverride),
+    split,
   };
 }
 
@@ -107,30 +163,18 @@ function normalizeRefundRow(raw) {
  * Small shared bits
  * ---------------------------------------------------------------------- */
 
-function RefundStatusBadge({ status }) {
+function RefundStatusBadge({ status, statusLabel }) {
   const map = {
-    PENDING: {
-      cls: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400",
-      icon: Clock3,
-      label: "Pending",
-    },
-    APPROVED: {
-      cls: "bg-emerald-400/10 text-emerald-600 ring-emerald-400/30 dark:text-emerald-400",
-      icon: CheckCircle2,
-      label: "Approved",
-    },
-    REJECTED: {
-      cls: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400",
-      icon: XCircle,
-      label: "Rejected",
-    },
+    approved: { cls: "bg-emerald-400/10 text-emerald-600 ring-emerald-400/30 dark:text-emerald-400", icon: CheckCircle2 },
+    rejected: { cls: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400", icon: XCircle },
+    pending: { cls: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400", icon: Clock3 },
   };
-  const cfg = map[status] || map.PENDING;
+  const cfg = map[bucketRefundStatus(status)] || map.pending;
   const Icon = cfg.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium ring-1 ${cfg.cls}`}>
       <Icon size={12} />
-      {cfg.label}
+      {statusLabel || status}
     </span>
   );
 }
@@ -157,7 +201,6 @@ const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
 function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
-  const [approvedAmount, setApprovedAmount] = useState(String(refund.requestedAmount));
   const [note, setNote] = useState("");
 
   return (
@@ -180,33 +223,18 @@ function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
           </button>
         </div>
 
-        <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-              Approved Amount<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
-            </span>
-            <input
-              type="number"
-              min="0"
-              max={refund.requestedAmount}
-              value={approvedAmount}
-              onChange={(e) => setApprovedAmount(e.target.value)}
-              className={inputClass}
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-              Note (optional)
-            </span>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              placeholder="e.g. Only the starter was wrong."
-              className={inputClass}
-            />
-          </label>
-        </div>
+        <label className="block">
+          <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+            Note (optional)
+          </span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="e.g. Only the starter was wrong."
+            className={inputClass}
+          />
+        </label>
 
         {error && (
           <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
@@ -223,8 +251,8 @@ function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
             Cancel
           </button>
           <button
-            onClick={() => onSubmit(Number(approvedAmount), note.trim())}
-            disabled={submitting || !approvedAmount}
+            onClick={() => onSubmit(note.trim())}
+            disabled={submitting}
             className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
@@ -312,16 +340,8 @@ const TABS = [
 ];
 
 function matchesTab(row, tab) {
-  switch (tab) {
-    case "pending":
-      return row.status === "PENDING";
-    case "approved":
-      return row.status === "APPROVED";
-    case "rejected":
-      return row.status === "REJECTED";
-    default:
-      return true;
-  }
+  if (tab === "all") return true;
+  return row.statusBucket === tab;
 }
 
 /* -------------------------------------------------------------------------
@@ -333,7 +353,7 @@ export default function Refund() {
   const [refunds, setRefunds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
@@ -362,9 +382,9 @@ export default function Refund() {
   }, [fetchRefunds]);
 
   const stats = useMemo(() => {
-    const pending = refunds.filter((r) => r.status === "PENDING");
-    const approved = refunds.filter((r) => r.status === "APPROVED");
-    const rejected = refunds.filter((r) => r.status === "REJECTED");
+    const pending = refunds.filter((r) => r.statusBucket === "pending");
+    const approved = refunds.filter((r) => r.statusBucket === "approved");
+    const rejected = refunds.filter((r) => r.statusBucket === "rejected");
     const sum = (rows) => rows.reduce((s, r) => s + r.requestedAmount, 0);
     return {
       all: { amount: sum(refunds), count: refunds.length },
@@ -381,9 +401,9 @@ export default function Refund() {
       const inSearch =
         !q ||
         r.claimCode.toLowerCase().includes(q) ||
-        r.vendor.toLowerCase().includes(q) ||
-        r.customer.toLowerCase().includes(q) ||
-        r.outlet.toLowerCase().includes(q);
+        r.brandId.toLowerCase().includes(q) ||
+        r.customerId.toLowerCase().includes(q) ||
+        r.reason.toLowerCase().includes(q);
       return inTab && inSearch;
     });
   }, [refunds, activeTab, search]);
@@ -391,11 +411,11 @@ export default function Refund() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const pageRows = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
-  const handleApprove = async (approvedAmount, note) => {
+  const handleApprove = async (note) => {
     setActionSubmitting(true);
     setActionError("");
     try {
-      await approveRefund(approveTarget.id, { approvedAmount, note });
+      await approveRefund(approveTarget.id, { note });
       setApproveTarget(null);
       await fetchRefunds();
     } catch (err) {
@@ -432,9 +452,10 @@ export default function Refund() {
         </button>
       ),
     },
-    { key: "vendor", label: "Vendor" },
-    { key: "customer", label: "Customer" },
-    { key: "outlet", label: "Outlet" },
+    { key: "brandId", label: "Brand", render: (r) => <span className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400">{r.brandId}</span> },
+    { key: "customerId", label: "Customer", render: (r) => <span className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400">{r.customerId}</span> },
+    { key: "reason", label: "Reason" },
+    { key: "method", label: "Method" },
     {
       key: "date",
       label: "Date",
@@ -448,7 +469,16 @@ export default function Refund() {
       key: "requestedAmount",
       label: "Requested",
       align: "right",
-      render: (r) => <span className="font-medium text-neutral-900 dark:text-neutral-50">{inr(r.requestedAmount)}</span>,
+      render: (r) => (
+        <span className="font-medium text-neutral-900 dark:text-neutral-50">
+          {inr(r.requestedAmount)}
+          {r.isFullRefund && (
+            <span className="ml-1.5 rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+              Full
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: "approvedAmount",
@@ -463,33 +493,42 @@ export default function Refund() {
     {
       key: "status",
       label: "Status",
-      render: (r) => <RefundStatusBadge status={r.status} />,
+      render: (r) => <RefundStatusBadge status={r.status} statusLabel={r.statusLabel} />,
     },
     {
       key: "actions",
       label: "Actions",
       align: "right",
-      render: (r) =>
-        r.status === "PENDING" ? (
-          <div className="flex justify-end gap-1.5">
-            <button
-              onClick={() => setApproveTarget(r)}
-              className="flex h-8 items-center gap-1 rounded-lg bg-emerald-400/10 px-2.5 text-[12px] font-medium text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
-            >
-              <Check size={13} />
-              Approve
-            </button>
-            <button
-              onClick={() => setRejectTarget(r)}
-              className="flex h-8 items-center gap-1 rounded-lg bg-red-400/10 px-2.5 text-[12px] font-medium text-red-600 transition-colors hover:bg-red-400/20 dark:text-red-400"
-            >
-              <Ban size={13} />
-              Reject
-            </button>
-          </div>
-        ) : (
-          <span className="text-neutral-400">—</span>
-        ),
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1.5">
+          {r.canDecide && (
+            <>
+              <button
+                onClick={() => setApproveTarget(r)}
+                className="flex h-8 items-center gap-1 rounded-lg bg-emerald-400/10 px-2.5 text-[12px] font-medium text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
+              >
+                <Check size={13} />
+                Approve
+              </button>
+              <button
+                onClick={() => setRejectTarget(r)}
+                className="flex h-8 items-center gap-1 rounded-lg bg-red-400/10 px-2.5 text-[12px] font-medium text-red-600 transition-colors hover:bg-red-400/20 dark:text-red-400"
+              >
+                <Ban size={13} />
+                Reject
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => navigate(`/refund/${r.id}`)}
+            aria-label="View refund details"
+            title="View details"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-emerald-400/10 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400"
+          >
+            <Eye size={15} />
+          </button>
+        </div>
+      ),
     },
   ];
 

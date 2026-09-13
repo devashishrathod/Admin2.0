@@ -41,10 +41,10 @@ import {
  *   entitlements: {
  *     subBrands: { isUnlimited, limit? },
  *     franchises: { isUnlimited, limit? },
- *     vouchers: { isEnabled },
+ *     vouchers: { isUnlimited, limit? },
  *     dealPack: { isEnabled },
  *     prioritySupport: { isEnabled },
- *     showcase: { isEnabled },
+ *     showcase: { isUnlimited, limit? },
  *   }
  * }
  * ---------------------------------------------------------------------- */
@@ -54,10 +54,10 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const emptyEntitlements = () => ({
   subBrands: { isUnlimited: false, limit: 0 },
   franchises: { isUnlimited: false, limit: 0 },
-  vouchers: { isEnabled: false },
+  vouchers: { isUnlimited: false, limit: 0 },
   dealPack: { isEnabled: false },
   prioritySupport: { isEnabled: false },
-  showcase: { isEnabled: false },
+  showcase: { isUnlimited: false, limit: 0 },
 });
 
 const emptyPlanDraft = () => ({
@@ -94,10 +94,10 @@ function normalizeEntitlements(raw) {
   return {
     subBrands: raw?.subBrands ? normalizeEntitlementLimit(raw.subBrands) : defaults.subBrands,
     franchises: raw?.franchises ? normalizeEntitlementLimit(raw.franchises) : defaults.franchises,
-    vouchers: { isEnabled: Boolean(raw?.vouchers?.isEnabled) },
+    vouchers: raw?.vouchers ? normalizeEntitlementLimit(raw.vouchers) : defaults.vouchers,
     dealPack: { isEnabled: Boolean(raw?.dealPack?.isEnabled) },
     prioritySupport: { isEnabled: Boolean(raw?.prioritySupport?.isEnabled) },
-    showcase: { isEnabled: Boolean(raw?.showcase?.isEnabled) },
+    showcase: raw?.showcase ? normalizeEntitlementLimit(raw.showcase) : defaults.showcase,
   };
 }
 
@@ -516,9 +516,9 @@ function EditableFeatureList({ features, onChange }) {
 }
 
 /* -------------------------------------------------------------------------
- * Entitlements editor — subBrands/franchises are unlimited-or-limited,
- * the rest (vouchers, dealPack, prioritySupport, showcase) are plain
- * enable/disable switches.
+ * Entitlements editor — subBrands/franchises/vouchers/showcase are
+ * unlimited-or-limited ({ isUnlimited, limit }); dealPack and
+ * prioritySupport are plain enable/disable switches ({ isEnabled }).
  * ---------------------------------------------------------------------- */
 
 function EnableToggle({ label, enabled, onChange }) {
@@ -596,10 +596,10 @@ function EntitlementsEditor({ entitlements, onChange }) {
           entitlement={entitlements.franchises}
           onChange={(next) => set("franchises", next)}
         />
-        <EnableToggle
+        <LimitOrUnlimitedField
           label="Vouchers"
-          enabled={entitlements.vouchers.isEnabled}
-          onChange={(v) => set("vouchers", { isEnabled: v })}
+          entitlement={entitlements.vouchers}
+          onChange={(next) => set("vouchers", next)}
         />
         <EnableToggle
           label="Deal Pack"
@@ -611,10 +611,10 @@ function EntitlementsEditor({ entitlements, onChange }) {
           enabled={entitlements.prioritySupport.isEnabled}
           onChange={(v) => set("prioritySupport", { isEnabled: v })}
         />
-        <EnableToggle
+        <LimitOrUnlimitedField
           label="Showcase"
-          enabled={entitlements.showcase.isEnabled}
-          onChange={(v) => set("showcase", { isEnabled: v })}
+          entitlement={entitlements.showcase}
+          onChange={(next) => set("showcase", next)}
         />
       </div>
     </div>
@@ -957,10 +957,14 @@ export default function Plan() {
         franchises: cleaned.entitlements.franchises.isUnlimited
           ? { isUnlimited: true }
           : { isUnlimited: false, limit: Number(cleaned.entitlements.franchises.limit) || 0 },
-        vouchers: { isEnabled: Boolean(cleaned.entitlements.vouchers.isEnabled) },
+        vouchers: cleaned.entitlements.vouchers.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.vouchers.limit) || 0 },
         dealPack: { isEnabled: Boolean(cleaned.entitlements.dealPack.isEnabled) },
         prioritySupport: { isEnabled: Boolean(cleaned.entitlements.prioritySupport.isEnabled) },
-        showcase: { isEnabled: Boolean(cleaned.entitlements.showcase.isEnabled) },
+        showcase: cleaned.entitlements.showcase.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.showcase.limit) || 0 },
       },
     };
 
@@ -969,11 +973,26 @@ export default function Plan() {
     try {
       if (isNew) {
         const created = await addPlan(apiPayload);
-        const newPlan = normalizePlan(created?.plan ?? created?.data ?? created ?? cleaned);
+        // Some responses just echo `{success, message}` with no plan object
+        // at all (or wrap it under a key other than `.plan`/`.data`) — when
+        // the response doesn't actually look like a plan, fall back to
+        // building it from the payload we just sent, instead of silently
+        // normalizing an empty `{success, message}` object into a blank plan.
+        const createdRaw = created?.data?.plan ?? created?.plan ?? created?.data ?? created;
+        const createdLooksLikePlan = createdRaw && (createdRaw.name || createdRaw.entitlements || createdRaw._id || createdRaw.id);
+        const newPlan = normalizePlan(createdLooksLikePlan ? createdRaw : apiPayload);
         setPlans((prev) => [...prev, newPlan]);
       } else {
         const updated = await updatePlan(cleaned.id, apiPayload);
-        const updatedPlan = normalizePlan(updated?.plan ?? updated?.data ?? updated ?? cleaned);
+        // Same fallback as above — this was the actual bug behind
+        // "entitlements not updating": when the update response didn't
+        // carry a recognizable plan object, `normalizePlan(updated)` was
+        // silently producing a near-empty plan with a fresh random id, so
+        // `.map` never matched an existing row and the save appeared to
+        // do nothing even though the backend had already saved it.
+        const updatedRaw = updated?.data?.plan ?? updated?.plan ?? updated?.data ?? updated;
+        const updatedLooksLikePlan = updatedRaw && (updatedRaw.name || updatedRaw.entitlements || updatedRaw._id || updatedRaw.id);
+        const updatedPlan = normalizePlan(updatedLooksLikePlan ? updatedRaw : { _id: cleaned.id, ...apiPayload });
         setPlans((prev) => prev.map((p) => (p.id === updatedPlan.id ? updatedPlan : p)));
       }
       setDraft(null);

@@ -13,7 +13,8 @@ import {
   Gift,
 } from "lucide-react";
 import Table from "../../components/common/Table";
-import { getPromoCodeById, DISCOUNT_TYPES } from "./services/PromoCodeApi";
+import { getPromoCodeById } from "./services/PromoCodeApi";
+import { PROMO_DISCOUNT_TYPES as DISCOUNT_TYPES } from "./promoCodeEnums";
 
 function formatDateTime(iso) {
   if (!iso) return "—";

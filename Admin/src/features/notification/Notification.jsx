@@ -16,6 +16,9 @@ import {
   X,
   Info,
   Eye,
+  Wifi,
+  SignalHigh,
+  BatteryFull,
 } from "lucide-react";
 import { broadcastNotification } from "./services/NotificationApi";
 import { registerDeviceToken, unregisterDeviceToken } from "./services/DeviceTokenApi";
@@ -594,33 +597,56 @@ function BroadcastSection() {
           </div>
 
           <div className="lg:sticky lg:top-6">
-            <div className="mx-auto w-[220px]">
-              <div className="relative rounded-[2rem] border-4 border-neutral-800 bg-neutral-950 p-1.5 shadow-xl shadow-black/40">
-                <div className="absolute left-1/2 top-1.5 h-1.5 w-14 -translate-x-1/2 rounded-full bg-neutral-800" />
-                <div className="overflow-hidden rounded-[1.5rem] bg-gradient-to-b from-neutral-800 via-neutral-900 to-neutral-950 px-2.5 pb-4 pt-7">
-                  <div className="mb-3 flex items-center justify-between px-0.5 text-[10px] font-medium text-neutral-400">
+            <div className="mx-auto w-[240px]">
+              {/* Phone frame — a real lock-screen mockup, not a watch face */}
+              <div className="relative aspect-[9/19.5] overflow-hidden rounded-[2.75rem] border-[6px] border-neutral-800 bg-neutral-950 shadow-xl shadow-black/40">
+                {/* Wallpaper */}
+                <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/30 via-neutral-900 to-neutral-950" />
+
+                {/* Dynamic island */}
+                <div className="absolute left-1/2 top-2 z-20 h-5 w-[86px] -translate-x-1/2 rounded-full bg-neutral-950" />
+
+                <div className="relative z-10 flex h-full flex-col">
+                  {/* Status bar */}
+                  <div className="flex items-center justify-between px-5 pt-3 text-[10.5px] font-medium text-white">
                     <span>9:41</span>
-                    <span className="h-1.5 w-1.5 rounded-full bg-neutral-500" />
-                  </div>
-                  <div className="rounded-xl border border-neutral-700/60 bg-neutral-900/95 p-2.5 shadow-lg shadow-black/30">
-                    <div className="flex items-center gap-1.5">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-400/15 text-emerald-400">
-                        <Bell size={10} />
-                      </span>
-                      <span className="text-[10px] font-semibold tracking-wide text-neutral-300">TRYDOOD</span>
-                      {severity === "WARNING" && (
-                        <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[8.5px] font-semibold text-amber-400">
-                          !
-                        </span>
-                      )}
-                      <span className="ml-auto text-[9px] text-neutral-500">now</span>
+                    <div className="flex items-center gap-1 text-white/90">
+                      <SignalHigh size={11} />
+                      <Wifi size={11} />
+                      <BatteryFull size={13} />
                     </div>
-                    <p className="mt-1.5 truncate text-[12px] font-semibold text-neutral-50">
-                      {title.trim() || "Your notification title"}
+                  </div>
+
+                  {/* Lock-screen clock */}
+                  <div className="mt-5 px-4 text-center text-white">
+                    <p className="text-[11px] font-medium text-white/60">
+                      {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
                     </p>
-                    <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-neutral-400">
-                      {body.trim() || "Body text appears here as you type."}
-                    </p>
+                    <p className="mt-0.5 text-[38px] font-semibold leading-none tracking-tight">9:41</p>
+                  </div>
+
+                  {/* Notification banner */}
+                  <div className="mt-6 px-3">
+                    <div className="rounded-2xl border border-white/10 bg-neutral-900/90 p-2.5 shadow-lg shadow-black/40 backdrop-blur">
+                      <div className="flex items-center gap-1.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-400/15 text-emerald-400">
+                          <Bell size={10} />
+                        </span>
+                        <span className="text-[10px] font-semibold tracking-wide text-neutral-300">TRYDOOD</span>
+                        {severity === "WARNING" && (
+                          <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[8.5px] font-semibold text-amber-400">
+                            !
+                          </span>
+                        )}
+                        <span className="ml-auto text-[9px] text-neutral-500">now</span>
+                      </div>
+                      <p className="mt-1.5 truncate text-[12px] font-semibold text-neutral-50">
+                        {title.trim() || "Your notification title"}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-neutral-400">
+                        {body.trim() || "Body text appears here as you type."}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

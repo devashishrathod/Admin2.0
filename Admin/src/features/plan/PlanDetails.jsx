@@ -129,12 +129,7 @@ export default function PlanDetails({ planId, onBack }) {
   const availableFeatures = plan?.features.filter((f) => f.available).length ?? 0;
   const totalFeatures = plan?.features.length ?? 0;
   const booleanEntitlements = plan
-    ? [
-        plan.entitlements.vouchers.isEnabled,
-        plan.entitlements.dealPack.isEnabled,
-        plan.entitlements.prioritySupport.isEnabled,
-        plan.entitlements.showcase.isEnabled,
-      ]
+    ? [plan.entitlements.dealPack.isEnabled, plan.entitlements.prioritySupport.isEnabled]
     : [];
   const enabledEntitlements = booleanEntitlements.filter(Boolean).length;
   const savings =
@@ -182,9 +177,9 @@ export default function PlanDetails({ planId, onBack }) {
                 tint={plan.status === "Active" ? "emerald" : "red"}
               />
               <RingStat
-                pct={plan.entitlements.vouchers.isEnabled ? 100 : 0}
+                pct={plan.entitlements.vouchers.isUnlimited ? 100 : 0}
                 label="Vouchers"
-                caption={plan.entitlements.vouchers.isEnabled ? "Enabled" : "Disabled"}
+                caption={plan.entitlements.vouchers.isUnlimited ? "Unlimited" : `${plan.entitlements.vouchers.limit} limit`}
                 tint="sky"
               />
               <RingStat
@@ -407,7 +402,7 @@ export default function PlanDetails({ planId, onBack }) {
                 <InfoRow
                   icon={Ticket}
                   label="Vouchers"
-                  value={plan.entitlements.vouchers.isEnabled ? "Enabled" : "Disabled"}
+                  value={plan.entitlements.vouchers.isUnlimited ? "Unlimited" : plan.entitlements.vouchers.limit}
                 />
                 <InfoRow
                   icon={Gift}
@@ -422,7 +417,7 @@ export default function PlanDetails({ planId, onBack }) {
                 <InfoRow
                   icon={LayoutGrid}
                   label="Showcase"
-                  value={plan.entitlements.showcase.isEnabled ? "Enabled" : "Disabled"}
+                  value={plan.entitlements.showcase.isUnlimited ? "Unlimited" : plan.entitlements.showcase.limit}
                 />
               </div>
             </SectionCard>

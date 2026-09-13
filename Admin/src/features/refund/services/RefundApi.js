@@ -60,14 +60,24 @@ export async function getRefundById(refundRequestId) {
     }
 }
 
+/* -------------------------------------------------------------------------
+ * Admin refund workflow — confirmed from Postman:
+ * PATCH /refunds/admin/:id/approve | /reject | /pay | /request-bank-details
+ * Distinct from the read-only /refunds and /refunds/:id above, same
+ * pattern as the settlements admin workflow (/settlements/admin/:id/...).
+ * ---------------------------------------------------------------------- */
+
 // ── Approve a Refund ──────────────────────────────────────────────
-// PATCH {{base_url}}/refunds/:refundRequestId/approve  body: { approvedAmount, note? }
-export async function approveRefund(refundRequestId, { approvedAmount, note } = {}) {
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/approve  body: { note? }
+// Matches the confirmed Postman request exactly — no approvedAmount field;
+// the endpoint decides the amount itself (echoed back as "amount" in the
+// response).
+export async function approveRefund(refundRequestId, { note } = {}) {
     try {
         if (!refundRequestId) throw new Error('refundRequestId is required');
-        const body = { approvedAmount };
+        const body = {};
         if (note) body.note = note;
-        const { data } = await api.patch(`/refunds/${refundRequestId}/approve`, body);
+        const { data } = await api.patch(`/refunds/admin/${refundRequestId}/approve`, body);
         return data;
     } catch (error) {
         handleError(error);
@@ -75,13 +85,80 @@ export async function approveRefund(refundRequestId, { approvedAmount, note } = 
 }
 
 // ── Reject a Refund ───────────────────────────────────────────────
-// PATCH {{base_url}}/refunds/:refundRequestId/reject  body: { note? }
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/reject  body: { note? }
 export async function rejectRefund(refundRequestId, { note } = {}) {
     try {
         if (!refundRequestId) throw new Error('refundRequestId is required');
         const body = {};
         if (note) body.note = note;
-        const { data } = await api.patch(`/refunds/${refundRequestId}/reject`, body);
+        const { data } = await api.patch(`/refunds/admin/${refundRequestId}/reject`, body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Pay a Refund ──────────────────────────────────────────────────
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/pay  (no body)
+// Triggers the actual Razorpay/gateway refund for an already-approved
+// request. Can fail with 422 (e.g. "Razorpay could not process this
+// refund: Refund failed") — that message is surfaced as-is via
+// handleError so the admin can decide to request bank details instead.
+export async function payRefund(refundRequestId) {
+    try {
+        if (!refundRequestId) throw new Error('refundRequestId is required');
+        const { data } = await api.patch(`/refunds/admin/${refundRequestId}/pay`);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Request Bank Details ───────────────────────────────────────────
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/request-bank-details
+// body: { reason }
+// Used when the gateway refund window has closed (or the /pay attempt
+// failed) — switches the refund to MANUAL_BANK and asks the customer for
+// their bank account details so the admin can NEFT it manually.
+export async function requestBankDetails(refundRequestId, { reason } = {}) {
+    try {
+        if (!refundRequestId) throw new Error('refundRequestId is required');
+        const { data } = await api.patch(`/refunds/admin/${refundRequestId}/request-bank-details`, { reason });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Pay to Bank (start a manual NEFT payout) ───────────────────────
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/pay-to-bank  (no body)
+// For MANUAL_BANK refunds once the customer's bank details are on file —
+// opens a payout "leg" (status INITIATED) and moves the refund to
+// PROCESSING. The actual bank transfer still happens outside this call;
+// /confirm-bank-payout closes the loop once it has.
+export async function payToBank(refundRequestId) {
+    try {
+        if (!refundRequestId) throw new Error('refundRequestId is required');
+        const { data } = await api.patch(`/refunds/admin/${refundRequestId}/pay-to-bank`);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Confirm Bank Payout ─────────────────────────────────────────────
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/confirm-bank-payout
+// body: { utr, mode, paidAt } — same shape as the settlements admin
+// confirm-payout endpoint. Closes out the manual NEFT leg opened by
+// /pay-to-bank (leg status -> PAID).
+export async function confirmBankPayout(refundRequestId, { utr, mode, paidAt } = {}) {
+    try {
+        if (!refundRequestId) throw new Error('refundRequestId is required');
+        const { data } = await api.patch(`/refunds/admin/${refundRequestId}/confirm-bank-payout`, {
+            utr,
+            mode,
+            paidAt,
+        });
         return data;
     } catch (error) {
         handleError(error);
@@ -93,4 +170,8 @@ export default {
     getRefundById,
     approveRefund,
     rejectRefund,
+    payRefund,
+    requestBankDetails,
+    payToBank,
+    confirmBankPayout,
 };

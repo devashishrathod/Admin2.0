@@ -31,19 +31,25 @@ function handleError(error) {
 }
 
 /* -------------------------------------------------------------------------
- * Payload shape returned by / sent to the API
+ * Payload shape returned by / sent to the API — confirmed real document:
  *
  * {
  *   _id, isActive, createdAt, updatedAt, updatedBy,
- *   vendor: {
- *     voucher: { maxOffers, maxImages, maxDistanceKm },
- *     showcase: {
- *       maxSections, maxItemsPerSection, maxImagesPerSection,
- *       maxVideosPerSection, maxImageSizeMB, maxVideoSizeMB,
- *       allowedImages: string[], allowedVideos: string[], isActive
- *     }
- *   }
+ *   vendor: { voucher, showcase, subscription },
+ *   customer: {
+ *     convenienceFee, tax, promoCode, claim, notification, invoice,
+ *     settlement (incl. nested reserve), refund, chargeback, search
+ *   },
+ *   security: { otp },
+ *   admin: { notification },
+ *   app: { minVersion, latestVersion, forceUpdate, updateMessage, storeUrl, support, features }
  * }
+ *
+ * updateSettings only ever accepts ONE partial sub-object per call
+ * (e.g. { vendor: { voucher } } alone, or { isActive } alone) — never
+ * combine multiple top-level/nested keys in a single PUT. See
+ * Settings.jsx's buildSavePayload, which maps every sidebar leaf to
+ * exactly one such payload.
  * ---------------------------------------------------------------------- */
 
 // ── Get Settings ─────────────────────────────────────────────

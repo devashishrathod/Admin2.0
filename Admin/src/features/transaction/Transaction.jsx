@@ -68,14 +68,14 @@ export function Table({
 
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[13.5px]">
+      <div className="no-scrollbar overflow-x-auto">
+        <table className="w-full min-w-[900px] border-collapse text-[13px]">
           <thead>
-            <tr>
+            <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-5 py-4 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 ${alignClass(
+                  className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
                     col.align
                   )} ${col.width || ""}`}
                 >
@@ -98,14 +98,14 @@ export function Table({
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className={`transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/30 ${
+                  className={`border-t border-neutral-100 transition-colors hover:bg-neutral-50 dark:border-neutral-800/60 dark:hover:bg-neutral-800/30 ${
                     row.isToday ? "bg-cyan-400/[0.04]" : ""
                   }`}
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-5 py-4 text-neutral-700 dark:text-neutral-300 ${alignClass(
+                      className={`whitespace-nowrap px-4 py-3.5 text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
                       )}`}
                     >
@@ -130,33 +130,44 @@ const PAYMENT_METHODS = ["UPI", "Debit Card", "Credit Card", "Net Banking", "Wal
 
 // Normalizes one real voucher-claim payment record (GET
 // /voucher-claims/payments) into the flat row shape this page's table/
-// stats expect. `customerId` is only ever a raw id — the platform's users
-// have no `name` field (WhatsApp-OTP login only), so "Customer" shows the
-// id rather than a fabricated name. `claimId` (the redemption's own id,
-// `voucher.claimId` here) is what routes to the details page (GET
-// /voucher-claims/:claimId) — never shown in the UI; the visible
-// "Payment ID" is the gateway's `razorpayPaymentId`.
-function normalizeClaimPayment(raw) {
-  const ts = raw.createdAt || raw.verifiedAt || null;
+// stats expect.
+//
+// The sibling detail endpoint (GET /voucher-claims/:claimId, confirmed real
+// — see TransactionDetails.jsx) returns each record wrapped as
+// { payment, claim, brand, outlet, timeline } rather than one flat object,
+// so each list row is defensively unwrapped the same way here: read every
+// payment field off `item.payment` when present, falling back to the item
+// itself for a flatter shape. This is what was making most cells show "—"
+// — the old code only ever read straight off the list item.
+//
+// `customerId` is only ever a raw id — the platform's users have no `name`
+// field (WhatsApp-OTP login only), so "Customer" shows the id rather than
+// a fabricated name.
+function normalizeClaimPayment(item) {
+  const payment = item?.payment ?? item ?? {};
+  const claim = item?.claim ?? {};
+  const brand = item?.brand ?? payment?.brand ?? {};
+
+  const ts = payment.createdAt || payment.verifiedAt || null;
   const d = ts ? new Date(ts) : null;
   const dateStr = d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : todayStr();
 
-  const status = normalizeClaimStatus(raw.status);
+  const status = normalizeClaimStatus(payment.status);
 
   return {
-    id: raw._id || "—",
-    claimId: raw.voucher?.claimId || raw._id || "—",
-    razorpayPaymentId: raw.razorpayPaymentId || "—",
-    vendor: raw.brand?.brandName || "—",
-    customer: raw.customerId || "—",
+    id: payment._id || item?._id || "—",
+    claimId: claim._id || payment.claimId || item?.voucher?.claimId || item?._id || payment._id || "—",
+    razorpayPaymentId: payment.razorpayPaymentId || "—",
+    vendor: brand.brandName || "—",
+    customer: payment.customerId || claim.customerId || "—",
     date: dateStr,
     time: d && !Number.isNaN(d.getTime()) ? fmtTime(ts) : "—",
-    amount: Number(raw.amount) || 0,
-    method: formatPaymentMethod(raw.paymentMethod),
+    amount: Number(payment.amount) || 0,
+    method: formatPaymentMethod(payment.paymentMethod),
     status,
     isToday: dateStr === todayStr(),
-    reference: raw.invoiceId || "—",
-    failureReason: status === "Failed" ? raw.errorDescription || raw.failureReason || "Payment failed." : null,
+    reference: payment.invoiceId || "—",
+    failureReason: status === "Failed" ? payment.errorDescription || payment.failureReason || "Payment failed." : null,
   };
 }
 

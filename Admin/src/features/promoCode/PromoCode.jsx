@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus,
   Search,
@@ -15,6 +15,12 @@ import {
   Award,
   TrendingUp,
   Percent,
+  Users,
+  Store,
+  Wallet,
+  Layers,
+  Calendar,
+  ChevronDown,
 } from "lucide-react";
 import {
   BarChart,
@@ -29,17 +35,33 @@ import {
 } from "recharts";
 import Table from "../../components/common/Table";
 import PromoCodeDetails from "./PromoCodeDetails";
+import { createPromoCode, getPromoCodes, updatePromoCode } from "./services/PromoCodeApi";
 import {
-  createPromoCode,
-  getPromoCodes,
-  updatePromoCode,
-  DISCOUNT_TYPES,
+  PROMO_DISCOUNT_TYPES,
+  PROMO_AUDIENCE,
+  PROMO_APPLIES_TO,
+  PROMO_COST_BEARING_MODE,
+  PROMO_APPLICABLE_ACTIONS,
   PROMO_STATUSES,
-  APPLICABLE_ACTIONS,
-} from "./services/PromoCodeApi";
+  DISCOUNT_TYPE_LABELS,
+  AUDIENCE_LABELS,
+  APPLIES_TO_LABELS,
+  COST_BEARING_LABELS,
+  APPLICABLE_ACTION_LABELS,
+} from "./promoCodeEnums";
+import { getVouchers } from "../voucher/services/VoucherApi";
+import { getAllBrands } from "../brand/services/brandApi";
+import { getCategories } from "../category/services/CategoryApi";
+import { getPlans } from "../plan/services/planApi";
 
 const STATUS_FILTERS = ["All", PROMO_STATUSES.LIVE, PROMO_STATUSES.SCHEDULED, PROMO_STATUSES.EXPIRED];
 const STATUS_LABELS = { All: "All", LIVE: "Live", SCHEDULED: "Scheduled", EXPIRED: "Expired" };
+
+const ACTION_OPTIONS = Object.values(PROMO_APPLICABLE_ACTIONS).map((value) => ({
+  value,
+  label: APPLICABLE_ACTION_LABELS[value],
+}));
+const ACTION_LABELS = APPLICABLE_ACTION_LABELS;
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -56,13 +78,6 @@ function deriveDisplayStatus(row) {
   if (!row.isActive) return { label: "Inactive", className: "bg-amber-400/10 text-amber-600 dark:text-amber-400" };
   return { label: "Live", className: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" };
 }
-
-const ACTION_OPTIONS = [
-  { value: APPLICABLE_ACTIONS.NEW, label: "New" },
-  { value: APPLICABLE_ACTIONS.UPGRADE, label: "Upgrade" },
-];
-
-const ACTION_LABELS = ACTION_OPTIONS.reduce((acc, o) => ({ ...acc, [o.value]: o.label }), {});
 
 const CHART_COLORS = { PERCENT: "#2FDE8C", FLAT: "#38BDF8" };
 
@@ -97,29 +112,274 @@ function KpiTile({ icon: Icon, label, value, caption, tint }) {
   );
 }
 
+/* -------------------------------------------------------------------------
+ * Small reusable form bits used by the rebuilt Add/Edit form.
+ * ---------------------------------------------------------------------- */
+
+// A removable-chip multi-select for real records (vouchers/brands/
+// categories) fetched from their own feature's API — type to filter,
+// click a result to add it.
+// A closed-by-default dropdown with a checkbox list — click to open,
+// search to filter, check/uncheck to select. Selected items also show as
+// removable chips above the trigger.
+function MultiIdPicker({ label, hint, options, selectedIds, onChange, placeholder = "Search…" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const selected = options.filter((o) => selectedIds.includes(o.id));
+  const q = query.trim().toLowerCase();
+  const filtered = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+
+  const toggle = (id) => onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</label>
+
+      {selected.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {selected.map((o) => (
+            <span
+              key={o.id}
+              className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400"
+            >
+              {o.label}
+              <button
+                type="button"
+                onClick={() => toggle(o.id)}
+                aria-label={`Remove ${o.label}`}
+                className="text-emerald-600/70 hover:text-red-500 dark:text-emerald-400/70"
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13px] text-neutral-600 transition-colors hover:border-emerald-400/40 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400"
+      >
+        <span>{selected.length ? `${selected.length} selected` : "None selected — no restriction"}</span>
+        <ChevronDown size={15} className={`shrink-0 text-neutral-500 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="border-b border-neutral-200 p-2 dark:border-neutral-800">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={placeholder}
+              className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto p-1">
+            {filtered.length === 0 && <p className="px-3 py-2 text-[12px] text-neutral-500">No matches.</p>}
+            {filtered.map((o) => {
+              const checked = selectedIds.includes(o.id);
+              return (
+                <label
+                  key={o.id}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-[12.5px] text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(o.id)}
+                    className="h-3.5 w-3.5 rounded border-neutral-300 accent-emerald-400 dark:border-neutral-700"
+                  />
+                  {o.label}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {hint && <p className="mt-1.5 text-[11px] text-neutral-600">{hint}</p>}
+    </div>
+  );
+}
+
+// One tile of the form's bento-grid flow — a numbered, icon-labeled card
+// so the long real schema reads as a sequence (Basics → Audience →
+// Discount → Scope → Limits → Validity → Status) instead of one
+// continuous scroll of fields. Every card uses the same neutral surface —
+// the selected state inside a card (SegmentedField below) is what carries
+// color, not the card itself, so nothing reads as a box-inside-a-box.
+function FormCard({ step, icon: Icon, title, subtitle, span = 1, children }) {
+  return (
+    <div className={`rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950/60 ${span === 2 ? "sm:col-span-2" : ""}`}>
+      <div className="mb-3.5 flex items-center gap-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-400/15 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+          {step}
+        </span>
+        {Icon && <Icon size={14} className="shrink-0 text-neutral-500 dark:text-neutral-400" />}
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{title}</p>
+          {subtitle && <p className="text-[11px] text-neutral-500">{subtitle}</p>}
+        </div>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </div>
+  );
+}
+
+// A uniform segmented control (classic pill-track style) for every enum
+// field in this form — Discount Type, Audience, Applies To, Cost Bearing
+// and Status — so every enum reads the same way, and the selected option
+// is shown by a raised chip rather than a colored border (which read as a
+// box-inside-a-box when the surrounding card also had a tint).
+function SegmentedField({ label, value, options, onChange, columns = options.length }) {
+  return (
+    <div>
+      {label && <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</label>}
+      <div
+        className="grid gap-1 rounded-xl bg-neutral-200/70 p-1 dark:bg-neutral-900"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
+        {options.map((opt) => (
+          <button
+            type="button"
+            key={String(opt.value)}
+            onClick={() => onChange(opt.value)}
+            className={`rounded-lg px-3 py-2 text-[12.5px] font-medium transition-colors ${
+              value === opt.value
+                ? "bg-white text-emerald-600 shadow-sm dark:bg-neutral-800 dark:text-emerald-400"
+                : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// A single-select dropdown — same closed-by-default trigger + panel
+// pattern as MultiIdPicker, just one choice instead of many. Used for
+// Audience, where a segmented control read as a box-inside-a-box.
+function DropdownField({ label, value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const current = options.find((o) => o.value === value);
+
+  return (
+    <div ref={containerRef} className="relative">
+      {label && <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-left text-[13px] font-medium text-neutral-800 transition-colors hover:border-emerald-400/40 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+      >
+        <span>{current?.label ?? "Select…"}</span>
+        <ChevronDown size={15} className={`shrink-0 text-neutral-500 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+          {options.map((opt) => (
+            <button
+              type="button"
+              key={String(opt.value)}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              className={`block w-full px-3.5 py-2.5 text-left text-[13px] transition-colors ${
+                value === opt.value
+                  ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                  : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A quiet, contained note for when a picker's own list failed to load —
+// same info the admin needs, without a stark red exclamation.
+// The raw error (e.g. a Joi validation string like "Query.limit must be
+// less than or equal to 100") is logged to the console for debugging, not
+// shown here — an admin doesn't need the backend's own validator wording,
+// just a plain "this didn't load" plus somewhere to look next.
+function PickerErrorNote({ what }) {
+  return (
+    <div className="mb-1.5 flex items-start gap-1.5 rounded-lg bg-amber-400/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+      <AlertTriangle size={12} className="mt-[1px] shrink-0" />
+      <span>Couldn't load {what} right now — check the browser console or try reopening this form.</span>
+    </div>
+  );
+}
+
 const EMPTY_FORM = {
   id: null,
   code: "",
   description: "",
-  discountType: DISCOUNT_TYPES.PERCENT,
+  discountType: PROMO_DISCOUNT_TYPES.PERCENT,
   discountPercent: "",
   discountAmount: "",
   maxDiscountAmount: "",
   minOrderValue: "",
-  applicableActions: [],
-  firstTimeOnly: false,
   validFrom: "",
   validTill: "",
   totalUsageLimit: "",
   perBrandUsageLimit: "",
   isActive: true,
+
+  // ---------- audience ----------
+  audience: PROMO_AUDIENCE.VENDOR,
+
+  // ---------- vendor scope (audience === VENDOR) ----------
+  subscriptionIds: [],
+  applicableActions: [],
+  firstTimeOnly: false,
+
+  // ---------- customer scope (audience === CUSTOMER) ----------
+  voucherIds: [],
+  brandIds: [],
+  categoryIds: [],
+  perCustomerUsageLimit: "",
+  firstOrderOnly: false,
+  minBillAmount: "",
+  appliesTo: PROMO_APPLIES_TO.NET_BILL,
+  costBearing: { mode: PROMO_COST_BEARING_MODE.PLATFORM, vendorPercent: "" },
 };
 
 /* -------------------------------------------------------------------------
- * Add / Edit modal
+ * Add / Edit modal — every real field from the backend's Joi validator,
+ * split into Audience → (Vendor scope | Customer scope) → shared sections
+ * so the form only ever shows what's relevant to the code's own audience.
  * ---------------------------------------------------------------------- */
 
-function PromoCodeFormModal({ open, initialData, saving, onClose, onSave }) {
+function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands, categories, pickerErrors = {}, onClose, onSave }) {
   const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
@@ -135,6 +395,7 @@ function PromoCodeFormModal({ open, initialData, saving, onClose, onSave }) {
   const isEdit = Boolean(form.id);
   const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
   const handleChange = (field) => (e) => setField(field, e.target.value);
+  const setCostBearing = (patch) => setForm((prev) => ({ ...prev, costBearing: { ...prev.costBearing, ...patch } }));
 
   const toggleAction = (value) => {
     setForm((prev) => ({
@@ -145,16 +406,27 @@ function PromoCodeFormModal({ open, initialData, saving, onClose, onSave }) {
     }));
   };
 
+  const isCustomer = form.audience === PROMO_AUDIENCE.CUSTOMER;
+  const isVendor = form.audience === PROMO_AUDIENCE.VENDOR;
+  const costBearingNeedsBrands =
+    isCustomer && [PROMO_COST_BEARING_MODE.VENDOR, PROMO_COST_BEARING_MODE.SHARED].includes(form.costBearing.mode);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const nextErrors = {};
     if (!form.code.trim()) nextErrors.code = "Promo code is required";
-    const discountField = form.discountType === DISCOUNT_TYPES.PERCENT ? "discountPercent" : "discountAmount";
+    const discountField = form.discountType === PROMO_DISCOUNT_TYPES.PERCENT ? "discountPercent" : "discountAmount";
     if (!String(form[discountField]).trim()) nextErrors[discountField] = "Discount value is required";
     if (!form.validFrom) nextErrors.validFrom = "Start date is required";
     if (!form.validTill) nextErrors.validTill = "End date is required";
     if (form.validFrom && form.validTill && form.validFrom > form.validTill) {
       nextErrors.validTill = "End date must be after start date";
+    }
+    // A code that debits a vendor's payout (VENDOR/SHARED cost-bearing)
+    // must be scoped to specific brands — otherwise it would deduct from
+    // whichever brand a customer happened to visit (assertCoherent, backend).
+    if (costBearingNeedsBrands && form.brandIds.length === 0) {
+      nextErrors.brandIds = "Vendor/Shared cost-bearing needs at least one brand selected.";
     }
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
@@ -170,7 +442,7 @@ function PromoCodeFormModal({ open, initialData, saving, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+        className="w-full max-w-3xl rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
@@ -193,236 +465,362 @@ function PromoCodeFormModal({ open, initialData, saving, onClose, onSave }) {
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="max-h-[75vh] overflow-y-auto px-5 py-5">
-          {/* Code */}
-          <div className="mb-4">
-            <label htmlFor="promo-code" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Code
-            </label>
-            <input
-              id="promo-code"
-              value={form.code}
-              onChange={(e) => setField("code", e.target.value.toUpperCase())}
-              placeholder="e.g. LAUNCH20"
-              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 font-mono text-[13.5px] tracking-wide text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                errors.code
-                  ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-              }`}
-              disabled={isEdit}
-            />
-            {errors.code && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.code}</p>}
-            {isEdit && <p className="mt-1.5 text-[11.5px] text-neutral-600">Code can't be changed after creation.</p>}
-          </div>
-
-          {/* Description */}
-          <div className="mb-4">
-            <label htmlFor="promo-description" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Description <span className="font-normal text-neutral-500">(optional)</span>
-            </label>
-            <textarea
-              id="promo-description"
-              value={form.description}
-              onChange={handleChange("description")}
-              rows={2}
-              placeholder="e.g. Launch offer — 20% off, capped at ₹1,000"
-              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
-            />
-          </div>
-
-          {/* Discount */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="max-h-[82vh] overflow-y-auto px-6 py-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Step 1 — Basics */}
+          <FormCard step={1} icon={Tag} title="Basics" span={2}>
             <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Discount Type</label>
-              <select
-                value={form.discountType}
-                onChange={handleChange("discountType")}
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
-              >
-                <option value={DISCOUNT_TYPES.PERCENT}>Percent</option>
-                <option value={DISCOUNT_TYPES.FLAT}>Flat</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-                {form.discountType === DISCOUNT_TYPES.PERCENT ? "Discount (%)" : "Discount Amount (₹)"}
+              <label htmlFor="promo-code" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
+                Code
               </label>
-              {form.discountType === DISCOUNT_TYPES.PERCENT ? (
-                <input
-                  type="number"
-                  min={0}
-                  value={form.discountPercent}
-                  onChange={handleChange("discountPercent")}
-                  placeholder="20"
-                  className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                    errors.discountPercent
-                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-                  }`}
-                />
-              ) : (
-                <input
-                  type="number"
-                  min={0}
-                  value={form.discountAmount}
-                  onChange={handleChange("discountAmount")}
-                  placeholder="500"
-                  className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                    errors.discountAmount
-                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-                  }`}
-                />
-              )}
-              {(errors.discountPercent || errors.discountAmount) && (
-                <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.discountPercent || errors.discountAmount}</p>
-              )}
+              <input
+                id="promo-code"
+                value={form.code}
+                onChange={(e) => setField("code", e.target.value.toUpperCase())}
+                placeholder="e.g. LAUNCH20"
+                className={`w-full rounded-xl border bg-white px-3.5 py-2.5 font-mono text-[13.5px] tracking-wide text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
+                  errors.code
+                    ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
+                }`}
+                disabled={isEdit}
+              />
+              {errors.code && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.code}</p>}
+              {isEdit && <p className="mt-1.5 text-[11.5px] text-neutral-600">Code can't be changed after creation.</p>}
             </div>
-          </div>
 
-          {form.discountType === DISCOUNT_TYPES.PERCENT && (
-            <div className="mb-4">
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Max Discount Amount (₹)</label>
+            <div>
+              <label htmlFor="promo-description" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
+                Description <span className="font-normal text-neutral-500">(optional)</span>
+              </label>
+              <textarea
+                id="promo-description"
+                value={form.description}
+                onChange={handleChange("description")}
+                rows={2}
+                placeholder="e.g. Launch offer — 20% off, capped at ₹1,000"
+                className="w-full resize-none rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+              />
+            </div>
+          </FormCard>
+
+          {/* Step 2 — Audience (drives which later steps appear) */}
+          <FormCard step={2} icon={Users} title="Audience" subtitle="Which checkout this code belongs to">
+            <DropdownField
+              value={form.audience}
+              onChange={(v) => setField("audience", v)}
+              options={Object.values(PROMO_AUDIENCE).map((a) => ({ value: a, label: AUDIENCE_LABELS[a] }))}
+            />
+            <p className="text-[11px] text-neutral-600">A vendor and a customer never see each other's codes.</p>
+          </FormCard>
+
+          {/* Step 3 — Discount */}
+          <FormCard step={3} icon={Percent} title="Discount">
+            <div className="grid grid-cols-2 gap-3">
+              <SegmentedField
+                label="Discount Type"
+                value={form.discountType}
+                onChange={(v) => setField("discountType", v)}
+                options={Object.values(PROMO_DISCOUNT_TYPES).map((t) => ({ value: t, label: DISCOUNT_TYPE_LABELS[t] }))}
+              />
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
+                  {form.discountType === PROMO_DISCOUNT_TYPES.PERCENT ? "Discount (%)" : "Discount Amount (₹)"}
+                </label>
+                {form.discountType === PROMO_DISCOUNT_TYPES.PERCENT ? (
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.discountPercent}
+                    onChange={handleChange("discountPercent")}
+                    placeholder="20"
+                    className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
+                      errors.discountPercent
+                        ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                        : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
+                    }`}
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.discountAmount}
+                    onChange={handleChange("discountAmount")}
+                    placeholder="500"
+                    className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
+                      errors.discountAmount
+                        ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                        : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
+                    }`}
+                  />
+                )}
+                {(errors.discountPercent || errors.discountAmount) && (
+                  <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.discountPercent || errors.discountAmount}</p>
+                )}
+              </div>
+            </div>
+
+            {form.discountType === PROMO_DISCOUNT_TYPES.PERCENT && (
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Max Discount Amount (₹)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.maxDiscountAmount}
+                  onChange={handleChange("maxDiscountAmount")}
+                  placeholder="1000"
+                  className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                />
+                <p className="mt-1.5 text-[11px] text-neutral-600">Caps how much a percent-based discount can be worth.</p>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Min Order Value (₹)</label>
               <input
                 type="number"
                 min={0}
-                value={form.maxDiscountAmount}
-                onChange={handleChange("maxDiscountAmount")}
-                placeholder="1000"
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                value={form.minOrderValue}
+                onChange={handleChange("minOrderValue")}
+                placeholder="1999"
+                className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
-              <p className="mt-1.5 text-[11px] text-neutral-600">Caps how much a percent-based discount can be worth.</p>
             </div>
+          </FormCard>
+
+          {/* Step 4 — Vendor scope */}
+          {isVendor && (
+            <FormCard step={4} icon={Store} title="Vendor Scope" subtitle="Which subscription plans and actions this code covers" span={2}>
+              {pickerErrors.plans && <PickerErrorNote what="plans" />}
+              <MultiIdPicker
+                label="Eligible Subscription Plans"
+                options={plans}
+                selectedIds={form.subscriptionIds}
+                onChange={(v) => setField("subscriptionIds", v)}
+                placeholder="Search plans…"
+              />
+              <p className="text-[11px] text-neutral-600">
+                Voucher/Brand/Category scoping lives under Customer audience (Step 2) — a vendor code only ever discounts a subscription.
+              </p>
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Applicable Actions</label>
+                <div className="flex flex-wrap gap-2">
+                  {ACTION_OPTIONS.map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={() => toggleAction(opt.value)}
+                      className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
+                        form.applicableActions.includes(opt.value)
+                          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                          : "border-neutral-200 bg-white text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[11px] text-neutral-600">None selected means any action.</p>
+              </div>
+              <label className="flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={form.firstTimeOnly}
+                  onChange={(e) => setField("firstTimeOnly", e.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-300 bg-white accent-emerald-400 dark:border-neutral-700 dark:bg-neutral-900"
+                />
+                First subscription purchase only
+              </label>
+            </FormCard>
           )}
 
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Min Order Value (₹)</label>
-            <input
-              type="number"
-              min={0}
-              value={form.minOrderValue}
-              onChange={handleChange("minOrderValue")}
-              placeholder="1999"
-              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
-            />
-          </div>
+          {/* Step 4 — Customer scope */}
+          {isCustomer && (
+            <FormCard step={4} icon={Gift} title="Customer Scope" subtitle="Which vouchers, brands and categories this code covers" span={2}>
+              <SegmentedField
+                label="Applies To"
+                value={form.appliesTo}
+                onChange={(v) => setField("appliesTo", v)}
+                options={Object.values(PROMO_APPLIES_TO).map((t) => ({ value: t, label: APPLIES_TO_LABELS[t] }))}
+                columns={2}
+              />
 
-          {/* Usage limits */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Total Usage Limit</label>
-              <input
-                type="number"
-                min={0}
-                value={form.totalUsageLimit}
-                onChange={handleChange("totalUsageLimit")}
-                placeholder="500"
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Per Brand Usage Limit</label>
-              <input
-                type="number"
-                min={0}
-                value={form.perBrandUsageLimit}
-                onChange={handleChange("perBrandUsageLimit")}
-                placeholder="1"
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
-              />
-            </div>
-          </div>
+              <div>
+                {pickerErrors.vouchers && <PickerErrorNote what="vouchers" />}
+                <MultiIdPicker
+                  label="Eligible Vouchers"
+                  options={vouchers}
+                  selectedIds={form.voucherIds}
+                  onChange={(v) => setField("voucherIds", v)}
+                  placeholder="Search vouchers…"
+                />
+              </div>
+              <div>
+                {pickerErrors.brands && <PickerErrorNote what="brands" />}
+                <MultiIdPicker
+                  label="Eligible Brands"
+                  options={brands}
+                  selectedIds={form.brandIds}
+                  onChange={(v) => setField("brandIds", v)}
+                  placeholder="Search brands…"
+                />
+                {errors.brandIds && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.brandIds}</p>}
+              </div>
+              <div>
+                {pickerErrors.categories && <PickerErrorNote what="categories" />}
+                <MultiIdPicker
+                  label="Eligible Categories"
+                  options={categories}
+                  selectedIds={form.categoryIds}
+                  onChange={(v) => setField("categoryIds", v)}
+                  placeholder="Search categories…"
+                />
+              </div>
 
-          {/* Validity */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Valid From</label>
-              <input
-                type="date"
-                value={form.validFrom}
-                onChange={handleChange("validFrom")}
-                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark] ${
-                  errors.validFrom
-                    ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-                }`}
-              />
-              {errors.validFrom && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.validFrom}</p>}
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Valid Till</label>
-              <input
-                type="date"
-                value={form.validTill}
-                onChange={handleChange("validTill")}
-                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-950 dark:text-neutral-200 dark:[color-scheme:dark] ${
-                  errors.validTill
-                    ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-                }`}
-              />
-              {errors.validTill && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.validTill}</p>}
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Per-Customer Usage Limit</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.perCustomerUsageLimit}
+                    onChange={handleChange("perCustomerUsageLimit")}
+                    placeholder="1"
+                    className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Min Bill Amount (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.minBillAmount}
+                    onChange={handleChange("minBillAmount")}
+                    placeholder="500"
+                    className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                  />
+                </div>
+              </div>
 
-          {/* Applicable actions */}
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Applicable Actions</label>
-            <div className="flex gap-2">
-              {ACTION_OPTIONS.map((opt) => (
-                <button
-                  type="button"
-                  key={opt.value}
-                  onClick={() => toggleAction(opt.value)}
-                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.applicableActions.includes(opt.value)
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
+              <label className="flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={form.firstOrderOnly}
+                  onChange={(e) => setField("firstOrderOnly", e.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-300 bg-white accent-emerald-400 dark:border-neutral-700 dark:bg-neutral-900"
+                />
+                First order only
+              </label>
+            </FormCard>
+          )}
+
+          {/* Step 5 — Cost bearing (customer audience only) */}
+          {isCustomer && (
+            <FormCard step={5} icon={Wallet} title="Who Funds The Discount">
+              <SegmentedField
+                value={form.costBearing.mode}
+                onChange={(m) => setCostBearing({ mode: m })}
+                options={Object.values(PROMO_COST_BEARING_MODE).map((m) => ({ value: m, label: COST_BEARING_LABELS[m] }))}
+                columns={3}
+              />
+              {form.costBearing.mode === PROMO_COST_BEARING_MODE.SHARED && (
+                <div>
+                  <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Vendor's Share (%)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={form.costBearing.vendorPercent}
+                    onChange={(e) => setCostBearing({ vendorPercent: e.target.value })}
+                    placeholder="50"
+                    className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                  />
+                </div>
+              )}
+              {costBearingNeedsBrands && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  Vendor/Shared takes money out of a specific vendor's payout — this code must be scoped to specific brands (Step 4).
+                </p>
+              )}
+            </FormCard>
+          )}
+
+          {/* Step 6 — Usage limits */}
+          <FormCard step={6} icon={Layers} title="Usage Limits">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Total Usage Limit</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.totalUsageLimit}
+                  onChange={handleChange("totalUsageLimit")}
+                  placeholder="500"
+                  className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Per Brand Usage Limit</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.perBrandUsageLimit}
+                  onChange={handleChange("perBrandUsageLimit")}
+                  placeholder="1"
+                  className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                />
+              </div>
+            </div>
+          </FormCard>
+
+          {/* Step 7 — Validity & status */}
+          <FormCard step={7} icon={Calendar} title="Validity & Status" span={2}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Valid From</label>
+                <input
+                  type="date"
+                  value={form.validFrom}
+                  onChange={handleChange("validFrom")}
+                  className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-900 dark:text-neutral-200 dark:[color-scheme:dark] ${
+                    errors.validFrom
+                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                   }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* First time only */}
-          <label className="mb-6 flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
-            <input
-              type="checkbox"
-              checked={form.firstTimeOnly}
-              onChange={(e) => setField("firstTimeOnly", e.target.checked)}
-              className="h-4 w-4 rounded border-neutral-300 bg-neutral-50 accent-emerald-400 dark:border-neutral-700 dark:bg-neutral-950"
-            />
-            First-time brands only
-          </label>
-
-          {/* Status */}
-          <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
-            <div className="flex gap-2">
-              {[
-                { label: "Active", value: true },
-                { label: "Inactive", value: false },
-              ].map((s) => (
-                <button
-                  type="button"
-                  key={s.label}
-                  onClick={() => setField("isActive", s.value)}
-                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.isActive === s.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
+                />
+                {errors.validFrom && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.validFrom}</p>}
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Valid Till</label>
+                <input
+                  type="date"
+                  value={form.validTill}
+                  onChange={handleChange("validTill")}
+                  className={`w-full rounded-xl border bg-white px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 [color-scheme:light] dark:bg-neutral-900 dark:text-neutral-200 dark:[color-scheme:dark] ${
+                    errors.validTill
+                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
                   }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+                />
+                {errors.validTill && <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400">{errors.validTill}</p>}
+              </div>
             </div>
-          </div>
+
+            <SegmentedField
+              label="Status"
+              value={form.isActive}
+              onChange={(v) => setField("isActive", v)}
+              options={[
+                { value: true, label: "Active" },
+                { value: false, label: "Inactive" },
+              ]}
+              columns={2}
+            />
+          </FormCard>
+        </div>
 
           {/* Footer actions */}
-          <div className="flex items-center justify-end gap-2.5">
+          <div className="mt-5 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
@@ -455,7 +853,7 @@ function apiToRow(promo) {
     id: promo._id ?? promo.id,
     code: promo.code,
     description: promo.description || "",
-    discountType: promo.discountType || DISCOUNT_TYPES.PERCENT,
+    discountType: promo.discountType || PROMO_DISCOUNT_TYPES.PERCENT,
     discountPercent: promo.discountPercent ?? 0,
     discountAmount: promo.discountAmount ?? 0,
     maxDiscountAmount: promo.maxDiscountAmount ?? 0,
@@ -474,6 +872,21 @@ function apiToRow(promo) {
     isExpired: Boolean(promo.isExpired),
     isActive: Boolean(promo.isActive),
     status: promo.isActive ? "Active" : "Inactive",
+
+    // Real fields per the Joi validator — defensively defaulted since the
+    // last confirmed getAll sample predates them.
+    audience: promo.audience || PROMO_AUDIENCE.VENDOR,
+    appliesTo: promo.appliesTo || PROMO_APPLIES_TO.NET_BILL,
+    costBearing: {
+      mode: promo.costBearing?.mode || PROMO_COST_BEARING_MODE.PLATFORM,
+      vendorPercent: promo.costBearing?.vendorPercent ?? 0,
+    },
+    voucherIds: Array.isArray(promo.voucherIds) ? promo.voucherIds : [],
+    brandIds: Array.isArray(promo.brandIds) ? promo.brandIds : [],
+    categoryIds: Array.isArray(promo.categoryIds) ? promo.categoryIds : [],
+    perCustomerUsageLimit: promo.perCustomerUsageLimit ?? 0,
+    firstOrderOnly: Boolean(promo.firstOrderOnly),
+    minBillAmount: promo.minBillAmount ?? 0,
   };
 }
 
@@ -494,6 +907,17 @@ function rowToFormDraft(row) {
     totalUsageLimit: row.totalUsageLimit,
     perBrandUsageLimit: row.perBrandUsageLimit,
     isActive: row.isActive,
+
+    audience: row.audience,
+    subscriptionIds: [...row.subscriptionIds],
+    voucherIds: [...row.voucherIds],
+    brandIds: [...row.brandIds],
+    categoryIds: [...row.categoryIds],
+    perCustomerUsageLimit: row.perCustomerUsageLimit,
+    firstOrderOnly: row.firstOrderOnly,
+    minBillAmount: row.minBillAmount,
+    appliesTo: row.appliesTo,
+    costBearing: { ...row.costBearing },
   };
 }
 
@@ -519,6 +943,61 @@ export default function PromoCode() {
   const [saveError, setSaveError] = useState("");
 
   const [selectedId, setSelectedId] = useState(null);
+
+  // Real vouchers/brands/categories/plans for the pickers — each reuses
+  // that feature's own "get all" API rather than a fabricated one. Errors
+  // are surfaced (not swallowed) so an empty picker always says WHY it's
+  // empty instead of just silently showing nothing.
+  const [vouchers, setVouchers] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [pickerErrors, setPickerErrors] = useState({});
+
+  useEffect(() => {
+    // 100 is the real backend cap on these two list endpoints (a limit of
+    // 200 gets rejected outright with "must be less than or equal to
+    // 100") — capped here for all three for consistency.
+    getVouchers({ page: 1, limit: 100 })
+      .then((res) => {
+        const rows = (res?.data?.data ?? []).map((v) => ({ id: v._id, label: v.name || v._id }));
+        setVouchers(rows);
+      })
+      .catch((err) => {
+        console.error("Failed to load vouchers for promo code picker:", err.message);
+        setPickerErrors((prev) => ({ ...prev, vouchers: true }));
+      });
+    getAllBrands({ page: 1, limit: 100 })
+      .then((res) => {
+        const rows = (res?.data?.data ?? res?.data ?? []).map((b) => ({ id: b._id, label: b.brandName || b._id }));
+        setBrands(rows);
+      })
+      .catch((err) => {
+        console.error("Failed to load brands for promo code picker:", err.message);
+        setPickerErrors((prev) => ({ ...prev, brands: true }));
+      });
+    getCategories({ page: 1, limit: 100 })
+      .then((res) => {
+        const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id, label: c.name || c._id }));
+        setCategories(rows);
+      })
+      .catch((err) => {
+        console.error("Failed to load categories for promo code picker:", err.message);
+        setPickerErrors((prev) => ({ ...prev, categories: true }));
+      });
+    // getPlans() returns the raw envelope, not a fixed { data: { data } }
+    // shape — same defensive unwrap Plan.jsx itself uses.
+    getPlans()
+      .then((res) => {
+        const rawList = Array.isArray(res) ? res : res?.data?.data ?? res?.data?.plans ?? res?.data ?? res?.plans ?? [];
+        const rows = (Array.isArray(rawList) ? rawList : []).map((p) => ({ id: p._id ?? p.id, label: p.name || p._id || p.id }));
+        setPlans(rows);
+      })
+      .catch((err) => {
+        console.error("Failed to load plans for promo code picker:", err.message);
+        setPickerErrors((prev) => ({ ...prev, plans: true }));
+      });
+  }, []);
 
   const fetchPromoCodes = useCallback(async () => {
     setLoading(true);
@@ -581,7 +1060,7 @@ export default function PromoCode() {
 
   const usageByTypeData = Object.entries(
     promoCodes.reduce((acc, r) => {
-      const key = r.discountType === DISCOUNT_TYPES.PERCENT ? "Percentage Off" : "Flat Amount";
+      const key = r.discountType === PROMO_DISCOUNT_TYPES.PERCENT ? "Percentage Off" : "Flat Amount";
       acc[key] = (acc[key] || 0) + r.usedCount;
       return acc;
     }, {})
@@ -607,20 +1086,52 @@ export default function PromoCode() {
     setSaving(true);
     setSaveError("");
     try {
+      const isCustomer = form.audience === PROMO_AUDIENCE.CUSTOMER;
+      // These fields are `.min(1).optional()` in the real backend Joi
+      // schema — they may be left out entirely, but sending 0 (what an
+      // empty form field coerces to) fails validation. Omit instead of
+      // defaulting to 0 whenever the admin hasn't set a value ≥ 1.
+      const positiveIntOrUndefined = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n >= 1 ? n : undefined;
+      };
       const payload = {
         description: form.description.trim(),
         discountType: form.discountType,
         discountPercent: Number(form.discountPercent) || 0,
         discountAmount: Number(form.discountAmount) || 0,
-        maxDiscountAmount: Number(form.maxDiscountAmount) || 0,
+        maxDiscountAmount: positiveIntOrUndefined(form.maxDiscountAmount),
         minOrderValue: Number(form.minOrderValue) || 0,
-        applicableActions: form.applicableActions,
-        firstTimeOnly: form.firstTimeOnly,
         validFrom: form.validFrom,
         validTill: form.validTill,
-        totalUsageLimit: Number(form.totalUsageLimit) || 0,
-        perBrandUsageLimit: Number(form.perBrandUsageLimit) || 0,
+        totalUsageLimit: positiveIntOrUndefined(form.totalUsageLimit),
+        perBrandUsageLimit: positiveIntOrUndefined(form.perBrandUsageLimit),
         isActive: form.isActive,
+        audience: form.audience,
+
+        // vendor scope
+        subscriptionIds: form.subscriptionIds,
+        applicableActions: form.applicableActions,
+        firstTimeOnly: form.firstTimeOnly,
+
+        // customer scope — the backend rejects these keys outright on a
+        // VENDOR promo code (not just a non-empty value), so they must be
+        // left out of the payload entirely, not sent as [] / false / 0.
+        voucherIds: isCustomer ? form.voucherIds : undefined,
+        brandIds: isCustomer ? form.brandIds : [],
+        categoryIds: isCustomer ? form.categoryIds : undefined,
+        perCustomerUsageLimit: isCustomer ? positiveIntOrUndefined(form.perCustomerUsageLimit) : undefined,
+        firstOrderOnly: isCustomer ? form.firstOrderOnly : undefined,
+        minBillAmount: isCustomer ? Number(form.minBillAmount) || 0 : undefined,
+        appliesTo: isCustomer ? form.appliesTo : undefined,
+        costBearing: isCustomer
+          ? {
+              mode: form.costBearing.mode,
+              ...(form.costBearing.mode === PROMO_COST_BEARING_MODE.SHARED
+                ? { vendorPercent: Number(form.costBearing.vendorPercent) || 0 }
+                : {}),
+            }
+          : undefined,
       };
       if (form.id) {
         // Code can't be edited — never included in the update body.
@@ -655,14 +1166,24 @@ export default function PromoCode() {
       ),
     },
     {
+      key: "audience",
+      label: "Audience",
+      render: (row) => (
+        <span className="flex items-center gap-1.5 rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+          <Users size={11} />
+          {row.audience === PROMO_AUDIENCE.CUSTOMER ? "Customer" : "Vendor"}
+        </span>
+      ),
+    },
+    {
       key: "discount",
       label: "Discount",
       render: (row) => (
         <div>
           <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-            {row.discountType === DISCOUNT_TYPES.PERCENT ? `${row.discountPercent}%` : `₹${row.discountAmount}`}
+            {row.discountType === PROMO_DISCOUNT_TYPES.PERCENT ? `${row.discountPercent}%` : `₹${row.discountAmount}`}
           </span>
-          {row.discountType === DISCOUNT_TYPES.PERCENT && row.maxDiscountAmount > 0 && (
+          {row.discountType === PROMO_DISCOUNT_TYPES.PERCENT && row.maxDiscountAmount > 0 && (
             <p className="mt-0.5 text-[11px] text-neutral-500">Capped at ₹{row.maxDiscountAmount}</p>
           )}
           {row.minOrderValue > 0 && (
@@ -864,6 +1385,7 @@ export default function PromoCode() {
                   data={promoCodes}
                   emptyMessage="No promo codes yet. Add one to get started."
                   minWidth={0}
+                  dense
                 />
 
                 {/* Pagination */}
@@ -919,7 +1441,7 @@ export default function PromoCode() {
                     <div className="rounded-xl bg-neutral-100 px-3 py-2 dark:bg-neutral-950/60">
                       <p className="text-[10.5px] text-neutral-500">Offer</p>
                       <p className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-                        {topCode.discountType === DISCOUNT_TYPES.PERCENT ? `${topCode.discountPercent}%` : `₹${topCode.discountAmount}`}
+                        {topCode.discountType === PROMO_DISCOUNT_TYPES.PERCENT ? `${topCode.discountPercent}%` : `₹${topCode.discountAmount}`}
                       </p>
                     </div>
                   </div>
@@ -1005,6 +1527,11 @@ export default function PromoCode() {
         open={modalOpen}
         initialData={editingPromo}
         saving={saving}
+        plans={plans}
+        vouchers={vouchers}
+        brands={brands}
+        categories={categories}
+        pickerErrors={pickerErrors}
         onClose={() => {
           if (saving) return;
           setModalOpen(false);

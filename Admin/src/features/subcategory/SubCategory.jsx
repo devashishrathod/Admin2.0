@@ -22,6 +22,7 @@ import {
   ResponsiveContainer,
   XAxis,
   Tooltip,
+  Legend,
   LabelList,
 } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
@@ -358,13 +359,22 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
                 </p>
               )}
 
-              <div className="mt-5 rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-                <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                  Voucher Count
-                </p>
-                <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-                  {subCategory.voucherCount ?? 0}
-                </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                {[
+                  { label: "Brands", stat: subCategory.stats?.brands },
+                  { label: "Vouchers", stat: subCategory.stats?.vouchers },
+                ].map(({ label, stat }) => (
+                  <div
+                    key={label}
+                    className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20"
+                  >
+                    <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
+                    <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
+                      {stat?.total ?? 0}
+                    </p>
+                    <p className="text-[10.5px] text-neutral-500">{stat?.active ?? 0} active</p>
+                  </div>
+                ))}
               </div>
 
               {subCategory.createdAt && (
@@ -426,6 +436,10 @@ function DeleteConfirmModal({ subCategory, deleting, onCancel, onConfirm }) {
  * ---------------------------------------------------------------------- */
 
 function apiToRow(sub) {
+  const stats = sub.stats || {};
+  const brands = { total: stats.brands?.total ?? 0, active: stats.brands?.active ?? 0 };
+  const vouchers = { total: stats.vouchers?.total ?? sub.voucherCount ?? 0, active: stats.vouchers?.active ?? 0 };
+
   return {
     id: sub._id ?? sub.id,
     name: sub.name,
@@ -434,9 +448,21 @@ function apiToRow(sub) {
     categoryId: sub.categoryId,
     isActive: sub.isActive,
     status: sub.isActive ? "Active" : "Inactive",
-    voucherCount: sub.voucherCount ?? 0,
+    stats: { brands, vouchers },
+    voucherCount: vouchers.total,
+    brandCount: brands.total,
     createdAt: sub.createdAt,
   };
+}
+
+// A small "total + active" pair shown in table cells and the view modal.
+function StatCell({ total, active }) {
+  return (
+    <div className="leading-tight">
+      <div className="font-semibold text-neutral-900 dark:text-neutral-50">{total}</div>
+      <div className="text-[10.5px] text-neutral-500">{active} active</div>
+    </div>
+  );
 }
 
 function rowToFormDraft(row) {
@@ -648,6 +674,11 @@ export default function SubCategory() {
     .sort((a, b) => b.subCategories - a.subCategories)
     .slice(0, 6);
 
+  const topByBrandsVouchers = [...allSubCategories]
+    .map((s) => ({ name: s.name, brands: s.stats.brands.total, vouchers: s.stats.vouchers.total }))
+    .sort((a, b) => b.brands + b.vouchers - (a.brands + a.vouchers))
+    .slice(0, 6);
+
   const columns = [
     {
       key: "sno",
@@ -686,9 +717,16 @@ export default function SubCategory() {
       ),
     },
     {
-      key: "voucherCount",
-      label: "Voucher Count",
+      key: "brandCount",
+      label: "Brands",
       align: "center",
+      render: (row) => <StatCell total={row.stats.brands.total} active={row.stats.brands.active} />,
+    },
+    {
+      key: "voucherCount",
+      label: "Vouchers",
+      align: "center",
+      render: (row) => <StatCell total={row.stats.vouchers.total} active={row.stats.vouchers.active} />,
     },
     {
       key: "status",
@@ -756,7 +794,7 @@ export default function SubCategory() {
             Couldn't load chart data: {chartsError}
           </div>
         )}
-        <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.4fr]">
+        <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
           <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
               <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
@@ -819,6 +857,25 @@ export default function SubCategory() {
               <div className="flex h-[150px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
             )}
           </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <BarChart3 size={14} className="text-violet-500" /> Top by Brands &amp; Vouchers
+            </div>
+            {topByBrandsVouchers.length ? (
+              <ResponsiveContainer width="100%" height={150}>
+                <BarChart data={topByBrandsVouchers} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
+                  <XAxis dataKey="name" hide />
+                  <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="brands" name="Brands" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="vouchers" name="Vouchers" fill="#38BDF8" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[150px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+            )}
+          </div>
         </div>
 
         {/* Filters */}
@@ -868,6 +925,8 @@ export default function SubCategory() {
               columns={columns}
               data={subCategories}
               emptyMessage="No sub-categories yet. Add one to get started."
+              dense
+              minWidth={860}
             />
 
             {/* Pagination */}

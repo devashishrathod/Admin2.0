@@ -98,14 +98,29 @@ export async function getShowcaseSectionById(sectionId) {
 }
 
 // ── Update Section (title, description, sortOrder, sectionType, visibility) ──
-// PATCH {{TryDood2.0BaseUrl}}/showcase/section/:id/update
+// PUT {{TryDood2.0BaseUrl}}/showcase/section/update/:id
 // body: any subset of { brandId, title, description, sortOrder, sectionType, isVisible, showVideosInClips, isActive }
-// NOTE: adjust verb (PATCH vs PUT) / path if the real endpoint differs.
 export async function updateShowcaseSection(sectionId, patch = {}, brandId) {
     try {
-        const { data } = await api.patch(`/showcase/section/update/${sectionId}/update`, {
+        const { data } = await api.put(`/showcase/section/update/${sectionId}`, {
             ...(brandId ? { brandId } : {}),
             ...patch,
+        });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Reorder Sections ─────────────────────────────────────────────
+// PUT {{TryDood2.0BaseUrl}}/showcase/section/:brandId/reorder
+// body: { sections: [{ id, sortOrder }, ...] }  — EVERY section, in its
+// new order, 1-based sortOrder. Note the path id here is the BRAND's id,
+// not a section id.
+export async function reorderShowcaseSections(brandId, sections) {
+    try {
+        const { data } = await api.put(`/showcase/section/${brandId}/reorder`, {
+            sections,
         });
         return data;
     } catch (error) {
@@ -137,19 +152,24 @@ export async function deleteShowcaseSection(sectionId, brandId) {
 // Matches the Postman request exactly:
 //   - "isShowInVideoClips": "true" | "false"   (text field)
 //   - "files": <file>                          (repeated file field, one per upload)
+//   - "thumbnail": <file>                      (single file field, optional —
+//     NOT independently confirmed against a real Postman sample; verify
+//     with the backend before relying on it)
 //
 // @param {string} sectionId
 // @param {File[]} files
 // @param {object} [options]
 // @param {string} [options.brandId] - required when acting as an admin
 // @param {boolean} [options.isShowInVideoClips=false]
+// @param {File|null} [options.thumbnail] - optional custom thumbnail, only
+//        meaningful when isShowInVideoClips is true
 // @param {Record<string,string>} [options.extraFields] - e.g. a "month" tag
 //        for Ambience-style albums, if the backend accepts it per-upload.
 // @param {(percent:number)=>void} [onUploadProgress]
 export async function addShowcaseMedia(
     sectionId,
     files,
-    { brandId, isShowInVideoClips = false, extraFields = {} } = {},
+    { brandId, isShowInVideoClips = false, thumbnail = null, extraFields = {} } = {},
     onUploadProgress
 ) {
     try {
@@ -159,6 +179,7 @@ export async function addShowcaseMedia(
         const formData = new FormData();
         if (brandId) formData.append('brandId', brandId);
         formData.append('isShowInVideoClips', String(isShowInVideoClips));
+        if (thumbnail) formData.append('thumbnail', thumbnail);
 
         Object.entries(extraFields).forEach(([key, value]) => {
             formData.append(key, value);
@@ -183,16 +204,67 @@ export async function addShowcaseMedia(
     }
 }
 
-// ── Update a Media Item's Metadata ──────────────────────────────
-// PATCH {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/media/:mediaId/update
-// body: e.g. { isShowInVideoClips, month, sortOrder }
-// Does NOT replace the underlying file — delete + re-add for that.
-// NOTE: adjust path if the real endpoint differs.
+// ── Replace a Media Item's File ──────────────────────────────────
+// PUT {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/media/replace/:mediaId  (multipart/form-data)
+// body: "file" (single file field) and/or "isShowInVideoClips" — used by
+// the click-to-preview modal's "Replace" action.
+export async function replaceShowcaseMedia(sectionId, mediaId, { file, isShowInVideoClips, brandId } = {}) {
+    try {
+        const formData = new FormData();
+        if (file) formData.append('file', file);
+        if (isShowInVideoClips !== undefined) formData.append('isShowInVideoClips', String(isShowInVideoClips));
+        if (brandId) formData.append('brandId', brandId);
+
+        const { data } = await api.put(
+            `/showcase/section/${sectionId}/media/replace/${mediaId}`,
+            formData
+        );
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Reorder Media within a Section ────────────────────────────────
+// PUT {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/media/reorder
+// body: { medias: [{ id, sortOrder }, ...] } — the FULL combined photo+
+// video sequence (photos and videos share one sortOrder sequence, never
+// two separate ones).
+export async function reorderShowcaseMedia(sectionId, medias) {
+    try {
+        const { data } = await api.put(`/showcase/section/${sectionId}/media/reorder`, {
+            medias,
+        });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Update a Media Item's Metadata — CONFIRMED ──────────────────
+// PATCH {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/media/update/:mediaId
+// body: partial, e.g. { title, altText, isActive, sortOrder,
+// isShowInVideoClips } — matches the confirmed response's own fields.
+// `thumbnail` (a real field on the response) is also editable here — when
+// a File is passed, this switches to multipart/form-data to carry it,
+// otherwise it stays a plain JSON PATCH like before. Does NOT replace the
+// underlying media file itself — replaceShowcaseMedia does that.
 export async function updateShowcaseMedia(sectionId, mediaId, patch = {}) {
     try {
+        const { thumbnail, ...rest } = patch;
+        let body = rest;
+        if (thumbnail instanceof File) {
+            const formData = new FormData();
+            Object.entries(rest).forEach(([key, value]) => {
+                if (value === undefined) return;
+                formData.append(key, typeof value === 'boolean' ? String(value) : value);
+            });
+            formData.append('thumbnail', thumbnail);
+            body = formData;
+        }
         const { data } = await api.patch(
             `/showcase/section/${sectionId}/media/update/${mediaId}`,
-            patch
+            body
         );
         return data;
     } catch (error) {

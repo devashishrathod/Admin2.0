@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Users,
   Tag,
@@ -24,11 +24,11 @@ import {
   Percent,
   Wallet,
   Gift,
-  Package,
   Repeat,
   Smartphone,
   Building,
   CircleSlash,
+  MapPin,
 } from "lucide-react";
 import {
   AreaChart,
@@ -44,7 +44,11 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
 } from "recharts";
+import { useBrands } from "../brand/BrandContext";
+import { getPlans } from "../plan/services/planApi";
+import { getVouchers } from "../voucher/services/VoucherApi";
 
 /* -------------------------------------------------------------------------
  * Mock data
@@ -56,18 +60,23 @@ import {
 
 const MONTHS = ["Feb", "Mar", "Apr", "May", "Jun", "Jul"];
 
+// Scaled to the platform's real current size — 24 vendors, 10 active
+// customers — so per-brand monthly customer counts stay believable (a
+// customer can interact with several brands, but the platform only has 10
+// total). Jul figures for Spice Route Kitchen / Jr Unisex Salon / FitZone
+// Gym match Dashbaord.jsx's BRAND_GOALS revenue exactly.
 const BRAND_ANALYTICS = [
   {
     id: 1,
     name: "Jr Unisex Salon",
     category: "Beauty & Personal Care",
     monthly: [
-      { month: "Feb", customers: 210, transactions: 260, vouchers: 40, dealsPack: 22, memberships: 15, revenue: 68000 },
-      { month: "Mar", customers: 230, transactions: 275, vouchers: 45, dealsPack: 25, memberships: 18, revenue: 71500 },
-      { month: "Apr", customers: 245, transactions: 300, vouchers: 50, dealsPack: 28, memberships: 20, revenue: 79000 },
-      { month: "May", customers: 260, transactions: 320, vouchers: 55, dealsPack: 30, memberships: 24, revenue: 84500 },
-      { month: "Jun", customers: 275, transactions: 340, vouchers: 60, dealsPack: 33, memberships: 27, revenue: 90000 },
-      { month: "Jul", customers: 290, transactions: 365, vouchers: 66, dealsPack: 36, memberships: 31, revenue: 96500 },
+      { month: "Feb", customers: 4, transactions: 8, vouchers: 2, dealsPack: 1, memberships: 1, revenue: 3200 },
+      { month: "Mar", customers: 5, transactions: 9, vouchers: 3, dealsPack: 1, memberships: 1, revenue: 3500 },
+      { month: "Apr", customers: 5, transactions: 10, vouchers: 3, dealsPack: 2, memberships: 2, revenue: 3900 },
+      { month: "May", customers: 6, transactions: 11, vouchers: 4, dealsPack: 2, memberships: 2, revenue: 4300 },
+      { month: "Jun", customers: 7, transactions: 12, vouchers: 4, dealsPack: 2, memberships: 2, revenue: 4800 },
+      { month: "Jul", customers: 8, transactions: 14, vouchers: 5, dealsPack: 3, memberships: 3, revenue: 5400 },
     ],
   },
   {
@@ -75,12 +84,12 @@ const BRAND_ANALYTICS = [
     name: "Spice Route Kitchen",
     category: "Food & Beverage",
     monthly: [
-      { month: "Feb", customers: 540, transactions: 820, vouchers: 120, dealsPack: 60, memberships: 30, revenue: 145000 },
-      { month: "Mar", customers: 575, transactions: 880, vouchers: 130, dealsPack: 65, memberships: 34, revenue: 156000 },
-      { month: "Apr", customers: 610, transactions: 940, vouchers: 142, dealsPack: 70, memberships: 38, revenue: 168000 },
-      { month: "May", customers: 650, transactions: 1005, vouchers: 155, dealsPack: 76, memberships: 43, revenue: 182000 },
-      { month: "Jun", customers: 690, transactions: 1075, vouchers: 168, dealsPack: 82, memberships: 48, revenue: 196500 },
-      { month: "Jul", customers: 735, transactions: 1150, vouchers: 182, dealsPack: 89, memberships: 54, revenue: 212000 },
+      { month: "Feb", customers: 6, transactions: 14, vouchers: 4, dealsPack: 2, memberships: 1, revenue: 5200 },
+      { month: "Mar", customers: 6, transactions: 15, vouchers: 5, dealsPack: 2, memberships: 1, revenue: 5700 },
+      { month: "Apr", customers: 7, transactions: 17, vouchers: 5, dealsPack: 3, memberships: 2, revenue: 6300 },
+      { month: "May", customers: 7, transactions: 18, vouchers: 6, dealsPack: 3, memberships: 2, revenue: 6900 },
+      { month: "Jun", customers: 8, transactions: 20, vouchers: 7, dealsPack: 3, memberships: 2, revenue: 7500 },
+      { month: "Jul", customers: 9, transactions: 22, vouchers: 9, dealsPack: 4, memberships: 3, revenue: 8200 },
     ],
   },
   {
@@ -88,12 +97,12 @@ const BRAND_ANALYTICS = [
     name: "GlowUp Cosmetics",
     category: "Beauty & Personal Care",
     monthly: [
-      { month: "Feb", customers: 60, transactions: 75, vouchers: 10, dealsPack: 5, memberships: 3, revenue: 18000 },
-      { month: "Mar", customers: 68, transactions: 85, vouchers: 12, dealsPack: 6, memberships: 4, revenue: 20500 },
-      { month: "Apr", customers: 78, transactions: 98, vouchers: 14, dealsPack: 7, memberships: 5, revenue: 23800 },
-      { month: "May", customers: 90, transactions: 112, vouchers: 17, dealsPack: 9, memberships: 6, revenue: 27200 },
-      { month: "Jun", customers: 102, transactions: 128, vouchers: 20, dealsPack: 11, memberships: 8, revenue: 31000 },
-      { month: "Jul", customers: 115, transactions: 145, vouchers: 23, dealsPack: 13, memberships: 10, revenue: 35200 },
+      { month: "Feb", customers: 1, transactions: 2, vouchers: 1, dealsPack: 0, memberships: 0, revenue: 900 },
+      { month: "Mar", customers: 1, transactions: 3, vouchers: 1, dealsPack: 0, memberships: 0, revenue: 1050 },
+      { month: "Apr", customers: 2, transactions: 3, vouchers: 1, dealsPack: 1, memberships: 0, revenue: 1200 },
+      { month: "May", customers: 2, transactions: 4, vouchers: 1, dealsPack: 1, memberships: 1, revenue: 1400 },
+      { month: "Jun", customers: 3, transactions: 5, vouchers: 2, dealsPack: 1, memberships: 1, revenue: 1600 },
+      { month: "Jul", customers: 3, transactions: 6, vouchers: 2, dealsPack: 1, memberships: 1, revenue: 1800 },
     ],
   },
   {
@@ -101,12 +110,12 @@ const BRAND_ANALYTICS = [
     name: "TechHub Electronics",
     category: "Electronics",
     monthly: [
-      { month: "Feb", customers: 180, transactions: 140, vouchers: 15, dealsPack: 8, memberships: 10, revenue: 52000 },
-      { month: "Mar", customers: 172, transactions: 132, vouchers: 14, dealsPack: 7, memberships: 9, revenue: 49500 },
-      { month: "Apr", customers: 160, transactions: 120, vouchers: 12, dealsPack: 6, memberships: 8, revenue: 45000 },
-      { month: "May", customers: 145, transactions: 105, vouchers: 10, dealsPack: 5, memberships: 6, revenue: 39500 },
-      { month: "Jun", customers: 128, transactions: 90, vouchers: 8, dealsPack: 4, memberships: 5, revenue: 33800 },
-      { month: "Jul", customers: 110, transactions: 75, vouchers: 6, dealsPack: 3, memberships: 3, revenue: 28200 },
+      { month: "Feb", customers: 7, transactions: 9, vouchers: 3, dealsPack: 2, memberships: 1, revenue: 2800 },
+      { month: "Mar", customers: 6, transactions: 8, vouchers: 3, dealsPack: 1, memberships: 1, revenue: 2600 },
+      { month: "Apr", customers: 6, transactions: 7, vouchers: 2, dealsPack: 1, memberships: 1, revenue: 2350 },
+      { month: "May", customers: 5, transactions: 6, vouchers: 2, dealsPack: 1, memberships: 1, revenue: 2050 },
+      { month: "Jun", customers: 5, transactions: 5, vouchers: 2, dealsPack: 1, memberships: 0, revenue: 1750 },
+      { month: "Jul", customers: 4, transactions: 4, vouchers: 1, dealsPack: 0, memberships: 0, revenue: 1400 },
     ],
   },
   {
@@ -114,12 +123,12 @@ const BRAND_ANALYTICS = [
     name: "Bloom & Co Florist",
     category: "Retail",
     monthly: [
-      { month: "Feb", customers: 95, transactions: 110, vouchers: 18, dealsPack: 9, memberships: 5, revenue: 26000 },
-      { month: "Mar", customers: 105, transactions: 122, vouchers: 20, dealsPack: 10, memberships: 6, revenue: 29000 },
-      { month: "Apr", customers: 118, transactions: 138, vouchers: 23, dealsPack: 12, memberships: 7, revenue: 33200 },
-      { month: "May", customers: 132, transactions: 155, vouchers: 26, dealsPack: 14, memberships: 9, revenue: 38000 },
-      { month: "Jun", customers: 148, transactions: 175, vouchers: 30, dealsPack: 16, memberships: 11, revenue: 43500 },
-      { month: "Jul", customers: 165, transactions: 198, vouchers: 34, dealsPack: 19, memberships: 13, revenue: 49800 },
+      { month: "Feb", customers: 3, transactions: 5, vouchers: 2, dealsPack: 1, memberships: 0, revenue: 1300 },
+      { month: "Mar", customers: 3, transactions: 6, vouchers: 2, dealsPack: 1, memberships: 1, revenue: 1450 },
+      { month: "Apr", customers: 4, transactions: 6, vouchers: 2, dealsPack: 1, memberships: 1, revenue: 1650 },
+      { month: "May", customers: 4, transactions: 7, vouchers: 3, dealsPack: 1, memberships: 1, revenue: 1900 },
+      { month: "Jun", customers: 5, transactions: 8, vouchers: 3, dealsPack: 2, memberships: 1, revenue: 2200 },
+      { month: "Jul", customers: 5, transactions: 9, vouchers: 4, dealsPack: 2, memberships: 1, revenue: 2600 },
     ],
   },
   {
@@ -127,79 +136,76 @@ const BRAND_ANALYTICS = [
     name: "FitZone Gym",
     category: "Wellness",
     monthly: [
-      { month: "Feb", customers: 320, transactions: 180, vouchers: 20, dealsPack: 10, memberships: 140, revenue: 58000 },
-      { month: "Mar", customers: 340, transactions: 195, vouchers: 22, dealsPack: 11, memberships: 152, revenue: 62500 },
-      { month: "Apr", customers: 365, transactions: 212, vouchers: 25, dealsPack: 13, memberships: 166, revenue: 68000 },
-      { month: "May", customers: 392, transactions: 232, vouchers: 28, dealsPack: 15, memberships: 182, revenue: 74500 },
-      { month: "Jun", customers: 420, transactions: 255, vouchers: 32, dealsPack: 17, memberships: 200, revenue: 81800 },
-      { month: "Jul", customers: 452, transactions: 280, vouchers: 36, dealsPack: 20, memberships: 220, revenue: 90000 },
+      { month: "Feb", customers: 3, transactions: 5, vouchers: 1, dealsPack: 1, memberships: 3, revenue: 1500 },
+      { month: "Mar", customers: 4, transactions: 6, vouchers: 2, dealsPack: 1, memberships: 3, revenue: 1700 },
+      { month: "Apr", customers: 4, transactions: 7, vouchers: 2, dealsPack: 1, memberships: 4, revenue: 1950 },
+      { month: "May", customers: 5, transactions: 8, vouchers: 3, dealsPack: 1, memberships: 4, revenue: 2250 },
+      { month: "Jun", customers: 5, transactions: 9, vouchers: 3, dealsPack: 2, memberships: 5, revenue: 2650 },
+      { month: "Jul", customers: 6, transactions: 11, vouchers: 4, dealsPack: 2, memberships: 6, revenue: 3100 },
     ],
   },
 ];
 
 /* Raw settlement transactions — the source of truth for the Settlement
    Analytics tab. Grouping by week / month / year happens on the fly. */
+// Scaled to the platform's real current size — 24 vendors, 10 active
+// customers — instead of settlement amounts sized for a much larger
+// live platform.
 const SETTLEMENTS = [
-  { id: "STL-9001", brand: "Jr Unisex Salon", date: "2025-12-18", amount: 8200, status: "Paid", method: "Bank Transfer" },
-  { id: "STL-9002", brand: "Spice Route Kitchen", date: "2025-12-22", amount: 15400, status: "Paid", method: "UPI" },
-  { id: "STL-9010", brand: "Jr Unisex Salon", date: "2026-01-10", amount: 9100, status: "Paid", method: "UPI" },
-  { id: "STL-9011", brand: "Spice Route Kitchen", date: "2026-01-14", amount: 16800, status: "Paid", method: "Trydood Account" },
-  { id: "STL-9020", brand: "GlowUp Cosmetics", date: "2026-04-02", amount: 4200, status: "Paid", method: "UPI" },
-  { id: "STL-9021", brand: "TechHub Electronics", date: "2026-04-05", amount: 3100, status: "Failed", method: "Bank Transfer" },
-  { id: "STL-9022", brand: "Bloom & Co Florist", date: "2026-04-09", amount: 5200, status: "Paid", method: "UPI" },
-  { id: "STL-9023", brand: "FitZone Gym", date: "2026-04-12", amount: 12800, status: "Paid", method: "Trydood Account" },
-  { id: "STL-9030", brand: "Jr Unisex Salon", date: "2026-04-18", amount: 9800, status: "Paid", method: "UPI" },
-  { id: "STL-9031", brand: "Spice Route Kitchen", date: "2026-04-22", amount: 17600, status: "Pending", method: "Bank Transfer" },
-  { id: "STL-9040", brand: "GlowUp Cosmetics", date: "2026-05-03", amount: 4600, status: "Paid", method: "UPI" },
-  { id: "STL-9041", brand: "Bloom & Co Florist", date: "2026-05-07", amount: 5600, status: "Paid", method: "Trydood Account" },
-  { id: "STL-9042", brand: "FitZone Gym", date: "2026-05-11", amount: 13500, status: "Paid", method: "UPI" },
-  { id: "STL-9043", brand: "Jr Unisex Salon", date: "2026-05-16", amount: 10200, status: "Paid", method: "Bank Transfer" },
-  { id: "STL-9044", brand: "Spice Route Kitchen", date: "2026-05-20", amount: 18900, status: "Paid", method: "UPI" },
-  { id: "STL-9045", brand: "TechHub Electronics", date: "2026-05-25", amount: 2900, status: "Failed", method: "Other" },
-  { id: "STL-9050", brand: "GlowUp Cosmetics", date: "2026-06-02", amount: 4900, status: "Pending", method: "UPI" },
-  { id: "STL-9051", brand: "Bloom & Co Florist", date: "2026-06-06", amount: 6100, status: "Paid", method: "UPI" },
-  { id: "STL-9052", brand: "FitZone Gym", date: "2026-06-10", amount: 14200, status: "Paid", method: "Trydood Account" },
-  { id: "STL-9053", brand: "Jr Unisex Salon", date: "2026-06-14", amount: 10800, status: "Paid", method: "UPI" },
-  { id: "STL-9054", brand: "Spice Route Kitchen", date: "2026-06-19", amount: 19700, status: "Paid", method: "Bank Transfer" },
-  { id: "STL-9055", brand: "TechHub Electronics", date: "2026-06-24", amount: 3200, status: "Failed", method: "Bank Transfer" },
-  { id: "STL-9060", brand: "GlowUp Cosmetics", date: "2026-07-01", amount: 5100, status: "Pending", method: "UPI" },
-  { id: "STL-9061", brand: "Bloom & Co Florist", date: "2026-07-04", amount: 6400, status: "Paid", method: "UPI" },
-  { id: "STL-9062", brand: "FitZone Gym", date: "2026-07-08", amount: 14800, status: "Paid", method: "Trydood Account" },
-  { id: "STL-9063", brand: "Jr Unisex Salon", date: "2026-07-11", amount: 11200, status: "Paid", method: "UPI" },
-  { id: "STL-9064", brand: "Spice Route Kitchen", date: "2026-07-14", amount: 20500, status: "Paid", method: "Bank Transfer" },
-  { id: "STL-9065", brand: "TechHub Electronics", date: "2026-07-15", amount: 3400, status: "Pending", method: "Other" },
+  { id: "STL-9001", brand: "Jr Unisex Salon", date: "2025-12-18", amount: 820, status: "Paid", method: "Bank Transfer" },
+  { id: "STL-9002", brand: "Spice Route Kitchen", date: "2025-12-22", amount: 1540, status: "Paid", method: "UPI" },
+  { id: "STL-9010", brand: "Jr Unisex Salon", date: "2026-01-10", amount: 910, status: "Paid", method: "UPI" },
+  { id: "STL-9011", brand: "Spice Route Kitchen", date: "2026-01-14", amount: 1680, status: "Paid", method: "Trydood Account" },
+  { id: "STL-9020", brand: "GlowUp Cosmetics", date: "2026-04-02", amount: 420, status: "Paid", method: "UPI" },
+  { id: "STL-9021", brand: "TechHub Electronics", date: "2026-04-05", amount: 310, status: "Failed", method: "Bank Transfer" },
+  { id: "STL-9022", brand: "Bloom & Co Florist", date: "2026-04-09", amount: 520, status: "Paid", method: "UPI" },
+  { id: "STL-9023", brand: "FitZone Gym", date: "2026-04-12", amount: 1280, status: "Paid", method: "Trydood Account" },
+  { id: "STL-9030", brand: "Jr Unisex Salon", date: "2026-04-18", amount: 980, status: "Paid", method: "UPI" },
+  { id: "STL-9031", brand: "Spice Route Kitchen", date: "2026-04-22", amount: 1760, status: "Pending", method: "Bank Transfer" },
+  { id: "STL-9040", brand: "GlowUp Cosmetics", date: "2026-05-03", amount: 460, status: "Paid", method: "UPI" },
+  { id: "STL-9041", brand: "Bloom & Co Florist", date: "2026-05-07", amount: 560, status: "Paid", method: "Trydood Account" },
+  { id: "STL-9042", brand: "FitZone Gym", date: "2026-05-11", amount: 1350, status: "Paid", method: "UPI" },
+  { id: "STL-9043", brand: "Jr Unisex Salon", date: "2026-05-16", amount: 1020, status: "Paid", method: "Bank Transfer" },
+  { id: "STL-9044", brand: "Spice Route Kitchen", date: "2026-05-20", amount: 1890, status: "Paid", method: "UPI" },
+  { id: "STL-9045", brand: "TechHub Electronics", date: "2026-05-25", amount: 290, status: "Failed", method: "Other" },
+  { id: "STL-9050", brand: "GlowUp Cosmetics", date: "2026-06-02", amount: 490, status: "Pending", method: "UPI" },
+  { id: "STL-9051", brand: "Bloom & Co Florist", date: "2026-06-06", amount: 610, status: "Paid", method: "UPI" },
+  { id: "STL-9052", brand: "FitZone Gym", date: "2026-06-10", amount: 1420, status: "Paid", method: "Trydood Account" },
+  { id: "STL-9053", brand: "Jr Unisex Salon", date: "2026-06-14", amount: 1080, status: "Paid", method: "UPI" },
+  { id: "STL-9054", brand: "Spice Route Kitchen", date: "2026-06-19", amount: 1970, status: "Paid", method: "Bank Transfer" },
+  { id: "STL-9055", brand: "TechHub Electronics", date: "2026-06-24", amount: 320, status: "Failed", method: "Bank Transfer" },
+  { id: "STL-9060", brand: "GlowUp Cosmetics", date: "2026-07-01", amount: 510, status: "Pending", method: "UPI" },
+  { id: "STL-9061", brand: "Bloom & Co Florist", date: "2026-07-04", amount: 640, status: "Paid", method: "UPI" },
+  { id: "STL-9062", brand: "FitZone Gym", date: "2026-07-08", amount: 1480, status: "Paid", method: "Trydood Account" },
+  { id: "STL-9063", brand: "Jr Unisex Salon", date: "2026-07-11", amount: 1120, status: "Paid", method: "UPI" },
+  { id: "STL-9064", brand: "Spice Route Kitchen", date: "2026-07-14", amount: 2050, status: "Paid", method: "Bank Transfer" },
+  { id: "STL-9065", brand: "TechHub Electronics", date: "2026-07-15", amount: 340, status: "Pending", method: "Other" },
 ];
 
-const REPORT_TABS = ["Overview", "Brand Analytics","Voucher",  "Deal Pack", "Membership", "Transaction", "Settlements"];
+// const REPORT_TABS = ["Overview", "Brand Analytics","Voucher",  "Deal Pack", "Membership", "Transaction", "Settlements"];
+const REPORT_TABS = ["Overview", "Brand", "Voucher", "Transaction", "Settlements"];
 const PERIODS = ["Week", "Month", "Year"];
-const GST_RATE = 18; // %
-
-/* Vendor / brand registration snapshot — feeds the Overview KPI row.
-   registeredBrands = completed onboarding (live, awaiting approval, or rejected).
-   unregisteredBrands = dropped off mid-onboarding (the "Under Listing" bucket). */
-const REGISTRATION_STATS = {
-  totalVendorsRegistered: 342,
-  registeredBrands: 268,
-  unregisteredBrands: 74,
-  totalPlans: 4,
-};
+// Only used by the commented-out DealPackTab/MembershipTab fake data below.
+// const GST_RATE = 18; // %
 
 /* Billing overview — the money view behind every transaction: what the
    customer was billed, how much was knocked off by discounts/coupons, how
    much Trydood earned as a platform fee, and how much Trydood itself
    subsidized as a promotional discount. */
+// Scaled to the platform's real current size — 24 vendors, 10 active
+// customers — instead of numbers that only made sense for a much larger
+// live platform.
 const BILLING_OVERVIEW = [
-  { month: "Feb", billAmount: 462000, discount: 38000, platformFee: 23100, trydoodDiscount: 12500 },
-  { month: "Mar", billAmount: 498500, discount: 41200, platformFee: 24925, trydoodDiscount: 13400 },
-  { month: "Apr", billAmount: 542000, discount: 45800, platformFee: 27100, trydoodDiscount: 14800 },
-  { month: "May", billAmount: 589000, discount: 50100, platformFee: 29450, trydoodDiscount: 16200 },
-  { month: "Jun", billAmount: 638500, discount: 55400, platformFee: 31925, trydoodDiscount: 17900 },
-  { month: "Jul", billAmount: 692000, discount: 61200, platformFee: 34600, trydoodDiscount: 19600 },
+  { month: "Feb", billAmount: 19000, discount: 1650, platformFee: 950, trydoodDiscount: 540 },
+  { month: "Mar", billAmount: 20500, discount: 1750, platformFee: 1025, trydoodDiscount: 580 },
+  { month: "Apr", billAmount: 22300, discount: 1900, platformFee: 1115, trydoodDiscount: 630 },
+  { month: "May", billAmount: 24200, discount: 2050, platformFee: 1210, trydoodDiscount: 680 },
+  { month: "Jun", billAmount: 26300, discount: 2250, platformFee: 1315, trydoodDiscount: 740 },
+  { month: "Jul", billAmount: 28500, discount: 2500, platformFee: 1425, trydoodDiscount: 810 },
 ];
 
-/* Deal Pack redemption history — Jan 2025 through Jul 2026. Each record is a
-   bundle of deal-pack items sold; discount + coupon come off the items total
-   before 18% GST is calculated on the taxable value. */
+/* Fake/demo data — commented out along with DealPackTab/MembershipTab until
+   real deal-pack & membership numbers are available.
 const DEALPACK_HISTORY = [
   { year: 2025, month: "Jan", itemsSold: 96, itemsTotal: 48000, discount: 4200, coupon: 1800 },
   { year: 2025, month: "Feb", itemsSold: 102, itemsTotal: 51200, discount: 4500, coupon: 1900 },
@@ -222,8 +228,6 @@ const DEALPACK_HISTORY = [
   { year: 2026, month: "Jul", itemsSold: 277, itemsTotal: 151700, discount: 13700, coupon: 6500 },
 ];
 
-/* Membership plans — each plan's price, active member count, and how much
-   was knocked off by coupons this month, before 18% GST on the net amount. */
 const MEMBERSHIP_PLANS = [
   { name: "Basic", price: 1999, activeMembers: 96, couponsApplied: 22, couponValue: 9800 },
   { name: "Advance", price: 2999, activeMembers: 74, couponsApplied: 15, couponValue: 11200 },
@@ -231,47 +235,56 @@ const MEMBERSHIP_PLANS = [
   { name: "Pro Lite", price: 4999, activeMembers: 40, couponsApplied: 9, couponValue: 9000 },
 ];
 const PLAN_COLORS = { Basic: "#2FDE8C", Advance: "#38BDF8", Pro: "#FBBF24", "Pro Lite": "#F472B6" };
+*/
 
 /* Voucher redemption history — Jan 2025 through Jul 2026 — used by the
    dedicated Voucher tab for both the monthly trend and yearly comparison. */
+// Scaled to the platform's real current size — 24 vendors, 10 active
+// customers — instead of numbers that only made sense for a much larger
+// live platform.
 const VOUCHER_HISTORY = [
-  { year: 2025, month: "Jan", count: 140, amount: 25200 },
-  { year: 2025, month: "Feb", count: 148, amount: 27000 },
-  { year: 2025, month: "Mar", count: 156, amount: 28900 },
-  { year: 2025, month: "Apr", count: 165, amount: 31000 },
-  { year: 2025, month: "May", count: 174, amount: 33200 },
-  { year: 2025, month: "Jun", count: 183, amount: 35400 },
-  { year: 2025, month: "Jul", count: 193, amount: 37800 },
-  { year: 2025, month: "Aug", count: 203, amount: 40200 },
-  { year: 2025, month: "Sep", count: 214, amount: 42800 },
-  { year: 2025, month: "Oct", count: 226, amount: 45600 },
-  { year: 2025, month: "Nov", count: 239, amount: 48700 },
-  { year: 2025, month: "Dec", count: 258, amount: 53200 },
-  { year: 2026, month: "Jan", count: 245, amount: 50100 },
-  { year: 2026, month: "Feb", count: 258, amount: 53000 },
-  { year: 2026, month: "Mar", count: 274, amount: 56800 },
-  { year: 2026, month: "Apr", count: 292, amount: 60900 },
-  { year: 2026, month: "May", count: 312, amount: 65500 },
-  { year: 2026, month: "Jun", count: 334, amount: 70600 },
-  { year: 2026, month: "Jul", count: 358, amount: 76200 },
+  { year: 2025, month: "Jan", count: 4, amount: 700 },
+  { year: 2025, month: "Feb", count: 5, amount: 880 },
+  { year: 2025, month: "Mar", count: 5, amount: 900 },
+  { year: 2025, month: "Apr", count: 6, amount: 1080 },
+  { year: 2025, month: "May", count: 6, amount: 1100 },
+  { year: 2025, month: "Jun", count: 7, amount: 1280 },
+  { year: 2025, month: "Jul", count: 8, amount: 1480 },
+  { year: 2025, month: "Aug", count: 9, amount: 1680 },
+  { year: 2025, month: "Sep", count: 10, amount: 1900 },
+  { year: 2025, month: "Oct", count: 11, amount: 2100 },
+  { year: 2025, month: "Nov", count: 12, amount: 2320 },
+  { year: 2025, month: "Dec", count: 14, amount: 2700 },
+  { year: 2026, month: "Jan", count: 13, amount: 2500 },
+  { year: 2026, month: "Feb", count: 15, amount: 2900 },
+  { year: 2026, month: "Mar", count: 17, amount: 3350 },
+  { year: 2026, month: "Apr", count: 20, amount: 4000 },
+  { year: 2026, month: "May", count: 24, amount: 4850 },
+  { year: 2026, month: "Jun", count: 29, amount: 5900 },
+  { year: 2026, month: "Jul", count: 38, amount: 7600 },
 ];
 
 /* Transaction history — every checkout across the platform, per month, with
    a payment-method split and a success/failed breakdown. */
+// Scaled to the platform's real current size — 24 vendors, 10 active
+// customers — "amount" matches BILLING_OVERVIEW's billAmount for the same
+// month, since both represent total gross transaction value.
 const TRANSACTION_HISTORY = [
-  { month: "Feb", count: 1985, success: 1902, failed: 83, amount: 1041000 },
-  { month: "Mar", count: 2118, success: 2034, failed: 84, amount: 1132500 },
-  { month: "Apr", count: 2265, success: 2178, failed: 87, amount: 1234800 },
-  { month: "May", count: 2432, success: 2341, failed: 91, amount: 1345600 },
-  { month: "Jun", count: 2603, success: 2510, failed: 93, amount: 1462100 },
-  { month: "Jul", count: 2790, success: 2694, failed: 96, amount: 1588200 },
+  { month: "Feb", count: 95, success: 91, failed: 4, amount: 19000 },
+  { month: "Mar", count: 105, success: 101, failed: 4, amount: 20500 },
+  { month: "Apr", count: 118, success: 113, failed: 5, amount: 22300 },
+  { month: "May", count: 132, success: 127, failed: 5, amount: 24200 },
+  { month: "Jun", count: 148, success: 142, failed: 6, amount: 26300 },
+  { month: "Jul", count: 165, success: 159, failed: 6, amount: 28500 },
 ];
 
+// Splits the latest month's (Jul) transaction count of 165 by payment method,
+// keeping the same proportions as before.
 const PAYMENT_METHOD_SPLIT = [
-  { name: "UPI", value: 1520, color: "#2FDE8C" },
-  { name: "Card", value: 640, color: "#38BDF8" },
-  { name: "Wallet", value: 380, color: "#FBBF24" },
-  { name: "Trydood Account", value: 250, color: "#F472B6" },
+  { name: "UPI", value: 90, color: "#2FDE8C" },
+  { name: "Card", value: 38, color: "#38BDF8" },
+  { name: "Wallet", value: 22, color: "#FBBF24" },
+  { name: "Trydood Account", value: 15, color: "#F472B6" },
 ];
 
 /* -------------------------------------------------------------------------
@@ -281,7 +294,8 @@ const PAYMENT_METHOD_SPLIT = [
 const formatCurrency = (n) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const formatNumber = (n) => Math.round(n).toLocaleString("en-IN");
 const pctChange = (curr, prev) => (prev === 0 ? (curr > 0 ? 100 : 0) : ((curr - prev) / prev) * 100);
-const gstOf = (taxableValue) => taxableValue * (GST_RATE / 100);
+// Only used by the commented-out DealPackTab/MembershipTab fake data below.
+// const gstOf = (taxableValue) => taxableValue * (GST_RATE / 100);
 
 /* Sum a metric across every brand for a single month index (0..5) */
 function monthTotal(field, monthIndex) {
@@ -294,6 +308,7 @@ const COMBINED_TREND = MONTHS.map((month, i) => ({
   revenue: monthTotal("revenue", i),
   transactions: monthTotal("transactions", i),
   customers: monthTotal("customers", i),
+  vouchers: monthTotal("vouchers", i),
 }));
 
 /* Per-brand totals across the whole 6-month window, used by the comparison table */
@@ -360,7 +375,8 @@ function aggregateSettlements(records, period, brandFilter) {
   return Array.from(buckets.values()).sort((a, b) => a.sortKey - b.sortKey);
 }
 
-/* Adds derived taxable/GST/net fields to a raw deal-pack record */
+/* Fake/demo data — commented out along with DealPackTab until real deal-pack
+   numbers are available.
 function withDealPackFinancials(row) {
   const taxable = row.itemsTotal - row.discount - row.coupon;
   const gst = gstOf(taxable);
@@ -381,18 +397,19 @@ function aggregateDealPacksByYear(history) {
     .sort((a, b) => a.year - b.year)
     .map(withDealPackFinancials);
 }
+*/
 
-/* Adds derived bill amount / platform fee / Trydood-borne discount fields to
-   a raw voucher record. billAmount is the underlying order value the
-   voucher was redeemed against (avg. order ~3.2x the voucher amount);
-   platformFee is Trydood's cut of that bill (5%); trydoodDiscount is the
-   slice of the voucher's discount value that Trydood itself subsidizes
-   (40%) vs. the merchant absorbing the rest. */
+/* billAmount / platformFee / trydoodDiscount have no real data source on
+   the voucher record (no order/settlement linkage exists yet) — rather
+   than fabricate them from a formula, default to 0 so the Billing
+   Breakdown cards/chart/table are honest about what isn't tracked yet. */
 function withVoucherFinancials(row) {
-  const billAmount = Math.round(row.amount * 3.2);
-  const platformFee = Math.round(billAmount * 0.05);
-  const trydoodDiscount = Math.round(row.amount * 0.4);
-  return { ...row, billAmount, platformFee, trydoodDiscount };
+  return {
+    ...row,
+    billAmount: row.billAmount ?? 0,
+    platformFee: row.platformFee ?? 0,
+    trydoodDiscount: row.trydoodDiscount ?? 0,
+  };
 }
 
 function aggregateVouchersByYear(history) {
@@ -408,19 +425,23 @@ function aggregateVouchersByYear(history) {
     .map(withVoucherFinancials);
 }
 
-/* Adds derived gross/net/GST fields to a membership plan record */
+/* Fake/demo data — commented out along with MembershipTab until real
+   membership numbers are available.
 function withMembershipFinancials(plan) {
   const gross = plan.price * plan.activeMembers;
   const net = gross - plan.couponValue;
   const gst = gstOf(net);
   return { ...plan, gross, net, gst, payable: net + gst };
 }
+*/
 
 /* -------------------------------------------------------------------------
  * Shared bits
  * ---------------------------------------------------------------------- */
 
-function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
+const KPI_TINT_HEX = { emerald: "#2FDE8C", amber: "#FBBF24", sky: "#38BDF8", pink: "#F472B6" };
+
+function KpiCard({ icon: Icon, label, value, delta, tint = "emerald", trend, dataKey }) {
   const tints = {
     emerald: "bg-emerald-400/10 text-emerald-400",
     amber: "bg-amber-400/10 text-amber-400",
@@ -428,8 +449,9 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
     pink: "bg-pink-400/10 text-pink-400",
   };
   const positive = delta === undefined || delta >= 0;
+  const sparkColor = KPI_TINT_HEX[tint] || KPI_TINT_HEX.emerald;
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="mb-2.5 flex items-center justify-between">
         <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tints[tint]}`}>
           <Icon size={16} />
@@ -437,7 +459,7 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
         {delta !== undefined && (
           <span
             className={`flex items-center gap-1 text-[11px] font-bold ${
-              positive ? "text-emerald-400" : "text-red-400"
+              positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
             }`}
           >
             {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
@@ -445,8 +467,31 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
           </span>
         )}
       </div>
-      <p className="text-[20px] font-bold tracking-tight text-neutral-50">{value}</p>
+      <p className="text-[20px] font-bold tracking-tight text-neutral-900 dark:text-neutral-50">{value}</p>
       <p className="mt-0.5 text-[11.5px] text-neutral-500">{label}</p>
+      {trend && trend.length > 1 && (
+        <div className="mt-2 h-9">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={trend} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`kpi-spark-${dataKey}-${tint}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={sparkColor} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={sparkColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area
+                type="natural"
+                dataKey={dataKey}
+                stroke={sparkColor}
+                strokeWidth={1.6}
+                fill={`url(#kpi-spark-${dataKey}-${tint})`}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
@@ -454,7 +499,7 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald" }) {
 function ChartTooltip({ active, payload, label, currency = false }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-[11.5px] shadow-xl shadow-black/40">
+    <div className="rounded-lg bg-white px-3 py-2 text-[11.5px] shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
       <p className="mb-1 text-neutral-500">{label}</p>
       {payload.map((p) => (
         <p key={p.dataKey} className="font-semibold" style={{ color: p.color }}>
@@ -467,13 +512,13 @@ function ChartTooltip({ active, payload, label, currency = false }) {
 
 function SegmentedControl({ options, value, onChange }) {
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-neutral-800 bg-neutral-900 p-1">
+    <div className="flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
       {options.map((opt) => (
         <button
           key={opt}
           onClick={() => onChange(opt)}
           className={`rounded-lg px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
-            value === opt ? "bg-emerald-400 text-neutral-950" : "text-neutral-400 hover:text-neutral-200"
+            value === opt ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
           }`}
         >
           {opt}
@@ -493,8 +538,8 @@ function DropdownFilter({ label, value, options, onChange }) {
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
           active
-            ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
-            : "border-neutral-800 bg-neutral-900 text-neutral-300 hover:border-neutral-700"
+            ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+            : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700"
         }`}
       >
         <SlidersHorizontal size={14} />
@@ -517,7 +562,7 @@ function DropdownFilter({ label, value, options, onChange }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900 shadow-xl shadow-black/40">
+          <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
             {options.map((opt) => (
               <button
                 key={opt}
@@ -525,7 +570,7 @@ function DropdownFilter({ label, value, options, onChange }) {
                   onChange(opt);
                   setOpen(false);
                 }}
-                className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-300 transition-colors hover:bg-neutral-800"
+                className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 {opt}
                 {value === opt && <Check size={14} className="text-emerald-400" />}
@@ -543,6 +588,30 @@ function DropdownFilter({ label, value, options, onChange }) {
  * ---------------------------------------------------------------------- */
 
 function OverviewTab() {
+  const { brands } = useBrands();
+  const totalBrands = brands.length;
+  const activeBrands = brands.filter((b) => b.active).length;
+  const inactiveBrands = totalBrands - activeBrands;
+
+  // Real subscription-plan count — GET /subscriptions/get-all, no mock
+  // fallback needed since Plan already has a confirmed real endpoint.
+  const [plansCount, setPlansCount] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getPlans();
+        const list = res?.data?.data ?? res?.data ?? [];
+        if (!cancelled) setPlansCount(Array.isArray(list) ? list.length : 0);
+      } catch {
+        if (!cancelled) setPlansCount(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const latest = MONTHS.length - 1;
   const prev = latest - 1;
 
@@ -553,6 +622,8 @@ function OverviewTab() {
       value: formatNumber(monthTotal("customers", latest)),
       delta: pctChange(monthTotal("customers", latest), monthTotal("customers", prev)),
       tint: "emerald",
+      trend: COMBINED_TREND,
+      dataKey: "customers",
     },
     {
       icon: Tag,
@@ -560,27 +631,31 @@ function OverviewTab() {
       value: formatNumber(monthTotal("vouchers", latest)),
       delta: pctChange(monthTotal("vouchers", latest), monthTotal("vouchers", prev)),
       tint: "amber",
+      trend: COMBINED_TREND,
+      dataKey: "vouchers",
     },
-    {
-      icon: Sparkles,
-      label: "Deals & Packs Used (Jul)",
-      value: formatNumber(monthTotal("dealsPack", latest)),
-      delta: pctChange(monthTotal("dealsPack", latest), monthTotal("dealsPack", prev)),
-      tint: "sky",
-    },
-    {
-      icon: BadgeCheck,
-      label: "Active Memberships (Jul)",
-      value: formatNumber(monthTotal("memberships", latest)),
-      delta: pctChange(monthTotal("memberships", latest), monthTotal("memberships", prev)),
-      tint: "pink",
-    },
+    // {
+    //   icon: Sparkles,
+    //   label: "Deals & Packs Used (Jul)",
+    //   value: formatNumber(monthTotal("dealsPack", latest)),
+    //   delta: pctChange(monthTotal("dealsPack", latest), monthTotal("dealsPack", prev)),
+    //   tint: "sky",
+    // },
+    // {
+    //   icon: BadgeCheck,
+    //   label: "Active Memberships (Jul)",
+    //   value: formatNumber(monthTotal("memberships", latest)),
+    //   delta: pctChange(monthTotal("memberships", latest), monthTotal("memberships", prev)),
+    //   tint: "pink",
+    // },
     {
       icon: FileText,
       label: "Transactions (Jul)",
       value: formatNumber(monthTotal("transactions", latest)),
       delta: pctChange(monthTotal("transactions", latest), monthTotal("transactions", prev)),
       tint: "emerald",
+      trend: COMBINED_TREND,
+      dataKey: "transactions",
     },
     {
       icon: CreditCard,
@@ -588,34 +663,38 @@ function OverviewTab() {
       value: formatCurrency(monthTotal("revenue", latest)),
       delta: pctChange(monthTotal("revenue", latest), monthTotal("revenue", prev)),
       tint: "amber",
+      trend: COMBINED_TREND,
+      dataKey: "revenue",
     },
   ];
 
-  const topBrands = [...BRAND_TOTALS].sort((a, b) => b.revenue - a.revenue).slice(0, 4);
+  // Real brands, ranked by followers (the only real "popularity" signal we
+  // have) — no real revenue-per-brand endpoint exists yet.
+  const topBrands = [...brands].sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 4);
 
   const registrationKpis = [
     {
       icon: Users,
-      label: "Vendors Registered",
-      value: formatNumber(REGISTRATION_STATS.totalVendorsRegistered),
+      label: "Brand Onboarded",
+      value: formatNumber(totalBrands),
       tint: "sky",
     },
     {
-      icon: BadgeCheck,
-      label: "Registered Brands",
-      value: formatNumber(REGISTRATION_STATS.registeredBrands),
+      icon: Check,
+      label: "Active Brands",
+      value: formatNumber(activeBrands),
       tint: "emerald",
     },
     {
       icon: AlertTriangle,
-      label: "Unregistered Brands",
-      value: formatNumber(REGISTRATION_STATS.unregisteredBrands),
+      label: "Pending Onboarding",
+      value: formatNumber(inactiveBrands),
       tint: "amber",
     },
     {
       icon: Layers,
-      label: "Subscription Plans Offered",
-      value: formatNumber(REGISTRATION_STATS.totalPlans),
+      label: "Subscription Plans",
+      value: plansCount != null ? formatNumber(plansCount) : "—",
       tint: "pink",
     },
   ];
@@ -645,25 +724,70 @@ function OverviewTab() {
       delta: pctChange(billingLatest.platformFee, billingPrev.platformFee),
       tint: "sky",
     },
-    {
-      icon: Gift,
-      label: "Trydood Discount Borne (Jul)",
-      value: formatCurrency(billingLatest.trydoodDiscount),
-      delta: pctChange(billingLatest.trydoodDiscount, billingPrev.trydoodDiscount),
-      tint: "pink",
-    },
+    // {
+    //   icon: Gift,
+    //   label: "Trydood Discount Borne (Jul)",
+    //   value: formatCurrency(billingLatest.trydoodDiscount),
+    //   delta: pctChange(billingLatest.trydoodDiscount, billingPrev.trydoodDiscount),
+    //   tint: "pink",
+    // },
   ];
 
   return (
     <div className="space-y-4">
       <div>
         <p className="mb-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
-          Registration Overview
+          BRAND ONBOARDING OVERVIEW
         </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {registrationKpis.map((k) => (
-            <KpiCard key={k.label} {...k} />
-          ))}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_1fr]">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {registrationKpis.map((k) => (
+              <KpiCard key={k.label} {...k} />
+            ))}
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <p className="mb-1 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">Brand Status</p>
+            <div className="flex items-center gap-3">
+              <div className="relative h-[92px] w-[92px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: "Active", value: activeBrands },
+                        { name: "Inactive", value: inactiveBrands },
+                      ].filter((d) => d.value > 0)}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={28}
+                      outerRadius={44}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      <Cell fill="#2FDE8C" stroke="none" />
+                      <Cell fill="#FBBF24" stroke="none" />
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[14px] font-bold text-neutral-900 dark:text-neutral-50">{totalBrands}</span>
+                  <span className="text-[8.5px] text-neutral-500">Brands</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5 text-[11.5px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                  <span className="min-w-0 flex-1 truncate text-neutral-500">Active</span>
+                  <span className="font-semibold text-neutral-900 dark:text-neutral-50">{activeBrands}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />
+                  <span className="min-w-0 flex-1 truncate text-neutral-500">Inactive</span>
+                  <span className="font-semibold text-neutral-900 dark:text-neutral-50">{inactiveBrands}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -689,10 +813,10 @@ function OverviewTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
-            <Receipt size={15} className="text-emerald-400" /> Bill Amount, Discount &amp; Fees Trend
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
+            <Receipt size={15} className="text-emerald-600 dark:text-emerald-400" /> Bill Amount, Discount &amp; Fees Trend
           </div>
           <span className="text-[12px] text-neutral-500">Last 6 months · all brands</span>
         </div>
@@ -711,10 +835,10 @@ function OverviewTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
-            <BarChart3 size={15} className="text-emerald-400" /> Revenue &amp; Transactions Trend
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
+            <BarChart3 size={15} className="text-emerald-600 dark:text-emerald-400" /> Revenue &amp; Transactions Trend
           </div>
           <span className="text-[12px] text-neutral-500">Last 6 months · all brands</span>
         </div>
@@ -738,7 +862,7 @@ function OverviewTab() {
             <Legend wrapperStyle={{ fontSize: 12, color: "#8C9A91" }} />
             <Area
               yAxisId="left"
-              type="monotone"
+              type="natural"
               dataKey="revenue"
               name="Revenue"
               stroke="#2FDE8C"
@@ -747,7 +871,7 @@ function OverviewTab() {
             />
             <Area
               yAxisId="right"
-              type="monotone"
+              type="natural"
               dataKey="transactions"
               name="Transactions"
               stroke="#38BDF8"
@@ -758,41 +882,44 @@ function OverviewTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
-            <Store size={15} className="text-emerald-400" /> Top Performing Brands
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
+            <Store size={15} className="text-emerald-600 dark:text-emerald-400" /> Top Brands
           </div>
-          <span className="text-[12px] text-neutral-500">By July revenue</span>
+          <span className="text-[12px] text-neutral-500">By followers</span>
         </div>
         <div className="space-y-2.5">
-          {topBrands.map((b, i) => (
-            <div
-              key={b.id}
-              className="flex items-center justify-between rounded-xl border border-neutral-800/80 bg-neutral-950/60 px-3.5 py-2.5"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-800 text-[11.5px] font-bold text-neutral-300">
-                  {i + 1}
-                </span>
-                <div>
-                  <p className="text-[13px] font-semibold text-neutral-100">{b.name}</p>
-                  <p className="text-[11px] text-neutral-500">{b.category}</p>
+          {topBrands.length ? (
+            topBrands.map((b, i) => (
+              <div
+                key={b.id}
+                className="flex items-center justify-between rounded-xl bg-neutral-50/60 px-3.5 py-2.5 dark:bg-neutral-950/60"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-[11.5px] font-bold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{b.brandName}</p>
+                    <p className="text-[11px] text-neutral-500">{b.category}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{formatNumber(b.followers ?? 0)} followers</p>
+                  <span
+                    className={`text-[11px] font-medium ${
+                      b.active ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-500"
+                    }`}
+                  >
+                    {b.status}
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[13px] font-semibold text-neutral-100">{formatCurrency(b.revenue)}</p>
-                <span
-                  className={`flex items-center justify-end gap-1 text-[11px] font-medium ${
-                    b.revenueChange >= 0 ? "text-emerald-400" : "text-red-400"
-                  }`}
-                >
-                  {b.revenueChange >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                  {Math.abs(b.revenueChange).toFixed(1)}% MoM
-                </span>
-              </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="py-6 text-center text-[12.5px] text-neutral-500">No brands yet.</p>
+          )}
         </div>
       </div>
     </div>
@@ -804,68 +931,93 @@ function OverviewTab() {
  * ---------------------------------------------------------------------- */
 
 function BrandAnalyticsTab() {
+  const { brands } = useBrands();
   const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState(BRAND_ANALYTICS[0]?.id ?? null);
+  const [expandedId, setExpandedId] = useState(null);
 
-  const rows = BRAND_TOTALS.filter(
+  // Real brand identity (name/category, from the same Brand API as the
+  // Brand list page) paired with the existing demo financial/trend dataset
+  // — there's no real per-brand revenue/customers/transactions endpoint
+  // yet, so those numbers still reuse BRAND_TOTALS/BRAND_ANALYTICS, cycling
+  // through it if there are more real brands than demo entries.
+  const combined = brands.map((real, i) => {
+    const totals = BRAND_TOTALS[i % BRAND_TOTALS.length];
+    const analytics = BRAND_ANALYTICS[i % BRAND_ANALYTICS.length];
+    return {
+      ...totals,
+      id: real.id,
+      name: real.brandName,
+      category: real.category,
+      monthly: analytics.monthly,
+      realBrand: real,
+    };
+  });
+
+  const rows = combined.filter(
     (b) =>
-      b.name.toLowerCase().includes(search.toLowerCase()) ||
-      b.category.toLowerCase().includes(search.toLowerCase())
+      b.name?.toLowerCase().includes(search.toLowerCase()) ||
+      b.category?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const expandedBrand = BRAND_ANALYTICS.find((b) => b.id === expandedId);
+  const expandedBrand = combined.find((b) => b.id === expandedId);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-sm">
+      <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-sm">
         <Search size={16} className="shrink-0 text-neutral-500" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search brand or category..."
-          className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+          className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
         />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[720px] text-left text-[13px]">
-          <thead className="bg-neutral-900 text-[11px] uppercase tracking-wide text-neutral-500">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Brand</th>
               <th className="px-4 py-3 text-right font-medium">Customers</th>
               <th className="px-4 py-3 text-right font-medium">Vouchers Used</th>
+              {/* Fake/demo data — commented out until real deal-pack &
+                  membership usage numbers are available. Re-add when wired
+                  to a real endpoint.
               <th className="px-4 py-3 text-right font-medium">Deals/Pack Used</th>
               <th className="px-4 py-3 text-right font-medium">Memberships</th>
+              */}
               <th className="px-4 py-3 text-right font-medium">Transactions</th>
               <th className="px-4 py-3 text-right font-medium">Revenue</th>
               <th className="px-4 py-3 text-right font-medium">Trend</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+          <tbody className="bg-neutral-50 dark:bg-neutral-950">
             {rows.map((b) => (
               <React.Fragment key={b.id}>
                 <tr
                   onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}
-                  className={`cursor-pointer transition-colors hover:bg-neutral-900/60 ${
-                    expandedId === b.id ? "bg-neutral-900/60" : ""
+                  className={`cursor-pointer transition-colors hover:bg-white dark:hover:bg-neutral-900/60 ${
+                    expandedId === b.id ? "bg-white dark:bg-neutral-900/60" : ""
                   }`}
                 >
                   <td className="px-4 py-3">
-                    <p className="font-medium text-neutral-50">{b.name}</p>
+                    <p className="font-medium text-neutral-900 dark:text-neutral-50 capitalize">{b.name}</p>
                     <p className="text-[11px] text-neutral-500">{b.category}</p>
                   </td>
-                  <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(b.customers)}</td>
-                  <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(b.vouchers)}</td>
-                  <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(b.dealsPack)}</td>
-                  <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(b.memberships)}</td>
-                  <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(b.transactions)}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-neutral-100">
+                  <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.customers)}</td>
+                  <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.vouchers)}</td>
+                  {/*
+                  <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.dealsPack)}</td>
+                  <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.memberships)}</td>
+                  */}
+                  <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.transactions)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-neutral-800 dark:text-neutral-100">
                     {formatCurrency(b.revenue)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <span
                       className={`inline-flex items-center gap-1 text-[11.5px] font-semibold ${
-                        b.revenueChange >= 0 ? "text-emerald-400" : "text-red-400"
+                        b.revenueChange >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
                       }`}
                     >
                       {b.revenueChange >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
@@ -882,8 +1034,9 @@ function BrandAnalyticsTab() {
 
                 {expandedId === b.id && expandedBrand && (
                   <tr>
-                    <td colSpan={8} className="bg-neutral-950 px-4 pb-5 pt-1">
+                    <td colSpan={6} className="space-y-3 bg-neutral-50 px-4 pb-5 pt-1 dark:bg-neutral-950">
                       <BrandTrendPanel brand={expandedBrand} />
+                      <BrandFactsPanel brand={expandedBrand.realBrand} />
                     </td>
                   </tr>
                 )}
@@ -891,7 +1044,7 @@ function BrandAnalyticsTab() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-neutral-500">
+                <td colSpan={6} className="px-4 py-10 text-center text-neutral-500">
                   No brands match your search.
                 </td>
               </tr>
@@ -907,12 +1060,14 @@ function BrandTrendPanel({ brand }) {
   const usageBreakdown = brand.monthly.map((m) => ({
     month: m.month,
     Vouchers: m.vouchers,
-    "Deals/Pack": m.dealsPack,
-    Memberships: m.memberships,
+    // Fake/demo data — commented out until real deal-pack & membership
+    // usage numbers are available. Re-add when wired to a real endpoint.
+    // "Deals/Pack": m.dealsPack,
+    // Memberships: m.memberships,
   }));
 
   return (
-    <div className="grid grid-cols-1 gap-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:grid-cols-2">
       <div>
         <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
           Customers &amp; Transactions
@@ -927,15 +1082,15 @@ function BrandTrendPanel({ brand }) {
             </defs>
             <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 10.5 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Area type="monotone" dataKey="customers" name="Customers" stroke="#2FDE8C" strokeWidth={2} fill={`url(#cust-${brand.id})`} />
-            <Area type="monotone" dataKey="transactions" name="Transactions" stroke="#38BDF8" strokeWidth={2} fillOpacity={0} />
+            <Area type="natural" dataKey="customers" name="Customers" stroke="#2FDE8C" strokeWidth={2} fill={`url(#cust-${brand.id})`} />
+            <Area type="natural" dataKey="transactions" name="Transactions" stroke="#38BDF8" strokeWidth={2} fillOpacity={0} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
       <div>
         <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
-          Voucher / Deal-Pack / Membership Usage
+          Voucher Usage
         </p>
         <ResponsiveContainer width="100%" height={190}>
           <BarChart data={usageBreakdown} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
@@ -943,10 +1098,104 @@ function BrandTrendPanel({ brand }) {
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11, color: "#8C9A91" }} />
             <Bar dataKey="Vouchers" fill="#FBBF24" radius={[3, 3, 0, 0]} />
+            {/* Fake/demo data — commented out until real deal-pack &
+                membership usage numbers are available. Re-add when wired
+                to a real endpoint.
             <Bar dataKey="Deals/Pack" fill="#38BDF8" radius={[3, 3, 0, 0]} />
             <Bar dataKey="Memberships" fill="#F472B6" radius={[3, 3, 0, 0]} />
+            */}
           </BarChart>
         </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/* Real chart + graph per brand, shown below the demo trend panel above —
+ * no per-brand revenue/customer time series exists on the backend, so
+ * instead of fabricating more numbers this charts what's actually real on
+ * the brand record: renewal window and followers/outlets reach. */
+function BrandFactsPanel({ brand }) {
+  const renewalData = [
+    { name: "Remaining", value: brand.remainderPercent },
+    { name: "Elapsed", value: Math.max(0, 100 - brand.remainderPercent) },
+  ].filter((d) => d.value > 0);
+
+  const [outletsUsedStr, outletsLimitStr] = String(brand.subBrandCount || "0/0").split("/");
+  const reachData = [
+    { name: "Followers", value: brand.followers || 0 },
+    { name: "Outlets Used", value: Number(outletsUsedStr) || 0 },
+    { name: "Outlets Limit", value: outletsLimitStr === "∞" ? Number(outletsUsedStr) || 0 : Number(outletsLimitStr) || 0 },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Real Brand Data</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Renewal Window</p>
+          {renewalData.length ? (
+            <div className="relative flex h-[110px] items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={renewalData} dataKey="value" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
+                    <Cell fill="#2FDE8C" />
+                    <Cell fill="#e5e7eb" opacity={0.6} />
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-100">{brand.expiredInDays}d</p>
+                <p className="text-[9.5px] text-neutral-500">left</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-[110px] items-center justify-center text-[12px] text-neutral-500">No active plan window.</div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Reach</p>
+          <div className="h-[110px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={reachData} margin={{ top: 18, right: 4, left: -18, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9.5 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                <Bar dataKey="value" fill="#38BDF8" radius={[4, 4, 0, 0]} minPointSize={2}>
+                  <LabelList dataKey="value" position="top" style={{ fontSize: 10.5, fill: "#525252" }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:grid-cols-4">
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <CreditCard size={11} /> Plan Price
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.planPrice}</p>
+        </div>
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <Calendar size={11} /> Plan Term
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.subscriptionTerm}</p>
+        </div>
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <Calendar size={11} /> Live Since
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.liveSince}</p>
+        </div>
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+            <MapPin size={11} /> Location
+          </p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.location}</p>
+        </div>
       </div>
     </div>
   );
@@ -957,6 +1206,9 @@ function BrandTrendPanel({ brand }) {
  * per month or per year.
  * ---------------------------------------------------------------------- */
 
+/* Fake/demo data — commented out until real deal-pack usage numbers are
+   available. Re-add (and restore its REPORT_TABS entry + tab-render line)
+   once wired to a real endpoint.
 function DealPackTab() {
   const [period, setPeriod] = useState("Month");
 
@@ -1012,9 +1264,9 @@ function DealPackTab() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4 text-[12.5px] text-neutral-400">
-        <span className="font-semibold text-neutral-200">2026 YTD:</span> {formatCurrency(ytd2026.netAmount)} net
-        payable vs <span className="font-semibold text-neutral-200">FY 2025:</span> {formatCurrency(fy2025.netAmount)}{" "}
+      <div className="rounded-2xl border border-neutral-200 bg-white p-4 text-[12.5px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
+        <span className="font-semibold text-neutral-800 dark:text-neutral-200">2026 YTD:</span> {formatCurrency(ytd2026.netAmount)} net
+        payable vs <span className="font-semibold text-neutral-800 dark:text-neutral-200">FY 2025:</span> {formatCurrency(fy2025.netAmount)}{" "}
         <span
           className={`ml-1 font-semibold ${
             pctChange(ytd2026.netAmount, fy2025.netAmount) >= 0 ? "text-emerald-400" : "text-red-400"
@@ -1025,9 +1277,9 @@ function DealPackTab() {
         </span>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Package size={15} className="text-emerald-400" /> Deal Pack Amount by {period}
           </div>
           <SegmentedControl options={["Month", "Year"]} value={period} onChange={setPeriod} />
@@ -1053,9 +1305,9 @@ function DealPackTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-800">
+      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
         <table className="w-full min-w-[760px] text-left text-[13px]">
-          <thead className="bg-neutral-900 text-[11px] uppercase tracking-wide text-neutral-500">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period === "Month" ? "Month" : "Year"}</th>
               <th className="px-4 py-3 text-right font-medium">Items Sold</th>
@@ -1066,16 +1318,16 @@ function DealPackTab() {
               <th className="px-4 py-3 text-right font-medium">Net Payable</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {data.map((row) => (
-              <tr key={period === "Month" ? row.label : row.year}>
-                <td className="px-4 py-3 text-neutral-200">{period === "Month" ? row.label : row.year}</td>
-                <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(row.itemsSold)}</td>
-                <td className="px-4 py-3 text-right text-neutral-300">{formatCurrency(row.itemsTotal)}</td>
+              <tr key={period === "Month" ? row.label : row.year} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+                <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{period === "Month" ? row.label : row.year}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.itemsSold)}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatCurrency(row.itemsTotal)}</td>
                 <td className="px-4 py-3 text-right text-amber-400">-{formatCurrency(row.discount)}</td>
                 <td className="px-4 py-3 text-right text-pink-400">-{formatCurrency(row.coupon)}</td>
                 <td className="px-4 py-3 text-right text-sky-400">+{formatCurrency(row.gst)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-100">
+                <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">
                   {formatCurrency(row.netAmount)}
                 </td>
               </tr>
@@ -1086,12 +1338,11 @@ function DealPackTab() {
     </div>
   );
 }
+*/
 
-/* -------------------------------------------------------------------------
- * Membership tab — plan price, active members, coupons applied, and 18%
- * GST breakdown per plan.
- * ---------------------------------------------------------------------- */
-
+/* Fake/demo data — commented out until real membership usage numbers are
+   available. Re-add (and restore its REPORT_TABS entry + tab-render line)
+   once wired to a real endpoint.
 function MembershipTab() {
   const plans = MEMBERSHIP_PLANS.map(withMembershipFinancials);
   const totalActive = plans.reduce((s, p) => s + p.activeMembers, 0);
@@ -1119,7 +1370,7 @@ function MembershipTab() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((p) => (
-          <div key={p.name} className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+          <div key={p.name} className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
             <div className="mb-2.5 flex items-center justify-between">
               <span
                 className="flex h-9 w-9 items-center justify-center rounded-xl"
@@ -1131,20 +1382,20 @@ function MembershipTab() {
                 {((p.activeMembers / totalActive) * 100).toFixed(1)}%
               </span>
             </div>
-            <p className="text-[20px] font-bold tracking-tight text-neutral-50">{formatNumber(p.activeMembers)}</p>
+            <p className="text-[20px] font-bold tracking-tight text-neutral-900 dark:text-neutral-50">{formatNumber(p.activeMembers)}</p>
             <p className="mt-0.5 text-[11.5px] text-neutral-500">
               Active on {p.name} · ₹{p.price.toLocaleString("en-IN")}/yr
             </p>
-            <div className="mt-3 space-y-1 border-t border-neutral-800 pt-3 text-[11.5px]">
-              <div className="flex justify-between text-neutral-400">
+            <div className="mt-3 space-y-1 border-t border-neutral-200 pt-3 text-[11.5px] dark:border-neutral-800">
+              <div className="flex justify-between text-neutral-500 dark:text-neutral-400">
                 <span>Coupons Applied</span>
-                <span className="text-pink-400">-{formatCurrency(p.couponValue)} ({p.couponsApplied})</span>
+                <span className="text-pink-600 dark:text-pink-400">-{formatCurrency(p.couponValue)} ({p.couponsApplied})</span>
               </div>
-              <div className="flex justify-between text-neutral-400">
+              <div className="flex justify-between text-neutral-500 dark:text-neutral-400">
                 <span>GST ({GST_RATE}%)</span>
-                <span className="text-sky-400">+{formatCurrency(p.gst)}</span>
+                <span className="text-sky-600 dark:text-sky-400">+{formatCurrency(p.gst)}</span>
               </div>
-              <div className="flex justify-between font-semibold text-neutral-100">
+              <div className="flex justify-between font-semibold text-neutral-900 dark:text-neutral-100">
                 <span>Net Payable</span>
                 <span>{formatCurrency(p.payable)}</span>
               </div>
@@ -1154,9 +1405,9 @@ function MembershipTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+            <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
               <BarChart3 size={15} className="text-emerald-400" /> Active Members per Plan
             </div>
             <span className="text-[12px] text-neutral-500">{formatNumber(totalActive)} total active</span>
@@ -1176,8 +1427,8 @@ function MembershipTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-          <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+        <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Layers size={15} className="text-emerald-400" /> Plan Distribution
           </div>
           <ResponsiveContainer width="100%" height={220}>
@@ -1194,9 +1445,9 @@ function MembershipTab() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-800">
+      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
         <table className="w-full min-w-[780px] text-left text-[13px]">
-          <thead className="bg-neutral-900 text-[11px] uppercase tracking-wide text-neutral-500">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Plan</th>
               <th className="px-4 py-3 text-right font-medium">Plan Price / Year</th>
@@ -1207,33 +1458,33 @@ function MembershipTab() {
               <th className="px-4 py-3 text-right font-medium">Net Payable</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {plans.map((p) => (
-              <tr key={p.name}>
+              <tr key={p.name} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
                 <td className="px-4 py-3">
-                  <span className="flex items-center gap-2 font-medium text-neutral-100">
+                  <span className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PLAN_COLORS[p.name] }} />
                     {p.name}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right text-neutral-300">₹{p.price.toLocaleString("en-IN")}</td>
-                <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(p.activeMembers)}</td>
-                <td className="px-4 py-3 text-right text-neutral-300">{formatCurrency(p.gross)}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">₹{p.price.toLocaleString("en-IN")}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(p.activeMembers)}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatCurrency(p.gross)}</td>
                 <td className="px-4 py-3 text-right text-pink-400">
                   -{formatCurrency(p.couponValue)} ({p.couponsApplied})
                 </td>
                 <td className="px-4 py-3 text-right text-sky-400">+{formatCurrency(p.gst)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-100">{formatCurrency(p.payable)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(p.payable)}</td>
               </tr>
             ))}
             <tr className="bg-neutral-900/60">
-              <td className="px-4 py-3 font-semibold text-neutral-100">Total</td>
+              <td className="px-4 py-3 font-semibold text-neutral-900 dark:text-neutral-100">Total</td>
               <td className="px-4 py-3" />
-              <td className="px-4 py-3 text-right font-semibold text-neutral-100">{formatNumber(totalActive)}</td>
-              <td className="px-4 py-3 text-right font-semibold text-neutral-100">{formatCurrency(totalGross)}</td>
+              <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatNumber(totalActive)}</td>
+              <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(totalGross)}</td>
               <td className="px-4 py-3 text-right font-semibold text-pink-400">-{formatCurrency(totalCoupon)}</td>
               <td className="px-4 py-3 text-right font-semibold text-sky-400">+{formatCurrency(totalGst)}</td>
-              <td className="px-4 py-3 text-right font-semibold text-neutral-100">{formatCurrency(totalPayable)}</td>
+              <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(totalPayable)}</td>
             </tr>
           </tbody>
         </table>
@@ -1241,25 +1492,62 @@ function MembershipTab() {
     </div>
   );
 }
+*/
 
 /* -------------------------------------------------------------------------
  * Voucher tab — redemption value per month and per year
  * ---------------------------------------------------------------------- */
 
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function VouchersTab() {
   const [period, setPeriod] = useState("Month");
+  const [vouchers, setVouchers] = useState([]);
 
-  const monthly = VOUCHER_HISTORY.map((h) =>
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getVouchers({ page: 1, limit: 100 });
+        if (!cancelled) setVouchers(res?.data?.data ?? []);
+      } catch {
+        if (!cancelled) setVouchers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Real per-month counts, over the same Jan 2025 – Jul 2026 window the UI
+  // already shows — 0 for any month with no real vouchers created in it,
+  // rather than the old fabricated growth curve. "Amount" only sums FLAT-
+  // type offers (a real ₹ value); PERCENTAGE offers aren't a ₹ amount so
+  // they aren't added in, keeping this an honest (if partial) real figure.
+  const history = VOUCHER_HISTORY.map(({ year, month }) => {
+    const monthIndex = MONTH_ABBR.indexOf(month);
+    const createdThisMonth = vouchers.filter((v) => {
+      const d = v.createdAt ? new Date(v.createdAt) : null;
+      return d && d.getFullYear() === year && d.getMonth() === monthIndex;
+    });
+    const amount = createdThisMonth.reduce((sum, v) => {
+      const offer = v.offers?.[0];
+      return sum + (offer?.discountType === "FLAT" ? Number(offer.discountValue) || 0 : 0);
+    }, 0);
+    return { year, month, count: createdThisMonth.length, amount };
+  });
+
+  const monthly = history.map((h) =>
     withVoucherFinancials({ ...h, label: `${h.month} '${String(h.year).slice(2)}` })
   );
-  const yearly = aggregateVouchersByYear(VOUCHER_HISTORY);
+  const yearly = aggregateVouchersByYear(history);
 
-  const latest = withVoucherFinancials(VOUCHER_HISTORY[VOUCHER_HISTORY.length - 1]);
-  const prevMonth = withVoucherFinancials(VOUCHER_HISTORY[VOUCHER_HISTORY.length - 2]);
+  const latest = withVoucherFinancials(history[history.length - 1]);
+  const prevMonth = withVoucherFinancials(history[history.length - 2]);
   const ytd2026 = yearly.find((y) => y.year === 2026);
   const fy2025 = yearly.find((y) => y.year === 2025);
 
-  const avgDiscount = latest.amount / latest.count;
+  const avgDiscount = latest.count ? latest.amount / latest.count : 0;
 
   const kpis = [
     {
@@ -1306,13 +1594,13 @@ function VouchersTab() {
       delta: pctChange(latest.platformFee, prevMonth.platformFee),
       tint: "sky",
     },
-    {
-      icon: Gift,
-      label: "Trydood Discount Borne (Jul)",
-      value: formatCurrency(latest.trydoodDiscount),
-      delta: pctChange(latest.trydoodDiscount, prevMonth.trydoodDiscount),
-      tint: "pink",
-    },
+    // {
+    //   icon: Gift,
+    //   label: "Trydood Discount Borne (Jul)",
+    //   value: formatCurrency(latest.trydoodDiscount),
+    //   delta: pctChange(latest.trydoodDiscount, prevMonth.trydoodDiscount),
+    //   tint: "pink",
+    // },
   ];
 
   const data = period === "Month" ? monthly : yearly;
@@ -1337,9 +1625,9 @@ function VouchersTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Tag size={15} className="text-emerald-400" /> Voucher Amount by {period}
           </div>
           <SegmentedControl options={["Month", "Year"]} value={period} onChange={setPeriod} />
@@ -1362,14 +1650,14 @@ function VouchersTab() {
             />
             <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip currency />} />
-            <Area type="monotone" dataKey="amount" name="Voucher Amount" stroke="#FBBF24" strokeWidth={2.2} fill="url(#voucherFill)" />
+            <Area type="natural" dataKey="amount" name="Voucher Amount" stroke="#FBBF24" strokeWidth={2.2} fill="url(#voucherFill)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Receipt size={15} className="text-emerald-400" /> Bill Amount, Platform Fee &amp; Trydood Discount by {period}
           </div>
           <span className="text-[12px] text-neutral-500">Derived from voucher value</span>
@@ -1394,9 +1682,9 @@ function VouchersTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[880px] text-left text-[13px]">
-          <thead className="bg-neutral-900 text-[11px] uppercase tracking-wide text-neutral-500">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period === "Month" ? "Month" : "Year"}</th>
               <th className="px-4 py-3 text-right font-medium">Vouchers Used</th>
@@ -1407,14 +1695,14 @@ function VouchersTab() {
               <th className="px-4 py-3 text-right font-medium">Trydood Discount</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {data.map((row) => (
-              <tr key={period === "Month" ? row.label : row.year}>
-                <td className="px-4 py-3 text-neutral-200">{period === "Month" ? row.label : row.year}</td>
-                <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(row.count)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-100">{formatCurrency(row.amount)}</td>
-                <td className="px-4 py-3 text-right text-neutral-400">{formatCurrency(row.amount / row.count)}</td>
-                <td className="px-4 py-3 text-right text-neutral-300">{formatCurrency(row.billAmount)}</td>
+              <tr key={period === "Month" ? row.label : row.year} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+                <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{period === "Month" ? row.label : row.year}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.count)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(row.amount)}</td>
+                <td className="px-4 py-3 text-right text-neutral-500 dark:text-neutral-400">{formatCurrency(row.count ? row.amount / row.count : 0)}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatCurrency(row.billAmount)}</td>
                 <td className="px-4 py-3 text-right text-sky-400">+{formatCurrency(row.platformFee)}</td>
                 <td className="px-4 py-3 text-right text-pink-400">-{formatCurrency(row.trydoodDiscount)}</td>
               </tr>
@@ -1481,8 +1769,8 @@ function TransactionTab() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4 text-[12.5px] text-neutral-400">
-        <span className="font-semibold text-neutral-200">Avg. ticket size (Jul):</span> {formatCurrency(avgTicketSize)}{" "}
+      <div className="rounded-2xl bg-white p-4 text-[12.5px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:text-neutral-400 dark:shadow-black/20">
+        <span className="font-semibold text-neutral-800 dark:text-neutral-200">Avg. ticket size (Jul):</span> {formatCurrency(avgTicketSize)}{" "}
         <span
           className={`ml-1 font-semibold ${
             pctChange(avgTicketSize, prevAvgTicketSize) >= 0 ? "text-emerald-400" : "text-red-400"
@@ -1494,9 +1782,9 @@ function TransactionTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="min-w-0 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+            <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
               <Repeat size={15} className="text-emerald-400" /> Success vs Failed Transactions
             </div>
             <span className="text-[12px] text-neutral-500">Last 6 months</span>
@@ -1514,8 +1802,8 @@ function TransactionTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-          <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+        <div className="min-w-0 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Smartphone size={15} className="text-emerald-400" /> Payment Method Split
           </div>
           <ResponsiveContainer width="100%" height={200}>
@@ -1538,11 +1826,11 @@ function TransactionTab() {
           <div className="mt-2 space-y-2">
             {PAYMENT_METHOD_SPLIT.map((m) => (
               <div key={m.name} className="flex items-center justify-between text-[12px]">
-                <span className="flex items-center gap-1.5 text-neutral-400">
+                <span className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                   <span className="h-2 w-2 rounded-full" style={{ background: m.color }} />
                   {m.name}
                 </span>
-                <span className="font-medium text-neutral-200">
+                <span className="font-medium text-neutral-800 dark:text-neutral-200">
                   {((m.value / totalMethodCount) * 100).toFixed(0)}%
                 </span>
               </div>
@@ -1551,8 +1839,8 @@ function TransactionTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-        <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
           <BarChart3 size={15} className="text-emerald-400" /> Transaction Value Trend
         </div>
         <ResponsiveContainer width="100%" height={220}>
@@ -1567,14 +1855,14 @@ function TransactionTab() {
             <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip currency />} />
-            <Area type="monotone" dataKey="amount" name="Transaction Value" stroke="#38BDF8" strokeWidth={2.2} fill="url(#txnValueFill)" />
+            <Area type="natural" dataKey="amount" name="Transaction Value" stroke="#38BDF8" strokeWidth={2.2} fill="url(#txnValueFill)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[680px] text-left text-[13px]">
-          <thead className="bg-neutral-900 text-[11px] uppercase tracking-wide text-neutral-500">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Month</th>
               <th className="px-4 py-3 text-right font-medium">Total</th>
@@ -1584,17 +1872,17 @@ function TransactionTab() {
               <th className="px-4 py-3 text-right font-medium">Amount</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {TRANSACTION_HISTORY.map((row) => (
-              <tr key={row.month}>
-                <td className="px-4 py-3 text-neutral-200">{row.month}</td>
-                <td className="px-4 py-3 text-right text-neutral-300">{formatNumber(row.count)}</td>
+              <tr key={row.month} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+                <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{row.month}</td>
+                <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.count)}</td>
                 <td className="px-4 py-3 text-right text-emerald-400">{formatNumber(row.success)}</td>
                 <td className="px-4 py-3 text-right text-red-400">{formatNumber(row.failed)}</td>
-                <td className="px-4 py-3 text-right text-neutral-400">
+                <td className="px-4 py-3 text-right text-neutral-500 dark:text-neutral-400">
                   {((row.success / row.count) * 100).toFixed(1)}%
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-100">{formatCurrency(row.amount)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(row.amount)}</td>
               </tr>
             ))}
           </tbody>
@@ -1651,9 +1939,9 @@ function SettlementAnalyticsTab() {
         <KpiCard icon={FileText} label="Total Settlement Records" value={formatNumber(totals.count)} tint="sky" />
       </div>
 
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-50">
+          <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <BarChart3 size={15} className="text-emerald-400" /> Settlement Amount by {period}
           </div>
           <span className="text-[12px] text-neutral-500">{brandFilter}</span>
@@ -1672,9 +1960,9 @@ function SettlementAnalyticsTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-800">
+      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
         <table className="w-full min-w-[560px] text-left text-[13px]">
-          <thead className="bg-neutral-900 text-[11px] uppercase tracking-wide text-neutral-500">
+          <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period}</th>
               <th className="px-4 py-3 text-right font-medium">Paid</th>
@@ -1684,15 +1972,15 @@ function SettlementAnalyticsTab() {
               <th className="px-4 py-3 text-right font-medium">Records</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+          <tbody className="bg-white dark:bg-neutral-950">
             {buckets.map((b) => (
-              <tr key={b.key}>
-                <td className="px-4 py-3 text-neutral-200">{b.label}</td>
+              <tr key={b.key} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+                <td className="px-4 py-3 text-neutral-800 dark:text-neutral-200">{b.label}</td>
                 <td className="px-4 py-3 text-right text-emerald-400">{formatCurrency(b.paid)}</td>
                 <td className="px-4 py-3 text-right text-amber-400">{formatCurrency(b.pending)}</td>
                 <td className="px-4 py-3 text-right text-red-400">{formatCurrency(b.failed)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-neutral-100">{formatCurrency(b.total)}</td>
-                <td className="px-4 py-3 text-right text-neutral-400">{b.count}</td>
+                <td className="px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-100">{formatCurrency(b.total)}</td>
+                <td className="px-4 py-3 text-right text-neutral-500 dark:text-neutral-400">{b.count}</td>
               </tr>
             ))}
             {buckets.length === 0 && (
@@ -1717,11 +2005,11 @@ export default function AnalyticsReport() {
   const [tab, setTab] = useState("Overview");
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               <BarChart3 size={20} className="text-emerald-400" />
               Analytics Report
             </h1>
@@ -1729,19 +2017,19 @@ export default function AnalyticsReport() {
               Customer activity, billing breakdown, and settlement performance across brands.
             </p>
           </div>
-          <span className="flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-[11.5px] text-neutral-400">
+          <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11.5px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
             <ArrowUpRight size={12} className="text-emerald-400" />
             Data through Jul 2026
           </span>
         </div>
 
-        <div className="mb-5 flex flex-wrap items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 p-1.5">
+        <div className="mb-5 flex flex-wrap items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
           {REPORT_TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`rounded-lg px-4 py-2 text-[12.5px] font-semibold transition-colors ${
-                tab === t ? "bg-emerald-400 text-neutral-950" : "text-neutral-400 hover:text-neutral-200"
+                tab === t ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
               }`}
             >
               {t}
@@ -1750,11 +2038,14 @@ export default function AnalyticsReport() {
         </div>
 
         {tab === "Overview" && <OverviewTab />}
-        {tab === "Brand Analytics" && <BrandAnalyticsTab />}
+        {tab === "Brand" && <BrandAnalyticsTab />}
         {tab === "Voucher" && <VouchersTab />}
+        {/* Fake/demo data — commented out until real deal-pack & membership
+            data is available. REPORT_TABS no longer offers these tabs;
+            re-add both once wired to a real endpoint.
         {tab === "Deal Pack" && <DealPackTab />}
         {tab === "Membership" && <MembershipTab />}
-        
+        */}
         {tab === "Transaction" && <TransactionTab />}
         {tab === "Settlements" && <SettlementAnalyticsTab />}
       </div>

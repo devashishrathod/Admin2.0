@@ -4,7 +4,7 @@ import {
   getBrandDetails,
   updateBrandStatus,
   updateTopBrand,
-} from "./services/brandApi";
+} from "./services/BrandApi";
 import { mapBrandListItem, mapBrandDetail } from "./brandMapper";
 import { getPlanById } from "../plan/services/planApi";
 

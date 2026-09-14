@@ -50,7 +50,7 @@ import {
   APPLICABLE_ACTION_LABELS,
 } from "./promoCodeEnums";
 import { getVouchers } from "../voucher/services/VoucherApi";
-import { getAllBrands } from "../brand/services/brandApi";
+import { getAllBrands } from "../brand/services/BrandApi";
 import { getCategories } from "../category/services/CategoryApi";
 import { getPlans } from "../plan/services/planApi";
 

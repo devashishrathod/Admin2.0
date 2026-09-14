@@ -35,7 +35,7 @@ import {
 } from "recharts";
 import { useBrands } from "../brand/BrandContext";
 import { BrandAvatar } from "../brand/BrandShared";
-import { getTopBrands } from "../brand/services/brandApi";
+import { getTopBrands } from "../brand/services/BrandApi";
 import { mapBrandListItem } from "../brand/brandMapper";
 import { getBrandVerifications } from "../newOnboarding/services/NewOnboardingApi";
 

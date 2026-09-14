@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { BrandAvatar, StatusBadge, SectionCard, EmptyState, ToggleSwitch, StatChip, RingStat } from "../brand/BrandShared";
 import { REJECTION_REASONS } from "../brand/data/BrandData";
-import { getBrandDetails } from "../brand/services/brandApi";
+import { getBrandDetails } from "../brand/services/BrandApi";
 import { mapBrandDetail } from "../brand/brandMapper";
 import { getVouchers } from "../voucher/services/VoucherApi";
 import { getVerificationHistory } from "./services/NewOnboardingApi";

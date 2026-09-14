@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LabelList, ResponsiveContainer } from "recharts";
 import {
   Search,
   RefreshCw,
@@ -13,9 +14,13 @@ import {
   Check,
   Ban,
   Eye,
+  Download,
+  BarChart3,
 } from "lucide-react";
 import { getRefundWorklist, approveRefund, rejectRefund } from "./services/RefundApi";
 import { formatDate, fmtTime, inr, todayStr } from "../transaction/transactionUtils";
+import DateRangeFilter from "../../components/common/DateRangeFilter";
+import { downloadCsv } from "../../utils/exportTable";
 
 /* -------------------------------------------------------------------------
  * Shared Table — mirrors Transaction.jsx's local table so this page keeps
@@ -197,6 +202,28 @@ function StatCard({ icon: Icon, label, amount, sub, tone = "emerald" }) {
   );
 }
 
+/* -------------------------------------------------------------------------
+ * Top Refund Reasons — a single-series horizontal bar ranking every
+ * refund reason by how many requests cite it, so an admin can see at a
+ * glance what's actually driving refunds instead of digging through the
+ * table row by row.
+ * ---------------------------------------------------------------------- */
+
+const REASON_BAR_COLOR = "#fbbf24"; // amber — this page's existing "needs attention" tone
+
+function ReasonTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+      <p className="font-medium text-neutral-800 dark:text-neutral-100">{row.reason}</p>
+      <p className="mt-0.5 text-neutral-500 dark:text-neutral-400">
+        {row.count} refund{row.count === 1 ? "" : "s"} · {inr(row.amount)} requested
+      </p>
+    </div>
+  );
+}
+
 const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
@@ -355,6 +382,8 @@ export default function Refund() {
   const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -394,6 +423,29 @@ export default function Refund() {
     };
   }, [refunds]);
 
+  // Ranks every reason by how many refunds cite it, across all fetched
+  // refunds (not just the current search/date filter) so this stays a
+  // stable "what's driving refunds" summary. Past the top 6, the rest
+  // fold into "Other" rather than crowding the chart with long tail slices.
+  const reasonBreakdown = useMemo(() => {
+    const map = new Map();
+    refunds.forEach((r) => {
+      const key = r.reason || "Unspecified";
+      const entry = map.get(key) || { reason: key, count: 0, amount: 0 };
+      entry.count += 1;
+      entry.amount += r.requestedAmount;
+      map.set(key, entry);
+    });
+    const rows = Array.from(map.values()).sort((a, b) => b.count - a.count);
+    const TOP_N = 6;
+    if (rows.length <= TOP_N) return rows;
+    const other = rows.slice(TOP_N - 1).reduce(
+      (acc, r) => ({ reason: "Other", count: acc.count + r.count, amount: acc.amount + r.amount }),
+      { reason: "Other", count: 0, amount: 0 }
+    );
+    return [...rows.slice(0, TOP_N - 1), other];
+  }, [refunds]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return refunds.filter((r) => {
@@ -404,12 +456,61 @@ export default function Refund() {
         r.brandId.toLowerCase().includes(q) ||
         r.customerId.toLowerCase().includes(q) ||
         r.reason.toLowerCase().includes(q);
-      return inTab && inSearch;
+      const inDateFrom = !dateFrom || r.date >= dateFrom;
+      const inDateTo = !dateTo || r.date <= dateTo;
+      return inTab && inSearch && inDateFrom && inDateTo;
     });
-  }, [refunds, activeTab, search]);
+  }, [refunds, activeTab, search, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const pageRows = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+  // Every scalar field on the normalized row, including the split ledger —
+  // nothing left out — so the export is a full data dump, not a curated
+  // subset of columns.
+  const handleExport = () => {
+    downloadCsv(`refunds_${todayStr()}`, [
+      { label: "Refund Id", key: "id" },
+      { label: "Claim Id", key: "claimId" },
+      { label: "Transaction Id", key: "transactionId" },
+      { label: "Claim Code", key: "claimCode" },
+      { label: "Brand Id", key: "brandId" },
+      { label: "Customer Id", key: "customerId" },
+      { label: "Date", key: "date" },
+      { label: "Time", key: "time" },
+      { label: "Requested Amount", key: "requestedAmount" },
+      { label: "Approved Amount", value: (r) => (r.approvedAmount != null ? r.approvedAmount : "") },
+      { label: "Is Full Refund", value: (r) => (r.isFullRefund ? "Yes" : "No") },
+      { label: "Reason", key: "reason" },
+      { label: "Reason Note", key: "reasonNote" },
+      { label: "Method", key: "method" },
+      { label: "Status", key: "status" },
+      { label: "Status Label", key: "statusLabel" },
+      { label: "Is Open", value: (r) => (r.isOpen ? "Yes" : "No") },
+      { label: "Can Decide", value: (r) => (r.canDecide ? "Yes" : "No") },
+      { label: "Can Withdraw", value: (r) => (r.canWithdraw ? "Yes" : "No") },
+      { label: "Can Pay", value: (r) => (r.canPay ? "Yes" : "No") },
+      { label: "Can Request Bank Details", value: (r) => (r.canRequestBankDetails ? "Yes" : "No") },
+      { label: "Razorpay Refund Id", key: "razorpayRefundId" },
+      { label: "Completed At", key: "completedAt" },
+      { label: "Admin Decision At", key: "adminDecisionAt" },
+      { label: "Admin Note", key: "adminNote" },
+      { label: "Reminders Sent", key: "remindersSent" },
+      { label: "Attempt Count", key: "attemptCount" },
+      { label: "Is Override", value: (r) => (r.isOverride ? "Yes" : "No") },
+      { label: "Net Bill Refund", value: (r) => r.split?.netBillRefund ?? "" },
+      { label: "Convenience Fee Refund", value: (r) => r.split?.convenienceFeeRefund ?? "" },
+      { label: "Tax Refund", value: (r) => r.split?.taxRefund ?? "" },
+      { label: "Commission Reversal", value: (r) => r.split?.commissionReversal ?? "" },
+      { label: "Commission Tax Reversal", value: (r) => r.split?.commissionTaxReversal ?? "" },
+      { label: "Commission Deduction Reversal", value: (r) => r.split?.commissionDeductionReversal ?? "" },
+      { label: "Vendor Clawback", value: (r) => r.split?.vendorClawback ?? "" },
+      { label: "Platform Promo Reversal", value: (r) => r.split?.platformPromoReversal ?? "" },
+      { label: "Vendor Promo Reversal", value: (r) => r.split?.vendorPromoReversal ?? "" },
+      { label: "Gateway Fee Absorbed", value: (r) => r.split?.gatewayFeeAbsorbed ?? "" },
+      { label: "Total Refund (Split)", value: (r) => r.split?.totalRefund ?? "" },
+    ], filtered);
+  };
 
   const handleApprove = async (note) => {
     setActionSubmitting(true);
@@ -614,18 +715,46 @@ export default function Refund() {
           })}
         </div>
 
-        {/* Toolbar */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
-          <Search size={15} className="shrink-0 text-neutral-500" />
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
+        {/* Toolbar — search, date range and export in one wrapping row,
+            matching Settlement/Transaction's filter layout. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
+            <Search size={15} className="shrink-0 text-neutral-500" />
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search claim code, vendor, customer, outlet..."
+              className="w-44 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200 sm:w-64"
+            />
+          </div>
+          <DateRangeFilter
+            startDate={dateFrom}
+            endDate={dateTo}
+            onStartChange={(v) => {
+              setDateFrom(v);
               setPage(1);
             }}
-            placeholder="Search claim code, vendor, customer, outlet..."
-            className="w-72 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+            onEndChange={(v) => {
+              setDateTo(v);
+              setPage(1);
+            }}
+            onClear={() => {
+              setDateFrom("");
+              setDateTo("");
+              setPage(1);
+            }}
           />
+          <button
+            onClick={handleExport}
+            disabled={filtered.length === 0}
+            className="flex h-[38px] items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <Download size={14} />
+            Export
+          </button>
         </div>
 
         {/* Table */}
@@ -681,6 +810,39 @@ export default function Refund() {
             ))}
           </div>
         </div>
+
+        {/* Top Refund Reasons — a single stable place to see what's driving
+            refunds the most, independent of the table's current search/tab
+            filters. */}
+        {reasonBreakdown.length > 0 && (
+          <div className="mt-5 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">
+              <BarChart3 size={14} className="text-amber-500" />
+              Top Refund Reasons
+            </div>
+            <p className="mb-4 text-[12px] text-neutral-500">
+              Which reasons are driving the most refund requests, across all {refunds.length} refunds.
+            </p>
+            <ResponsiveContainer width="100%" height={Math.max(180, reasonBreakdown.length * 42)}>
+              <BarChart data={reasonBreakdown} layout="vertical" margin={{ top: 4, right: 40, left: 4, bottom: 4 }}>
+                <CartesianGrid horizontal={false} stroke="#e1e0d9" strokeDasharray="0" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                <YAxis
+                  type="category"
+                  dataKey="reason"
+                  width={150}
+                  tick={{ fontSize: 12, fill: "#9ca3af" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<ReasonTooltip />} cursor={{ fill: "rgba(251, 191, 36, 0.08)" }} />
+                <Bar dataKey="count" fill={REASON_BAR_COLOR} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: "#71717a" }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       {approveTarget && (

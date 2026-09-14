@@ -42,6 +42,10 @@ import {
   holdSettlement,
   cancelSettlement,
 } from "./services/SettlementApi";
+import DateRangeFilter from "../../components/common/DateRangeFilter";
+import SelectDropdown from "../../components/common/SelectDropdown";
+import { downloadCsv } from "../../utils/exportTable";
+import { todayStr } from "../transaction/transactionUtils";
 
 
 /* -------------------------------------------------------------------------
@@ -223,6 +227,10 @@ function normalizeSettlement(raw) {
     settlementNumber: raw.settlementNumber || null,
     vendor: raw.brandId || "—",
     paymentReceivedDate: formatDMYFromISO(raw.periodEnd || raw.periodStart || raw.createdAt) || "—",
+    // Raw ISO "YYYY-MM-DD" (not the "DD Mon YYYY" display string above) so
+    // the date-range filter can compare it directly against a native
+    // <input type="date"> value.
+    dateForFilter: (raw.periodEnd || raw.periodStart || raw.createdAt || "").slice(0, 10) || null,
     settlementDate: formatDMYFromISO(raw.paidAt) || "—",
     createdAt: formatDMYFromISO(raw.createdAt) || "—",
     periodStart: formatDMYFromISO(raw.periodStart) || "—",
@@ -363,6 +371,27 @@ function StatusBadge({ status }) {
   );
 }
 
+// Status badge for one ledger leg (leg-level PAID/FAILED/PROCESSING/...),
+// distinct from the settlement-level StatusBadge above.
+function LegStatusBadge({ status }) {
+  const s = String(status || "").toUpperCase();
+  const styles = {
+    PAID: "bg-emerald-400/10 text-emerald-600 ring-emerald-400/30 dark:text-emerald-400",
+    FAILED: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400",
+    PROCESSING: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400",
+    PENDING: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${
+        styles[s] || "bg-neutral-200 text-neutral-600 ring-neutral-300 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-neutral-700"
+      }`}
+    >
+      {s || "—"}
+    </span>
+  );
+}
+
 // Shows the T+2 due state: Today / Tomorrow / In X days / Overdue / Completed
 function DueBadge({ schedule }) {
   if (!schedule || schedule.dueLabel === "—") {
@@ -499,7 +528,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
     settlement.canApprove || settlement.canPay || settlement.canRetry || settlement.status === "Processing" || canReverse;
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <button
           onClick={onBack}
@@ -796,20 +825,100 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
       </section>
 
       {/* Ledger legs — from the settlement detail endpoint, kept separate
-          from the statement-line transactions fetched below */}
+          from the statement-line transactions fetched below. Each leg gets
+          its own card (status badge + a Field grid), same visual language
+          as the "Settlement Information" section above, instead of a flat
+          key:value dump. */}
       <section className="mb-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Ledger Legs
         </h3>
-        <GenericRecordList items={settlement.legs} emptyMessage="No ledger legs recorded for this settlement." />
+        {settlement.legs.length === 0 ? (
+          <p className="text-[13px] text-neutral-500">No ledger legs recorded for this settlement.</p>
+        ) : (
+          <div className="space-y-3">
+            {settlement.legs.map((leg, i) => (
+              <div key={leg._id || leg.id || i} className="rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">
+                    Leg {leg.legNumber ?? i + 1}
+                  </span>
+                  <LegStatusBadge status={leg.status} />
+                </div>
+                <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+                  <Field label="Amount" value={inr(leg.amount)} accent />
+                  <Field label="UTR" value={leg.utr || "—"} />
+                  <Field label="Mode" value={leg.mode || "—"} />
+                  <Field label="Provider" value={leg.provider || "—"} />
+                  <Field label="Bank Last4" value={leg.bankLast4 || "—"} />
+                  <Field label="Initiated At" value={formatGenericValue(leg.initiatedAt)} />
+                  <Field label="Paid At" value={formatGenericValue(leg.paidAt)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* Settlement timeline — from the settlement detail endpoint */}
+      {/* Settlement timeline — from the settlement detail endpoint, shown
+          as the same icon-stepper as "Transaction Information" below
+          rather than a flat key:value dump. Each entry's `snapshot` is a
+          small object (e.g. released/needsRevalidation/attemptCount) —
+          rendered as the same label:value meta pairs the transaction
+          stepper already uses. */}
       <section className="mb-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
           Settlement Timeline
         </h3>
-        <GenericRecordList items={settlement.timeline} emptyMessage="No timeline events recorded yet." />
+        {settlement.timeline.length === 0 ? (
+          <p className="text-[13px] text-neutral-500">No timeline events recorded yet.</p>
+        ) : (
+          <ol className="space-y-5">
+            {settlement.timeline.map((ev, i) => {
+              const isLast = i === settlement.timeline.length - 1;
+              const metaEntries = [
+                ...(ev.performedBy ? [{ label: "Performed By", value: ev.performedBy }] : []),
+                ...(ev.snapshot && typeof ev.snapshot === "object"
+                  ? Object.entries(ev.snapshot).map(([k, v]) => ({ label: humanizeKey(k), value: formatGenericValue(v) }))
+                  : []),
+              ];
+              return (
+                <li key={ev._id || i} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-400">
+                      {isLast ? <CheckCircle2 size={15} /> : <Clock3 size={15} />}
+                    </span>
+                    {!isLast && <span className="mt-1 h-full w-px flex-1 bg-neutral-800" />}
+                  </div>
+                  <div className="pb-1">
+                    <p className="text-[13.5px] font-medium text-neutral-900 dark:text-neutral-50">
+                      {ev.fromStatus
+                        ? `${mapSettlementStatus(ev.fromStatus)} → ${mapSettlementStatus(ev.toStatus)}`
+                        : mapSettlementStatus(ev.toStatus)}
+                    </p>
+                    <p className="mt-0.5 text-[12px] text-neutral-500">
+                      {formatGenericValue(ev.at)}
+                      {ev.by ? ` · by ${ev.by}` : ""}
+                    </p>
+                    {ev.reason && (
+                      <p className="mt-1.5 text-[12.5px] text-neutral-600 dark:text-neutral-300">{ev.reason}</p>
+                    )}
+                    {metaEntries.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+                        {metaEntries.map((m) => (
+                          <span key={m.label} className="text-[12px] text-neutral-500 dark:text-neutral-400">
+                            {m.label}:{" "}
+                            <span className="text-neutral-700 dark:text-neutral-200">{m.value}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
       </section>
 
       {/* Transaction timeline */}
@@ -920,34 +1029,6 @@ function formatGenericValue(value) {
   }
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
-}
-
-// Renders a list of records (settlement legs / timeline events) whose
-// exact shape isn't confirmed yet — each record's own keys are shown
-// as-is rather than mapped onto guessed field names.
-function GenericRecordList({ items, emptyMessage }) {
-  if (!items || items.length === 0) {
-    return <p className="text-[13px] text-neutral-500">{emptyMessage}</p>;
-  }
-  return (
-    <div className="space-y-2">
-      {items.map((item, i) => (
-        <div
-          key={item.id || item._id || i}
-          className="rounded-xl bg-neutral-50 px-4 py-3 dark:bg-neutral-950"
-        >
-          <div className="flex flex-wrap gap-x-6 gap-y-1">
-            {Object.entries(item).map(([k, v]) => (
-              <span key={k} className="text-[12px] text-neutral-500 dark:text-neutral-400">
-                {humanizeKey(k)}:{" "}
-                <span className="text-neutral-700 dark:text-neutral-200">{formatGenericValue(v)}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 /* -------------------------------------------------------------------------
@@ -1353,6 +1434,8 @@ export default function Settlement() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [showTodayOnly, setShowTodayOnly] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [expandedId, setExpandedId] = useState(null);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
@@ -1544,9 +1627,60 @@ export default function Settlement() {
         s.vendor.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "All" || s.status === statusFilter;
       const matchesToday = !showTodayOnly || schedules[s.id]?.isToday;
-      return matchesSearch && matchesStatus && matchesToday;
+      const matchesDateFrom = !dateFrom || (s.dateForFilter && s.dateForFilter >= dateFrom);
+      const matchesDateTo = !dateTo || (s.dateForFilter && s.dateForFilter <= dateTo);
+      return matchesSearch && matchesStatus && matchesToday && matchesDateFrom && matchesDateTo;
     });
-  }, [settlements, search, statusFilter, showTodayOnly, schedules]);
+  }, [settlements, search, statusFilter, showTodayOnly, schedules, dateFrom, dateTo]);
+
+  // Every scalar field on the normalized row — nothing left out — so the
+  // export is a full data dump, not a curated subset of columns.
+  const handleExport = () => {
+    downloadCsv(`settlements_${todayStr()}`, [
+      { label: "Settlement Id", key: "id" },
+      { label: "Settlement Number", key: "settlementNumber" },
+      { label: "Vendor", key: "vendor" },
+      { label: "Payment Received Date", key: "paymentReceivedDate" },
+      { label: "Settlement Date", key: "settlementDate" },
+      { label: "Created At", key: "createdAt" },
+      { label: "Period Start", key: "periodStart" },
+      { label: "Period End", key: "periodEnd" },
+      { label: "Cycle Type", key: "cycleType" },
+      { label: "Payout Provider", key: "payoutProvider" },
+      { label: "Transaction Count", key: "transactionCount" },
+      { label: "Amount", key: "amount" },
+      { label: "Status", key: "status" },
+      { label: "Bank Name", key: "bankName" },
+      { label: "Account Holder Name", key: "accountHolderName" },
+      { label: "Masked Account Number", key: "maskedAccountNumber" },
+      { label: "IFSC Code", key: "ifscCode" },
+      { label: "Request Id", key: "requestId" },
+      { label: "Idempotency Key", key: "idempotencyKey" },
+      { label: "Document Token", key: "documentToken" },
+      { label: "Reserve Label", key: "reserveLabel" },
+      { label: "Reserve Dispute Count", value: (s) => s.reserveBasis.disputeCount },
+      { label: "Reserve Payment Count", value: (s) => s.reserveBasis.paymentCount },
+      { label: "Reserve Dispute Rate %", value: (s) => s.reserveBasis.disputeRatePercent },
+      { label: "Reserve Lookback Days", value: (s) => s.reserveBasis.lookbackDays },
+      { label: "Gross Collected", value: (s) => s.breakup.grossCollected },
+      { label: "Vendor Promo Cost", value: (s) => s.breakup.vendorPromoCost },
+      { label: "Commission Amount", value: (s) => s.breakup.commissionAmount },
+      { label: "Commission Tax", value: (s) => s.breakup.commissionTax },
+      { label: "Commission Deduction", value: (s) => s.breakup.commissionDeduction },
+      { label: "Refund Adjustment", value: (s) => s.breakup.refundAdjustment },
+      { label: "Chargeback Adjustment", value: (s) => s.breakup.chargebackAdjustment },
+      { label: "Reserve Held", value: (s) => s.breakup.reserveHeld },
+      { label: "Reserve Percent", value: (s) => s.breakup.reservePercent },
+      { label: "Reserve Released", value: (s) => s.breakup.reserveReleased },
+      { label: "Net Payable", value: (s) => s.breakup.netPayable },
+      { label: "Can Approve", value: (s) => (s.canApprove ? "Yes" : "No") },
+      { label: "Can Pay", value: (s) => (s.canPay ? "Yes" : "No") },
+      { label: "Can Retry", value: (s) => (s.canRetry ? "Yes" : "No") },
+      { label: "Is Open", value: (s) => (s.isOpen ? "Yes" : "No") },
+      { label: "Needs Revalidation", value: (s) => (s.needsRevalidation ? "Yes" : "No") },
+      { label: "Attempt Count", key: "attemptCount" },
+    ], filtered);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const pageRows = filtered.slice(
@@ -1638,67 +1772,75 @@ export default function Settlement() {
           />
         </div>
 
-        {/* Toolbar */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-            Settlement Overview
-          </h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
-              <Search size={15} className="shrink-0 text-neutral-500" />
-              <input
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search settlement id, vendor, txn id..."
-                className="w-56 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
-              />
-            </div>
-            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-1 py-1 dark:border-neutral-800 dark:bg-neutral-900">
-              <Filter size={14} className="ml-1.5 text-neutral-500" />
-              {STATUS_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setStatusFilter(s);
-                    setPage(1);
-                  }}
-                  className={`rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
-                    statusFilter === s
-                      ? "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400"
-                      : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                setShowTodayOnly((v) => !v);
+        {/* Toolbar — search, status, due-today, date range and export all
+            live in one wrapping row so the filter UI reads the same way
+            across Settlement/Refund/Transaction. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
+            <Search size={15} className="shrink-0 text-neutral-500" />
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
                 setPage(1);
               }}
-              className={`flex h-[38px] items-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
-                showTodayOnly
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-600 dark:text-cyan-400"
-                  : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              }`}
-            >
-              <CalendarClock size={14} />
-              Due Today
-              {todaySettlementStats.count > 0 && (
-                <span className="ml-0.5 rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[10.5px] font-semibold text-cyan-700 dark:text-cyan-300">
-                  {todaySettlementStats.count}
-                </span>
-              )}
-            </button>
-            <button className="flex h-[38px] items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800">
-              <Download size={14} />
-              Export
-            </button>
+              placeholder="Search settlement id, vendor, txn id..."
+              className="w-44 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200 sm:w-56"
+            />
           </div>
+          <SelectDropdown
+            value={statusFilter}
+            options={STATUS_OPTIONS}
+            icon={Filter}
+            onChange={(s) => {
+              setStatusFilter(s);
+              setPage(1);
+            }}
+          />
+          <DateRangeFilter
+            startDate={dateFrom}
+            endDate={dateTo}
+            onStartChange={(v) => {
+              setDateFrom(v);
+              setPage(1);
+            }}
+            onEndChange={(v) => {
+              setDateTo(v);
+              setPage(1);
+            }}
+            onClear={() => {
+              setDateFrom("");
+              setDateTo("");
+              setPage(1);
+            }}
+          />
+          <button
+            onClick={() => {
+              setShowTodayOnly((v) => !v);
+              setPage(1);
+            }}
+            className={`flex h-[38px] items-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
+              showTodayOnly
+                ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-600 dark:text-cyan-400"
+                : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            }`}
+          >
+            <CalendarClock size={14} />
+            Due Today
+            {todaySettlementStats.count > 0 && (
+              <span className="ml-0.5 rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[10.5px] font-semibold text-cyan-700 dark:text-cyan-300">
+                {todaySettlementStats.count}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={filtered.length === 0}
+            className="flex h-[38px] items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <Download size={14} />
+            Export
+          </button>
         </div>
 
         {/* Table */}

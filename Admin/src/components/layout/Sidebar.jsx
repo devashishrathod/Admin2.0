@@ -33,28 +33,45 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
-// Grouped nav — each group renders with an uppercase label (hidden when collapsed).
+// Grouped nav — each group renders with an uppercase label (hidden when
+// collapsed). Ordered top-to-bottom the way an admin actually works through
+// the platform: see the big picture, set up the catalog structure, manage
+// the vendors that fill it, promote it, manage customers, watch the money
+// move between the two, then system-level config last.
 const NAV_GROUPS = [
   {
     label: "Overview",
     items: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
       { id: "analysis-all", label: "Analysis ALL", icon: BarChart3, path: "/analytics" },
-      { id: "main-category", label: "Main Category", icon: Tags, path: "/main-category" },
-      { id: "sub-category", label: "Sub - Catergory", icon: Layers, path: "/sub-category" },
     ],
   },
   {
     label: "Catalog",
     items: [
+      { id: "main-category", label: "Main Category", icon: Tags, path: "/main-category" },
+      { id: "sub-category", label: "Sub - Catergory", icon: Layers, path: "/sub-category" },
+      { id: "voucher-listing", label: "Voucher Listing", icon: Gift, path: "/vendor-listing" },
+    ],
+  },
+  {
+    label: "Vendors",
+    items: [
       { id: "brand", label: "Brand", icon: BadgeCheck, path: "/brand" },
-      { id: "banner", label: "Banner", icon: Image, path: "/banner" },
-      { id: "promotional-ticker", label: "Promotional Ticker", icon: MonitorPlay, path: "/promotional-ticker" },
+      { id: "new-onboarding", label: "New Onboarding", icon: UserPlus, path: "/new-onboarding" },
       { id: "vendor-plan", label: "Vendor Plan", icon: CreditCard, path: "/vendor-plan" },
       { id: "subscriptions", label: "Subscriptions", icon: Repeat, path: "/subscriptions" },
-      { id: "voucher-listing", label: "Voucher Listing", icon: Gift, path: "/vendor-listing" },
-      { id: "new-onboarding", label: "New Onboarding", icon: UserPlus, path: "/new-onboarding" },
       { id: "analysis-report-catalog", label: "Vender Analysis Report", icon: ClipboardList, path: "/analysis-report-vendor" },
+    ],
+  },
+  {
+    label: "Marketing",
+    items: [
+      { id: "banner", label: "Banner", icon: Image, path: "/banner" },
+      { id: "promotional-ticker", label: "Promotional Ticker", icon: MonitorPlay, path: "/promotional-ticker" },
+      { id: "settings", label: "Feature Campaign", icon: Megaphone, path: "/feature_campaign" },
+      { id: "coupon-code", label: "Coupon Code", icon: Tag, path: "/coupon" },
+      { id: "promo-code", label: "Promo Code", icon: Percent, path: "/promo-code" },
     ],
   },
   {
@@ -73,9 +90,6 @@ const NAV_GROUPS = [
       { id: "refund", label: "Refunds", icon: Undo2, path: "/refund" },
       { id: "settlements", label: "Settlements", icon: HandCoins, path: "/settlements" },
       { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
-      { id: "settings", label: "Feature Campaign", icon: Megaphone, path: "/feature_campaign" },
-      { id: "coupon-code", label: "Coupon Code", icon: Tag, path: "/coupon" },
-      { id: "promo-code", label: "Promo Code", icon: Percent, path: "/promo-code" },
     ],
   },
   {

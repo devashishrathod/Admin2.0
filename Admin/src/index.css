@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Serif+Display:ital@0;1&display=swap");
 
 @import "tailwindcss";
 
@@ -9,7 +9,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "DM Serif Display", ui-serif, serif;
 }
 
@@ -39,6 +39,11 @@ body {
   font-family: var(--font-sans);
   background-color: #dee9f4;
   color: #111827;
+  /* Capitalize every word app-wide — only changes the first letter of
+     each word, so it has no visible effect on text that's already
+     upper-case (status badges, enum labels) and never touches the
+     underlying string value, just how it's painted. */
+  text-transform: capitalize;
 }
 
 /* Slim scrollbars everywhere — the browser default (thick, with arrow

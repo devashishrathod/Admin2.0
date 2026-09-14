@@ -89,16 +89,7 @@ export async function createPromoCode(payload) {
     }
 }
 
-// ── Get All Promo Codes (paginated + filterable) ────────────────
-// GET {{base_url}}/promoCodes/get-all?page=&limit=&search=&status=&isActive=&sortBy=&sortOrder=
-// Confirmed from Postman. Query params:
-//   page       — default 1
-//   limit      — max 100
-//   search     — matches code or description
-//   status     — LIVE | SCHEDULED | EXPIRED (the effective status)
-//   isActive   — true | false
-//   sortBy     — createdAt | code | usedCount | validTill
-//   sortOrder  — asc | desc
+
 export async function getPromoCodes({
     page = 1,
     limit = 20,

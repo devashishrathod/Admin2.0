@@ -25,6 +25,9 @@ import {
   formatPaymentMethod,
   inr,
 } from "./transactionUtils";
+import DateRangeFilter from "../../components/common/DateRangeFilter";
+import SelectDropdown from "../../components/common/SelectDropdown";
+import { downloadCsv } from "../../utils/exportTable";
 
 /* -------------------------------------------------------------------------
  * Shared Table component (same as provided) — kept in this file so the
@@ -229,58 +232,6 @@ function StatCard({ icon: Icon, label, amount, sub, tone = "emerald", live }) {
   );
 }
 
-/* -------------------------------------------------------------------------
- * CSV export
- * ---------------------------------------------------------------------- */
-
-function exportToCsv(rows, filename) {
-  if (!rows.length) return;
-  const headers = [
-    "Payment Id",
-    "Vendor",
-    "Customer",
-    "Date",
-    "Time",
-    "Amount",
-    "Payment Method",
-    "Status",
-    "Reference",
-    "Failure Reason",
-  ];
-  const escapeCell = (val) => {
-    const s = val === null || val === undefined ? "" : String(val);
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const lines = [
-    headers.join(","),
-    ...rows.map((r) =>
-      [
-        r.razorpayPaymentId,
-        r.vendor,
-        r.customer,
-        r.date,
-        r.time,
-        r.amount,
-        r.method,
-        r.status,
-        r.reference,
-        r.failureReason || "",
-      ]
-        .map(escapeCell)
-        .join(",")
-    ),
-  ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
 /* -------------------------------------------------------------------------
  * Tabs config
@@ -321,6 +272,8 @@ export default function Transaction() {
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [methodFilter, setMethodFilter] = useState("All");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [claimCode, setClaimCode] = useState("");
@@ -372,17 +325,35 @@ export default function Transaction() {
         t.vendor.toLowerCase().includes(q) ||
         t.customer.toLowerCase().includes(q) ||
         t.reference.toLowerCase().includes(q);
-      return inTab && inMethod && inSearch;
+      const inDateFrom = !dateFrom || t.date >= dateFrom;
+      const inDateTo = !dateTo || t.date <= dateTo;
+      return inTab && inMethod && inSearch && inDateFrom && inDateTo;
     });
-  }, [transactions, activeTab, methodFilter, search]);
+  }, [transactions, activeTab, methodFilter, search, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const pageRows = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
+  // Every scalar field on the normalized row — nothing left out — so the
+  // export is a full data dump, not a curated subset of columns.
   const handleExport = () => {
     const tabLabel = TABS.find((t) => t.key === activeTab)?.label || "transactions";
-    const filename = `${tabLabel.replace(/\s+/g, "_").toLowerCase()}_${todayStr()}.csv`;
-    exportToCsv(filtered, filename);
+    const filename = `${tabLabel.replace(/\s+/g, "_").toLowerCase()}_${todayStr()}`;
+    downloadCsv(filename, [
+      { label: "Payment Id", key: "id" },
+      { label: "Claim Id", key: "claimId" },
+      { label: "Razorpay Payment Id", key: "razorpayPaymentId" },
+      { label: "Vendor", key: "vendor" },
+      { label: "Customer", key: "customer" },
+      { label: "Date", key: "date" },
+      { label: "Time", key: "time" },
+      { label: "Amount", key: "amount" },
+      { label: "Method", key: "method" },
+      { label: "Status", key: "status" },
+      { label: "Is Today", value: (r) => (r.isToday ? "Yes" : "No") },
+      { label: "Reference", key: "reference" },
+      { label: "Failure Reason", value: (r) => r.failureReason || "" },
+    ], filtered);
   };
 
   const handleVerifyCode = async (e) => {
@@ -651,8 +622,9 @@ export default function Transaction() {
           })}
         </div>
 
-        {/* Toolbar */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Toolbar — search, method filter, date range and export share one
+            wrapping row, matching Settlement/Refund's filter layout. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
             <Search size={15} className="shrink-0 text-neutral-500" />
             <input
@@ -662,30 +634,35 @@ export default function Transaction() {
                 setPage(1);
               }}
               placeholder="Search payment id, vendor, customer, reference..."
-              className="w-72 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+              className="w-44 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200 sm:w-64"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl bg-white px-1 py-1 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-              <Filter size={14} className="ml-1.5 text-neutral-500" />
-              {["All", ...PAYMENT_METHODS].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => {
-                    setMethodFilter(m);
-                    setPage(1);
-                  }}
-                  className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
-                    methodFilter === m
-                      ? "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400"
-                      : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
+          <SelectDropdown
+            value={methodFilter}
+            options={["All", ...PAYMENT_METHODS]}
+            icon={Filter}
+            onChange={(m) => {
+              setMethodFilter(m);
+              setPage(1);
+            }}
+          />
+          <DateRangeFilter
+            startDate={dateFrom}
+            endDate={dateTo}
+            onStartChange={(v) => {
+              setDateFrom(v);
+              setPage(1);
+            }}
+            onEndChange={(v) => {
+              setDateTo(v);
+              setPage(1);
+            }}
+            onClear={() => {
+              setDateFrom("");
+              setDateTo("");
+              setPage(1);
+            }}
+          />
         </div>
 
         {/* Table */}

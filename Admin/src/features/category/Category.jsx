@@ -9,7 +9,20 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   Loader2,
+  PieChart as PieChartIcon,
+  BarChart3,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  XAxis,
+  Tooltip,
+  Legend,
+} from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
   createCategory,
@@ -80,12 +93,12 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <div>
-            <h2 className="text-[15px] font-semibold text-neutral-50">
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
               {isEdit ? "Edit Category" : "Add Category"}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
@@ -98,7 +111,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
             onClick={onClose}
             disabled={saving}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -108,11 +121,11 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
         <form onSubmit={handleSubmit} className="px-5 py-5">
           {/* Image upload */}
           <div className="mb-4">
-            <label className="mb-2 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Category Image
             </label>
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
                 {form.imagePreview ? (
                   <img
                     src={form.imagePreview}
@@ -123,7 +136,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
                   <ImageIcon size={18} className="text-neutral-600" />
                 )}
               </div>
-              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-700 text-[12.5px] font-medium text-neutral-400 transition-colors hover:border-emerald-400/60 hover:text-emerald-400">
+              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-400 dark:border-neutral-700 dark:text-neutral-400">
                 <ImageIcon size={14} />
                 {form.image ? "Change image" : "Upload image"}
                 <input
@@ -140,7 +153,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
           <div className="mb-4">
             <label
               htmlFor="cat-name"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
+              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
             >
               Category Name
             </label>
@@ -149,10 +162,10 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
               value={form.name}
               onChange={handleChange("name")}
               placeholder="e.g. Electronics"
-              className={`w-full rounded-xl border bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 ${
+              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.name
                   ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-800 focus:border-emerald-400/60 focus:ring-emerald-400/60"
+                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
             {errors.name && (
@@ -164,7 +177,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
           <div className="mb-4">
             <label
               htmlFor="cat-description"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-300"
+              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
             >
               Description
             </label>
@@ -174,13 +187,13 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
               onChange={handleChange("description")}
               placeholder="Short description of this category"
               rows={3}
-              className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
           </div>
 
           {/* Status */}
           <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-300">
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
               Status
             </label>
             <div className="flex gap-2">
@@ -195,7 +208,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                     form.isActive === s.value
                       ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s.label}
@@ -210,7 +223,7 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="flex h-10 items-center rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 transition-colors hover:bg-neutral-800 disabled:opacity-50"
+              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
@@ -243,14 +256,14 @@ function CategoryViewModal({ open, category, loading, onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl"
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
       >
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-neutral-50">Category Details</h2>
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Category Details</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -265,7 +278,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
           ) : (
             <>
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-800">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
                   {category.image ? (
                     <img
                       src={category.image}
@@ -277,34 +290,35 @@ function CategoryViewModal({ open, category, loading, onClose }) {
                   )}
                 </div>
                 <div>
-                  <p className="text-[16px] font-semibold text-neutral-50">{category.name}</p>
+                  <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{category.name}</p>
                   <StatusBadge status={category.isActive ? "Active" : "Inactive"} />
                 </div>
               </div>
 
               {category.description && (
-                <p className="mt-4 text-[13px] leading-relaxed text-neutral-400">
+                <p className="mt-4 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                   {category.description}
                 </p>
               )}
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    Sub Categories
-                  </p>
-                  <p className="mt-1 text-[15px] font-semibold text-neutral-50">
-                    {category.subCategoryCount ?? 0}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-3">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    Vouchers
-                  </p>
-                  <p className="mt-1 text-[15px] font-semibold text-neutral-50">
-                    {category.voucherCount ?? 0}
-                  </p>
-                </div>
+                {[
+                  { label: "Sub Categories", stat: category.stats?.subCategories },
+                  { label: "Brands", stat: category.stats?.brands },
+                  { label: "Vouchers", stat: category.stats?.vouchers },
+                  { label: "Promo Codes", stat: category.stats?.promoCodes },
+                ].map(({ label, stat }) => (
+                  <div
+                    key={label}
+                    className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20"
+                  >
+                    <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
+                    <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
+                      {stat?.total ?? 0}
+                    </p>
+                    <p className="text-[10.5px] text-neutral-500">{stat?.active ?? 0} active</p>
+                  </div>
+                ))}
               </div>
 
               {category.createdAt && (
@@ -327,7 +341,7 @@ function CategoryViewModal({ open, category, loading, onClose }) {
 function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl bg-neutral-900 p-6 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
             <AlertTriangle size={18} />
@@ -366,6 +380,15 @@ function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
  * ---------------------------------------------------------------------- */
 
 function apiToRow(cat) {
+  const stats = cat.stats || {};
+  const subCategories = {
+    total: stats.subCategories?.total ?? cat.subCategoryCount ?? 0,
+    active: stats.subCategories?.active ?? 0,
+  };
+  const brands = { total: stats.brands?.total ?? 0, active: stats.brands?.active ?? 0 };
+  const vouchers = { total: stats.vouchers?.total ?? cat.voucherCount ?? 0, active: stats.vouchers?.active ?? 0 };
+  const promoCodes = { total: stats.promoCodes?.total ?? 0, active: stats.promoCodes?.active ?? 0 };
+
   return {
     id: cat._id ?? cat.id,
     name: cat.name,
@@ -373,10 +396,23 @@ function apiToRow(cat) {
     image: cat.image,
     isActive: cat.isActive,
     status: cat.isActive ? "Active" : "Inactive",
-    subCategoryCount: cat.subCategoryCount ?? 0,
-    voucherCount: cat.voucherCount ?? 0,
+    stats: { subCategories, brands, vouchers, promoCodes },
+    subCategoryCount: subCategories.total,
+    voucherCount: vouchers.total,
+    brandCount: brands.total,
+    promoCodeCount: promoCodes.total,
     createdAt: cat.createdAt,
   };
+}
+
+// A small "total + active" pair shown in table cells and the view modal.
+function StatCell({ total, active }) {
+  return (
+    <div className="leading-tight">
+      <div className="font-semibold text-neutral-900 dark:text-neutral-50">{total}</div>
+      <div className="text-[10.5px] text-neutral-500">{active} active</div>
+    </div>
+  );
 }
 
 function rowToFormDraft(row) {
@@ -415,6 +451,27 @@ export default function Category() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  // A broader, unpaginated snapshot used only for the overview charts —
+  // the paginated `categories` list above only ever holds one page, which
+  // would make a status/count chart misleading.
+  const [allCategories, setAllCategories] = useState([]);
+  const [chartsError, setChartsError] = useState("");
+
+  const fetchAllCategories = useCallback(async () => {
+    setChartsError("");
+    try {
+      const res = await getCategories({ page: 1, limit: 100 });
+      setAllCategories((res?.data?.data ?? []).map(apiToRow));
+    } catch (err) {
+      setAllCategories([]);
+      setChartsError(err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllCategories();
+  }, [fetchAllCategories]);
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
@@ -498,6 +555,7 @@ export default function Category() {
       setModalOpen(false);
       setEditingCategory(null);
       fetchCategories();
+      fetchAllCategories();
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -511,12 +569,40 @@ export default function Category() {
       await deleteCategory(deleteTarget.id);
       setDeleteTarget(null);
       fetchCategories();
+      fetchAllCategories();
     } catch (err) {
       console.error("Failed to delete category:", err.message);
     } finally {
       setDeleting(false);
     }
   };
+
+  // Overview charts — derived from the broader allCategories snapshot, not
+  // the current paginated page, so they reflect the true full set.
+  const activeCount = allCategories.filter((c) => c.isActive).length;
+  const inactiveCount = allCategories.length - activeCount;
+  const statusMix = [
+    { name: "Active", value: activeCount, color: "#2FDE8C" },
+    { name: "Inactive", value: inactiveCount, color: "#A3A3A3" },
+  ].filter((s) => s.value > 0);
+
+  // One combined breakdown chart (rather than 4 separate single-metric
+  // charts) so all real stats — sub-categories, brands, vouchers, promo
+  // codes — are visible side-by-side per category.
+  const topByStats = [...allCategories]
+    .map((c) => ({
+      name: c.name,
+      subCategories: c.stats.subCategories.total,
+      brands: c.stats.brands.total,
+      vouchers: c.stats.vouchers.total,
+      promoCodes: c.stats.promoCodes.total,
+    }))
+    .sort(
+      (a, b) =>
+        b.subCategories + b.brands + b.vouchers + b.promoCodes -
+        (a.subCategories + a.brands + a.vouchers + a.promoCodes)
+    )
+    .slice(0, 6);
 
   // Column config for the shared Table component.
   const columns = [
@@ -532,7 +618,7 @@ export default function Category() {
       key: "icon",
       label: "Category Icon",
       render: (row) => (
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
           {row.image ? (
             <img src={row.image} alt={row.name} className="h-full w-full object-cover" />
           ) : (
@@ -545,18 +631,32 @@ export default function Category() {
       key: "name",
       label: "Category Name",
       render: (row) => (
-        <span className="font-medium text-neutral-50">{row.name}</span>
+        <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.name}</span>
       ),
     },
     {
       key: "subCategoryCount",
-      label: "Sub Category Count",
+      label: "Sub Categories",
       align: "center",
+      render: (row) => <StatCell total={row.stats.subCategories.total} active={row.stats.subCategories.active} />,
+    },
+    {
+      key: "brandCount",
+      label: "Brands",
+      align: "center",
+      render: (row) => <StatCell total={row.stats.brands.total} active={row.stats.brands.active} />,
     },
     {
       key: "voucherCount",
-      label: "Voucher Count",
+      label: "Vouchers",
       align: "center",
+      render: (row) => <StatCell total={row.stats.vouchers.total} active={row.stats.vouchers.active} />,
+    },
+    {
+      key: "promoCodeCount",
+      label: "Promo Codes",
+      align: "center",
+      render: (row) => <StatCell total={row.stats.promoCodes.total} active={row.stats.promoCodes.active} />,
     },
     {
       key: "status",
@@ -572,21 +672,21 @@ export default function Category() {
           <button
             onClick={() => handleView(row)}
             aria-label={`View ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
           >
             <Eye size={15} />
           </button>
           <button
             onClick={() => handleEdit(row)}
             aria-label={`Edit ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => setDeleteTarget(row)}
             aria-label={`Delete ${row.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -596,12 +696,12 @@ export default function Category() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Category
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -617,27 +717,99 @@ export default function Category() {
           </button>
         </div>
 
+        {/* Overview charts — real data, independent of the table's filters */}
+        {chartsError && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            Couldn't load chart data: {chartsError}
+          </div>
+        )}
+        <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
+            </div>
+            <div className="flex flex-col items-center">
+              <div className="relative h-[110px] w-[110px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusMix}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={34}
+                      outerRadius={52}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      {statusMix.map((s) => (
+                        <Cell key={s.name} fill={s.color} stroke="none" />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{allCategories.length}</span>
+                  <span className="text-[8.5px] text-neutral-500">Total</span>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
+                {statusMix.map((s) => (
+                  <div key={s.name} className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                    {s.name} · {s.value}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:col-span-2">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <BarChart3 size={14} className="text-violet-500" /> Category Stats Overview
+            </div>
+            {topByStats.length ? (
+              <ResponsiveContainer width="100%" height={190}>
+                <BarChart data={topByStats} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                  <XAxis dataKey="name" hide />
+                  <Tooltip
+                    labelFormatter={(name) => name}
+                    contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="subCategories" name="Sub-Categories" fill="#a78bfa" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="brands" name="Brands" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="vouchers" name="Vouchers" fill="#38BDF8" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="promoCodes" name="Promo Codes" fill="#2FDE8C" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[190px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+            )}
+          </div>
+        </div>
+
         {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+        <div className="mb-4 flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:max-w-xs">
           <Search size={16} className="shrink-0 text-neutral-500" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search category..."
-            className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
           />
         </div>
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading categories…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load categories: {loadError}
           </div>
         )}
@@ -649,6 +821,8 @@ export default function Category() {
               columns={columns}
               data={categories}
               emptyMessage="No categories yet. Add one to get started."
+              dense
+              minWidth={920}
             />
 
             {/* Pagination */}
@@ -657,7 +831,7 @@ export default function Category() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Prev
                 </button>
@@ -667,7 +841,7 @@ export default function Category() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Next
                 </button>
@@ -690,7 +864,7 @@ export default function Category() {
         onSave={handleSave}
       />
       {modalOpen && saveError && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-white px-4 py-2.5 text-[12.5px] text-red-600 shadow-lg dark:bg-neutral-900 dark:text-red-400">
           {saveError}
         </div>
       )}

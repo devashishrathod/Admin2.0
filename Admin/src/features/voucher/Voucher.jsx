@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Download,
@@ -19,8 +19,11 @@ import {
   Phone,
   Mail,
   Star,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
+import { getVouchers } from "./services/VoucherApi";
 
 /* -------------------------------------------------------------------------
  * Type configuration — Voucher / Deal Pack / Membership share the same
@@ -63,79 +66,16 @@ const APPROVAL_FILTERS = ["All", "Pending", "Approved", "Rejected"];
 const DETAIL_TABS = (type) => ["Overview", `${type} Info`, TYPE_META[type].activityLabel, "Merchant"];
 
 /* -------------------------------------------------------------------------
- * Mock data — vendor-submitted items awaiting / holding admin approval.
- * Only items with approvalStatus "Approved" (and status "Active") are
- * meant to be visible in the live app; everything else is admin-only.
+ * Mock data — Deal Pack / Membership have no real API yet, so these two
+ * stay mock. Voucher is real — see normalizeRealVoucher()/fetchVouchers()
+ * below, which populate dataByType.Voucher from GET
+ * /vouchers/versions/get-all instead of this object.
  *
  * `topSuggestion` marks an item as a featured "Top Suggestion" for its
  * type (Top Voucher / Top Deal Pack / Top Membership).
  * ---------------------------------------------------------------------- */
 
 const INITIAL_DATA = {
-  Voucher: [
-    {
-      id: 1,
-      itemId: "#V35122345",
-      merchant: "Arent",
-      title: "New resort 50% off all bills",
-      publishedDate: "1-7-2026",
-      priceValue: "50%",
-      secondaryValue: "₹200.00",
-      approvalStatus: "Approved",
-      status: "Active",
-      topSuggestion: true,
-      time: "2/7/2026",
-      code: "ARENT50",
-      category: "Travel & Resorts",
-      description:
-        "Get 50% off on all bills at Arent Resort. Applicable on room stays, dining and spa services. Valid for a limited time only.",
-      terms: [
-        "Valid on minimum billing of ₹1,000.",
-        "Cannot be combined with any other offer or promotion.",
-        "Applicable once per customer per month.",
-        "Management reserves the right to withdraw the offer anytime.",
-      ],
-      minPurchase: "₹1,000",
-      maxDiscount: "₹2,000",
-      validFrom: "2026-07-01",
-      validTo: "2026-08-31",
-      usageLimit: 500,
-      usageCount: 128,
-      merchantContact: { phone: "+91 98765 43210", email: "partnerships@arentresorts.com" },
-      outlets: ["Arent Resort - Lake View, Nainital", "Arent Resort - Hilltop, Mussoorie"],
-      activity: [
-        { name: "Ishita R.", date: "2026-07-10", amount: "₹1,850" },
-        { name: "Kabir M.", date: "2026-07-06", amount: "₹2,400" },
-        { name: "Priya D.", date: "2026-07-03", amount: "₹1,200" },
-      ],
-    },
-    {
-      id: 2,
-      itemId: "#V35122998",
-      merchant: "Spice Route Kitchen",
-      title: "Flat ₹100 off on thali combos",
-      publishedDate: "9-7-2026",
-      priceValue: "₹100",
-      secondaryValue: "₹499.00",
-      approvalStatus: "Pending",
-      status: "Inactive",
-      topSuggestion: false,
-      time: "9/7/2026",
-      code: "THALI100",
-      category: "Food & Beverage",
-      description: "Flat ₹100 off on all thali combo orders above ₹499, dine-in and takeaway both.",
-      terms: ["Valid on minimum billing of ₹499.", "One redemption per table per visit."],
-      minPurchase: "₹499",
-      maxDiscount: "₹100",
-      validFrom: "2026-07-15",
-      validTo: "2026-09-15",
-      usageLimit: 300,
-      usageCount: 0,
-      merchantContact: { phone: "+91 91234 56789", email: "contact@spiceroute.in" },
-      outlets: ["Spice Route - Hazratganj, Lucknow"],
-      activity: [],
-    },
-  ],
   "Deal Pack": [
     {
       id: 1,
@@ -204,9 +144,9 @@ const INITIAL_DATA = {
 
 function ApprovalBadge({ status }) {
   const styles = {
-    Approved: "bg-emerald-400/10 text-emerald-400",
-    Pending: "bg-amber-400/10 text-amber-400",
-    Rejected: "bg-red-500/10 text-red-400",
+    Approved: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
+    Pending: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
+    Rejected: "bg-red-500/10 text-red-600 dark:text-red-400",
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}>
@@ -218,8 +158,8 @@ function ApprovalBadge({ status }) {
 // Static "Top Suggestion" tag shown wherever an item is flagged as featured.
 function TopSuggestionBadge({ type }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-400/10 px-2.5 py-1 text-[11px] font-semibold text-yellow-400">
-      <Star size={11} className="fill-yellow-400" />
+    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-400/10 px-2.5 py-1 text-[11px] font-semibold text-yellow-600 dark:text-yellow-400">
+      <Star size={11} className="fill-yellow-600 dark:fill-yellow-400" />
       {topSuggestionLabel(type)}
     </span>
   );
@@ -274,14 +214,26 @@ function InfoRow({ icon: Icon, label, value }) {
         {Icon && <Icon size={13} />}
         {label}
       </span>
-      <span className="text-[13.5px] font-medium text-neutral-200">{value}</span>
+      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
+    </div>
+  );
+}
+
+function DetailTile({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
     </div>
   );
 }
 
 function SectionCard({ title, children, className = "" }) {
   return (
-    <div className={`rounded-2xl border border-neutral-800 bg-neutral-900 p-5 ${className}`}>
+    <div className={`rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
       {title && (
         <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{title}</p>
       )}
@@ -292,7 +244,7 @@ function SectionCard({ title, children, className = "" }) {
 
 function EmptyState({ label }) {
   return (
-    <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+    <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
       {label}
     </div>
   );
@@ -304,7 +256,7 @@ function EmptyState({ label }) {
 
 function MainTabs({ activeType, onChange, counts }) {
   return (
-    <div className="mb-5 flex items-center gap-1 rounded-2xl border border-neutral-800 bg-neutral-900 p-1.5">
+    <div className="mb-5 flex items-center gap-1 rounded-2xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
       {MAIN_TABS.map((type) => {
         const Icon = TYPE_META[type].icon;
         const active = activeType === type;
@@ -313,14 +265,14 @@ function MainTabs({ activeType, onChange, counts }) {
             key={type}
             onClick={() => onChange(type)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-colors ${
-              active ? "bg-emerald-400 text-neutral-950" : "text-neutral-400 hover:text-neutral-200"
+              active ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
             }`}
           >
             <Icon size={15} />
             {type}
             <span
               className={`rounded-full px-1.5 text-[10.5px] ${
-                active ? "bg-neutral-950/15" : "bg-neutral-800"
+                active ? "bg-neutral-950/15" : "bg-neutral-200 dark:bg-neutral-800"
               }`}
             >
               {counts[type]}
@@ -354,7 +306,7 @@ function ListHeader({
   onExport,
 }) {
   return (
-    <div className="mb-5 flex flex-col gap-3 border-b border-neutral-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="mb-5 flex flex-col gap-3 border-b border-neutral-200 pb-4 dark:border-neutral-800 lg:flex-row lg:items-center lg:justify-between">
       {/* Approval status tabs + Top Suggestions filter */}
       <div className="flex flex-wrap items-center gap-1.5">
         {APPROVAL_FILTERS.map((tab) => (
@@ -363,14 +315,14 @@ function ListHeader({
             onClick={() => onApprovalFilterChange(tab)}
             className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
               approvalFilter === tab
-                ? "bg-emerald-400/10 text-emerald-400"
-                : "text-neutral-500 hover:text-neutral-300"
+                ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
             }`}
           >
             {tab}
             <span
               className={`rounded-full px-1.5 text-[10.5px] ${
-                approvalFilter === tab ? "bg-emerald-400/20" : "bg-neutral-800"
+                approvalFilter === tab ? "bg-emerald-400/20" : "bg-neutral-200 dark:bg-neutral-800"
               }`}
             >
               {counts[tab]}
@@ -379,7 +331,7 @@ function ListHeader({
         ))}
 
         {/* Divider */}
-        <span className="mx-1 h-4 w-px bg-neutral-800" />
+        <span className="mx-1 h-4 w-px bg-neutral-200 dark:bg-neutral-800" />
 
         {/* Same filter, works for all tabs: label flips to
             "Top Voucher" / "Top Deal Pack" / "Top Membership" */}
@@ -387,12 +339,12 @@ function ListHeader({
           onClick={() => onTopOnlyChange(!topOnly)}
           aria-pressed={topOnly}
           className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
-            topOnly ? "bg-yellow-400/10 text-yellow-400" : "text-neutral-500 hover:text-neutral-300"
+            topOnly ? "bg-yellow-400/10 text-yellow-600 dark:text-yellow-400" : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
           }`}
         >
-          <Star size={12} className={topOnly ? "fill-yellow-400" : ""} />
+          <Star size={12} className={topOnly ? "fill-yellow-600 dark:fill-yellow-400" : ""} />
           {topSuggestionLabel(activeType)}
-          <span className={`rounded-full px-1.5 text-[10.5px] ${topOnly ? "bg-yellow-400/20" : "bg-neutral-800"}`}>
+          <span className={`rounded-full px-1.5 text-[10.5px] ${topOnly ? "bg-yellow-400/20" : "bg-neutral-200 dark:bg-neutral-800"}`}>
             {topCount}
           </span>
         </button>
@@ -408,30 +360,30 @@ function ListHeader({
           Export
         </button>
 
-        <div className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2.5">
+        <div className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => onDateFromChange(e.target.value)}
-            className="bg-transparent text-[12.5px] text-neutral-300 focus:outline-none [color-scheme:dark]"
+            className="bg-transparent text-[12.5px] text-neutral-700 focus:outline-none dark:text-neutral-300 [color-scheme:light] dark:[color-scheme:dark]"
           />
           <span className="text-[11.5px] text-neutral-600">To</span>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => onDateToChange(e.target.value)}
-            className="bg-transparent text-[12.5px] text-neutral-300 focus:outline-none [color-scheme:dark]"
+            className="bg-transparent text-[12.5px] text-neutral-700 focus:outline-none dark:text-neutral-300 [color-scheme:light] dark:[color-scheme:dark]"
           />
           <Calendar size={14} className="shrink-0 text-neutral-500" />
         </div>
 
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5">
+        <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
           <Search size={15} className="shrink-0 text-neutral-500" />
           <input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search Here"
-            className="w-40 bg-transparent text-[13px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+            className="w-40 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
           />
         </div>
       </div>
@@ -446,7 +398,7 @@ function EntriesFooter({ pageSize, onPageSizeChange, total }) {
       <select
         value={pageSize}
         onChange={(e) => onPageSizeChange(Number(e.target.value))}
-        className="rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-[12.5px] text-neutral-300 focus:outline-none"
+        className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[12.5px] text-neutral-700 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
       >
         {[10, 25, 50, 100].map((n) => (
           <option key={n} value={n}>
@@ -474,12 +426,12 @@ function EditModal({ item, type, onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-neutral-50">Edit {type}</h2>
+          <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Edit {type}</h2>
           <button
             onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -487,44 +439,44 @@ function EditModal({ item, type, onCancel, onSave }) {
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Title</label>
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Title</label>
             <input
               value={form.title}
               onChange={(e) => setField("title", e.target.value)}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">Merchant</label>
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Merchant</label>
             <input
               value={form.merchant}
               onChange={(e) => setField("merchant", e.target.value)}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">{meta.priceLabel}</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{meta.priceLabel}</label>
               <input
                 value={form.priceValue}
                 onChange={(e) => setField("priceValue", e.target.value)}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">{meta.valueLabel}</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{meta.valueLabel}</label>
               <input
                 value={form.secondaryValue}
                 onChange={(e) => setField("secondaryValue", e.target.value)}
-                className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 focus:border-emerald-400/50 focus:outline-none"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">App Visibility</label>
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">App Visibility</label>
             <div className="flex gap-2">
               {["Active", "Inactive"].map((s) => (
                 <button
@@ -535,7 +487,7 @@ function EditModal({ item, type, onCancel, onSave }) {
                   className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                     form.status === s
                       ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
                   }`}
                 >
                   {s}
@@ -550,7 +502,7 @@ function EditModal({ item, type, onCancel, onSave }) {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-neutral-400">
+            <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
               {topSuggestionLabel(type)}
             </label>
             <button
@@ -560,7 +512,7 @@ function EditModal({ item, type, onCancel, onSave }) {
               className={`flex w-full items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
                 form.topSuggestion
                   ? "border-yellow-400/50 bg-yellow-400/10 text-yellow-400"
-                  : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:text-neutral-200"
+                  : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
               }`}
             >
               <Star size={14} className={form.topSuggestion ? "fill-yellow-400" : ""} />
@@ -571,10 +523,10 @@ function EditModal({ item, type, onCancel, onSave }) {
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-800 pt-4">
+        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -599,47 +551,44 @@ function OverviewTab({ item, type }) {
   return (
     <div className="space-y-4">
       <SectionCard>
-        <div className="grid grid-cols-2 gap-x-6 divide-y divide-neutral-800">
-          <div className="col-span-1">
-            <p className="pt-0 pb-1 text-[11px] text-neutral-500">{type} Id :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.itemId}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">{type} Id</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.itemId}</p>
           </div>
-          <div className="col-span-1">
-            <p className="pt-0 pb-1 text-[11px] text-neutral-500">Code :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.code}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Code</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.code}</p>
           </div>
-
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">{meta.priceLabel} :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.priceValue}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">{meta.priceLabel}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.priceValue}</p>
           </div>
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">{meta.valueLabel} :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.secondaryValue}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">{meta.valueLabel}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.secondaryValue}</p>
           </div>
-
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Published Date :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.publishedDate}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Published Date</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.publishedDate}</p>
           </div>
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Time :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.time}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Time</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.time}</p>
           </div>
-
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Valid From :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.validFrom}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Valid From</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.validFrom}</p>
           </div>
-          <div className="col-span-1 pt-3">
-            <p className="pb-1 text-[11px] text-neutral-500">Valid To :</p>
-            <p className="pb-2 text-[13.5px] font-medium text-neutral-200">{item.validTo}</p>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Valid To</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.validTo}</p>
           </div>
         </div>
 
         <div className="mt-2">
           <p className="mb-2 text-[11px] text-neutral-500">Usage</p>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-800">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
             <div
               className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-lime-400"
               style={{ width: `${item.usageLimit ? (item.usageCount / item.usageLimit) * 100 : 0}%` }}
@@ -658,22 +607,22 @@ function InfoTab({ item }) {
   return (
     <div className="space-y-4">
       <SectionCard title="Description">
-        <p className="text-[13.5px] leading-relaxed text-neutral-300">{item.description}</p>
+        <p className="text-[13.5px] leading-relaxed text-neutral-700 dark:text-neutral-300">{item.description}</p>
       </SectionCard>
 
       <SectionCard title="Details">
-        <div className="divide-y divide-neutral-800">
-          <InfoRow icon={Tag} label="Category" value={item.category} />
-          <InfoRow icon={IndianRupee} label="Min Purchase" value={item.minPurchase} />
-          <InfoRow icon={IndianRupee} label="Max Discount" value={item.maxDiscount} />
-          <InfoRow icon={Clock} label="Usage Limit" value={item.usageLimit} />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <DetailTile icon={Tag} label="Category" value={item.category} />
+          <DetailTile icon={IndianRupee} label="Min Purchase" value={item.minPurchase} />
+          <DetailTile icon={IndianRupee} label="Max Discount" value={item.maxDiscount} />
+          <DetailTile icon={Clock} label="Usage Limit" value={item.usageLimit} />
         </div>
       </SectionCard>
 
       <SectionCard title="Terms & Conditions">
         <ul className="space-y-2">
           {item.terms.map((term, i) => (
-            <li key={i} className="flex items-start gap-2 text-[13px] text-neutral-300">
+            <li key={i} className="flex items-start gap-2 text-[13px] text-neutral-700 dark:text-neutral-300">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-neutral-600" />
               {term}
             </li>
@@ -689,21 +638,21 @@ function ActivityTab({ item, type }) {
   if (!item.activity?.length)
     return <EmptyState label={`No ${meta.activityLabel.toLowerCase()} yet.`} />;
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <table className="w-full text-left text-[13px]">
-        <thead className="bg-neutral-900 text-[11.5px] uppercase tracking-wide text-neutral-500">
+        <thead className="text-[11.5px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
           <tr>
-            <th className="px-4 py-3 font-medium">{meta.personLabel}</th>
-            <th className="px-4 py-3 font-medium">Date</th>
-            <th className="px-4 py-3 text-right font-medium">Amount</th>
+            <th className="px-5 py-4 font-medium">{meta.personLabel}</th>
+            <th className="px-5 py-4 font-medium">Date</th>
+            <th className="px-5 py-4 text-right font-medium">Amount</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-neutral-800 bg-neutral-950">
+        <tbody className="bg-white dark:bg-neutral-950">
           {item.activity.map((r, i) => (
-            <tr key={i}>
-              <td className="px-4 py-3 text-neutral-300">{r.name}</td>
-              <td className="px-4 py-3 text-neutral-500">{r.date}</td>
-              <td className="px-4 py-3 text-right font-medium text-neutral-200">{r.amount}</td>
+            <tr key={i} className="transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/60">
+              <td className="px-5 py-4 text-neutral-700 dark:text-neutral-300">{r.name}</td>
+              <td className="px-5 py-4 text-neutral-500">{r.date}</td>
+              <td className="px-5 py-4 text-right font-medium text-neutral-800 dark:text-neutral-200">{r.amount}</td>
             </tr>
           ))}
         </tbody>
@@ -720,9 +669,9 @@ function MerchantTab({ item }) {
       </SectionCard>
 
       <SectionCard title="Contact">
-        <div className="divide-y divide-neutral-800">
-          <InfoRow icon={Phone} label="Phone" value={item.merchantContact.phone} />
-          <InfoRow icon={Mail} label="Email" value={item.merchantContact.email} />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <DetailTile icon={Phone} label="Phone" value={item.merchantContact.phone} />
+          <DetailTile icon={Mail} label="Email" value={item.merchantContact.email} />
         </div>
       </SectionCard>
 
@@ -732,10 +681,10 @@ function MerchantTab({ item }) {
             {item.outlets.map((outlet, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2.5 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5"
+                className="flex items-center gap-2.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-950"
               >
                 <Store size={14} className="shrink-0 text-neutral-500" />
-                <span className="text-[13px] text-neutral-300">{outlet}</span>
+                <span className="text-[13px] text-neutral-700 dark:text-neutral-300">{outlet}</span>
               </div>
             ))}
           </div>
@@ -765,11 +714,11 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-4xl">
         <button
           onClick={onBack}
-          className="mb-4 flex items-center gap-1.5 text-[13px] font-medium text-neutral-400 transition-colors hover:text-neutral-200"
+          className="mb-4 flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
         >
           <ArrowLeft size={14} />
           Back to {type}s
@@ -779,15 +728,15 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
         {item.approvalStatus === "Pending" && (
           <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[13.5px] font-semibold text-amber-300">Awaiting your approval</p>
-              <p className="mt-0.5 text-[12.5px] text-neutral-400">
+              <p className="text-[13.5px] font-semibold text-amber-600 dark:text-amber-300">Awaiting your approval</p>
+              <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
                 This {type.toLowerCase()} was submitted by the vendor and won't appear in the app until approved.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onReject(item)}
-                className="flex items-center gap-1.5 rounded-xl border border-red-500/40 px-3.5 py-2 text-[12.5px] font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                className="flex items-center gap-1.5 rounded-xl border border-red-500/40 px-3.5 py-2 text-[12.5px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
               >
                 <X size={14} />
                 Reject
@@ -804,14 +753,14 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
         )}
 
         {/* Header card */}
-        <div className="mb-5 rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="mb-5 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <TypeIcon type={type} size="lg" />
               <div>
                 <p className="text-[12px] font-medium text-neutral-500">{item.itemId}</p>
-                <h1 className="mt-0.5 text-[17px] font-semibold text-neutral-50">{item.title}</h1>
-                <p className="mt-1 text-[12.5px] font-medium text-neutral-400">{item.merchant}</p>
+                <h1 className="mt-0.5 text-[17px] font-semibold text-neutral-900 dark:text-neutral-50">{item.title}</h1>
+                <p className="mt-1 text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400">{item.merchant}</p>
               </div>
             </div>
             <div className="flex flex-col items-end gap-1.5">
@@ -831,7 +780,7 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
           </div>
 
           {/* Tabs */}
-          <div className="mt-5 -mb-5 flex gap-5 overflow-x-auto border-t border-neutral-800 pt-3">
+          <div className="mt-5 -mb-5 flex gap-5 overflow-x-auto border-t border-neutral-200 pt-3 dark:border-neutral-800">
             {tabs.map((t) => (
               <button
                 key={t}
@@ -839,7 +788,7 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
                 className={`shrink-0 whitespace-nowrap border-b-2 px-0.5 pb-3 text-[13px] font-medium transition-colors ${
                   tab === t
                     ? "border-emerald-400 text-emerald-400"
-                    : "border-transparent text-neutral-500 hover:text-neutral-300"
+                    : "border-transparent text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
                 }`}
               >
                 {t}
@@ -905,11 +854,112 @@ function exportToCsv(type, items) {
 }
 
 /* -------------------------------------------------------------------------
+ * Real Voucher data — GET /vouchers/versions/get-all (getVouchers), the
+ * same confirmed endpoint/shape VoucherList.jsx's apiVersionToRow already
+ * uses. Normalizes each real voucher-version into the exact flat shape
+ * this page's table/columns/ItemDetails/EditModal already expect, so none
+ * of that shared UI needed to change — only where its data comes from.
+ * ---------------------------------------------------------------------- */
+
+const inr = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
+
+function formatDMYFromISO(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "-");
+}
+
+function fmtTimeFromISO(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+}
+
+// Real voucher-version workflow status (DRAFT/UNDER_REVIEW/APPROVED/
+// PUBLISHED/REJECTED/EXPIRED/PAUSED/ARCHIVED) collapsed onto the 3-state
+// admin approval concept this page's ApprovalBadge already renders.
+function mapVoucherApproval(status) {
+  const s = String(status || "").toUpperCase();
+  if (["APPROVED", "PUBLISHED"].includes(s)) return "Approved";
+  if (s === "REJECTED") return "Rejected";
+  return "Pending"; // DRAFT, UNDER_REVIEW, EXPIRED, PAUSED, ARCHIVED
+}
+
+function normalizeRealVoucher(v) {
+  const voucher = v.voucher || {};
+  const brand = v.brand || null;
+  const primaryOffer = v.offers?.[0];
+  const publishedIso = v.publishedAt || v.createdAt;
+
+  return {
+    id: v._id,
+    itemId: `#${voucher.voucherCode || v.versionCode || v._id}`,
+    merchant: brand?.brandName || "—",
+    title: v.name || "—",
+    publishedDate: formatDMYFromISO(publishedIso),
+    priceValue:
+      primaryOffer?.title ||
+      (primaryOffer
+        ? primaryOffer.discountType === "PERCENTAGE"
+          ? `${primaryOffer.discountValue}%`
+          : inr(primaryOffer.discountValue)
+        : "—"),
+    secondaryValue: primaryOffer?.maxDiscountAmount != null ? inr(primaryOffer.maxDiscountAmount) : "—",
+    approvalStatus: mapVoucherApproval(v.status),
+    status: String(v.status || "").toUpperCase() === "PUBLISHED" ? "Active" : "Inactive",
+    topSuggestion: Boolean(voucher.isSuggested ?? v.isSuggested),
+    time: fmtTimeFromISO(publishedIso),
+    code: voucher.voucherCode || "—",
+    category: v.category?.name || "—",
+    description: v.description || "",
+    // No real per-item source yet for terms, redemption activity or an
+    // outlet-name list from this endpoint — left empty rather than
+    // invented; the detail tabs already render an empty state for these.
+    terms: [],
+    minPurchase: primaryOffer?.minBillAmount != null ? inr(primaryOffer.minBillAmount) : "—",
+    maxDiscount: primaryOffer?.maxDiscountAmount != null ? inr(primaryOffer.maxDiscountAmount) : "—",
+    validFrom: formatDMYFromISO(v.startAt),
+    validTo: formatDMYFromISO(v.endAt),
+    usageLimit: 0,
+    usageCount: 0,
+    merchantContact: {
+      phone: brand?.whatsappNumber ? `+91 ${brand.whatsappNumber}` : "—",
+      email: "—",
+    },
+    outlets: [],
+    activity: [],
+  };
+}
+
+/* -------------------------------------------------------------------------
  * Main page
  * ---------------------------------------------------------------------- */
 
 export default function Voucher() {
-  const [dataByType, setDataByType] = useState(INITIAL_DATA);
+  const [dataByType, setDataByType] = useState({ Voucher: [], ...INITIAL_DATA });
+  const [voucherLoading, setVoucherLoading] = useState(true);
+  const [voucherError, setVoucherError] = useState("");
+
+  const fetchVouchers = useCallback(async () => {
+    setVoucherLoading(true);
+    setVoucherError("");
+    try {
+      const res = await getVouchers({ page: 1, limit: 100 });
+      const rows = (res?.data?.data ?? []).map(normalizeRealVoucher);
+      setDataByType((prev) => ({ ...prev, Voucher: rows }));
+    } catch (err) {
+      setVoucherError(err.message);
+    } finally {
+      setVoucherLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchVouchers();
+  }, [fetchVouchers]);
+
   const [activeType, setActiveType] = useState("Voucher");
   const [approvalFilter, setApprovalFilter] = useState("All");
   const [topOnly, setTopOnly] = useState(false);
@@ -989,13 +1039,13 @@ export default function Voucher() {
     {
       key: "merchant",
       label: "Merchant",
-      render: (row) => <span className="font-medium text-neutral-200">{row.merchant}</span>,
+      render: (row) => <span className="font-medium text-neutral-800 dark:text-neutral-200">{row.merchant}</span>,
     },
     {
       key: "title",
       label: "Title",
       render: (row) => (
-        <span className="flex items-center gap-1.5 text-neutral-300">
+        <span className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
           {row.title}
           {row.topSuggestion && <TopSuggestionBadge type={activeType} />}
         </span>
@@ -1004,17 +1054,17 @@ export default function Voucher() {
     {
       key: "publishedDate",
       label: "Published Date",
-      render: (row) => <span className="text-neutral-400">{row.publishedDate}</span>,
+      render: (row) => <span className="text-neutral-500 dark:text-neutral-400">{row.publishedDate}</span>,
     },
     {
       key: "priceValue",
       label: TYPE_META[activeType].priceLabel,
-      render: (row) => <span className="font-semibold text-neutral-200">{row.priceValue}</span>,
+      render: (row) => <span className="font-semibold text-neutral-800 dark:text-neutral-200">{row.priceValue}</span>,
     },
     {
       key: "secondaryValue",
       label: TYPE_META[activeType].valueLabel,
-      render: (row) => <span className="text-neutral-300">{row.secondaryValue}</span>,
+      render: (row) => <span className="text-neutral-700 dark:text-neutral-300">{row.secondaryValue}</span>,
     },
     {
       key: "approvalStatus",
@@ -1051,14 +1101,14 @@ export default function Voucher() {
               <button
                 onClick={() => handleApprove(row)}
                 aria-label={`Approve ${row.title}`}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-emerald-400/10 hover:text-emerald-400"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-emerald-400/10 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400"
               >
                 <Check size={15} />
               </button>
               <button
                 onClick={() => handleReject(row)}
                 aria-label={`Reject ${row.title}`}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
               >
                 <X size={15} />
               </button>
@@ -1067,21 +1117,21 @@ export default function Voucher() {
           <button
             onClick={() => setOpenItemId(row.id)}
             aria-label={`View ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <Eye size={15} />
           </button>
           <button
             onClick={() => setEditingItem(row)}
             aria-label={`Edit ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-emerald-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => handleDelete(row)}
             aria-label={`Delete ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -1108,11 +1158,11 @@ export default function Voucher() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Page title */}
         <div className="mb-6">
-          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
             Vendor Submissions
           </h1>
           <p className="mt-1 text-[13px] text-neutral-500">
@@ -1153,7 +1203,24 @@ export default function Voucher() {
         />
 
         {/* Table */}
-        <Table columns={columns} data={filtered} emptyMessage={`No ${activeType.toLowerCase()}s found.`} />
+        {activeType === "Voucher" && voucherLoading ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
+            <Loader2 size={16} className="animate-spin" />
+            Loading vouchers…
+          </div>
+        ) : activeType === "Voucher" && voucherError ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={14} className="shrink-0" />
+            Failed to load vouchers: {voucherError}
+          </div>
+        ) : (
+          <Table
+            columns={columns}
+            data={filtered}
+            emptyMessage={`No ${activeType.toLowerCase()}s found.`}
+            dense
+          />
+        )}
 
         {/* Footer */}
         <EntriesFooter pageSize={pageSize} onPageSizeChange={setPageSize} total={filtered.length} />

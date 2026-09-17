@@ -120,10 +120,47 @@ export async function resendOtp({ value, type, role = 'ADMIN' }) {
     return sendOtp({ value, type, role });
 }
 
+// ── Login or Sign Up with WhatsApp ──────────────────────────
+// POST {{TryDood2.0BaseUrl}}/auth/loginOrSignUp-with-whatsapp
+// body: { whatsappNumber, role }
+// Confirmed role enum for this endpoint: CUSTOMER | VENDOR | SUB_VENDOR —
+// ADMIN is NOT a documented value. Used here for the admin login flow at
+// the user's explicit request; if the backend rejects role: "ADMIN",
+// revert to loginWithEmail/loginWithMobile above (still intact, unused).
+export async function loginOrSignUpWithWhatsapp({ whatsappNumber, role = 'ADMIN' }) {
+    try {
+        const { data } = await api.post('/auth/loginOrSignUp-with-whatsapp', {
+            whatsappNumber,
+            role,
+        });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Verify WhatsApp OTP ──────────────────────────────────────
+// POST {{TryDood2.0BaseUrl}}/auth/verify-otp-whatsapp
+// body: { otp, whatsappNumber, role, currentScreen? }
+// No sessionId required (unlike verify-otp-email/verify-otp-mobile).
+// response: { success, message, data: { user, token } }
+export async function verifyOtpWhatsapp({ otp, whatsappNumber, role = 'ADMIN', currentScreen }) {
+    try {
+        const payload = { otp, whatsappNumber, role };
+        if (currentScreen) payload.currentScreen = currentScreen;
+        const { data } = await api.post('/auth/verify-otp-whatsapp', payload);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
     loginWithEmail,
     loginWithMobile,
     sendOtp,
     verifyOtp,
     resendOtp,
+    loginOrSignUpWithWhatsapp,
+    verifyOtpWhatsapp,
 };

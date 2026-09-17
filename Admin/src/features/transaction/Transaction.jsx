@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Filter,
@@ -9,9 +10,24 @@ import {
   Clock3,
   XCircle,
   Wallet,
-  ArrowUpRight,
-  X,
+  Loader2,
+  AlertTriangle,
+  ScanLine,
+  ArrowRight,
+  Eye,
 } from "lucide-react";
+import { getVoucherClaimPayments, getVoucherClaimByCode } from "./services/TransactionApi";
+import {
+  todayStr,
+  formatDate,
+  fmtTime,
+  normalizeClaimStatus,
+  formatPaymentMethod,
+  inr,
+} from "./transactionUtils";
+import DateRangeFilter from "../../components/common/DateRangeFilter";
+import SelectDropdown from "../../components/common/SelectDropdown";
+import { downloadCsv } from "../../utils/exportTable";
 
 /* -------------------------------------------------------------------------
  * Shared Table component (same as provided) — kept in this file so the
@@ -26,8 +42,8 @@ export function StatusBadge({ status, activeLabel = "Active" }) {
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold
         ${
           isActive
-            ? "bg-emerald-400/10 text-emerald-400"
-            : "bg-neutral-700/40 text-neutral-400"
+            ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+            : "bg-neutral-200 text-neutral-600 dark:bg-neutral-700/40 dark:text-neutral-400"
         }`}
     >
       <span
@@ -54,15 +70,15 @@ export function Table({
       : "text-left";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[13.5px]">
+    <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="no-scrollbar overflow-x-auto">
+        <table className="w-full min-w-[900px] border-collapse text-[13px]">
           <thead>
-            <tr className="border-b border-neutral-800 bg-neutral-800/40">
+            <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 ${alignClass(
+                  className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
                     col.align
                   )} ${col.width || ""}`}
                 >
@@ -76,7 +92,7 @@ export function Table({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-4 py-10 text-center text-neutral-500"
+                  className="px-5 py-10 text-center text-neutral-500"
                 >
                   {emptyMessage}
                 </td>
@@ -85,14 +101,14 @@ export function Table({
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className={`border-b border-neutral-800/70 transition-colors last:border-b-0 hover:bg-neutral-800/30 ${
+                  className={`border-t border-neutral-100 transition-colors hover:bg-neutral-50 dark:border-neutral-800/60 dark:hover:bg-neutral-800/30 ${
                     row.isToday ? "bg-cyan-400/[0.04]" : ""
                   }`}
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-4 py-3 text-neutral-300 ${alignClass(
+                      className={`whitespace-nowrap px-4 py-3.5 text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
                       )}`}
                     >
@@ -110,123 +126,70 @@ export function Table({
 }
 
 /* -------------------------------------------------------------------------
- * Mock data — replace with API data (e.g. GET /admin/transactions)
+ * Real data — GET /voucher-claims/payments (see ./services/TransactionApi)
  * ---------------------------------------------------------------------- */
 
 const PAYMENT_METHODS = ["UPI", "Debit Card", "Credit Card", "Net Banking", "Wallet"];
 
-const VENDORS = [
-  "Rajwada Sweets & Namkeen",
-  "Kavya Mehndi Art Studio",
-  "UrbanFit Studio",
-  "Spice Route Kitchen",
-  "Om Electronics",
-];
+// Normalizes one real voucher-claim payment record (GET
+// /voucher-claims/payments) into the flat row shape this page's table/
+// stats expect.
+//
+// The sibling detail endpoint (GET /voucher-claims/:claimId, confirmed real
+// — see TransactionDetails.jsx) returns each record wrapped as
+// { payment, claim, brand, outlet, timeline } rather than one flat object,
+// so each list row is defensively unwrapped the same way here: read every
+// payment field off `item.payment` when present, falling back to the item
+// itself for a flatter shape. This is what was making most cells show "—"
+// — the old code only ever read straight off the list item.
+//
+// `customerId` is only ever a raw id — the platform's users have no `name`
+// field (WhatsApp-OTP login only), so "Customer" shows the id rather than
+// a fabricated name.
+function normalizeClaimPayment(item) {
+  const payment = item?.payment ?? item ?? {};
+  const claim = item?.claim ?? {};
+  const brand = item?.brand ?? payment?.brand ?? {};
 
-function todayStr() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  const ts = payment.createdAt || payment.verifiedAt || null;
+  const d = ts ? new Date(ts) : null;
+  const dateStr = d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : todayStr();
+
+  const status = normalizeClaimStatus(payment.status);
+
+  return {
+    id: payment._id || item?._id || "—",
+    claimId: claim._id || payment.claimId || item?.voucher?.claimId || item?._id || payment._id || "—",
+    razorpayPaymentId: payment.razorpayPaymentId || "—",
+    vendor: brand.brandName || "—",
+    customer: payment.customerId || claim.customerId || "—",
+    date: dateStr,
+    time: d && !Number.isNaN(d.getTime()) ? fmtTime(ts) : "—",
+    amount: Number(payment.amount) || 0,
+    method: formatPaymentMethod(payment.paymentMethod),
+    status,
+    isToday: dateStr === todayStr(),
+    reference: payment.invoiceId || "—",
+    failureReason: status === "Failed" ? payment.errorDescription || payment.failureReason || "Payment failed." : null,
+  };
 }
-
-function daysAgoStr(n) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
-
-function formatDate(iso) {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function fmtTime(iso) {
-  return new Date(iso).toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-let seed = 42;
-function rand() {
-  seed = (seed * 9301 + 49297) % 233280;
-  return seed / 233280;
-}
-
-function buildMockTransactions() {
-  const rows = [];
-  const statuses = ["Success", "Pending", "Failed"];
-  const dateOffsets = [0, 0, 0, 1, 2, 3, 5, 7, 10, 14];
-
-  let counter = 1;
-  dateOffsets.forEach((offset) => {
-    const perDay = offset === 0 ? 6 : 3;
-    for (let i = 0; i < perDay; i++) {
-      const status =
-        offset === 0
-          ? statuses[Math.floor(rand() * statuses.length)]
-          : rand() > 0.15
-          ? "Success"
-          : rand() > 0.5
-          ? "Pending"
-          : "Failed";
-      const vendor = VENDORS[Math.floor(rand() * VENDORS.length)];
-      const method = PAYMENT_METHODS[Math.floor(rand() * PAYMENT_METHODS.length)];
-      const amount = Math.round(500 + rand() * 45000);
-      const date = daysAgoStr(offset);
-      const id = `TXN${String(100000 + counter).slice(1)}`;
-      rows.push({
-        id,
-        vendor,
-        customer: `Customer ${counter}`,
-        date,
-        time: `${String(Math.floor(9 + rand() * 10)).padStart(2, "0")}:${String(
-          Math.floor(rand() * 60)
-        ).padStart(2, "0")}`,
-        amount,
-        method,
-        status,
-        isToday: offset === 0,
-        reference: `REF${Math.floor(100000000 + rand() * 899999999)}`,
-        failureReason:
-          status === "Failed"
-            ? ["Insufficient funds", "Bank timeout", "Card declined", "Gateway error"][
-                Math.floor(rand() * 4)
-              ]
-            : null,
-      });
-      counter++;
-    }
-  });
-
-  // sort newest first
-  return rows.sort((a, b) => (a.date < b.date ? 1 : -1));
-}
-
-const INITIAL_TRANSACTIONS = buildMockTransactions();
 
 /* -------------------------------------------------------------------------
  * Small shared bits
  * ---------------------------------------------------------------------- */
 
-const inr = (n) =>
-  `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
-
-function TxnStatusBadge({ status }) {
+export function TxnStatusBadge({ status }) {
   const map = {
     Success: {
-      cls: "bg-emerald-400/10 text-emerald-400 ring-emerald-400/30",
+      cls: "bg-emerald-400/10 text-emerald-600 ring-emerald-400/30 dark:text-emerald-400",
       icon: CheckCircle2,
     },
     Pending: {
-      cls: "bg-amber-400/10 text-amber-400 ring-amber-400/30",
+      cls: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400",
       icon: Clock3,
     },
     Failed: {
-      cls: "bg-red-400/10 text-red-400 ring-red-400/30",
+      cls: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400",
       icon: XCircle,
     },
   };
@@ -244,24 +207,24 @@ function TxnStatusBadge({ status }) {
 
 function StatCard({ icon: Icon, label, amount, sub, tone = "emerald", live }) {
   const toneCls = {
-    emerald: "text-emerald-400",
-    cyan: "text-cyan-400",
-    amber: "text-amber-400",
-    red: "text-red-400",
+    emerald: "text-emerald-600 dark:text-emerald-400",
+    cyan: "text-cyan-600 dark:text-cyan-400",
+    amber: "text-amber-600 dark:text-amber-400",
+    red: "text-red-600 dark:text-red-400",
   }[tone];
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-      <div className="flex items-center gap-2 text-[12.5px] text-neutral-400">
+    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
         <Icon size={15} className={toneCls} />
         {label}
         {live && (
-          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             Live
           </span>
         )}
       </div>
-      <div className="mt-3 text-[22px] font-semibold text-neutral-50">
+      <div className="mt-3 text-[22px] font-semibold text-neutral-900 dark:text-neutral-50">
         {inr(amount)}
       </div>
       <div className="mt-1 text-[12px] text-neutral-500">{sub}</div>
@@ -269,58 +232,6 @@ function StatCard({ icon: Icon, label, amount, sub, tone = "emerald", live }) {
   );
 }
 
-/* -------------------------------------------------------------------------
- * CSV export
- * ---------------------------------------------------------------------- */
-
-function exportToCsv(rows, filename) {
-  if (!rows.length) return;
-  const headers = [
-    "Transaction Id",
-    "Vendor",
-    "Customer",
-    "Date",
-    "Time",
-    "Amount",
-    "Payment Method",
-    "Status",
-    "Reference",
-    "Failure Reason",
-  ];
-  const escapeCell = (val) => {
-    const s = val === null || val === undefined ? "" : String(val);
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const lines = [
-    headers.join(","),
-    ...rows.map((r) =>
-      [
-        r.id,
-        r.vendor,
-        r.customer,
-        r.date,
-        r.time,
-        r.amount,
-        r.method,
-        r.status,
-        r.reference,
-        r.failureReason || "",
-      ]
-        .map(escapeCell)
-        .join(",")
-    ),
-  ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 
 /* -------------------------------------------------------------------------
  * Tabs config
@@ -350,102 +261,43 @@ function matchesTab(row, tab) {
 }
 
 /* -------------------------------------------------------------------------
- * Transaction detail drawer
- * ---------------------------------------------------------------------- */
-
-function TransactionDrawer({ txn, onClose }) {
-  if (!txn) return null;
-  return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="h-full w-full max-w-md overflow-y-auto border-l border-neutral-800 bg-neutral-900 p-6"
-      >
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold text-neutral-50">
-            {txn.id}
-          </h2>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="mb-5 flex items-center justify-between rounded-xl bg-neutral-950 px-4 py-4">
-          <div>
-            <p className="text-[11.5px] text-neutral-500">Amount</p>
-            <p className="mt-0.5 text-[20px] font-semibold text-neutral-50">
-              {inr(txn.amount)}
-            </p>
-          </div>
-          <TxnStatusBadge status={txn.status} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <DrawerField label="Vendor" value={txn.vendor} />
-          <DrawerField label="Customer" value={txn.customer} />
-          <DrawerField label="Date" value={formatDate(txn.date)} />
-          <DrawerField label="Time" value={txn.time} />
-          <DrawerField label="Payment Method" value={txn.method} />
-          <DrawerField label="Reference" value={txn.reference} />
-        </div>
-
-        {txn.status === "Failed" && (
-          <div className="mt-5 rounded-xl bg-red-400/10 px-4 py-3">
-            <p className="text-[11.5px] font-medium text-red-400">
-              Failure reason
-            </p>
-            <p className="mt-1 text-[13px] text-neutral-300">
-              {txn.failureReason}
-            </p>
-          </div>
-        )}
-
-        {txn.status === "Pending" && (
-          <div className="mt-5 rounded-xl bg-amber-400/10 px-4 py-3 text-[13px] text-neutral-300">
-            This transaction is still being processed by the payment gateway.
-          </div>
-        )}
-
-        {txn.status === "Success" && (
-          <div className="mt-5 flex items-center gap-2 rounded-xl bg-emerald-400/10 px-4 py-3 text-[13px] text-neutral-300">
-            <CheckCircle2 size={15} className="text-emerald-400" />
-            Payment completed and confirmed.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DrawerField({ label, value }) {
-  return (
-    <div>
-      <p className="text-[11.5px] text-neutral-500">{label}</p>
-      <p className="mt-0.5 truncate text-[13.5px] font-medium text-neutral-100">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
  * Main page
  * ---------------------------------------------------------------------- */
 
 export default function Transaction() {
-  const [transactions] = useState(INITIAL_TRANSACTIONS);
+  const navigate = useNavigate();
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [methodFilter, setMethodFilter] = useState("All");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState(null);
+  const [claimCode, setClaimCode] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+  const [verifyResult, setVerifyResult] = useState(null);
+
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const res = await getVoucherClaimPayments({ page: 1, limit: 100 });
+      const rows = (res?.data?.data ?? []).map(normalizeClaimPayment);
+      setTransactions(rows);
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   const stats = useMemo(() => {
     const today = transactions.filter((t) => t.isToday);
@@ -469,30 +321,76 @@ export default function Transaction() {
       const inMethod = methodFilter === "All" || t.method === methodFilter;
       const inSearch =
         !q ||
-        t.id.toLowerCase().includes(q) ||
+        t.razorpayPaymentId.toLowerCase().includes(q) ||
         t.vendor.toLowerCase().includes(q) ||
         t.customer.toLowerCase().includes(q) ||
         t.reference.toLowerCase().includes(q);
-      return inTab && inMethod && inSearch;
+      const inDateFrom = !dateFrom || t.date >= dateFrom;
+      const inDateTo = !dateTo || t.date <= dateTo;
+      return inTab && inMethod && inSearch && inDateFrom && inDateTo;
     });
-  }, [transactions, activeTab, methodFilter, search]);
+  }, [transactions, activeTab, methodFilter, search, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const pageRows = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
+  // Every scalar field on the normalized row — nothing left out — so the
+  // export is a full data dump, not a curated subset of columns.
   const handleExport = () => {
     const tabLabel = TABS.find((t) => t.key === activeTab)?.label || "transactions";
-    const filename = `${tabLabel.replace(/\s+/g, "_").toLowerCase()}_${todayStr()}.csv`;
-    exportToCsv(filtered, filename);
+    const filename = `${tabLabel.replace(/\s+/g, "_").toLowerCase()}_${todayStr()}`;
+    downloadCsv(filename, [
+      { label: "Payment Id", key: "id" },
+      { label: "Claim Id", key: "claimId" },
+      { label: "Razorpay Payment Id", key: "razorpayPaymentId" },
+      { label: "Vendor", key: "vendor" },
+      { label: "Customer", key: "customer" },
+      { label: "Date", key: "date" },
+      { label: "Time", key: "time" },
+      { label: "Amount", key: "amount" },
+      { label: "Method", key: "method" },
+      { label: "Status", key: "status" },
+      { label: "Is Today", value: (r) => (r.isToday ? "Yes" : "No") },
+      { label: "Reference", key: "reference" },
+      { label: "Failure Reason", value: (r) => r.failureReason || "" },
+    ], filtered);
+  };
+
+  const handleVerifyCode = async (e) => {
+    e.preventDefault();
+    const code = claimCode.trim();
+    if (!code) return;
+    setVerifyLoading(true);
+    setVerifyError("");
+    setVerifyResult(null);
+    try {
+      const res = await getVoucherClaimByCode(code);
+      const raw = res?.data ?? res;
+      const claim = raw?.claim ?? raw;
+      if (!claim) throw new Error("No claim found for this code.");
+      setVerifyResult({
+        claimId: claim._id || raw?.payment?.voucher?.claimId || null,
+        claimCode: claim.claimCode || code,
+        status: claim.status || "—",
+        voucherName: claim.voucherSnapshot?.name || "—",
+        brandName: claim.brandSnapshot?.name || raw?.brand?.brandName || "—",
+        outletId: claim.outletSnapshot?.uniqueId || raw?.outlet?.uniqueId || "—",
+        billAmount: claim.billAmount ?? claim.pricing?.billAmount ?? null,
+      });
+    } catch (err) {
+      setVerifyError(err.message);
+    } finally {
+      setVerifyLoading(false);
+    }
   };
 
   const columns = [
-    { key: "id", label: "Transaction Id", render: (r) => (
+    { key: "razorpayPaymentId", label: "Payment Id", render: (r) => (
       <button
-        onClick={() => setSelected(r)}
-        className="font-medium text-emerald-400 hover:underline"
+        onClick={() => navigate(`/transaction/${r.claimId}`)}
+        className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
       >
-        {r.id}
+        {r.razorpayPaymentId}
       </button>
     ) },
     { key: "vendor", label: "Vendor" },
@@ -504,7 +402,7 @@ export default function Transaction() {
         <span>
           {formatDate(r.date)}{" "}
           {r.isToday && (
-            <span className="ml-1 rounded-full bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+            <span className="ml-1 rounded-full bg-cyan-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-600 dark:text-cyan-300">
               Today
             </span>
           )}
@@ -518,7 +416,7 @@ export default function Transaction() {
       label: "Amount",
       align: "right",
       render: (r) => (
-        <span className="font-medium text-neutral-50">{inr(r.amount)}</span>
+        <span className="font-medium text-neutral-900 dark:text-neutral-50">{inr(r.amount)}</span>
       ),
     },
     {
@@ -533,15 +431,30 @@ export default function Transaction() {
         <span className="text-neutral-500">{r.reference}</span>
       ),
     },
+    {
+      key: "actions",
+      label: "Actions",
+      align: "right",
+      render: (r) => (
+        <button
+          onClick={() => navigate(`/transaction/${r.claimId}`)}
+          aria-label="View transaction details"
+          title="View details"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-emerald-400/10 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400"
+        >
+          <Eye size={15} />
+        </button>
+      ),
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Transactions
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -557,11 +470,81 @@ export default function Transaction() {
               <Download size={15} />
               Export CSV
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-xl border border-neutral-800 px-4 text-[13.5px] font-medium text-neutral-300 hover:bg-neutral-800">
-              <RefreshCw size={15} />
+            <button
+              onClick={fetchTransactions}
+              disabled={loading}
+              className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
+        </div>
+
+        {/* Verify claim code (counter verification) */}
+        <div className="mb-6 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <form onSubmit={handleVerifyCode} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex flex-1 items-center gap-2 rounded-xl border border-neutral-200 px-3.5 py-2.5 dark:border-neutral-800">
+              <ScanLine size={15} className="shrink-0 text-neutral-500" />
+              <input
+                value={claimCode}
+                onChange={(e) => setClaimCode(e.target.value)}
+                placeholder="Verify a claim code (e.g. TD-W46DVM)…"
+                className="w-full bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={verifyLoading || !claimCode.trim()}
+              className="flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {verifyLoading ? <Loader2 size={15} className="animate-spin" /> : <ScanLine size={15} />}
+              Verify
+            </button>
+          </form>
+
+          {verifyError && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+              <AlertTriangle size={14} className="shrink-0" />
+              {verifyError}
+            </div>
+          )}
+
+          {verifyResult && (
+            <div className="mt-3 flex flex-col gap-3 rounded-xl bg-neutral-50 px-4 py-3 dark:bg-neutral-950 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px]">
+                <span className="font-mono font-semibold text-neutral-900 dark:text-neutral-50">
+                  {verifyResult.claimCode}
+                </span>
+                <span className="text-neutral-500">{verifyResult.voucherName}</span>
+                <span className="text-neutral-500">{verifyResult.brandName}</span>
+                <span className="text-neutral-500">Outlet {verifyResult.outletId}</span>
+                {verifyResult.billAmount != null && (
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">
+                    {inr(verifyResult.billAmount)}
+                  </span>
+                )}
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    verifyResult.status === "REDEEMED"
+                      ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "bg-amber-400/10 text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {verifyResult.status}
+                </span>
+              </div>
+              {verifyResult.claimId && (
+                <button
+                  onClick={() => navigate(`/transaction/${verifyResult.claimId}`)}
+                  className="flex items-center gap-1 self-start text-[12.5px] font-medium text-emerald-600 hover:underline dark:text-emerald-400 sm:self-auto"
+                >
+                  View Full Timeline
+                  <ArrowRight size={13} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Stat cards */}
@@ -604,7 +587,7 @@ export default function Transaction() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 p-1.5">
+        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl bg-white p-1.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           {TABS.map((t) => {
             const count =
               t.key === "all"
@@ -621,7 +604,7 @@ export default function Transaction() {
                 className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors ${
                   active
                     ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                    : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                 }`}
               >
                 {t.label}
@@ -629,7 +612,7 @@ export default function Transaction() {
                   className={`rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold ${
                     active
                       ? "bg-neutral-950/20 text-neutral-950"
-                      : "bg-neutral-800 text-neutral-400"
+                      : "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
                   }`}
                 >
                   {count}
@@ -639,9 +622,10 @@ export default function Transaction() {
           })}
         </div>
 
-        {/* Toolbar */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5">
+        {/* Toolbar — search, method filter, date range and export share one
+            wrapping row, matching Settlement/Refund's filter layout. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
             <Search size={15} className="shrink-0 text-neutral-500" />
             <input
               value={search}
@@ -649,39 +633,56 @@ export default function Transaction() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search transaction id, vendor, customer, reference..."
-              className="w-72 bg-transparent text-[13px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+              placeholder="Search payment id, vendor, customer, reference..."
+              className="w-44 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200 sm:w-64"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900 px-1 py-1">
-              <Filter size={14} className="ml-1.5 text-neutral-500" />
-              {["All", ...PAYMENT_METHODS].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => {
-                    setMethodFilter(m);
-                    setPage(1);
-                  }}
-                  className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
-                    methodFilter === m
-                      ? "bg-emerald-400/15 text-emerald-400"
-                      : "text-neutral-400 hover:text-neutral-200"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
+          <SelectDropdown
+            value={methodFilter}
+            options={["All", ...PAYMENT_METHODS]}
+            icon={Filter}
+            onChange={(m) => {
+              setMethodFilter(m);
+              setPage(1);
+            }}
+          />
+          <DateRangeFilter
+            startDate={dateFrom}
+            endDate={dateTo}
+            onStartChange={(v) => {
+              setDateFrom(v);
+              setPage(1);
+            }}
+            onEndChange={(v) => {
+              setDateTo(v);
+              setPage(1);
+            }}
+            onClear={() => {
+              setDateFrom("");
+              setDateTo("");
+              setPage(1);
+            }}
+          />
         </div>
 
         {/* Table */}
-        <Table
-          columns={columns}
-          data={pageRows}
-          emptyMessage="No transactions match your filters."
-        />
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
+            <Loader2 size={16} className="animate-spin" />
+            Loading transactions…
+          </div>
+        ) : loadError ? (
+          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={14} className="shrink-0" />
+            Failed to load transactions: {loadError}
+          </div>
+        ) : (
+          <Table
+            columns={columns}
+            data={pageRows}
+            emptyMessage="No transactions match your filters."
+          />
+        )}
 
         {/* Pagination */}
         <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
@@ -693,7 +694,7 @@ export default function Transaction() {
                 setRowsPerPage(Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-200 focus:outline-none"
+              className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-neutral-800 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
             >
               {[10, 20, 50].map((n) => (
                 <option key={n} value={n}>
@@ -713,7 +714,7 @@ export default function Transaction() {
                 className={`flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-medium ${
                   page === n
                     ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-400 hover:bg-neutral-800"
+                    : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 }`}
               >
                 {n}
@@ -722,8 +723,6 @@ export default function Transaction() {
           </div>
         </div>
       </div>
-
-      <TransactionDrawer txn={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

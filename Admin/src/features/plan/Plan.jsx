@@ -13,7 +13,10 @@ import {
   ThumbsDown,
   ListChecks,
   Loader2,
+  Eye,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, LabelList } from "recharts";
+import PlanDetails from "./PlanDetails";
 import {
   getPlans,
   addPlan,
@@ -24,51 +27,89 @@ import {
 } from "../plan/services/planApi";
 
 /* -------------------------------------------------------------------------
- * Data shape (matches the incoming form payload)
+ * Data shape (matches the real API payload)
  *
  * {
- *   id, name, description, price, oldPrice, discountLabel,
+ *   id, name, description, price, strikePrice,
+ *   discountType: "PERCENT" | "FLAT", discountPercent,
  *   type: "MONTHLY" | "YEARLY",
  *   status: "Active" | "Inactive",
- *   popular: boolean,
+ *   popular: boolean,               // UI-only, not persisted by the API
  *   benefits: string[],
  *   limitations: string[],
- *   features: [{ id, title, value, available }]
+ *   features: [{ id, title, value, available }],
+ *   entitlements: {
+ *     subBrands: { isUnlimited, limit? },
+ *     franchises: { isUnlimited, limit? },
+ *     vouchers: { isUnlimited, limit? },
+ *     dealPack: { isEnabled },
+ *     prioritySupport: { isEnabled },
+ *     showcase: { isUnlimited, limit? },
+ *   }
  * }
  * ---------------------------------------------------------------------- */
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+const emptyEntitlements = () => ({
+  subBrands: { isUnlimited: false, limit: 0 },
+  franchises: { isUnlimited: false, limit: 0 },
+  vouchers: { isUnlimited: false, limit: 0 },
+  dealPack: { isEnabled: false },
+  prioritySupport: { isEnabled: false },
+  showcase: { isUnlimited: false, limit: 0 },
+});
 
 const emptyPlanDraft = () => ({
   id: null,
   name: "",
   description: "",
   price: "",
-  oldPrice: "",
-  discountLabel: "",
+  strikePrice: "",
+  discountType: "PERCENT",
+  discountPercent: "",
   type: "MONTHLY",
   status: "Active",
   popular: false,
   benefits: [],
   limitations: [],
   features: [],
+  entitlements: emptyEntitlements(),
 });
 
 // Normalizes whatever the API returns into the shape every component below
 // expects — fills in missing arrays/fields with safe defaults so nothing
 // crashes on `.length`, `.map`, etc. Handles both `_id` and `id`.
 //
-// NOTE: the real API does NOT return `oldPrice`, `discountLabel`, or
-// `popular` — those are UI-only fields for now (kept so the form still
-// works, but they won't persist unless the backend adds support).
-function normalizePlan(raw) {
+// NOTE: `popular` is still UI-only — the real API doesn't return it.
+function normalizeEntitlementLimit(raw) {
+  return {
+    isUnlimited: Boolean(raw?.isUnlimited),
+    limit: raw?.limit ?? 0,
+  };
+}
+
+function normalizeEntitlements(raw) {
+  const defaults = emptyEntitlements();
+  return {
+    subBrands: raw?.subBrands ? normalizeEntitlementLimit(raw.subBrands) : defaults.subBrands,
+    franchises: raw?.franchises ? normalizeEntitlementLimit(raw.franchises) : defaults.franchises,
+    vouchers: raw?.vouchers ? normalizeEntitlementLimit(raw.vouchers) : defaults.vouchers,
+    dealPack: { isEnabled: Boolean(raw?.dealPack?.isEnabled) },
+    prioritySupport: { isEnabled: Boolean(raw?.prioritySupport?.isEnabled) },
+    showcase: raw?.showcase ? normalizeEntitlementLimit(raw.showcase) : defaults.showcase,
+  };
+}
+
+export function normalizePlan(raw) {
   return {
     id: raw?._id ?? raw?.id ?? uid(),
     name: raw?.name ?? "",
     description: raw?.description ?? "",
     price: raw?.price ?? 0,
-    oldPrice: raw?.oldPrice ?? "",
-    discountLabel: raw?.discountLabel ?? "",
+    strikePrice: raw?.strikePrice ?? "",
+    discountType: raw?.discountType ?? "PERCENT",
+    discountPercent: raw?.discountPercent ?? 0,
     type: raw?.type ?? "MONTHLY",
     durationInDays: raw?.durationInDays ?? "",
     status: raw?.status ?? (raw?.isActive === false ? "Inactive" : "Active"),
@@ -83,6 +124,7 @@ function normalizePlan(raw) {
           available: Boolean(f?.available),
         }))
       : [],
+    entitlements: normalizeEntitlements(raw?.entitlements),
   };
 }
 
@@ -93,20 +135,28 @@ function normalizePlan(raw) {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[12px] font-medium text-neutral-400">{label}</span>
+      <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
       {children}
     </label>
   );
 }
 
 const inputClass =
-  "w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none";
+  "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
-function TypePill({ type }) {
+/* Small colored-dot legend under a donut chart — so a mix with only one
+ * populated segment still reads as "N Active, 0 Inactive" instead of a
+ * plain, unlabeled ring. */
+function MixLegend({ items }) {
   return (
-    <span className="rounded-full bg-neutral-800 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-300">
-      {type === "MONTHLY" ? "Monthly" : "Yearly"}
-    </span>
+    <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
+      {items.map((item) => (
+        <span key={item.name} className="flex items-center gap-1.5 text-[11px] text-neutral-600 dark:text-neutral-400">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+          {item.name} · {item.value}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -114,11 +164,12 @@ function TypePill({ type }) {
  * Plan card
  * ---------------------------------------------------------------------- */
 
-function PlanCard({ plan, onEdit, onDelete }) {
+function PlanCard({ plan, onView, onEdit, onDelete }) {
+  const hasDiscount = plan.strikePrice || Number(plan.discountPercent) > 0;
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border bg-neutral-900 p-5 ${
-        plan.popular ? "border-emerald-400/60" : "border-neutral-800"
+      className={`relative flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${
+        plan.popular ? "ring-1 ring-emerald-400/60" : ""
       }`}
     >
       {plan.popular && (
@@ -129,15 +180,15 @@ function PlanCard({ plan, onEdit, onDelete }) {
       )}
 
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-[15px] font-semibold text-neutral-50">{plan.name}</h3>
-          <p className="mt-0.5 text-[12px] text-neutral-500">{plan.description}</p>
+        <div className="min-w-0">
+          <h3 className="truncate text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h3>
+          <p className="mt-0.5 truncate text-[12px] text-neutral-500">{plan.description || "No description"}</p>
         </div>
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
             plan.status === "Active"
-              ? "bg-emerald-400/10 text-emerald-400"
-              : "bg-neutral-700/40 text-neutral-400"
+              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
           }`}
         >
           {plan.status}
@@ -145,60 +196,63 @@ function PlanCard({ plan, onEdit, onDelete }) {
       </div>
 
       <div className="mt-4 flex items-baseline gap-2">
-        <span className="text-[24px] font-bold text-neutral-50">
+        <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">
           ₹{Number(plan.price || 0).toLocaleString("en-IN")}
         </span>
-        <TypePill type={plan.type} />
+        <span className="text-[12px] text-neutral-500">/{plan.type === "MONTHLY" ? "mo" : "yr"}</span>
       </div>
-      <div className="mt-1 flex items-center gap-2">
-        {plan.oldPrice ? (
-          <span className="text-[12.5px] text-neutral-600 line-through">
-            ₹{Number(plan.oldPrice).toLocaleString("en-IN")}
-          </span>
-        ) : null}
-        {plan.discountLabel ? (
-          <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-400">
-            {plan.discountLabel}
-          </span>
-        ) : null}
-      </div>
+      {hasDiscount && (
+        <div className="mt-1 flex items-center gap-2">
+          {plan.strikePrice ? (
+            <span className="rounded-md bg-neutral-200 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-500 line-through dark:bg-neutral-800 dark:text-neutral-400">
+              ₹{Number(plan.strikePrice).toLocaleString("en-IN")}
+            </span>
+          ) : null}
+          {Number(plan.discountPercent) > 0 ? (
+            <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+              {plan.discountType === "PERCENT"
+                ? `${Math.round(Number(plan.discountPercent))}% OFF`
+                : `₹${Number(plan.discountPercent).toLocaleString("en-IN")} OFF`}
+            </span>
+          ) : null}
+        </div>
+      )}
 
-      {plan.benefits.length > 0 && (
-        <ul className="mt-4 space-y-1.5">
-          {plan.benefits.slice(0, 3).map((b, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-400">
-              <ThumbsUp size={12} className="mt-0.5 shrink-0 text-emerald-400" />
+      {(plan.benefits.length > 0 || plan.limitations.length > 0) && (
+        <div className="mt-4 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+          {plan.benefits.slice(0, 2).map((b, i) => (
+            <p key={i} className="flex items-start gap-1.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+              <ThumbsUp size={11} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
               {b}
-            </li>
+            </p>
           ))}
-          {plan.benefits.length > 3 && (
-            <li className="text-[11.5px] text-neutral-600">+{plan.benefits.length - 3} more</li>
-          )}
-        </ul>
-      )}
-
-      {plan.limitations.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
-          {plan.limitations.slice(0, 2).map((l, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-[12px] text-neutral-600">
-              <ThumbsDown size={12} className="mt-0.5 shrink-0 text-red-400/70" />
+          {plan.limitations.slice(0, 1).map((l, i) => (
+            <p key={i} className="mt-1 flex items-start gap-1.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+              <ThumbsDown size={11} className="mt-0.5 shrink-0 text-red-600/70 dark:text-red-400/70" />
               {l}
-            </li>
+            </p>
           ))}
-        </ul>
+        </div>
       )}
 
-      <div className="mt-5 flex items-center gap-2 border-t border-neutral-800 pt-4">
+      <div className="mt-5 flex items-center gap-2 pt-1">
+        <button
+          onClick={() => onView(plan)}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-sky-400/60 hover:text-sky-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-sky-400"
+        >
+          <Eye size={13} />
+          View
+        </button>
         <button
           onClick={() => onEdit(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-2 text-[12.5px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
         >
           <Pencil size={13} />
           Edit
         </button>
         <button
           onClick={() => onDelete(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-2 text-[12.5px] font-medium text-neutral-300 transition-colors hover:border-red-500/60 hover:text-red-400"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-red-500/60 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-red-400"
         >
           <Trash2 size={13} />
           Delete
@@ -229,7 +283,7 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
 
   if (!plans.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+      <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
         No plans yet — add a plan to build the comparison table.
       </div>
     );
@@ -237,25 +291,25 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
 
   if (!featureTitles.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+      <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
         No features added to any plan yet — add features from the plan editor.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-[13px]">
           <thead>
-            <tr className="bg-neutral-900">
+            <tr className="bg-white dark:bg-neutral-900">
               <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                 Feature
               </th>
               {plans.map((plan) => (
                 <th
                   key={plan.id}
-                  className="px-4 py-3.5 text-center text-[12.5px] font-semibold text-neutral-200"
+                  className="px-4 py-3.5 text-center text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-200"
                 >
                   {plan.name}
                 </th>
@@ -264,15 +318,15 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
           </thead>
           <tbody>
             {featureTitles.map((title, i) => (
-              <tr key={title} className={i % 2 === 0 ? "bg-neutral-950" : "bg-neutral-900/40"}>
-                <td className="px-4 py-3 text-neutral-400">{title}</td>
+              <tr key={title} className={i % 2 === 0 ? "bg-neutral-50 dark:bg-neutral-950" : "bg-neutral-100 dark:bg-neutral-900/40"}>
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{title}</td>
                 {plans.map((plan) => {
                   const feature = plan.features.find((f) => f.title === title);
                   const cellId = `${plan.id}-${title}`;
 
                   if (!feature) {
                     return (
-                      <td key={plan.id} className="px-4 py-3 text-center text-neutral-700">
+                      <td key={plan.id} className="px-4 py-3 text-center text-neutral-400 dark:text-neutral-700">
                         —
                       </td>
                     );
@@ -289,9 +343,9 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
                           className="inline-flex shrink-0"
                         >
                           {feature.available ? (
-                            <Check size={15} className="text-emerald-400 transition-transform hover:scale-110" />
+                            <Check size={15} className="text-emerald-600 transition-transform hover:scale-110 dark:text-emerald-400" />
                           ) : (
-                            <X size={15} className="text-red-400/80 transition-transform hover:scale-110" />
+                            <X size={15} className="text-red-600/80 transition-transform hover:scale-110 dark:text-red-400/80" />
                           )}
                         </button>
                         {isEditing ? (
@@ -306,12 +360,12 @@ function ComparisonTable({ plans, onToggleFeature, onEditFeatureValue }) {
                               if (e.key === "Enter") e.target.blur();
                               if (e.key === "Escape") setEditingCell(null);
                             }}
-                            className="w-16 rounded-md border border-emerald-400/50 bg-neutral-950 px-1.5 py-0.5 text-center text-[12px] text-neutral-200 focus:outline-none"
+                            className="w-16 rounded-md border border-emerald-400/50 bg-neutral-50 px-1.5 py-0.5 text-center text-[12px] text-neutral-800 focus:outline-none dark:bg-neutral-950 dark:text-neutral-200"
                           />
                         ) : (
                           <button
                             onClick={() => setEditingCell(cellId)}
-                            className="rounded-md px-1.5 py-0.5 text-[12px] text-neutral-400 transition-colors hover:bg-neutral-800"
+                            className="rounded-md px-1.5 py-0.5 text-[12px] text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                           >
                             {feature.value || "—"}
                           </button>
@@ -351,7 +405,7 @@ function EditableStringList({ title, icon, items, placeholder, accent, onChange 
         </p>
         <button
           onClick={add}
-          className={`flex items-center gap-1 rounded-lg border border-neutral-800 px-2 py-1 text-[11.5px] font-medium text-neutral-300 transition-colors hover:${accent}`}
+          className={`flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11.5px] font-medium text-neutral-700 transition-colors hover:${accent} dark:border-neutral-800 dark:text-neutral-300`}
         >
           <Plus size={12} />
           Add
@@ -359,7 +413,7 @@ function EditableStringList({ title, icon, items, placeholder, accent, onChange 
       </div>
       <div className="space-y-1.5">
         {items.length === 0 && (
-          <p className="rounded-xl border border-dashed border-neutral-800 px-3 py-2.5 text-[12px] text-neutral-600">
+          <p className="rounded-xl border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] text-neutral-600 dark:border-neutral-800">
             None added yet.
           </p>
         )}
@@ -369,7 +423,7 @@ function EditableStringList({ title, icon, items, placeholder, accent, onChange 
               value={item}
               onChange={(e) => update(i, e.target.value)}
               placeholder={placeholder}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
             <button
               onClick={() => remove(i)}
@@ -407,7 +461,7 @@ function EditableFeatureList({ features, onChange }) {
         </p>
         <button
           onClick={add}
-          className="flex items-center gap-1 rounded-lg border border-neutral-800 px-2 py-1 text-[11.5px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400"
+          className="flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
         >
           <Plus size={12} />
           Add Feature
@@ -416,26 +470,26 @@ function EditableFeatureList({ features, onChange }) {
 
       <div className="space-y-1.5">
         {features.length === 0 && (
-          <p className="rounded-xl border border-dashed border-neutral-800 px-3 py-2.5 text-[12px] text-neutral-600">
+          <p className="rounded-xl border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-600">
             No features added yet.
           </p>
         )}
         {features.map((f, i) => (
           <div
             key={f.id}
-            className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2"
+            className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"
           >
             <input
               value={f.title}
               onChange={(e) => update(i, { title: e.target.value })}
               placeholder="Feature title, e.g. Sub Brand"
-              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
             <input
               value={f.value}
               onChange={(e) => update(i, { value: e.target.value })}
               placeholder="Value"
-              className="w-24 shrink-0 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-right text-[12px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+              className="w-24 shrink-0 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-right text-[12px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
             <button
               onClick={() => update(i, { available: !f.available })}
@@ -462,6 +516,112 @@ function EditableFeatureList({ features, onChange }) {
 }
 
 /* -------------------------------------------------------------------------
+ * Entitlements editor — subBrands/franchises/vouchers/showcase are
+ * unlimited-or-limited ({ isUnlimited, limit }); dealPack and
+ * prioritySupport are plain enable/disable switches ({ isEnabled }).
+ * ---------------------------------------------------------------------- */
+
+function EnableToggle({ label, enabled, onChange }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!enabled)}
+      aria-pressed={enabled}
+      className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left text-[12.5px] font-medium transition-colors ${
+        enabled
+          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+          : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
+      }`}
+    >
+      {label}
+      <span
+        className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+          enabled ? "bg-emerald-400/20" : "bg-neutral-200 dark:bg-neutral-800"
+        }`}
+      >
+        {enabled ? "Enabled" : "Disabled"}
+      </span>
+    </button>
+  );
+}
+
+function LimitOrUnlimitedField({ label, entitlement, onChange }) {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
+        <button
+          type="button"
+          onClick={() => onChange({ ...entitlement, isUnlimited: !entitlement.isUnlimited })}
+          aria-pressed={entitlement.isUnlimited}
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors ${
+            entitlement.isUnlimited
+              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+          }`}
+        >
+          {entitlement.isUnlimited ? "Unlimited" : "Limited"}
+        </button>
+      </div>
+      {!entitlement.isUnlimited && (
+        <input
+          type="number"
+          min={0}
+          value={entitlement.limit}
+          onChange={(e) => onChange({ ...entitlement, limit: e.target.value })}
+          placeholder="e.g. 5"
+          className="w-full rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+        />
+      )}
+    </div>
+  );
+}
+
+function EntitlementsEditor({ entitlements, onChange }) {
+  const set = (key, value) => onChange({ ...entitlements, [key]: value });
+
+  return (
+    <div>
+      <p className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
+        Entitlements
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <LimitOrUnlimitedField
+          label="Sub Brands"
+          entitlement={entitlements.subBrands}
+          onChange={(next) => set("subBrands", next)}
+        />
+        <LimitOrUnlimitedField
+          label="Franchises"
+          entitlement={entitlements.franchises}
+          onChange={(next) => set("franchises", next)}
+        />
+        <LimitOrUnlimitedField
+          label="Vouchers"
+          entitlement={entitlements.vouchers}
+          onChange={(next) => set("vouchers", next)}
+        />
+        <EnableToggle
+          label="Deal Pack"
+          enabled={entitlements.dealPack.isEnabled}
+          onChange={(v) => set("dealPack", { isEnabled: v })}
+        />
+        <EnableToggle
+          label="Priority Support"
+          enabled={entitlements.prioritySupport.isEnabled}
+          onChange={(v) => set("prioritySupport", { isEnabled: v })}
+        />
+        <LimitOrUnlimitedField
+          label="Showcase"
+          entitlement={entitlements.showcase}
+          onChange={(next) => set("showcase", next)}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
  * Add / Edit plan modal
  * ---------------------------------------------------------------------- */
 
@@ -472,14 +632,14 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-neutral-50">
+          <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
             {isNew ? "Add Plan" : `Edit Plan · ${draft.name}`}
           </h2>
           <button
             onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -518,38 +678,50 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
           </div>
 
           <Field label="Price (₹)">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 dark:border-neutral-800 dark:bg-neutral-950">
               <IndianRupee size={13} className="text-neutral-500" />
               <input
                 type="number"
                 value={draft.price}
                 onChange={(e) => setField("price", e.target.value)}
                 placeholder="2999"
-                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
             </div>
           </Field>
-          <Field label="Old Price (₹, optional)">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
+          <Field label="Strike Price (₹, optional)">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 dark:border-neutral-800 dark:bg-neutral-950">
               <IndianRupee size={13} className="text-neutral-500" />
               <input
                 type="number"
-                value={draft.oldPrice}
-                onChange={(e) => setField("oldPrice", e.target.value)}
+                value={draft.strikePrice}
+                onChange={(e) => setField("strikePrice", e.target.value)}
                 placeholder="3999"
-                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
             </div>
           </Field>
 
-          <Field label="Discount Label">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
+          <Field label="Discount Type">
+            <select
+              value={draft.discountType}
+              onChange={(e) => setField("discountType", e.target.value)}
+              className={inputClass}
+            >
+              <option value="PERCENT">Percent</option>
+              <option value="FLAT">Flat</option>
+            </select>
+          </Field>
+          <Field label={draft.discountType === "PERCENT" ? "Discount (%)" : "Discount (₹)"}>
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 dark:border-neutral-800 dark:bg-neutral-950">
               <Tag size={13} className="text-neutral-500" />
               <input
-                value={draft.discountLabel}
-                onChange={(e) => setField("discountLabel", e.target.value)}
-                placeholder="25% OFF"
-                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                type="number"
+                min={0}
+                value={draft.discountPercent}
+                onChange={(e) => setField("discountPercent", e.target.value)}
+                placeholder="25"
+                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
             </div>
           </Field>
@@ -565,12 +737,12 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
           </Field>
         </div>
 
-        <label className="mt-4 flex items-center gap-2 text-[12.5px] text-neutral-300">
+        <label className="mt-4 flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
           <input
             type="checkbox"
             checked={draft.popular}
             onChange={(e) => setField("popular", e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 accent-emerald-400"
+            className="h-4 w-4 rounded border-neutral-300 bg-white accent-emerald-400 dark:border-neutral-700 dark:bg-neutral-950"
           />
           Mark as "Most Popular"
         </label>
@@ -607,11 +779,19 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
           />
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-800 pt-4">
+        {/* Entitlements */}
+        <div className="mt-6">
+          <EntitlementsEditor
+            entitlements={draft.entitlements}
+            onChange={(next) => setField("entitlements", next)}
+          />
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             onClick={onCancel}
             disabled={saving}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -636,13 +816,13 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
 function DeleteConfirmModal({ plan, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
           </div>
           <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete plan?</h3>
+            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete plan?</h3>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
               This removes "{plan.name}" and its column from the comparison table.
             </p>
@@ -652,7 +832,7 @@ function DeleteConfirmModal({ plan, deleting, onCancel, onConfirm }) {
           <button
             onClick={onCancel}
             disabled={deleting}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -686,6 +866,8 @@ export default function Plan() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [viewingPlanId, setViewingPlanId] = useState(null);
 
   // ── Load plans from the API on mount ─────────────────────────
   useEffect(() => {
@@ -722,6 +904,14 @@ export default function Plan() {
       benefits: [...plan.benefits],
       limitations: [...plan.limitations],
       features: plan.features.map((f) => ({ ...f })),
+      entitlements: {
+        subBrands: { ...plan.entitlements.subBrands },
+        franchises: { ...plan.entitlements.franchises },
+        vouchers: { ...plan.entitlements.vouchers },
+        dealPack: { ...plan.entitlements.dealPack },
+        prioritySupport: { ...plan.entitlements.prioritySupport },
+        showcase: { ...plan.entitlements.showcase },
+      },
     });
     setIsNew(false);
     setSaveError("");
@@ -741,12 +931,15 @@ export default function Plan() {
       features: draft.features.filter((f) => f.title.trim()),
     };
 
-    // The real API doesn't accept oldPrice/discountLabel/popular/status —
-    // it wants isActive (boolean) and durationInDays instead.
+    // The real API doesn't accept `popular`/`status` — it wants `isActive`
+    // (boolean) and `durationInDays` instead.
     const apiPayload = {
       name: cleaned.name.trim(),
       description: cleaned.description,
       price: Number(cleaned.price) || 0,
+      strikePrice: Number(cleaned.strikePrice) || 0,
+      discountType: cleaned.discountType,
+      discountPercent: Number(cleaned.discountPercent) || 0,
       type: cleaned.type,
       durationInDays: cleaned.type === "YEARLY" ? 365 : 30,
       isActive: cleaned.status === "Active",
@@ -757,6 +950,22 @@ export default function Plan() {
         value: f.value,
         available: Boolean(f.available),
       })),
+      entitlements: {
+        subBrands: cleaned.entitlements.subBrands.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.subBrands.limit) || 0 },
+        franchises: cleaned.entitlements.franchises.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.franchises.limit) || 0 },
+        vouchers: cleaned.entitlements.vouchers.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.vouchers.limit) || 0 },
+        dealPack: { isEnabled: Boolean(cleaned.entitlements.dealPack.isEnabled) },
+        prioritySupport: { isEnabled: Boolean(cleaned.entitlements.prioritySupport.isEnabled) },
+        showcase: cleaned.entitlements.showcase.isUnlimited
+          ? { isUnlimited: true }
+          : { isUnlimited: false, limit: Number(cleaned.entitlements.showcase.limit) || 0 },
+      },
     };
 
     setSaving(true);
@@ -764,11 +973,26 @@ export default function Plan() {
     try {
       if (isNew) {
         const created = await addPlan(apiPayload);
-        const newPlan = normalizePlan(created?.plan ?? created?.data ?? created ?? cleaned);
+        // Some responses just echo `{success, message}` with no plan object
+        // at all (or wrap it under a key other than `.plan`/`.data`) — when
+        // the response doesn't actually look like a plan, fall back to
+        // building it from the payload we just sent, instead of silently
+        // normalizing an empty `{success, message}` object into a blank plan.
+        const createdRaw = created?.data?.plan ?? created?.plan ?? created?.data ?? created;
+        const createdLooksLikePlan = createdRaw && (createdRaw.name || createdRaw.entitlements || createdRaw._id || createdRaw.id);
+        const newPlan = normalizePlan(createdLooksLikePlan ? createdRaw : apiPayload);
         setPlans((prev) => [...prev, newPlan]);
       } else {
         const updated = await updatePlan(cleaned.id, apiPayload);
-        const updatedPlan = normalizePlan(updated?.plan ?? updated?.data ?? updated ?? cleaned);
+        // Same fallback as above — this was the actual bug behind
+        // "entitlements not updating": when the update response didn't
+        // carry a recognizable plan object, `normalizePlan(updated)` was
+        // silently producing a near-empty plan with a fresh random id, so
+        // `.map` never matched an existing row and the save appeared to
+        // do nothing even though the backend had already saved it.
+        const updatedRaw = updated?.data?.plan ?? updated?.plan ?? updated?.data ?? updated;
+        const updatedLooksLikePlan = updatedRaw && (updatedRaw.name || updatedRaw.entitlements || updatedRaw._id || updatedRaw.id);
+        const updatedPlan = normalizePlan(updatedLooksLikePlan ? updatedRaw : { _id: cleaned.id, ...apiPayload });
         setPlans((prev) => prev.map((p) => (p.id === updatedPlan.id ? updatedPlan : p)));
       }
       setDraft(null);
@@ -865,13 +1089,34 @@ export default function Plan() {
     }
   };
 
+  if (viewingPlanId) {
+    return <PlanDetails planId={viewingPlanId} onBack={() => setViewingPlanId(null)} />;
+  }
+
+  const statusMix = [
+    { name: "Active", value: plans.filter((p) => p.status === "Active").length, color: "#34d399" },
+    { name: "Inactive", value: plans.filter((p) => p.status !== "Active").length, color: "#d4d4d4" },
+  ];
+
+  const priceCompare = plans.map((p) => ({ name: p.name, price: Number(p.price) || 0 }));
+
+  const billingMix = [
+    { name: "Monthly", value: plans.filter((p) => p.type === "MONTHLY").length, color: "#38bdf8" },
+    { name: "Yearly", value: plans.filter((p) => p.type !== "MONTHLY").length, color: "#34d399" },
+  ];
+
+  const featureCoverage = plans.map((p) => ({
+    name: p.name,
+    available: p.features.filter((f) => f.available).length,
+  }));
+
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Subscription Plans
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -889,24 +1134,112 @@ export default function Plan() {
 
         {/* Load state */}
         {loading && (
-          <div className="mb-8 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="mb-8 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading plans…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load plans: {loadError}
           </div>
         )}
 
         {!loading && !loadError && (
           <>
+            {/* Charts — one row, four equal cards */}
+            {plans.length > 0 && (
+              <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
+                  <div className="relative flex h-[110px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
+                          {statusMix.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-100">{plans.length}</p>
+                      <p className="text-[9.5px] text-neutral-500">Plans</p>
+                    </div>
+                  </div>
+                  <MixLegend items={statusMix} />
+                </div>
+
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Billing Type Mix</p>
+                  <div className="relative flex h-[110px] items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={billingMix} dataKey="value" nameKey="name" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
+                          {billingMix.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-100">{plans.length}</p>
+                      <p className="text-[9.5px] text-neutral-500">Plans</p>
+                    </div>
+                  </div>
+                  <MixLegend items={billingMix} />
+                </div>
+
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Price Comparison</p>
+                  <div className="h-[150px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={priceCompare} barCategoryGap="30%" margin={{ top: 18, left: 0, right: 0, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 9.5, fill: "#a3a3a3" }} axisLine={false} tickLine={false} interval={0} />
+                        <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Price"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                        <Bar dataKey="price" fill="#34d399" radius={[6, 6, 0, 0]}>
+                          <LabelList
+                            dataKey="price"
+                            position="top"
+                            formatter={(v) => `₹${Number(v).toLocaleString("en-IN")}`}
+                            style={{ fontSize: 9.5, fill: "#525252" }}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Feature Coverage</p>
+                  <div className="h-[150px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={featureCoverage} barCategoryGap="30%" margin={{ top: 18, left: 0, right: 0, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 9.5, fill: "#a3a3a3" }} axisLine={false} tickLine={false} interval={0} />
+                        <Tooltip formatter={(v) => [`${v} feature${v === 1 ? "" : "s"}`, "Available"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                        <Bar dataKey="available" fill="#38bdf8" radius={[6, 6, 0, 0]}>
+                          <LabelList dataKey="available" position="top" style={{ fontSize: 9.5, fill: "#525252" }} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Plan cards */}
             <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {plans.map((plan) => (
-                <PlanCard key={plan.id} plan={plan} onEdit={openEdit} onDelete={setDeleteTarget} />
+                <PlanCard
+                  key={plan.id}
+                  plan={plan}
+                  onView={(p) => setViewingPlanId(p.id)}
+                  onEdit={openEdit}
+                  onDelete={setDeleteTarget}
+                />
               ))}
             </div>
 
@@ -935,7 +1268,7 @@ export default function Plan() {
         />
       )}
       {draft && saveError && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-white px-4 py-2.5 text-[12.5px] text-red-600 shadow-lg dark:bg-neutral-900 dark:text-red-400 dark:shadow-none">
           {saveError}
         </div>
       )}

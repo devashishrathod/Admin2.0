@@ -11,7 +11,7 @@ import { MapPin, Plus, Minus, LocateFixed } from "lucide-react";
  */
 const OutletLocationMap = ({ latitude, longitude, onZoomIn, onZoomOut, onLocate }) => {
   return (
-    <div className="relative h-56 w-full overflow-hidden rounded-xl border border-gray-100 sm:h-64">
+    <div className="relative h-56 w-full overflow-hidden rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:h-64">
       {/* Diamond pattern background */}
       <div
         className="absolute inset-0"

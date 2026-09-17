@@ -8,7 +8,7 @@ import Brand from './features/brand/Brand'
 import Voucher from './features/voucher/Voucher'
 import Plan from './features/plan/Plan'
 import SubCategory from './features/subcategory/SubCategory'
-import NewOboarding from './features/brand/NewOboarding'
+import NewOnboarding from './features/newOnboarding/NewOnboarding'
 import AnalyticsReport from './features/dashboard/Analyticsreport'
 import CustomerPlan from './features/plan/Customerplan'
 import VendorPlanAnalytics from './features/plan/Vendorplananalytics'
@@ -16,6 +16,9 @@ import CustomerPlanAnalytics from './features/plan/Customerplananalytics'
 import Settlement from './features/settlement/Settlement'
 import Customer from './features/customer/Customer'
 import Transaction from './features/transaction/Transaction'
+import TransactionDetails from './features/transaction/TransactionDetails'
+import Refund from './features/refund/Refund'
+import RefundDetails from './features/refund/RefundDetails'
 
 import VoucherDetails from './features/voucher/VoucherDetails'
 import VoucherListing from './features/voucher/VoucherList'
@@ -24,6 +27,11 @@ import { BrandProvider } from './features/brand/BrandContext'
 import FeatureCampaign from './features/featurecampaign/page/FeatureCampaign'
 import CouponCode from './features/coupon/Couponcode'
 import Banner from './features/banner/Banner'
+import PromotionalTicker from './features/promotionalTicker/PromotionalTicker'
+import Settings from './features/settings/Settings'
+import PromoCode from './features/promoCode/PromoCode'
+import Notification from './features/notification/Notification'
+import Subscriptions from './features/subscriptions/Subscriptions'
 // import BrandPage from './features/BrandPage'
 // import LoginPage from './features/auth/components/LoginPage'
 
@@ -88,7 +96,7 @@ function App() {
           path="/new-onboarding"
           element={
             <Layout>
-              < NewOboarding />
+              <NewOnboarding />
             </Layout>
           }
         />
@@ -116,6 +124,51 @@ function App() {
           element={
             <Layout>
               <Banner />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/promotional-ticker"
+          element={
+            <Layout>
+              <PromotionalTicker />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <Layout>
+              <Settings />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/notifications"
+          element={
+            <Layout>
+              <Notification />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/subscriptions"
+          element={
+            <Layout>
+              <Subscriptions />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/promo-code"
+          element={
+            <Layout>
+              <PromoCode />
             </Layout>
           }
         />
@@ -180,6 +233,33 @@ function App() {
                 element={
                   <Layout>
                     <Transaction />
+                  </Layout>
+                }
+              />
+
+                 <Route
+                path="/transaction/:claimId"
+                element={
+                  <Layout>
+                    <TransactionDetails />
+                  </Layout>
+                }
+              />
+
+                 <Route
+                path="/refund"
+                element={
+                  <Layout>
+                    <Refund />
+                  </Layout>
+                }
+              />
+
+                 <Route
+                path="/refund/:refundRequestId"
+                element={
+                  <Layout>
+                    <RefundDetails />
                   </Layout>
                 }
               />

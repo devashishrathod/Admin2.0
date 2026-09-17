@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Plus,
   Pencil,
@@ -10,6 +10,7 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 
 /* -------------------------------------------------------------------------
  * Feature matrix definition (rows of the comparison table)
@@ -140,14 +141,14 @@ const slugifyKey = (label) => {
 function Field({ label, children }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[12px] font-medium text-neutral-400">{label}</span>
+      <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
       {children}
     </label>
   );
 }
 
 const inputClass =
-  "w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:border-emerald-400/50 focus:outline-none";
+  "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/50 focus:outline-none dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
 /* -------------------------------------------------------------------------
  * Plan card
@@ -156,8 +157,8 @@ const inputClass =
 function PlanCard({ plan, onEdit, onDelete }) {
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border bg-neutral-900 p-5 ${
-        plan.popular ? "border-emerald-400/60" : "border-neutral-800"
+      className={`relative flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${
+        plan.popular ? "ring-1 ring-emerald-400/60" : ""
       }`}
     >
       {plan.popular && (
@@ -169,14 +170,14 @@ function PlanCard({ plan, onEdit, onDelete }) {
 
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-[15px] font-semibold text-neutral-50">{plan.name}</h3>
+          <h3 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h3>
           <p className="mt-0.5 text-[12px] text-neutral-500">{plan.tagline}</p>
         </div>
         <span
           className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
             plan.status === "Active"
-              ? "bg-emerald-400/10 text-emerald-400"
-              : "bg-neutral-700/40 text-neutral-400"
+              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
           }`}
         >
           {plan.status}
@@ -184,28 +185,28 @@ function PlanCard({ plan, onEdit, onDelete }) {
       </div>
 
       <div className="mt-4 flex items-baseline gap-2">
-        <span className="text-[24px] font-bold text-neutral-50">
+        <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">
           ₹{Number(plan.price).toLocaleString("en-IN")}
         </span>
         <span className="text-[12px] text-neutral-500">/{plan.billingCycle}</span>
       </div>
       <div className="mt-1 flex items-center gap-2">
-        <span className="rounded-md bg-neutral-800 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-400">
+        <span className="rounded-md bg-neutral-200 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
           + GST
         </span>
       </div>
 
-      <div className="mt-5 flex items-center gap-2 border-t border-neutral-800 pt-4">
+      <div className="mt-5 flex items-center gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
         <button
           onClick={() => onEdit(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-2 text-[12.5px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
         >
           <Pencil size={13} />
           Edit
         </button>
         <button
           onClick={() => onDelete(plan)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 py-2 text-[12.5px] font-medium text-neutral-300 transition-colors hover:border-red-500/60 hover:text-red-400"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-red-500/60 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-red-400"
         >
           <Trash2 size={13} />
           Delete
@@ -225,25 +226,25 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
 
   if (!plans.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-neutral-800 px-4 py-10 text-center text-[13px] text-neutral-500">
+      <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
         No plans yet — add a plan to build the comparison table.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-800">
+    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-[13px]">
           <thead>
-            <tr className="bg-neutral-900">
+            <tr className="bg-white dark:bg-neutral-900">
               <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                 Benefits Of Plan
               </th>
               {plans.map((plan) => (
                 <th
                   key={plan.id}
-                  className="px-4 py-3.5 text-center text-[12.5px] font-semibold text-neutral-200"
+                  className="px-4 py-3.5 text-center text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-200"
                 >
                   {plan.name}
                 </th>
@@ -254,9 +255,9 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
             {featureList.map((feature, i) => (
               <tr
                 key={feature.key}
-                className={`group ${i % 2 === 0 ? "bg-neutral-950" : "bg-neutral-900/40"}`}
+                className={`group ${i % 2 === 0 ? "bg-neutral-50 dark:bg-neutral-950" : "bg-white dark:bg-neutral-900/40"}`}
               >
-                <td className="px-4 py-3 text-neutral-400">
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
                   <div className="flex items-center gap-2">
                     <span>{feature.label}</span>
                     {onRemoveBenefit && (
@@ -265,7 +266,7 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
                         aria-label={`Remove ${feature.label} benefit`}
                         className="opacity-0 transition-opacity group-hover:opacity-100"
                       >
-                        <Trash2 size={12} className="text-neutral-600 hover:text-red-400" />
+                        <Trash2 size={12} className="text-neutral-600 hover:text-red-600 dark:hover:text-red-400" />
                       </button>
                     )}
                   </div>
@@ -285,12 +286,12 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
                           {value ? (
                             <Check
                               size={16}
-                              className="text-emerald-400 transition-transform hover:scale-110"
+                              className="text-emerald-600 transition-transform hover:scale-110 dark:text-emerald-400"
                             />
                           ) : (
                             <X
                               size={16}
-                              className="text-red-400/80 transition-transform hover:scale-110"
+                              className="text-red-600/80 transition-transform hover:scale-110 dark:text-red-400/80"
                             />
                           )}
                         </button>
@@ -314,12 +315,12 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
                             if (e.key === "Enter") e.target.blur();
                             if (e.key === "Escape") setEditingCell(null);
                           }}
-                          className="w-24 rounded-md border border-emerald-400/50 bg-neutral-950 px-2 py-1 text-center text-[12.5px] text-neutral-200 focus:outline-none"
+                          className="w-24 rounded-md border border-emerald-400/50 bg-neutral-50 px-2 py-1 text-center text-[12.5px] text-neutral-800 focus:outline-none dark:bg-neutral-950 dark:text-neutral-200"
                         />
                       ) : (
                         <button
                           onClick={() => setEditingCell(cellId)}
-                          className="rounded-md px-2 py-1 text-neutral-300 transition-colors hover:bg-neutral-800"
+                          className="rounded-md px-2 py-1 text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                         >
                           {value || "—"}
                         </button>
@@ -349,14 +350,14 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-neutral-50">
+          <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
             {isNew ? "Add Customer Plan" : `Edit Plan · ${draft.name}`}
           </h2>
           <button
             onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -395,14 +396,14 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
           </div>
 
           <Field label="Price (₹) + GST">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-950 px-3.5">
+            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 dark:border-neutral-800 dark:bg-neutral-950">
               <IndianRupee size={13} className="text-neutral-500" />
               <input
                 type="number"
                 value={draft.price}
                 onChange={(e) => setField("price", e.target.value)}
                 placeholder="465"
-                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                className="w-full bg-transparent py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
               />
             </div>
           </Field>
@@ -418,12 +419,12 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
             </select>
           </Field>
           <div className="flex items-center">
-            <label className="flex items-center gap-2 text-[12.5px] text-neutral-300">
+            <label className="flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
               <input
                 type="checkbox"
                 checked={draft.popular}
                 onChange={(e) => setField("popular", e.target.checked)}
-                className="h-4 w-4 rounded border-neutral-700 bg-neutral-950 accent-emerald-400"
+                className="h-4 w-4 rounded border-neutral-300 bg-neutral-50 accent-emerald-400 dark:border-neutral-700 dark:bg-neutral-950"
               />
               Mark as "Most Popular"
             </label>
@@ -438,9 +439,9 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
           {featureList.map((feature) => (
             <div
               key={feature.key}
-              className="flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950 px-3.5 py-2"
+              className="flex items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2 dark:border-neutral-800 dark:bg-neutral-950"
             >
-              <span className="flex items-center gap-2 text-[12.5px] text-neutral-400">
+              <span className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
                 <Clock size={12} className="text-neutral-600" />
                 {feature.label}
               </span>
@@ -449,8 +450,8 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
                   onClick={() => setFeature(feature.key, !draft.features[feature.key])}
                   className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                     draft.features[feature.key]
-                      ? "bg-emerald-400/10 text-emerald-400"
-                      : "bg-red-500/10 text-red-400"
+                      ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "bg-red-500/10 text-red-600 dark:text-red-400"
                   }`}
                 >
                   {draft.features[feature.key] ? "Included" : "Not Included"}
@@ -460,17 +461,17 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
                   value={draft.features[feature.key]}
                   onChange={(e) => setFeature(feature.key, e.target.value)}
                   placeholder="e.g. 30 / mo, Unlimited"
-                  className="w-32 rounded-lg border border-neutral-800 bg-neutral-900 px-2.5 py-1 text-right text-[12.5px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none"
+                  className="w-32 rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-right text-[12.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:placeholder:text-neutral-600"
                 />
               )}
             </div>
           ))}
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-800 pt-4">
+        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -494,13 +495,13 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
 function DeleteConfirmModal({ plan, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
             <AlertTriangle size={18} />
           </div>
           <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete plan?</h3>
+            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete plan?</h3>
             <p className="mt-0.5 text-[12.5px] text-neutral-500">
               This removes "{plan.name}" and its column from the comparison table.
             </p>
@@ -509,7 +510,7 @@ function DeleteConfirmModal({ plan, onCancel, onConfirm }) {
         <div className="mt-5 flex items-center justify-end gap-2.5">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -538,12 +539,12 @@ function AddBenefitModal({ onCancel, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-[14.5px] font-semibold text-neutral-50">Add Benefit</h3>
+          <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Add Benefit</h3>
           <button
             onClick={onCancel}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X size={16} />
           </button>
@@ -560,7 +561,7 @@ function AddBenefitModal({ onCancel, onSave }) {
         </Field>
 
         <div className="mt-4">
-          <span className="mb-1.5 block text-[12px] font-medium text-neutral-400">
+          <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
             Value Type
           </span>
           <div className="grid grid-cols-2 gap-2">
@@ -568,8 +569,8 @@ function AddBenefitModal({ onCancel, onSave }) {
               onClick={() => setType("boolean")}
               className={`rounded-xl border px-3 py-2.5 text-[12.5px] font-medium transition-colors ${
                 type === "boolean"
-                  ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                  : "border-neutral-800 text-neutral-400 hover:border-neutral-700"
+                  ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                  : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700"
               }`}
             >
               Included / Not Included
@@ -578,8 +579,8 @@ function AddBenefitModal({ onCancel, onSave }) {
               onClick={() => setType("text")}
               className={`rounded-xl border px-3 py-2.5 text-[12.5px] font-medium transition-colors ${
                 type === "text"
-                  ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                  : "border-neutral-800 text-neutral-400 hover:border-neutral-700"
+                  ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                  : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700"
               }`}
             >
               Custom Text Value
@@ -587,10 +588,10 @@ function AddBenefitModal({ onCancel, onSave }) {
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-800 pt-4">
+        <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             onClick={onCancel}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700"
+            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
           >
             Cancel
           </button>
@@ -692,13 +693,26 @@ export default function CustomerPlan() {
     setDeleteTarget(null);
   };
 
+  const statusMix = useMemo(() => {
+    const active = plans.filter((p) => p.status === "Active").length;
+    return [
+      { name: "Active", value: active },
+      { name: "Inactive", value: plans.length - active },
+    ].filter((d) => d.value > 0);
+  }, [plans]);
+
+  const priceCompare = useMemo(
+    () => plans.map((p) => ({ name: p.name, price: Number(p.price) || 0 })),
+    [plans]
+  );
+
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Customer Plans
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -713,6 +727,43 @@ export default function CustomerPlan() {
             Add Plan
           </button>
         </div>
+
+        {/* Charts */}
+        {plans.length > 0 && (
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
+              <div className="relative flex h-[130px] items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
+                      {statusMix.map((entry) => (
+                        <Cell key={entry.name} fill={entry.name === "Active" ? "#34d399" : "#d4d4d4"} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="text-[18px] font-bold text-neutral-800 dark:text-neutral-100">{plans.length}</p>
+                  <p className="text-[10px] text-neutral-500">Plans</p>
+                </div>
+              </div>
+            </div>
+            <div className="sm:col-span-2 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Price Comparison</p>
+              <div className="h-[130px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={priceCompare} barCategoryGap="30%">
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Price"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
+                    <Bar dataKey="price" fill="#34d399" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Plan cards */}
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -733,7 +784,7 @@ export default function CustomerPlan() {
           </p>
           <button
             onClick={() => setAddingBenefit(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-neutral-800 px-3 py-1.5 text-[12px] font-medium text-neutral-300 transition-colors hover:border-emerald-400/60 hover:text-emerald-400"
+            className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
           >
             <Plus size={13} />
             Add Benefit

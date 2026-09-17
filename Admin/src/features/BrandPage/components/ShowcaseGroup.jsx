@@ -15,7 +15,7 @@ const ShowcaseGroup = ({ group, guidelinesLink, onUpload }) => {
   ];
 
   return (
-    <div className="rounded-xl border border-gray-100 p-5 shadow-sm">
+    <div className="rounded-xl p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">

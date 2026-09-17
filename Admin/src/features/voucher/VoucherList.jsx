@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Trash2,
@@ -7,15 +7,35 @@ import {
   SlidersHorizontal,
   Loader2,
   AlertTriangle,
+  FileDown,
+  Printer,
+  PieChart as PieChartIcon,
+  TrendingUp,
+  Star,
+  ChevronDown,
+  Check,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  XAxis,
+  Tooltip,
+} from "recharts";
 import Table from "../../components/common/Table";
 import VoucherDetails from "./VoucherDetails";
+import { downloadCsv, printAsPdf } from "../../utils/exportTable";
+import { isNotFoundMessage } from "../../utils/helpers";
 import {
   getVouchers,
   approveVoucher,
   rejectVoucher,
   publishVoucher,
   deleteVoucher,
+  updateVoucherSuggestion,
   VOUCHER_STATUSES,
 } from "./services/VoucherApi";
 
@@ -48,14 +68,25 @@ const STATUS_LABELS = {
 };
 
 const STATUS_STYLES = {
-  [VOUCHER_STATUSES.DRAFT]: { dot: "bg-neutral-500", text: "text-neutral-400", bg: "bg-neutral-700/40" },
-  [VOUCHER_STATUSES.UNDER_REVIEW]: { dot: "bg-amber-400", text: "text-amber-400", bg: "bg-amber-400/10" },
-  [VOUCHER_STATUSES.APPROVED]: { dot: "bg-sky-400", text: "text-sky-400", bg: "bg-sky-400/10" },
-  [VOUCHER_STATUSES.PUBLISHED]: { dot: "bg-emerald-400", text: "text-emerald-400", bg: "bg-emerald-400/10" },
-  [VOUCHER_STATUSES.REJECTED]: { dot: "bg-red-400", text: "text-red-400", bg: "bg-red-500/10" },
-  [VOUCHER_STATUSES.EXPIRED]: { dot: "bg-neutral-500", text: "text-neutral-400", bg: "bg-neutral-700/40" },
-  [VOUCHER_STATUSES.PAUSED]: { dot: "bg-orange-400", text: "text-orange-400", bg: "bg-orange-400/10" },
-  [VOUCHER_STATUSES.ARCHIVED]: { dot: "bg-neutral-600", text: "text-neutral-500", bg: "bg-neutral-800" },
+  [VOUCHER_STATUSES.DRAFT]: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
+  [VOUCHER_STATUSES.UNDER_REVIEW]: { dot: "bg-amber-400", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-400/10" },
+  [VOUCHER_STATUSES.APPROVED]: { dot: "bg-sky-400", text: "text-sky-600 dark:text-sky-400", bg: "bg-sky-400/10" },
+  [VOUCHER_STATUSES.PUBLISHED]: { dot: "bg-emerald-400", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-400/10" },
+  [VOUCHER_STATUSES.REJECTED]: { dot: "bg-red-400", text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" },
+  [VOUCHER_STATUSES.EXPIRED]: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
+  [VOUCHER_STATUSES.PAUSED]: { dot: "bg-orange-400", text: "text-orange-600 dark:text-orange-400", bg: "bg-orange-400/10" },
+  [VOUCHER_STATUSES.ARCHIVED]: { dot: "bg-neutral-600", text: "text-neutral-500", bg: "bg-neutral-200 dark:bg-neutral-800" },
+};
+
+const STATUS_HEX = {
+  [VOUCHER_STATUSES.DRAFT]: "#737373",
+  [VOUCHER_STATUSES.UNDER_REVIEW]: "#FBBF24",
+  [VOUCHER_STATUSES.APPROVED]: "#38BDF8",
+  [VOUCHER_STATUSES.PUBLISHED]: "#2FDE8C",
+  [VOUCHER_STATUSES.REJECTED]: "#F87171",
+  [VOUCHER_STATUSES.EXPIRED]: "#A3A3A3",
+  [VOUCHER_STATUSES.PAUSED]: "#FB923C",
+  [VOUCHER_STATUSES.ARCHIVED]: "#525252",
 };
 
 export function VoucherStatusBadge({ status }) {
@@ -78,12 +109,6 @@ export function computeStatus(v) {
 const STATUS_FILTERS = ["All", ...Object.values(VOUCHER_STATUSES)];
 
 /* ---- date helpers -------------------------------------------------------*/
-function formatDate(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
-}
 function formatDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -106,7 +131,13 @@ function personLabel(userObj, fallbackId) {
 function buildTimeline(v) {
   const entries = [];
   if (v.createdAt) {
-    entries.push({ action: "Created", date: v.createdAt, by: personLabel(v.createdByUser, v.createdBy), remarks: null });
+    const brandName = v.brand?.brandName;
+    entries.push({
+      action: "Created",
+      date: v.createdAt,
+      by: personLabel(v.createdByUser, v.createdBy),
+      remarks: brandName ? `For brand ${brandName}.` : null,
+    });
   }
   if (v.submittedAt) {
     entries.push({
@@ -151,6 +182,9 @@ function buildTimeline(v) {
 function apiVersionToRow(v) {
   const voucher = v.voucher || {};
   const brand = v.brand || null;
+  const category = v.category || null;
+  const subCategory = v.subCategory || null;
+  const creatorUser = v.createdByUser || null;
   const primaryOffer = v.offers?.[0];
   return {
     id: v._id, // version id — approve/reject/publish act on this
@@ -171,21 +205,108 @@ function apiVersionToRow(v) {
           onboardingStatus: brand.status || "—",
           isApproved: Boolean(brand.isApproved),
           isSubscribed: Boolean(brand.isSubscribed),
+          description: brand.description || "",
+          businessEntityType: brand.businessEntityType || "—",
+          businessRegistrationStatus: brand.businessRegistrationStatus || "—",
+          joinedDate: brand.joinedDate ? formatDateTime(brand.joinedDate) : "—",
+          isRevoked: Boolean(brand.isRevoked),
+          isReviewed: Boolean(brand.isReviewed),
+          followersCount: brand.followersCount ?? 0,
+          franchises: {
+            used: brand.franchisesUsed ?? 0,
+            limit: brand.franchisesLimit ?? 0,
+            unlimited: Boolean(brand.isFranchisesUnlimited),
+          },
+          subBrands: {
+            used: brand.subBrandsUsed ?? 0,
+            limit: brand.subBrandsLimit ?? 0,
+            unlimited: Boolean(brand.isSubBrandsUnlimited),
+          },
+          showcase: {
+            used: brand.showcaseUsed ?? 0,
+            limit: brand.showcaseLimit ?? 0,
+            unlimited: Boolean(brand.isShowcaseUnlimited),
+          },
+          vouchers: {
+            used: brand.vouchersUsed ?? 0,
+            limit: brand.vouchersLimit ?? 0,
+            unlimited: Boolean(brand.isVouchersUnlimited),
+          },
         }
       : null,
-    category: v.category?.name || "—",
-    subCategory: v.subCategory?.name || "—",
+    category: category?.name || "—",
+    subCategory: subCategory?.name || "—",
+    categoryDetails: category
+      ? { name: category.name || "—", description: category.description || "", image: category.image || "" }
+      : null,
+    subCategoryDetails: subCategory
+      ? { name: subCategory.name || "—", description: subCategory.description || "", image: subCategory.image || "" }
+      : null,
     description: v.description || "",
     tags: v.tags || [],
-    images: (v.images || []).map((img) => img.url),
+    images: (v.images || [])
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map((img) => ({ url: img.url, sortOrder: img.sortOrder, provider: img.storage?.provider || null })),
     offers: v.offers || [],
     discount: primaryOffer?.title || "—",
     minBillAmount: primaryOffer?.minBillAmount ?? 0,
     maxDiscountAmount: primaryOffer?.maxDiscountAmount ?? 0,
     attachedSubBrandsCount: v.attachedSubBrandsCount ?? 0,
-    publishedDate: formatDate(v.publishedAt || v.createdAt),
-    startDate: formatDate(v.startAt),
-    endDate: formatDate(v.endAt),
+    // Admin curation — PUT /vouchers/admin/suggestions/:voucherId
+    isSuggested: Boolean(voucher.isSuggested ?? v.isSuggested),
+    suggestionOrder: voucher.suggestionOrder ?? v.suggestionOrder ?? null,
+    // Date + time (not just the date) — shown in both the table and the
+    // details page.
+    createdAt: v.createdAt || null,
+    createdAtDisplay: formatDateTime(v.createdAt),
+    updatedAtDisplay: formatDateTime(v.updatedAt),
+    // No fallback to createdAt here — a DRAFT/never-published version has
+    // no publishedAt at all, and showing createdAt in its place would
+    // falsely imply it went live.
+    publishedDate: v.publishedAt ? formatDateTime(v.publishedAt) : null,
+    startDate: formatDateTime(v.startAt),
+    endDate: formatDateTime(v.endAt),
+    // Who actually created this voucher — falls back to whoever submitted
+    // it when a separate creator isn't populated (older records only
+    // carry submittedBy/submittedByUser).
+    creator: {
+      name: personLabel(v.createdByUser, v.createdBy) || personLabel(v.submittedByUser, v.submittedBy) || "—",
+      role: v.createdByUser?.role || v.submittedByUser?.role || null,
+      whatsappNumber: v.createdByUser?.whatsappNumber || v.submittedByUser?.whatsappNumber || null,
+    },
+    // Full raw record of whoever created the version, for the "Created By"
+    // panel — separate from `creator` above (which is just a display label
+    // with a submittedBy fallback used elsewhere).
+    creatorUser: creatorUser
+      ? {
+          role: creatorUser.role || "—",
+          loginType: creatorUser.loginType || "—",
+          whatsappNumber: creatorUser.whatsappNumber || "—",
+          uniqueId: creatorUser.uniqueId || "—",
+          referralCode: creatorUser.referralCode || "—",
+          isEmailVerified: Boolean(creatorUser.isEmailVerified),
+          isMobileVerified: Boolean(creatorUser.isMobileVerified),
+          isOnBoardingCompleted: Boolean(creatorUser.isOnBoardingCompleted),
+          walletBalance: creatorUser.walletBalance ?? 0,
+          tCoinsBalance: creatorUser.tCoinsBalance ?? 0,
+          currentScreen: creatorUser.currentScreen || "—",
+        }
+      : null,
+    // The parent voucher record (as opposed to this version) — its own
+    // lifecycle/status/timestamps, distinct from the version's.
+    parentVoucher: v.voucher
+      ? {
+          normalizedName: voucher.normalizedName || "—",
+          timezone: voucher.timezone || "—",
+          currentVersion: voucher.currentVersion ?? "—",
+          status: voucher.status || "—",
+          isActive: Boolean(voucher.isActive),
+          isDeleted: Boolean(voucher.isDeleted),
+          createdAtDisplay: voucher.createdAt ? formatDateTime(voucher.createdAt) : "—",
+          updatedAtDisplay: voucher.updatedAt ? formatDateTime(voucher.updatedAt) : "—",
+        }
+      : null,
     // The version's own `status` is the authoritative, up-to-date workflow
     // state — the parent `voucher.status` can lag behind it (e.g. a
     // version can show status "PUBLISHED" while `voucher.status` is still
@@ -193,6 +314,8 @@ function apiVersionToRow(v) {
     // the parent's when the version itself doesn't have one.
     approvalStatus: v.status || voucher.status || VOUCHER_STATUSES.DRAFT,
     isActive: Boolean(v.isActive),
+    isDeleted: Boolean(v.isDeleted),
+    isImmutable: Boolean(v.isImmutable),
     rejectionReason: v.rejectionReason || null,
     history: buildTimeline(v),
   };
@@ -208,7 +331,11 @@ export default function VoucherListing() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -221,7 +348,11 @@ export default function VoucherListing() {
       const rows = (res?.data?.data ?? []).map(apiVersionToRow);
       setVouchers(rows);
     } catch (err) {
-      setLoadError(err.message);
+      if (isNotFoundMessage(err.message)) {
+        setVouchers([]);
+      } else {
+        setLoadError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -230,6 +361,18 @@ export default function VoucherListing() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  // Close the status dropdown on outside click.
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const handleClick = (e) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target)) {
+        setStatusMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [statusMenuOpen]);
 
   const filtered = useMemo(() => {
     return vouchers.filter((v) => {
@@ -243,7 +386,54 @@ export default function VoucherListing() {
     });
   }, [vouchers, search, statusFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pagedRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
   const selectedVoucher = vouchers.find((v) => v.id === selectedId) || null;
+
+  // Real status mix + monthly creation trend — both derived straight from
+  // the already-loaded vouchers, no separate endpoint needed.
+  const statusMix = useMemo(() => {
+    const counts = new Map();
+    vouchers.forEach((v) => {
+      const key = v.approvalStatus || VOUCHER_STATUSES.DRAFT;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([status, count]) => ({ status, count, color: STATUS_HEX[status] || "#A3A3A3" }))
+      .sort((a, b) => b.count - a.count);
+  }, [vouchers]);
+
+  const monthlyTrend = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const dt = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return { y: dt.getFullYear(), m: dt.getMonth(), label: dt.toLocaleString("en-US", { month: "short" }) };
+    });
+    const counts = months.map(() => 0);
+    vouchers.forEach((v) => {
+      if (!v.createdAt) return;
+      const d = new Date(v.createdAt);
+      if (Number.isNaN(d.getTime())) return;
+      const idx = months.findIndex((mo) => mo.y === d.getFullYear() && mo.m === d.getMonth());
+      if (idx !== -1) counts[idx] += 1;
+    });
+    return months.map((mo, i) => ({ d: mo.label, vouchers: counts[i] }));
+  }, [vouchers]);
+
+  const handleExportCsv = () => {
+    downloadCsv("vouchers", [
+      { label: "Title", key: "title" },
+      { label: "Version Code", key: "versionCode" },
+      { label: "Brand", key: "brandName" },
+      { label: "Category", key: "category" },
+      { label: "Offer", key: "discount" },
+      { label: "Start Date", key: "startDate" },
+      { label: "End Date", key: "endDate" },
+      { label: "Created", key: "createdAtDisplay" },
+      { label: "Status", key: "approvalStatus" },
+    ], filtered);
+  };
 
   const handleDelete = async (voucher) => {
     setActionError("");
@@ -299,6 +489,23 @@ export default function VoucherListing() {
     }
   };
 
+  /* ---- Admin curation — feature/un-feature on the "Suggested" rail --- */
+  const handleToggleSuggested = async (voucher) => {
+    setActionError("");
+    setActionBusy(true);
+    try {
+      await updateVoucherSuggestion(voucher.voucherId, {
+        isSuggested: !voucher.isSuggested,
+        suggestionOrder: 1,
+      });
+      await fetchList();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   /* ---- Detail view --------------------------------------------------- */
   if (selectedVoucher) {
     return (
@@ -320,31 +527,48 @@ export default function VoucherListing() {
       key: "sno",
       label: "S.No",
       width: "w-14",
-      render: (_row, index) => <span className="text-neutral-500">{index + 1}</span>,
+      render: (_row, index) => <span className="text-neutral-500">{(page - 1) * pageSize + index + 1}</span>,
     },
     {
       key: "title",
       label: "Voucher",
       render: (row) => (
         <button onClick={() => setSelectedId(row.id)} className="text-left hover:underline">
-          <p className="font-medium text-neutral-50">{row.title}</p>
+          <p className="flex items-center gap-1.5 font-medium text-neutral-900 dark:text-neutral-50">
+            {row.title}
+            {row.isSuggested && <Star size={11} className="shrink-0 text-amber-500" fill="currentColor" />}
+          </p>
           <p className="mt-0.5 flex items-center gap-1 text-[11px] text-neutral-500">
-            <Tag size={10} /> {row.versionCode} · {row.brandName}
+            <Tag size={10} /> {row.versionCode}
           </p>
         </button>
       ),
     },
     {
+      key: "brand",
+      label: "Brand",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          {row.brand?.logo && (
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-0.5">
+              <img src={row.brand.logo} alt={row.brandName} className="h-full w-full object-contain" />
+            </div>
+          )}
+          <span className="text-neutral-700 dark:text-neutral-300">{row.brandName}</span>
+        </div>
+      ),
+    },
+    {
       key: "category",
       label: "Category",
-      render: (row) => <span className="text-neutral-300">{row.category}</span>,
+      render: (row) => <span className="text-neutral-700 dark:text-neutral-300">{row.category}</span>,
     },
     {
       key: "discount",
       label: "Offer",
       render: (row) => (
         <div>
-          <p className="font-semibold text-neutral-200">{row.discount}</p>
+          <p className="font-semibold text-neutral-800 dark:text-neutral-200">{row.discount}</p>
           {row.offers.length > 1 && (
             <p className="text-[11px] text-neutral-500">+{row.offers.length - 1} more</p>
           )}
@@ -355,10 +579,15 @@ export default function VoucherListing() {
       key: "validity",
       label: "Validity",
       render: (row) => (
-        <span className="text-[12.5px] text-neutral-400">
+        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
           {row.startDate} → {row.endDate}
         </span>
       ),
+    },
+    {
+      key: "created",
+      label: "Created",
+      render: (row) => <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">{row.createdAtDisplay}</span>,
     },
     {
       key: "status",
@@ -372,9 +601,22 @@ export default function VoucherListing() {
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
           <button
+            onClick={() => handleToggleSuggested(row)}
+            disabled={actionBusy}
+            aria-label={row.isSuggested ? `Remove ${row.title} from suggestions` : `Suggest ${row.title}`}
+            title={row.isSuggested ? "Remove from Suggested" : "Mark as Suggested"}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${
+              row.isSuggested
+                ? "text-amber-500 hover:bg-amber-400/10"
+                : "text-neutral-400 hover:bg-neutral-100 hover:text-amber-500 dark:text-neutral-500 dark:hover:bg-neutral-800"
+            }`}
+          >
+            <Star size={15} fill={row.isSuggested ? "currentColor" : "none"} />
+          </button>
+          <button
             onClick={() => setSelectedId(row.id)}
             aria-label={`View ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-sky-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
             title="View details"
           >
             <Eye size={15} />
@@ -384,7 +626,7 @@ export default function VoucherListing() {
             disabled={actionBusy}
             aria-label={`Delete ${row.title}`}
             title="Delete"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:opacity-40 dark:text-neutral-400 dark:hover:text-red-400"
           >
             <Trash2 size={15} />
           </button>
@@ -394,46 +636,165 @@ export default function VoucherListing() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-50">Vouchers</h1>
-          <p className="mt-1 text-[13px] text-neutral-500">
-            Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.
-          </p>
+        <div className="no-print mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Vouchers</h1>
+            <p className="mt-1 text-[13px] text-neutral-500 dark:text-neutral-400">
+              Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={handleExportCsv}
+              className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-3.5 py-2 text-[12.5px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+            >
+              <FileDown size={14} />
+              Export CSV
+            </button>
+            <button
+              onClick={printAsPdf}
+              className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-emerald-600"
+            >
+              <Printer size={14} />
+              Download PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Overview charts — real data, independent of the filters below */}
+        <div className="no-print mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-[1fr_1.4fr]">
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+              <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative h-[110px] w-[110px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusMix}
+                      dataKey="count"
+                      nameKey="status"
+                      innerRadius={34}
+                      outerRadius={52}
+                      paddingAngle={3}
+                      isAnimationActive={false}
+                    >
+                      {statusMix.map((s) => (
+                        <Cell key={s.status} fill={s.color} stroke="none" />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{vouchers.length}</span>
+                  <span className="text-[8.5px] text-neutral-500">Total</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {statusMix.map((s) => (
+                  <div key={s.status} className="flex items-center gap-1.5 text-[11.5px]">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="min-w-0 flex-1 truncate text-neutral-500">{STATUS_LABELS[s.status] || s.status}</span>
+                    <span className="font-semibold text-neutral-900 dark:text-neutral-50">{s.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+                <TrendingUp size={14} className="text-emerald-500" /> Vouchers Created
+              </div>
+              <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800/60 dark:text-neutral-400">
+                Last 6 Months
+              </span>
+            </div>
+            <ResponsiveContainer width="100%" height={150}>
+              <AreaChart data={monthlyTrend} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="voucherTrendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2FDE8C" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#2FDE8C" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="d" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Area type="natural" dataKey="vouchers" stroke="#2FDE8C" strokeWidth={2.4} fill="url(#voucherTrendFill)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Search + status filter */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2.5 sm:max-w-xs">
+        <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:max-w-xs">
             <Search size={16} className="shrink-0 text-neutral-500" />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search voucher, brand or code..."
-              className="w-full bg-transparent text-[13.5px] text-neutral-200 placeholder:text-neutral-500 focus:outline-none"
+              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900 p-1.5">
-            <SlidersHorizontal size={14} className="ml-1 shrink-0 text-neutral-500" />
-            {STATUS_FILTERS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                  statusFilter === s ? "bg-emerald-400 text-neutral-950" : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                {s === "All" ? "All" : STATUS_LABELS[s] || s}
-              </button>
-            ))}
+          <div className="relative shrink-0" ref={statusMenuRef}>
+            <button
+              onClick={() => setStatusMenuOpen((o) => !o)}
+              className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12.5px] font-medium text-neutral-700 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-colors hover:bg-neutral-50 dark:bg-neutral-900 dark:text-neutral-300 dark:shadow-black/20 dark:hover:bg-neutral-800"
+            >
+              <SlidersHorizontal size={14} className="text-neutral-500" />
+              {statusFilter === "All" ? (
+                "All Statuses"
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${STATUS_STYLES[statusFilter]?.dot}`} />
+                  {STATUS_LABELS[statusFilter] || statusFilter}
+                </span>
+              )}
+              <ChevronDown size={13} className={`text-neutral-400 transition-transform ${statusMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {statusMenuOpen && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-52 overflow-hidden rounded-2xl bg-white py-1.5 shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
+                {STATUS_FILTERS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      setStatusFilter(s);
+                      setPage(1);
+                      setStatusMenuOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-[13px] transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+                      statusFilter === s ? "font-semibold text-neutral-900 dark:text-neutral-50" : "text-neutral-600 dark:text-neutral-400"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {s === "All" ? (
+                        <span className="h-1.5 w-1.5 rounded-full bg-neutral-300 dark:bg-neutral-600" />
+                      ) : (
+                        <span className={`h-1.5 w-1.5 rounded-full ${STATUS_STYLES[s]?.dot}`} />
+                      )}
+                      {s === "All" ? "All Statuses" : STATUS_LABELS[s] || s}
+                    </span>
+                    {statusFilter === s && <Check size={13} className="text-emerald-500" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         {actionError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-400">
+          <div className="no-print mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />
             {actionError}
           </div>
@@ -441,21 +802,32 @@ export default function VoucherListing() {
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-800 py-14 text-[13px] text-neutral-500">
+          <div className="flex items-center justify-center gap-2 rounded-2xl bg-white py-14 text-[13px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <Loader2 size={16} className="animate-spin" />
             Loading vouchers…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-400">
+          <div className="rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load vouchers: {loadError}
           </div>
         )}
 
         {/* Table */}
         {!loading && !loadError && (
-          <Table columns={columns} data={filtered} emptyMessage="No vouchers match your filters." />
+          <div className="print-area">
+            <Table
+              columns={columns}
+              data={pagedRows}
+              emptyMessage="No vouchers match your filters."
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              total={filtered.length}
+              pageSize={pageSize}
+            />
+          </div>
         )}
       </div>
     </div>

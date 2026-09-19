@@ -41,6 +41,85 @@ function normalizeFaq(raw) {
   };
 }
 
+// Temporary placeholder content — the real /faqs endpoints aren't
+// confirmed/live yet, so this keeps the page usable to preview in the
+// meantime. Swapped out automatically the moment GET /faqs/getAll
+// actually responds; delete this block once the backend is ready.
+const MOCK_FAQS = [
+  {
+    _id: "mock-voucher-1",
+    type: "VOUCHER",
+    question: "How does a customer redeem a voucher?",
+    answer:
+      "The customer opens the voucher inside the app, shows the claim code (or QR) at the outlet, and the vendor marks it redeemed from their counter screen — the claim moves to REDEEMED the moment that happens.",
+    isActive: true,
+    createdAt: "2026-06-01T09:00:00.000Z",
+  },
+  {
+    _id: "mock-voucher-2",
+    type: "VOUCHER",
+    question: "Why can't a vendor publish a voucher with only 2 images?",
+    answer:
+      "Vendor Setting → Voucher enforces a minimum image count before a voucher can go live — it defaults to 3. Add more images or lower the minimum in Settings.",
+    isActive: true,
+    createdAt: "2026-06-02T09:00:00.000Z",
+  },
+  {
+    _id: "mock-offer-1",
+    type: "OFFER",
+    question: "Can a promo code be combined with a voucher offer?",
+    answer:
+      "Yes — a promo code discounts on top of whatever the voucher already offers, as long as the promo's audience (Customer/Vendor) and cost-bearing rules allow it for that brand.",
+    isActive: true,
+    createdAt: "2026-06-03T09:00:00.000Z",
+  },
+  {
+    _id: "mock-transaction-1",
+    type: "TRANSACTION",
+    question: "A payment shows Pending — when does it resolve?",
+    answer:
+      "Most gateway payments confirm within a couple of minutes. If a transaction sits Pending for longer, check the Razorpay payment ID on the Transaction Details page before assuming it failed.",
+    isActive: true,
+    createdAt: "2026-06-04T09:00:00.000Z",
+  },
+  {
+    _id: "mock-onboarding-1",
+    type: "ONBOARDING",
+    question: "What documents does a new vendor need to submit?",
+    answer:
+      "PAN, GSTIN (if registered), a bank account for payouts, and outlet address proof. Verification status is tracked per-document on the vendor's onboarding page until an admin approves it.",
+    isActive: true,
+    createdAt: "2026-06-05T09:00:00.000Z",
+  },
+  {
+    _id: "mock-settlement-1",
+    type: "SETTLEMENT",
+    question: "Why hasn't a vendor's settlement been paid yet?",
+    answer:
+      "Settlements follow a T+2 cycle from the payment date and need admin approval before payout starts. Check the settlement's status badge — Pending Approval means it's still waiting on that step.",
+    isActive: true,
+    createdAt: "2026-06-06T09:00:00.000Z",
+  },
+  {
+    _id: "mock-settlement-2",
+    type: "SETTLEMENT",
+    question: "What does an On Hold settlement mean?",
+    answer:
+      "An admin paused it before approval, usually pending a bank-details re-check. It can only move forward once released from hold — it will not auto-resume.",
+    isActive: false,
+    createdAt: "2026-06-07T09:00:00.000Z",
+  },
+  {
+    _id: "mock-general-1",
+    type: "GENERAL",
+    question: "Who can activate or deactivate a customer account?",
+    answer:
+      "Only an admin with Super Admin Mode turned on, from the Customers page. It's off by default so status changes aren't a single accidental click away.",
+    isActive: true,
+    createdAt: "2026-06-08T09:00:00.000Z",
+  },
+];
+
 const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
@@ -217,7 +296,7 @@ function FaqAccordionItem({ faq, isOpen, onToggleOpen, onEdit, onDelete, onReque
 export default function Faq() {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [usingMock, setUsingMock] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [openIds, setOpenIds] = useState(() => new Set());
@@ -235,13 +314,19 @@ export default function Faq() {
 
   const fetchFaqs = useCallback(async () => {
     setLoading(true);
-    setLoadError("");
     try {
       const res = await getFaqs({ page: 1, limit: 200 });
       const rows = (res?.data?.data ?? res?.data ?? []).map(normalizeFaq);
       setFaqs(rows);
+      setUsingMock(false);
     } catch (err) {
-      setLoadError(err.message);
+      // The real endpoint isn't confirmed/live yet — fall back to sample
+      // content so the page is still usable to preview, instead of a
+      // dead error screen. Logged, not shown, so it doesn't read as a
+      // real failure to the admin.
+      console.error("Failed to load FAQs from the API, showing sample data:", err.message);
+      setFaqs(MOCK_FAQS.map(normalizeFaq));
+      setUsingMock(true);
     } finally {
       setLoading(false);
     }
@@ -357,16 +442,18 @@ export default function Faq() {
           />
         </div>
 
+        {usingMock && !loading && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl bg-amber-400/10 px-4 py-2.5 text-[12px] font-medium text-amber-700 dark:text-amber-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            Showing sample FAQs — the live list couldn't be reached yet, so nothing below is saved to the server.
+          </div>
+        )}
+
         {/* List */}
         {loading ? (
           <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
             <Loader2 size={16} className="animate-spin" />
             Loading FAQs…
-          </div>
-        ) : loadError ? (
-          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load FAQs: {loadError}
           </div>
         ) : grouped.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-neutral-200 px-5 py-14 text-center text-[13px] text-neutral-500 dark:border-neutral-800">

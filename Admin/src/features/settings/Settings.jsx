@@ -14,6 +14,7 @@ import {
   Smartphone,
   ChevronDown,
   Scale,
+  HardDrive,
 } from "lucide-react";
 import { getSettings, updateSettings } from "./services/SettingsApi";
 import LegalDocsPanel from "../legal/LegalDocsPanel";
@@ -74,6 +75,16 @@ const SECTIONS = [
       { id: "app.support", label: "Support & Features" },
     ],
   },
+  {
+    id: "storage",
+    label: "Storage Setting",
+    icon: HardDrive,
+    children: [
+      { id: "storage.limits", label: "Provider & Limits" },
+      { id: "storage.allowed", label: "Allowed File Types" },
+      { id: "storage.upload", label: "Upload & Delivery" },
+    ],
+  },
   // Legal docs are a separate resource (their own create/update/delete
   // endpoints), not fields on the single settings document — so unlike
   // every other leaf here, these two don't go through handleSave/
@@ -93,13 +104,15 @@ const SECTIONS = [
  * Empty defaults — one per real sub-object, so nothing crashes on a fresh
  * document that's missing a key, and merged with whatever the API returns.
  * ---------------------------------------------------------------------- */
-const EMPTY_VOUCHER = { maxOffers: 0, maxImages: 0, maxDistanceKm: 0 };
+const EMPTY_VOUCHER = { maxOffers: 0, maxImages: 0, minImages: 0, maxDistanceKm: 0 };
 const EMPTY_SHOWCASE = {
-  maxSections: 0,
   maxItemsPerSection: 0,
   maxImagesPerSection: 0,
   maxVideosPerSection: 0,
+  minItemsPerSection: 0,
+  minSectionsPerBrand: 0,
   maxImageSizeMB: 0,
+  maxGifSizeMB: 0,
   maxVideoSizeMB: 0,
   allowedImages: [],
   allowedVideos: [],
@@ -213,6 +226,14 @@ const EMPTY_APP = {
   features: { promoCodes: true, refunds: true, voucherClaims: true, search: true },
 };
 
+const EMPTY_STORAGE = {
+  provider: "CLOUDINARY",
+  limits: { maxImageSizeMB: 0, maxGifSizeMB: 0, maxVideoSizeMB: 0, maxDocumentSizeMB: 0, maxAudioSizeMB: 0 },
+  allowed: { imageTypes: [], gifTypes: [], videoTypes: [], documentTypes: [], audioTypes: [] },
+  upload: { presignEnabled: false, presignTtlMinutes: 15, intentTtlMinutes: 60 },
+  delivery: { signedUrlTtlMinutes: 5 },
+};
+
 function formatDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -226,6 +247,7 @@ function apiToForm(settings) {
   const security = settings?.security || {};
   const admin = settings?.admin || {};
   const app = settings?.app || {};
+  const storage = settings?.storage || {};
   const settlement = { ...EMPTY_SETTLEMENT, ...(customer.settlement || {}) };
   settlement.reserve = { ...EMPTY_RESERVE, ...(customer.settlement?.reserve || {}) };
 
@@ -263,6 +285,13 @@ function apiToForm(settings) {
       support: { ...EMPTY_APP.support, ...(app.support || {}) },
       features: { ...EMPTY_APP.features, ...(app.features || {}) },
     },
+    storage: {
+      provider: storage.provider || EMPTY_STORAGE.provider,
+      limits: { ...EMPTY_STORAGE.limits, ...(storage.limits || {}) },
+      allowed: { ...EMPTY_STORAGE.allowed, ...(storage.allowed || {}) },
+      upload: { ...EMPTY_STORAGE.upload, ...(storage.upload || {}) },
+      delivery: { ...EMPTY_STORAGE.delivery, ...(storage.delivery || {}) },
+    },
     updatedAt: settings?.updatedAt,
     updatedBy: settings?.updatedBy,
   };
@@ -292,6 +321,15 @@ function buildSavePayload(sectionId, form) {
     }
     const { support, features } = form.app;
     return { app: { support, features } };
+  }
+
+  // Storage's real shape doesn't split 1:1 by tab id either — "limits"
+  // shows provider alongside the size ceilings, and "upload" shows the
+  // upload/delivery sub-objects together.
+  if (group === "storage") {
+    if (key === "limits") return { storage: { provider: form.storage.provider, limits: form.storage.limits } };
+    if (key === "allowed") return { storage: { allowed: form.storage.allowed } };
+    return { storage: { upload: form.storage.upload, delivery: form.storage.delivery } };
   }
 
   return { [group]: { [key]: form[group][key] } };
@@ -586,6 +624,9 @@ export default function Settings() {
   const setAppField = (section, field, value) =>
     setForm((prev) => ({ ...prev, app: { ...prev.app, [section]: { ...prev.app[section], [field]: value } } }));
   const setAppTopField = (field, value) => setForm((prev) => ({ ...prev, app: { ...prev.app, [field]: value } }));
+  const setStorageField = (section, field, value) =>
+    setForm((prev) => ({ ...prev, storage: { ...prev.storage, [section]: { ...prev.storage[section], [field]: value } } }));
+  const setStorageTopField = (field, value) => setForm((prev) => ({ ...prev, storage: { ...prev.storage, [field]: value } }));
 
   const selectSection = (id) => {
     setActiveSection(id);
@@ -787,6 +828,13 @@ export default function Settings() {
                     suffix="per voucher"
                   />
                   <NumberField
+                    label="Min Images"
+                    value={form.vendor.voucher.minImages}
+                    onChange={(v) => setVendorField("voucher", "minImages", v)}
+                    suffix="per voucher"
+                    hint="Required before a voucher can be published. Must stay ≤ Max Images."
+                  />
+                  <NumberField
                     label="Max Distance"
                     value={form.vendor.voucher.maxDistanceKm}
                     onChange={(v) => setVendorField("voucher", "maxDistanceKm", v)}
@@ -816,14 +864,20 @@ export default function Settings() {
                     }
                   >
                     <NumberField
-                      label="Max Sections"
-                      value={form.vendor.showcase.maxSections}
-                      onChange={(v) => setVendorField("showcase", "maxSections", v)}
-                    />
-                    <NumberField
                       label="Max Items / Section"
                       value={form.vendor.showcase.maxItemsPerSection}
                       onChange={(v) => setVendorField("showcase", "maxItemsPerSection", v)}
+                    />
+                    <NumberField
+                      label="Min Items / Section"
+                      value={form.vendor.showcase.minItemsPerSection}
+                      onChange={(v) => setVendorField("showcase", "minItemsPerSection", v)}
+                      hint="A section below this drops out of the customer's view immediately on save."
+                    />
+                    <NumberField
+                      label="Min Sections / Brand"
+                      value={form.vendor.showcase.minSectionsPerBrand}
+                      onChange={(v) => setVendorField("showcase", "minSectionsPerBrand", v)}
                     />
                     <NumberField
                       label="Max Images / Section"
@@ -840,12 +894,20 @@ export default function Settings() {
                       value={form.vendor.showcase.maxImageSizeMB}
                       onChange={(v) => setVendorField("showcase", "maxImageSizeMB", v)}
                       suffix="MB"
+                      hint="Must stay ≤ Storage Setting's own image ceiling."
+                    />
+                    <NumberField
+                      label="Max GIF Size"
+                      value={form.vendor.showcase.maxGifSizeMB}
+                      onChange={(v) => setVendorField("showcase", "maxGifSizeMB", v)}
+                      suffix="MB"
                     />
                     <NumberField
                       label="Max Video Size"
                       value={form.vendor.showcase.maxVideoSizeMB}
                       onChange={(v) => setVendorField("showcase", "maxVideoSizeMB", v)}
                       suffix="MB"
+                      hint="Must stay ≤ Storage Setting's own video ceiling."
                     />
                   </Card>
 
@@ -1643,6 +1705,133 @@ export default function Settings() {
                       label="Search"
                       checked={form.app.features.search}
                       onChange={(v) => setAppField("features", "search", v)}
+                    />
+                  </Card>
+                </div>
+              )}
+
+              {/* ---------------- Storage > Provider & Limits ---------------- */}
+              {activeSection === "storage.limits" && (
+                <div className="space-y-4">
+                  <Card title="Storage Provider">
+                    <SelectField
+                      label="Provider"
+                      value={form.storage.provider}
+                      options={["CLOUDINARY", "AWS_S3"]}
+                      onChange={(v) => setStorageTopField("provider", v)}
+                    />
+                  </Card>
+                  <Card title="Upload Size Ceilings">
+                    <NumberField
+                      label="Max Image Size"
+                      value={form.storage.limits.maxImageSizeMB}
+                      onChange={(v) => setStorageField("limits", "maxImageSizeMB", v)}
+                      suffix="MB"
+                    />
+                    <NumberField
+                      label="Max GIF Size"
+                      value={form.storage.limits.maxGifSizeMB}
+                      onChange={(v) => setStorageField("limits", "maxGifSizeMB", v)}
+                      suffix="MB"
+                    />
+                    <NumberField
+                      label="Max Video Size"
+                      value={form.storage.limits.maxVideoSizeMB}
+                      onChange={(v) => setStorageField("limits", "maxVideoSizeMB", v)}
+                      suffix="MB"
+                    />
+                    <NumberField
+                      label="Max Document Size"
+                      value={form.storage.limits.maxDocumentSizeMB}
+                      onChange={(v) => setStorageField("limits", "maxDocumentSizeMB", v)}
+                      suffix="MB"
+                    />
+                    <NumberField
+                      label="Max Audio Size"
+                      value={form.storage.limits.maxAudioSizeMB}
+                      onChange={(v) => setStorageField("limits", "maxAudioSizeMB", v)}
+                      suffix="MB"
+                      hint="No upload surface uses this yet — held for when one does."
+                    />
+                  </Card>
+                  <p className="text-[11px] text-neutral-500">
+                    Image/Video ceilings here are the platform max — Vendor Setting → Showcase can only ask for less, never more.
+                  </p>
+                </div>
+              )}
+
+              {/* ---------------- Storage > Allowed File Types ---------------- */}
+              {activeSection === "storage.allowed" && (
+                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                  <p className="mb-4 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Allowed File Types
+                  </p>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <TagListEditor
+                      label="Image Types"
+                      values={form.storage.allowed.imageTypes}
+                      onChange={(v) => setStorageField("allowed", "imageTypes", v)}
+                      placeholder="e.g. image/png"
+                    />
+                    <TagListEditor
+                      label="GIF Types"
+                      values={form.storage.allowed.gifTypes}
+                      onChange={(v) => setStorageField("allowed", "gifTypes", v)}
+                      placeholder="e.g. image/gif"
+                    />
+                    <TagListEditor
+                      label="Video Types"
+                      values={form.storage.allowed.videoTypes}
+                      onChange={(v) => setStorageField("allowed", "videoTypes", v)}
+                      placeholder="e.g. video/mp4"
+                    />
+                    <TagListEditor
+                      label="Document Types"
+                      values={form.storage.allowed.documentTypes}
+                      onChange={(v) => setStorageField("allowed", "documentTypes", v)}
+                      placeholder="e.g. application/pdf"
+                    />
+                    <TagListEditor
+                      label="Audio Types"
+                      values={form.storage.allowed.audioTypes}
+                      onChange={(v) => setStorageField("allowed", "audioTypes", v)}
+                      placeholder="e.g. audio/mpeg"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ---------------- Storage > Upload & Delivery ---------------- */}
+              {activeSection === "storage.upload" && (
+                <div className="space-y-4">
+                  <Card title="Presigned Upload">
+                    <ToggleField
+                      label="Presign Enabled"
+                      checked={form.storage.upload.presignEnabled}
+                      onChange={(v) => setStorageField("upload", "presignEnabled", v)}
+                    />
+                    <NumberField
+                      label="Presign TTL"
+                      value={form.storage.upload.presignTtlMinutes}
+                      onChange={(v) => setStorageField("upload", "presignTtlMinutes", v)}
+                      suffix="minutes"
+                      hint="How long a client has to start a presigned upload."
+                    />
+                    <NumberField
+                      label="Upload Intent TTL"
+                      value={form.storage.upload.intentTtlMinutes}
+                      onChange={(v) => setStorageField("upload", "intentTtlMinutes", v)}
+                      suffix="minutes"
+                      hint="Must stay ≥ Presign TTL — this is how long an unconfirmed upload survives."
+                    />
+                  </Card>
+                  <Card title="Delivery">
+                    <NumberField
+                      label="Signed URL TTL"
+                      value={form.storage.delivery.signedUrlTtlMinutes}
+                      onChange={(v) => setStorageField("delivery", "signedUrlTtlMinutes", v)}
+                      suffix="minutes"
+                      hint="How long a private document's signed download link stays valid."
                     />
                   </Card>
                 </div>

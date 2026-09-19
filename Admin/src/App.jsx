@@ -32,6 +32,7 @@ import Settings from './features/settings/Settings'
 import PromoCode from './features/promoCode/PromoCode'
 import Notification from './features/notification/Notification'
 import Subscriptions from './features/subscriptions/Subscriptions'
+import Faq from './features/faq/Faq'
 // import BrandPage from './features/BrandPage'
 // import LoginPage from './features/auth/components/LoginPage'
 
@@ -296,6 +297,15 @@ function App() {
                 element={
                   <Layout>
                     <CouponCode />
+                  </Layout>
+                }
+              />
+
+                   <Route
+                path="/faq"
+                element={
+                  <Layout>
+                    <Faq />
                   </Layout>
                 }
               />

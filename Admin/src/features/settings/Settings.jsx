@@ -16,7 +16,7 @@ import {
   Scale,
 } from "lucide-react";
 import { getSettings, updateSettings } from "./services/SettingsApi";
-import LegalDocsPanel from "./LegalDocsPanel";
+import LegalDocsPanel from "../legal/LegalDocsPanel";
 
 /* -------------------------------------------------------------------------
  * Sidebar tree — confirmed against the real GET /settings/get response.

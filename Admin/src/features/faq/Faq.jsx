@@ -15,7 +15,6 @@ import {
   Layers,
   Star,
   Image as ImageIcon,
-  Video,
   FileText,
   Link2,
   ExternalLink,
@@ -37,7 +36,6 @@ import { getFaqs, createFaq, updateFaq, deleteFaq } from "./services/FaqApi";
  * ---------------------------------------------------------------------- */
 const FAQ_TYPES = ["VOUCHER", "OFFER", "TRANSACTION", "ONBOARDING", "SETTLEMENT", "GENERAL"];
 const MEDIA_TYPES = ["image", "video", "pdf"];
-const MEDIA_ICONS = { image: ImageIcon, video: Video, pdf: FileText };
 
 function humanizeType(type) {
   if (!type) return "General";
@@ -63,6 +61,17 @@ function formatDateTime(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// "https://youtube.com/watch?v=ID", "https://youtu.be/ID",
+// ".../embed/ID" or ".../shorts/ID" -> an embeddable player URL, or null
+// for anything else (a direct .mp4 file plays fine in a native <video>
+// tag; a YouTube page URL never will, since the actual video stream
+// isn't at that URL).
+function getYouTubeEmbedUrl(url) {
+  if (!url) return null;
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
 }
 
 function normalizeMediaItem(raw) {
@@ -364,7 +373,12 @@ function MediaEditor({ items, onChange }) {
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <input value={m.url} onChange={(e) => updateItem(i, "url", e.target.value)} placeholder="Media URL" className={smallInputClass} />
+            <input
+              value={m.url}
+              onChange={(e) => updateItem(i, "url", e.target.value)}
+              placeholder={m.type === "video" ? "Video URL, or a YouTube link" : "Media URL"}
+              className={smallInputClass}
+            />
             <input
               value={m.thumbnail}
               onChange={(e) => updateItem(i, "thumbnail", e.target.value)}
@@ -374,6 +388,30 @@ function MediaEditor({ items, onChange }) {
             <input value={m.title} onChange={(e) => updateItem(i, "title", e.target.value)} placeholder="Title (optional)" className={smallInputClass} />
             <input value={m.caption} onChange={(e) => updateItem(i, "caption", e.target.value)} placeholder="Caption (optional)" className={smallInputClass} />
           </div>
+
+          {/* Live preview so the admin can see what they just pasted */}
+          {m.url && m.type === "image" && (
+            <img
+              src={m.url}
+              alt=""
+              className="mt-2.5 h-28 w-full rounded-lg border border-neutral-200 object-cover dark:border-neutral-800"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+              onLoad={(e) => {
+                e.currentTarget.style.display = "";
+              }}
+            />
+          )}
+          {m.url && m.type === "video" && (
+            getYouTubeEmbedUrl(m.url) ? (
+              <div className="mt-2.5 aspect-video w-full max-w-[280px] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+                <iframe src={getYouTubeEmbedUrl(m.url)} title="Preview" className="h-full w-full" allowFullScreen />
+              </div>
+            ) : (
+              <video src={m.url} controls className="mt-2.5 h-28 w-full max-w-[280px] rounded-lg border border-neutral-200 bg-black object-contain dark:border-neutral-800" />
+            )
+          )}
         </div>
       ))}
       <button
@@ -717,20 +755,52 @@ function FaqAccordionItem({ faq, isOpen, onToggleOpen, onEdit, onDelete, onReque
           </p>
 
           {faq.media.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {faq.media.map((m, i) => {
-                const Icon = MEDIA_ICONS[m.type] || FileText;
+                const youtubeEmbed = m.type === "video" ? getYouTubeEmbedUrl(m.url) : null;
                 return (
-                  <a
-                    key={i}
-                    href={m.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 rounded-xl border border-neutral-200 px-3 py-2 text-[12px] text-neutral-600 transition-colors hover:border-emerald-400/40 dark:border-neutral-800 dark:text-neutral-300"
-                  >
-                    <Icon size={13} className="shrink-0 text-neutral-400" />
-                    <span className="max-w-[160px] truncate">{m.title || m.caption || `${m.type} attachment`}</span>
-                  </a>
+                  <div key={i} className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+                    {m.type === "image" && m.url ? (
+                      <a href={m.url} target="_blank" rel="noreferrer">
+                        <img
+                          src={m.url}
+                          alt={m.title || "FAQ media"}
+                          className="h-40 w-full bg-neutral-100 object-cover dark:bg-neutral-950"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </a>
+                    ) : youtubeEmbed ? (
+                      <div className="aspect-video w-full">
+                        <iframe
+                          src={youtubeEmbed}
+                          title={m.title || "FAQ video"}
+                          className="h-full w-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : m.type === "video" && m.url ? (
+                      <video src={m.url} controls className="h-44 w-full bg-black object-contain" />
+                    ) : (
+                      <a
+                        href={m.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 px-3 py-4 text-[12px] text-neutral-600 transition-colors hover:text-emerald-600 dark:text-neutral-300"
+                      >
+                        <FileText size={14} className="shrink-0 text-neutral-400" />
+                        {m.title || `${m.type} attachment`}
+                      </a>
+                    )}
+                    {(m.title || m.caption) && (
+                      <div className="px-3 py-2">
+                        {m.title && <p className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300">{m.title}</p>}
+                        {m.caption && <p className="text-[11px] text-neutral-500">{m.caption}</p>}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

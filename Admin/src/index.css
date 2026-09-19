@@ -21,10 +21,18 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* Every Tailwind spacing/type utility (p-4, text-sm, gap-5, h-10...) is
-     defined in rem, so scaling the root font-size scales the whole app
-     uniformly — same effect as viewing every page at ~90% browser zoom,
-     without anyone having to actually zoom out to get it to fit. */
-  font-size: 90%;
+     defined in rem, so the root font-size scales the whole app
+     uniformly. A flat 90% looked fine on one screen size but was wrong
+     everywhere else: on a narrower 13–14" laptop (~1280px) it made
+     already-dense tables cramped, and on a wide desktop monitor
+     (1920px+) it just left everything looking small with no reason to
+     — the shrink only ever made sense on the exact viewport it was
+     tuned for. This instead scales smoothly with the viewport: compact
+     (14px root) on laptop-width screens where admin tables need the
+     room, growing linearly up to the natural 16px root on desktop
+     monitors, so the layout matches the device instead of one fixed
+     ratio for every device. */
+  font-size: clamp(14px, 10px + 0.3125vw, 16px);
 }
 
 /* The page itself should never need a horizontal scrollbar — wide content

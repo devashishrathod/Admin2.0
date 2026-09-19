@@ -13,8 +13,10 @@ import {
   Lock,
   Smartphone,
   ChevronDown,
+  Scale,
 } from "lucide-react";
 import { getSettings, updateSettings } from "./services/SettingsApi";
+import LegalDocsPanel from "./LegalDocsPanel";
 
 /* -------------------------------------------------------------------------
  * Sidebar tree — confirmed against the real GET /settings/get response.
@@ -70,6 +72,19 @@ const SECTIONS = [
     children: [
       { id: "app.version", label: "Version & Update" },
       { id: "app.support", label: "Support & Features" },
+    ],
+  },
+  // Legal docs are a separate resource (their own create/update/delete
+  // endpoints), not fields on the single settings document — so unlike
+  // every other leaf here, these two don't go through handleSave/
+  // updateSettings at all. See the isLegalSection branch below.
+  {
+    id: "legal",
+    label: "Legal",
+    icon: Scale,
+    children: [
+      { id: "legal.terms", label: "Terms & Conditions" },
+      { id: "legal.privacy", label: "Privacy Policy" },
     ],
   },
 ];
@@ -598,6 +613,7 @@ export default function Settings() {
   const activeGroup = SECTIONS.find((s) => s.id === activeSection || s.children?.some((c) => c.id === activeSection));
   const activeChild = activeGroup?.children?.find((c) => c.id === activeSection);
   const headerLabel = activeChild ? `${activeGroup.label} — ${activeChild.label}` : activeGroup?.label || "";
+  const isLegalSection = activeSection === "legal.terms" || activeSection === "legal.privacy";
 
   return (
     <div className="min-h-screen p-6">
@@ -688,28 +704,38 @@ export default function Settings() {
             <div className="min-w-0 flex-1 space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{headerLabel}</h2>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex h-10 shrink-0 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                  {saving ? "Saving…" : "Save"}
-                </button>
+                {/* Legal docs save through their own Add/Edit modal (each
+                    document is its own create/update call), not the
+                    single settings-document PUT every other leaf here
+                    shares — so this page-level Save button doesn't apply. */}
+                {!isLegalSection && (
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex h-10 shrink-0 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                )}
               </div>
 
-              {saveError && (
+              {!isLegalSection && saveError && (
                 <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
                   <AlertTriangle size={14} className="shrink-0" />
                   {saveError}
                 </div>
               )}
-              {savedSection === activeSection && !saving && (
+              {!isLegalSection && savedSection === activeSection && !saving && (
                 <div className="flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-[12.5px] text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 size={14} className="shrink-0" />
                   {headerLabel} saved.
                 </div>
               )}
+
+              {/* ---------------- Legal ---------------- */}
+              {activeSection === "legal.terms" && <LegalDocsPanel kind="terms" />}
+              {activeSection === "legal.privacy" && <LegalDocsPanel kind="privacy" />}
 
               {/* ---------------- General ---------------- */}
               {activeSection === "general" && (

@@ -33,9 +33,12 @@ import {
   AlertTriangle,
   MoreVertical,
   ChevronLeft,
+  Power,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
 import { getAllCustomers, getCustomerById } from "./services/CustomerApi";
+import ConfirmActionModal from "../../components/common/ConfirmActionModal";
+import ToggleSwitch from "../../components/common/ToggleSwitch";
 
 /* ------------------------------------------------------------------ */
 /*  Static reference data                                              */
@@ -100,6 +103,17 @@ function formatDateLabel(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+// Capitalizes the first letter of every word ("gandev rathod" -> "Gandev
+// Rathod") for display only — never touches the underlying value, so
+// search/filtering still matches whatever casing the customer actually
+// signed up with. Only touches letters right after a word boundary, so an
+// id-shaped fallback name ("TC397763") is left exactly as-is instead of
+// being lowercased.
+function toTitleCase(str) {
+  if (!str) return str;
+  return String(str).replace(/\b\p{L}/gu, (ch) => ch.toUpperCase());
 }
 
 function fmtRaw(v) {
@@ -541,26 +555,33 @@ const CUSTOMER_PLATFORM_ACCENTS = {
   iOS: "from-sky-400/25 via-sky-400/0",
 };
 
+// Avatar tint follows the same platform accent so the badge, the top glow
+// and the avatar all read as one coherent color story per card.
+const CUSTOMER_AVATAR_BG = {
+  Android: "bg-gradient-to-br from-lime-400/30 to-emerald-400/10 dark:from-lime-400/20 dark:to-emerald-400/5",
+  iOS: "bg-gradient-to-br from-sky-400/30 to-blue-400/10 dark:from-sky-400/20 dark:to-blue-400/5",
+};
+
 function StatChip({ icon: Icon, value, label }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl bg-neutral-50/60 px-2.5 py-1.5 dark:bg-neutral-950/60">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-        <Icon size={12} />
+    <div className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-2 text-center">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
+        <Icon size={13} />
       </span>
-      <div className="min-w-0 leading-tight">
-        <p className="truncate text-[12px] font-semibold text-neutral-800 dark:text-neutral-200">{value}</p>
-        <p className="truncate text-[9px] uppercase tracking-wide text-neutral-500">{label}</p>
-      </div>
+      <p className="truncate text-[12.5px] font-semibold leading-tight text-neutral-800 dark:text-neutral-200">{value}</p>
+      <p className="truncate text-[9px] font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">{label}</p>
     </div>
   );
 }
 
-function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
+function UserCard({ customer, plan, isSuperAdmin, onOpen, onEdit, onDelete, onRequestToggleStatus }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const accent = CUSTOMER_PLATFORM_ACCENTS[customer.platform] || "from-neutral-400/20 via-neutral-400/0";
+  const avatarBg = CUSTOMER_AVATAR_BG[customer.platform] || "bg-neutral-200 dark:bg-neutral-800";
+  const displayName = toTitleCase(customer.name);
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:shadow-black/30">
+    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:border-neutral-200 hover:shadow-lg hover:shadow-black/10 dark:border-neutral-800/60 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:border-neutral-700 dark:hover:shadow-black/30">
       <div className={`pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b ${accent} opacity-70`} />
 
       <div className="absolute right-3 top-3 z-10">
@@ -569,7 +590,7 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
             e.stopPropagation();
             setMenuOpen((o) => !o);
           }}
-          aria-label={`More actions for ${customer.name}`}
+          aria-label={`More actions for ${displayName}`}
           className="flex h-7 w-7 items-center justify-center rounded-full border border-neutral-200 bg-neutral-50/80 text-neutral-500 backdrop-blur transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950/80 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
         >
           <MoreVertical size={14} />
@@ -604,21 +625,46 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
         )}
       </div>
 
-      <button onClick={() => onOpen(customer)} className="relative flex flex-col p-4 text-left">
-        <div className="mb-3 flex items-center gap-2.5 pr-8">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-neutral-200 text-[19px] ring-2 ring-neutral-50 dark:bg-neutral-800 dark:ring-neutral-950">
+      {/* A plain clickable div, not a <button> — it needs to host the
+          real <button> status toggle below it, and a button can't nest
+          another interactive control. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(customer)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen(customer);
+          }
+        }}
+        className="relative flex cursor-pointer flex-col p-4 text-left"
+      >
+        <div className="mb-3.5 flex items-center gap-3 pr-8">
+          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-[21px] shadow-sm ring-2 ring-white dark:ring-neutral-900 ${avatarBg}`}>
             {customer.avatar}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-semibold leading-tight text-neutral-900 dark:text-neutral-50">
-              {customer.name}
+            <p className="truncate text-[14.5px] font-semibold leading-tight tracking-tight text-neutral-900 dark:text-neutral-50">
+              {displayName}
             </p>
             <p className="truncate text-[11.5px] text-neutral-500">{customer.email}</p>
           </div>
         </div>
 
         <div className="mb-3.5 flex flex-wrap items-center gap-1.5">
-          <StatusPill status={customer.status} />
+          {/* Status pill and its toggle sit together — the switch is what
+              controls the pill next to it, so they read as one control. */}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-50 py-0.5 pl-1 pr-2 dark:bg-neutral-950/60">
+            <StatusPill status={customer.status} />
+            <ToggleSwitch
+              checked={customer.status === "Active"}
+              disabled={!isSuperAdmin}
+              onChange={() => onRequestToggleStatus(customer)}
+              title={isSuperAdmin ? "Click to activate/deactivate" : "Only Super Admin can change status"}
+            />
+            {!isSuperAdmin && <Lock size={11} className="text-neutral-400 dark:text-neutral-600" />}
+          </span>
           <PlatformBadge platform={customer.platform} />
           {plan && (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
@@ -628,20 +674,20 @@ function UserCard({ customer, plan, onOpen, onEdit, onDelete }) {
           )}
         </div>
 
-        <div className="mb-3.5 grid grid-cols-3 gap-2">
+        <div className="mb-3.5 grid grid-cols-3 divide-x divide-neutral-100 rounded-xl bg-neutral-50/70 dark:divide-neutral-800 dark:bg-neutral-950/40">
           <StatChip icon={Wallet} value={money(customer.wallet)} label="Wallet" />
           <StatChip icon={Coins} value={customer.coins} label="Coins" />
           <StatChip icon={Users} value={customer.followers} label="Followers" />
         </div>
 
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-neutral-50 px-3 py-2.5 dark:bg-neutral-950/60">
+        <div className="flex items-center justify-between gap-2 border-t border-neutral-100 px-0.5 pt-3 dark:border-neutral-800/60">
           <span className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-neutral-500">
             <CalendarDays size={12} className="shrink-0" />
             Joined {customer.joined}
           </span>
           <ChevronRight size={15} className="shrink-0 text-neutral-500 transition-transform group-hover:translate-x-0.5" />
         </div>
-      </button>
+      </div>
     </div>
   );
 }
@@ -665,10 +711,17 @@ function CustomerDetail({
   onBack,
   onEditPlan,
   onDeletePlan,
-  onToggleStatus,
+  onRequestToggleStatus,
 }) {
   const [activeTab, setActiveTab] = useState("info");
   const currentPlan = plans.find((p) => p.id === customer.planId) || null;
+  const avatarBg = CUSTOMER_AVATAR_BG[customer.platform] || "bg-neutral-200 dark:bg-neutral-800";
+  const detailCoverAccent =
+    customer.platform === "Android"
+      ? "from-lime-400/30 via-emerald-400/10"
+      : customer.platform === "iOS"
+      ? "from-sky-400/30 via-blue-400/10"
+      : "from-neutral-300/25 via-neutral-300/0";
 
   const avgRating = customer.reviews.length
     ? (customer.reviews.reduce((sum, r) => sum + r.rating, 0) / customer.reviews.length).toFixed(1)
@@ -727,36 +780,44 @@ function CustomerDetail({
         )}
       </div>
 
-      {/* Identity strip — avatar, name, status, platform, plan only; every
-          other real field lives in the bento tiles below (nothing repeated,
-          nothing skipped). */}
-      <div className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-white to-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:via-neutral-900 dark:to-neutral-900 dark:shadow-black/20">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-neutral-200 text-[26px] dark:bg-neutral-800">
-          {customer.avatar}
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate text-[18px] font-semibold text-neutral-900 dark:text-neutral-50">{customer.name}</h2>
-            {customer.status === "Active" && <BadgeCheck size={16} className="shrink-0 text-emerald-400" />}
+      {/* Identity strip — a cover banner with the avatar overlapping it,
+          name/status/platform/plan, and an explicit active/inactive
+          switch; every other real field lives in the bento tiles below
+          (nothing repeated, nothing skipped). */}
+      <div className="mb-5 overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className={`h-16 bg-gradient-to-r ${detailCoverAccent} to-transparent`} />
+        <div className="flex flex-wrap items-end gap-4 px-5 pb-5">
+          <div className={`-mt-9 flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-2xl text-[30px] shadow-md ring-4 ring-white dark:ring-neutral-900 ${avatarBg}`}>
+            {customer.avatar}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <PlatformBadge platform={customer.platform} />
-            {isSuperAdmin ? (
-              <button onClick={() => onToggleStatus(customer)} title="Click to change status (Super Admin)">
-                <StatusPill status={customer.status} />
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-1 opacity-90" title="Only Super Admin can change status">
-                <StatusPill status={customer.status} />
-                <Lock size={10} className="text-neutral-500 dark:text-neutral-600" />
-              </span>
-            )}
-            {currentPlan && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                <Crown size={12} />
-                {currentPlan.name}
-              </span>
-            )}
+          <div className="min-w-0 flex-1 pb-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-[19px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+                {toTitleCase(customer.name)}
+              </h2>
+              {customer.status === "Active" && <BadgeCheck size={17} className="shrink-0 text-emerald-400" />}
+            </div>
+            <p className="mt-0.5 truncate text-[12px] text-neutral-500">{customer.email}</p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <PlatformBadge platform={customer.platform} />
+              {currentPlan && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  <Crown size={12} />
+                  {currentPlan.name}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2.5 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
+            <StatusPill status={customer.status} />
+            <ToggleSwitch
+              checked={customer.status === "Active"}
+              disabled={!isSuperAdmin}
+              onChange={() => onRequestToggleStatus(customer)}
+              title={isSuperAdmin ? "Click to activate/deactivate" : "Only Super Admin can change status"}
+            />
+            {!isSuperAdmin && <Lock size={12} className="text-neutral-400 dark:text-neutral-600" />}
           </div>
         </div>
       </div>
@@ -1261,6 +1322,9 @@ export default function Customer() {
 
   const [selectedId, setSelectedId] = useState(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  // Holds the customer pending an activate/deactivate confirmation — the
+  // switch never flips the status itself, it just opens this dialog.
+  const [statusConfirmTarget, setStatusConfirmTarget] = useState(null);
 
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -1414,7 +1478,7 @@ export default function Customer() {
             onBack={() => setSelectedId(null)}
             onEditPlan={handleEditPlan}
             onDeletePlan={handleDeletePlan}
-            onToggleStatus={handleToggleStatus}
+            onRequestToggleStatus={setStatusConfirmTarget}
           />
         ) : (
           <>
@@ -1427,14 +1491,27 @@ export default function Customer() {
                 </p>
               </div>
 
-             
+              <div className="flex items-center gap-2.5 self-start rounded-xl bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <ShieldCheck size={15} className={isSuperAdmin ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-600"} />
+                <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Super Admin Mode</span>
+                <ToggleSwitch
+                  checked={isSuperAdmin}
+                  onChange={() => setIsSuperAdmin((v) => !v)}
+                  title={isSuperAdmin ? "Turn off Super Admin Mode" : "Turn on Super Admin Mode"}
+                />
+              </div>
             </div>
 
-            {!isSuperAdmin && (
+            {!isSuperAdmin ? (
               <div className="mb-5 flex items-center gap-2 rounded-xl bg-neutral-50/60 px-4 py-2.5 text-[12px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900/60 dark:shadow-black/20">
                 <Lock size={13} />
                 Only Super Admin can activate or deactivate a customer account. Turn on Super Admin
                 Mode above to enable this control.
+              </div>
+            ) : (
+              <div className="mb-5 flex items-center gap-2 rounded-xl bg-emerald-400/10 px-4 py-2.5 text-[12px] font-medium text-emerald-700 dark:text-emerald-400">
+                <ShieldCheck size={13} />
+                Super Admin Mode is on — you can activate or deactivate any customer account below.
               </div>
             )}
 
@@ -1485,9 +1562,11 @@ export default function Customer() {
                       key={c.id}
                       customer={c}
                       plan={plans.find((p) => p.id === c.planId)}
+                      isSuperAdmin={isSuperAdmin}
                       onOpen={handleOpenCustomer}
                       onEdit={handleEditCustomer}
                       onDelete={handleDeleteCustomer}
+                      onRequestToggleStatus={setStatusConfirmTarget}
                     />
                   ))}
                 </div>
@@ -1555,6 +1634,28 @@ export default function Customer() {
           setEditingPlan(null);
         }}
         onSave={handleSavePlan}
+      />
+
+      <ConfirmActionModal
+        open={Boolean(statusConfirmTarget)}
+        tone={statusConfirmTarget?.status === "Active" ? "danger" : "neutral"}
+        icon={Power}
+        title={
+          statusConfirmTarget?.status === "Active"
+            ? `Deactivate ${toTitleCase(statusConfirmTarget?.name)}?`
+            : `Activate ${toTitleCase(statusConfirmTarget?.name)}?`
+        }
+        description={
+          statusConfirmTarget?.status === "Active"
+            ? "They'll immediately lose access to their account until reactivated."
+            : "They'll immediately regain access to their account."
+        }
+        confirmLabel={statusConfirmTarget?.status === "Active" ? "Deactivate" : "Activate"}
+        onClose={() => setStatusConfirmTarget(null)}
+        onConfirm={() => {
+          handleToggleStatus(statusConfirmTarget);
+          setStatusConfirmTarget(null);
+        }}
       />
     </div>
   );

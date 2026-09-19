@@ -45,14 +45,13 @@ function handleError(error) {
  * convention everywhere else in this app (Promo Code's audience, Legal's
  * likely counterpart) — not itself confirmed from Postman.
  *
- * NOT shown in the confirmed screenshots, so inferred from this exact
- * backend's own naming convention used everywhere else (e.g.
- * /banners/get-all, /promoCodes/get-all, both returning
- * { data: { data: [...], total, page, limit } }):
- *   - the list (get-all) endpoint for either resource
- *   - Privacy & Policies' own delete path (mirrored from Terms')
- * If either of those 404s against the real backend, that's the first
- * thing to re-confirm.
+ * List/single-item paths weren't in the confirmed screenshots. This
+ * backend isn't consistent about get-all vs getAll across resources
+ * (Banner uses get-all; Category/SubCategory/Plan/PromotionalTicker use
+ * getAll) — /terms-and-conditions/get-all 404'd with "Invalid API", and
+ * Plan's confirmed pairing of list `getAll` + single `get/:id` is the
+ * matching real convention here too. Privacy & Policies' own delete path
+ * is still mirrored (unconfirmed) from Terms'.
  * ---------------------------------------------------------------------- */
 
 function buildLegalApi(resource) {
@@ -61,7 +60,16 @@ function buildLegalApi(resource) {
             try {
                 const params = { page, limit };
                 if (search) params.search = search;
-                const { data } = await api.get(`/${resource}/get-all`, { params });
+                const { data } = await api.get(`/${resource}/getAll`, { params });
+                return data;
+            } catch (error) {
+                handleError(error);
+            }
+        },
+        async getById(id) {
+            try {
+                if (!id) throw new Error('id is required');
+                const { data } = await api.get(`/${resource}/get/${id}`);
                 return data;
             } catch (error) {
                 handleError(error);

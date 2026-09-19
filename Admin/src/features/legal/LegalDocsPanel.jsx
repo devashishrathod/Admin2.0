@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X, Power, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X, Power, FileText, Eye, Calendar, Clock } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
 import ConfirmActionModal from "../../components/common/ConfirmActionModal";
@@ -148,6 +148,107 @@ function LegalFormModal({ open, initialData, onClose, onSave }) {
 }
 
 /* -------------------------------------------------------------------------
+ * View modal — read-only detail. Opens instantly with whatever the list
+ * row already has, then quietly refreshes from GET /resource/get/:id in
+ * the background (same lightweight-list -> full-detail pattern used by
+ * Settlement/Customer/PromoCode elsewhere in this app), so a stale or
+ * truncated list-view field never gets stuck on screen.
+ * ---------------------------------------------------------------------- */
+function LegalViewModal({ doc, onClose, onFetchFull }) {
+  const [full, setFull] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!doc) return;
+    setFull(null);
+    let cancelled = false;
+    setRefreshing(true);
+    onFetchFull(doc.id)
+      .then((res) => {
+        if (cancelled || !res) return;
+        setFull(normalizeLegalDoc(res?.data ?? res));
+      })
+      .catch(() => {
+        // Keep showing the list row's data — the background refresh is a
+        // nice-to-have, not a blocker.
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, onFetchFull]);
+
+  if (!doc) return null;
+  const shown = full || doc;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-400/10 text-sky-600 dark:text-sky-400">
+              <FileText size={17} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{shown.title}</h2>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-full bg-sky-400/10 px-2.5 py-1 text-[11px] font-medium text-sky-600 dark:text-sky-400">{shown.type}</span>
+                <StatusBadge status={shown.isActive ? "Active" : "Inactive"} />
+                {refreshing && <Loader2 size={12} className="animate-spin text-neutral-400" />}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950/60">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Description</p>
+          {shown.description ? (
+            <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-neutral-700 dark:text-neutral-300">{shown.description}</p>
+          ) : (
+            <p className="text-[13px] text-neutral-400 dark:text-neutral-600">No description.</p>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="flex items-center gap-2 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
+            <Calendar size={13} className="shrink-0 text-neutral-500" />
+            <div className="min-w-0">
+              <p className="text-[10.5px] text-neutral-500">Created</p>
+              <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{formatDateTime(shown.createdAt)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
+            <Clock size={13} className="shrink-0 text-neutral-500" />
+            <div className="min-w-0">
+              <p className="text-[10.5px] text-neutral-500">Last Updated</p>
+              <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{formatDateTime(shown.updatedAt)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end border-t border-neutral-200 pt-4 dark:border-neutral-800">
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
  * LegalDocsPanel — Terms & Conditions / Privacy Policy management, shown
  * inside Settings' "Legal" section. `kind` picks which real resource this
  * instance talks to; both share the exact same UI since the backend
@@ -165,6 +266,8 @@ export default function LegalDocsPanel({ kind }) {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState(null);
+
+  const [viewTarget, setViewTarget] = useState(null);
 
   const [toggleTarget, setToggleTarget] = useState(null);
   const [toggleSubmitting, setToggleSubmitting] = useState(false);
@@ -273,6 +376,13 @@ export default function LegalDocsPanel({ kind }) {
             title={d.isActive ? "Deactivate" : "Activate"}
           />
           <button
+            onClick={() => setViewTarget(d)}
+            aria-label={`View ${d.title}`}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-emerald-400/10 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400"
+          >
+            <Eye size={14} />
+          </button>
+          <button
             onClick={() => {
               setEditingDoc(d);
               setFormOpen(true);
@@ -343,6 +453,8 @@ export default function LegalDocsPanel({ kind }) {
           pageSize={PAGE_SIZE}
         />
       )}
+
+      <LegalViewModal doc={viewTarget} onClose={() => setViewTarget(null)} onFetchFull={api.getById} />
 
       <LegalFormModal
         open={formOpen}

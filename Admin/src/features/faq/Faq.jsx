@@ -148,10 +148,17 @@ const MOCK_FAQS = [
     media: [
       {
         type: "image",
-        url: "https://example.com/media/voucher-redeem-step.png",
+        url: "https://picsum.photos/seed/trydood-voucher/640/360",
         thumbnail: "",
         title: "Redeem screen",
         caption: "The QR code the vendor scans at checkout.",
+      },
+      {
+        type: "video",
+        url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+        thumbnail: "",
+        title: "60-second walkthrough",
+        caption: "How redemption looks end to end.",
       },
     ],
     redirect: { enabled: true, type: "internal", url: "/vendor-listing", label: "View Vouchers", openInNewTab: false },
@@ -332,6 +339,23 @@ function RelatedFaqPicker({ options, selectedIds, onChange }) {
   );
 }
 
+// A broken/unreachable image URL used to just disappear (display:none on
+// error) — no visible feedback that anything was even attempted. This
+// shows a visible placeholder instead, so a bad URL reads as "this link
+// doesn't work" rather than an unexplained empty gap.
+function MediaPreviewImage({ src, alt, className }) {
+  const [errored, setErrored] = useState(false);
+  if (!src || errored) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-1 bg-neutral-100 text-neutral-400 dark:bg-neutral-950 dark:text-neutral-600 ${className}`}>
+        <ImageIcon size={18} />
+        <span className="text-[10px]">Image unavailable</span>
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} className={className} onError={() => setErrored(true)} />;
+}
+
 /* -------------------------------------------------------------------------
  * Repeatable media rows — URL-based (type/url/thumbnail/title/caption),
  * not a real uploader: there's no confirmed FAQ media-upload endpoint
@@ -391,16 +415,10 @@ function MediaEditor({ items, onChange }) {
 
           {/* Live preview so the admin can see what they just pasted */}
           {m.url && m.type === "image" && (
-            <img
+            <MediaPreviewImage
               src={m.url}
               alt=""
               className="mt-2.5 h-28 w-full rounded-lg border border-neutral-200 object-cover dark:border-neutral-800"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-              onLoad={(e) => {
-                e.currentTarget.style.display = "";
-              }}
             />
           )}
           {m.url && m.type === "video" && (
@@ -762,13 +780,10 @@ function FaqAccordionItem({ faq, isOpen, onToggleOpen, onEdit, onDelete, onReque
                   <div key={i} className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
                     {m.type === "image" && m.url ? (
                       <a href={m.url} target="_blank" rel="noreferrer">
-                        <img
+                        <MediaPreviewImage
                           src={m.url}
                           alt={m.title || "FAQ media"}
-                          className="h-40 w-full bg-neutral-100 object-cover dark:bg-neutral-950"
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
+                          className="h-40 w-full object-cover"
                         />
                       </a>
                     ) : youtubeEmbed ? (

@@ -640,10 +640,14 @@ export default function Settings() {
         )}
 
         {!loading && !loadError && form && (
-          <div className="flex flex-col gap-5 lg:flex-row">
-            {/* Left: nested section nav */}
-            <div className="shrink-0 lg:w-64">
-              <div className="space-y-1 rounded-2xl bg-white p-2 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:sticky lg:top-6">
+          <div className="flex flex-col gap-5 md:flex-row">
+            {/* Left: nested section nav — switches to a side-by-side
+                layout starting at the md breakpoint (768px) instead of lg
+                (1024px), so typical tablet/laptop widths get the compact
+                2-column view instead of the whole nav tree stacking above
+                the content and pushing it off-screen. */}
+            <div className="shrink-0 md:w-64">
+              <div className="max-h-[70vh] space-y-1 overflow-y-auto rounded-2xl bg-white p-2 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 md:sticky md:top-6 md:max-h-[calc(100vh-3rem)]">
                 {SECTIONS.map((s) => {
                   const hasChildren = Boolean(s.children?.length);
                   const isExpanded = expandedGroup === s.id;

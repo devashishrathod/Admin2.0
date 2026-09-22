@@ -1202,9 +1202,9 @@ function SystemVerificationTab({ brand }) {
   const gaugeData =
     sv.score != null
       ? [
-          { name: "score", value: sv.score },
-          { name: "rest", value: 100 - sv.score },
-        ]
+        { name: "score", value: sv.score },
+        { name: "rest", value: 100 - sv.score },
+      ]
       : [];
   const gaugeColor = sv.score >= 80 ? "#34d399" : sv.score >= 50 ? "#fbbf24" : "#f87171";
 
@@ -1250,20 +1250,18 @@ function SystemVerificationTab({ brand }) {
                 {sv.status?.replace(/_/g, " ")}
               </span>
               <span
-                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                  sv.isAdminApproved
-                    ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                    : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                }`}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${sv.isAdminApproved
+                  ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                  : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
+                  }`}
               >
                 {sv.isAdminApproved ? "Admin Approved" : "Not Admin Approved"}
               </span>
               <span
-                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                  sv.isReviewed
-                    ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
-                    : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                }`}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${sv.isReviewed
+                  ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
+                  : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
+                  }`}
               >
                 {sv.isReviewed ? "Reviewed" : "Not Reviewed"}
               </span>
@@ -1408,11 +1406,10 @@ function SystemVerificationTab({ brand }) {
           ].map(([label, flagged]) => (
             <div
               key={label}
-              className={`rounded-lg px-2.5 py-2 text-center text-[10.5px] font-medium ${
-                flagged
-                  ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                  : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-              }`}
+              className={`rounded-lg px-2.5 py-2 text-center text-[10.5px] font-medium ${flagged
+                ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+                }`}
             >
               {label}
               <br />
@@ -1462,11 +1459,10 @@ function SystemVerificationTab({ brand }) {
                 {flagList.map(([label, ok]) => (
                   <div
                     key={label}
-                    className={`rounded-lg px-2.5 py-2 text-center text-[10.5px] font-medium ${
-                      ok
-                        ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-                    }`}
+                    className={`rounded-lg px-2.5 py-2 text-center text-[10.5px] font-medium ${ok
+                      ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                      : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+                      }`}
                   >
                     {label}
                     <br />
@@ -1503,7 +1499,7 @@ function SystemVerificationTab({ brand }) {
 const TAB_ICONS = {
   Overview: Home,
   "Brand Info": IdCard,
-  Ambience: ImageIcon,
+  "Showcase Media": ImageIcon,
   "Sub-Brand": Store,
   Listings: Ticket,
   Settlements: HandCoins,
@@ -1547,7 +1543,7 @@ export default function BrandDetails({
   const tabContent = {
     Overview: <OverviewTab brand={brand} />,
     "Brand Info": <BrandInfoTab brand={brand} />,
-    Ambience: <AmbienceTab brand={brand} />,
+    "Showcase Media": <AmbienceTab brand={brand} />,
     "Sub-Brand": <SubBrandTab brand={brand} />,
     Listings: <ListingsTab brand={brand} />,
     Settlements: <SettlementsTab brand={brand} />,
@@ -1587,8 +1583,8 @@ export default function BrandDetails({
               <button
                 onClick={() => setShowTopBrandModal(true)}
                 className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${brand.isTopBrand
-                    ? "border-amber-400/40 bg-amber-400/10 text-amber-600 dark:text-amber-400"
-                    : "border-neutral-200 bg-white text-neutral-500 hover:border-amber-400/40 hover:text-amber-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-amber-400"
+                  ? "border-amber-400/40 bg-amber-400/10 text-amber-600 dark:text-amber-400"
+                  : "border-neutral-200 bg-white text-neutral-500 hover:border-amber-400/40 hover:text-amber-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-amber-400"
                   }`}
               >
                 <Sparkles size={13} />

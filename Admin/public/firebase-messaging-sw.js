@@ -11,12 +11,12 @@ importScripts(
 );
 
 firebase.initializeApp({
-  apiKey: "AIzaSyBrxjSu40AuXadpX7je2cBTXMyQOqLGuz4",
-  authDomain: "trydood-5b2ec.firebaseapp.com",
-  projectId: "trydood-5b2ec",
-  storageBucket: "trydood-5b2ec.firebasestorage.app",
-  messagingSenderId: "411862718937",
-  appId: "1:411862718937:web:6fa2eae3e94b41cddf61c8",
+  apiKey: "AIzaSyAVM2LU6d14UjvvPtzAiS6mjy-Vf_-mNC4",
+  authDomain: "trydood-98ec8.firebaseapp.com",
+  projectId: "trydood-98ec8",
+  storageBucket: "trydood-98ec8.firebasestorage.app",
+  messagingSenderId: "80506698320",
+  appId: "1:80506698320:web:a7de177f15f45d69e72f55",
 });
 
 const messaging = firebase.messaging();

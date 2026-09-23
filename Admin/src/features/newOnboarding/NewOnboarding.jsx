@@ -196,7 +196,7 @@ export default function NewOnboarding() {
     }
   };
 
-  // const handleApprove = (verification, note) => handleReview(verification, { action: "APPROVED", note }, "approve");
+  const handleApprove = (verification, note) => handleReview(verification, { action: "APPROVED", note }, "approve");
   const handleReject = (verification, rejectionReason) =>
     handleReview(verification, { action: "REJECTED", rejectionReason }, "reject");
   // Case D — plain toggle, no explicit direction (server flips isReviewed).
@@ -212,7 +212,7 @@ export default function NewOnboarding() {
       <VerificationDetails
         verification={selected}
         onBack={() => setSelectedId(null)}
-        // onApprove={(note) => handleApprove(selected, note)}
+        onApprove={(note) => handleApprove(selected, note)}
         onReject={(reason) => handleReject(selected, reason)}
         onMarkReviewed={() => handleMarkReviewed(selected)}
         onForceReviewed={(isReviewed) => handleForceReviewed(selected, isReviewed)}

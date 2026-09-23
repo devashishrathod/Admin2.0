@@ -22,7 +22,9 @@ import {
   updateBanner,
   deleteBanner,
   buildRedirectPayload,
+  presignUploadAndConfirm,
   BANNER_TYPES,
+  BANNER_UPLOAD_PURPOSE,
   REDIRECT_TYPES,
 } from "./services/BannerApi";
 import { getCategories } from "../category/services/CategoryApi";
@@ -51,6 +53,8 @@ const EMPTY_FORM = {
   type: BANNER_TYPES.IMAGE,
   file: null, // File object when a new media file is picked
   filePreview: "", // existing media URL (edit) or local object URL (new pick)
+  posterFile: null, // still-image poster — required alongside a new VIDEO file
+  posterPreview: "", // existing poster URL (edit) or local object URL (new pick)
   redirectType: REDIRECT_TYPES.NONE,
   targetId: "",
   url: "",
@@ -104,9 +108,9 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
   const handleChange = (field) => (e) => setField(field, e.target.value);
 
   const handleTypeChange = (nextType) => {
-    // A different type uploads to a different field (image/video/gif) —
-    // drop whatever was picked for the previous type.
-    setForm((prev) => ({ ...prev, type: nextType, file: null, filePreview: "" }));
+    // A different type picks a different file to upload — drop whatever
+    // was picked (media + poster) for the previous type.
+    setForm((prev) => ({ ...prev, type: nextType, file: null, filePreview: "", posterFile: null, posterPreview: "" }));
   };
 
   const handleFilePick = (e) => {
@@ -115,11 +119,22 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
     setForm((prev) => ({ ...prev, file, filePreview: URL.createObjectURL(file) }));
   };
 
+  const handlePosterPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setForm((prev) => ({ ...prev, posterFile: file, posterPreview: URL.createObjectURL(file) }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const nextErrors = {};
     if (!form.title.trim()) nextErrors.title = "Banner title is required";
     if (!isEdit && !form.file) nextErrors.file = `A ${typeOption.label.toLowerCase()} file is required`;
+    // A video banner needs its poster whenever a new video file is being
+    // sent — the backend requires both together, it never reuses an old one.
+    if (form.type === BANNER_TYPES.VIDEO && form.file && !form.posterFile) {
+      nextErrors.posterFile = "A poster image is required for video banners";
+    }
     if (TARGET_ID_TYPES.includes(form.redirectType) || form.redirectType === REDIRECT_TYPES.CATEGORY) {
       if (!form.targetId.trim()) nextErrors.targetId = "A target is required for this redirect type";
     }
@@ -212,6 +227,28 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
             </label>
             {errors.file && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.file}</p>}
           </div>
+
+          {/* Poster upload — required whenever a new video file is picked */}
+          {form.type === BANNER_TYPES.VIDEO && (
+            <div className="mb-4">
+              <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
+                Poster Image <span className="font-normal text-neutral-500">(shown before the video plays)</span>
+              </label>
+              <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
+                {form.posterPreview ? (
+                  <img src={form.posterPreview} alt="poster preview" className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon size={24} className="text-neutral-400 dark:text-neutral-600" />
+                )}
+              </div>
+              <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
+                <ImageIcon size={14} />
+                {form.posterPreview ? "Change poster" : "Upload poster"}
+                <input type="file" accept="image/*" onChange={handlePosterPick} className="hidden" />
+              </label>
+              {errors.posterFile && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.posterFile}</p>}
+            </div>
+          )}
 
           {/* Title */}
           <div className="mb-4">
@@ -434,7 +471,7 @@ function BannerViewModal({ open, banner, categories, onClose }) {
           <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
             {banner.mediaUrl ? (
               banner.type === BANNER_TYPES.VIDEO ? (
-                <video src={banner.mediaUrl} className="h-full w-full object-cover" muted controls />
+                <video src={banner.mediaUrl} poster={banner.posterUrl || undefined} className="h-full w-full object-cover" muted controls />
               ) : (
                 <img src={banner.mediaUrl} alt={banner.title} className="h-full w-full object-cover" />
               )
@@ -550,25 +587,36 @@ function redirectSummary(redirect, categories) {
   return `${redirect.type}: ${redirect.targetId}`;
 }
 
-// The real getAll response nests each media file as { url, storage }
-// under whichever key matches the banner's type (image/video/gif) — there
-// is no separate `type` field on read, so it's derived from which of
-// those keys is actually populated (with a real `url`).
+// The real getAll/create/update response nests media as a single unified
+// object — { url, kind, width, height, mimeType, sizeBytes, originalName,
+// provider } — with `kind` (IMAGE | VIDEO | GIF) telling us the type
+// directly, and for VIDEO two extra fields: `duration` and `thumbnail`
+// (the poster image — named `poster` on the way in, `thumbnail` on the
+// way out, deliberately, to match every other client-facing surface).
+// Older records that still return per-type image/video/gif keys are kept
+// as a fallback so previously-created banners keep rendering.
 function extractMedia(banner) {
-  if (banner.video?.url) return { type: BANNER_TYPES.VIDEO, mediaUrl: banner.video.url };
-  if (banner.gif?.url) return { type: BANNER_TYPES.GIF, mediaUrl: banner.gif.url };
-  if (banner.image?.url) return { type: BANNER_TYPES.IMAGE, mediaUrl: banner.image.url };
+  if (banner.media?.url) {
+    return {
+      type: banner.media.kind || banner.type || BANNER_TYPES.IMAGE,
+      mediaUrl: banner.media.url,
+      posterUrl: banner.media.thumbnail || "",
+    };
+  }
+  if (banner.video?.url) return { type: BANNER_TYPES.VIDEO, mediaUrl: banner.video.url, posterUrl: "" };
+  if (banner.gif?.url) return { type: BANNER_TYPES.GIF, mediaUrl: banner.gif.url, posterUrl: "" };
+  if (banner.image?.url) return { type: BANNER_TYPES.IMAGE, mediaUrl: banner.image.url, posterUrl: "" };
   // Fall back to a plain string if some record still returns one (e.g.
   // an older / differently-shaped record).
-  if (typeof banner.image === "string") return { type: BANNER_TYPES.IMAGE, mediaUrl: banner.image };
-  if (typeof banner.video === "string") return { type: BANNER_TYPES.VIDEO, mediaUrl: banner.video };
-  if (typeof banner.gif === "string") return { type: BANNER_TYPES.GIF, mediaUrl: banner.gif };
-  return { type: banner.type || BANNER_TYPES.IMAGE, mediaUrl: "" };
+  if (typeof banner.image === "string") return { type: BANNER_TYPES.IMAGE, mediaUrl: banner.image, posterUrl: "" };
+  if (typeof banner.video === "string") return { type: BANNER_TYPES.VIDEO, mediaUrl: banner.video, posterUrl: "" };
+  if (typeof banner.gif === "string") return { type: BANNER_TYPES.GIF, mediaUrl: banner.gif, posterUrl: "" };
+  return { type: banner.type || BANNER_TYPES.IMAGE, mediaUrl: "", posterUrl: "" };
 }
 
 function apiToRow(banner) {
   const redirect = parseRedirect(banner);
-  const { type, mediaUrl } = extractMedia(banner);
+  const { type, mediaUrl, posterUrl } = extractMedia(banner);
   return {
     id: banner._id ?? banner.id,
     // `title` isn't always present on the records this endpoint returns
@@ -578,6 +626,7 @@ function apiToRow(banner) {
     description: banner.description || "",
     type,
     mediaUrl,
+    posterUrl,
     redirect,
     startDate: banner.startDate,
     endDate: banner.endDate,
@@ -598,6 +647,8 @@ function rowToFormDraft(row) {
     type: row.type,
     file: null,
     filePreview: row.mediaUrl ?? "",
+    posterFile: null,
+    posterPreview: row.posterUrl ?? "",
     redirectType: row.redirect?.type || REDIRECT_TYPES.NONE,
     targetId: row.redirect?.targetId || "",
     url: row.redirect?.url || "",
@@ -717,18 +768,36 @@ export default function Banner() {
         targetId: form.targetId.trim(),
         url: form.url.trim(),
       });
+      // `type` is never sent — the backend derives it from the uploaded
+      // file's real mime type and ignores/ rejects a stray `type` field.
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
-        type: form.type,
         redirect,
         startDate: localInputToIso(form.startDateLocal),
         endDate: localInputToIso(form.endDateLocal),
         isActive: form.isActive,
-        file: form.file,
       };
+      const isVideo = form.type === BANNER_TYPES.VIDEO;
       if (form.id) {
-        await updateBanner(form.id, payload);
+        // Editing: the presigned road isn't offered for update, only
+        // create — send the raw file(s) as plain multipart under `media`
+        // (and `poster` for a new video file).
+        await updateBanner(form.id, {
+          ...payload,
+          mediaFile: form.file,
+          posterFile: isVideo ? form.posterFile : null,
+        });
+      } else if (form.file) {
+        // Creating with a file: presign + upload straight to S3 first,
+        // then hand the confirmed upload id(s) to /banners/create instead
+        // of the raw file(s). A video needs its own separate poster upload.
+        const mediaUploadId = await presignUploadAndConfirm({ file: form.file, purpose: BANNER_UPLOAD_PURPOSE.MEDIA });
+        let posterUploadId;
+        if (isVideo) {
+          posterUploadId = await presignUploadAndConfirm({ file: form.posterFile, purpose: BANNER_UPLOAD_PURPOSE.POSTER });
+        }
+        await createBanner({ ...payload, mediaUploadId, posterUploadId });
       } else {
         await createBanner(payload);
       }
@@ -790,7 +859,11 @@ export default function Banner() {
       label: "Banner",
       render: (row) => (
         <div className="flex h-10 w-20 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
-          {row.mediaUrl ? (
+          {row.type === BANNER_TYPES.VIDEO && row.posterUrl ? (
+            // The poster is a still image — lighter than loading video bytes
+            // just to show a thumbnail.
+            <img src={row.posterUrl} alt={row.title} className="h-full w-full object-cover" />
+          ) : row.mediaUrl ? (
             row.type === BANNER_TYPES.VIDEO ? (
               <video src={row.mediaUrl} className="h-full w-full object-cover" muted />
             ) : (

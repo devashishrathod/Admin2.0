@@ -158,16 +158,16 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
             {voucher.images?.length > 0 && (
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {voucher.images.map((img, i) => (
-                  <div key={img.url || i} className="relative aspect-video overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-                    <img src={img.url} alt={`${voucher.title} ${i + 1}`} className="h-full w-full object-cover" />
+                  <div key={img?.url || img?.media?.url || i} className="relative aspect-video overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
+                    <img src={img?.url || img?.media?.url} alt={`${voucher.title} ${i + 1}`} className="h-full w-full object-cover" />
                     <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
                       #{img.sortOrder ?? i + 1}
                     </span>
-                    {img.provider && (
+                    {/* {img.provider && (
                       <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wide text-white">
                         {img.provider}
                       </span>
-                    )}
+                    )} */}
                   </div>
                 ))}
               </div>
@@ -199,7 +199,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 )}
                 <InfoRow icon={Calendar} label="Validity" value={`${voucher.startDate} → ${voucher.endDate}`} />
                 {/* <InfoRow icon={Store} label="Sub-Brands Attached" value={voucher.attachedSubBrandsCount ?? 0} />*/}
-                <InfoRow 
+                <InfoRow
                   icon={Lock}
                   label="Immutable"
                   value={voucher.isImmutable ? "Yes — locked from further edits" : "No — still editable"}
@@ -207,11 +207,10 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                    voucher.isActive
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.isActive
                       ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                       : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                  }`}
+                    }`}
                 >
                   {voucher.isActive ? "Active" : "Inactive"}
                 </span>
@@ -540,20 +539,18 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.brand.isApproved
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.brand.isApproved
                         ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                    }`}
+                      }`}
                   >
                     {voucher.brand.isApproved ? "Brand Approved" : "Brand Pending Approval"}
                   </span>
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.brand.isSubscribed
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.brand.isSubscribed
                         ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                    }`}
+                      }`}
                   >
                     {voucher.brand.isSubscribed ? "Subscribed" : "Not Subscribed"}
                   </span>
@@ -561,11 +558,10 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                     Onboarding: {voucher.brand.onboardingStatus}
                   </span>
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.brand.isReviewed
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.brand.isReviewed
                         ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                    }`}
+                      }`}
                   >
                     {voucher.brand.isReviewed ? "Reviewed" : "Not Reviewed"}
                   </span>
@@ -596,29 +592,26 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.creatorUser.isMobileVerified
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.creatorUser.isMobileVerified
                         ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                    }`}
+                      }`}
                   >
                     {voucher.creatorUser.isMobileVerified ? "Mobile Verified" : "Mobile Not Verified"}
                   </span>
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.creatorUser.isEmailVerified
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.creatorUser.isEmailVerified
                         ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                    }`}
+                      }`}
                   >
                     {voucher.creatorUser.isEmailVerified ? "Email Verified" : "Email Not Verified"}
                   </span>
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.creatorUser.isOnBoardingCompleted
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.creatorUser.isOnBoardingCompleted
                         ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                    }`}
+                      }`}
                   >
                     {voucher.creatorUser.isOnBoardingCompleted ? "Onboarding Complete" : "Onboarding Incomplete"}
                   </span>
@@ -642,11 +635,10 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      voucher.parentVoucher.isActive
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.parentVoucher.isActive
                         ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                    }`}
+                      }`}
                   >
                     {voucher.parentVoucher.isActive ? "Active" : "Inactive"}
                   </span>
@@ -740,9 +732,8 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                   rows={3}
                   placeholder="e.g. Discount exceeds category cap. Please revise."
                   disabled={busy}
-                  className={`w-full resize-none rounded-xl bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                    rejectError ? "ring-1 ring-red-500/60 focus:ring-red-500/60" : "focus:ring-red-400/60"
-                  }`}
+                  className={`w-full resize-none rounded-xl bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${rejectError ? "ring-1 ring-red-500/60 focus:ring-red-500/60" : "focus:ring-red-400/60"
+                    }`}
                 />
                 {rejectError && (
                   <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-red-600 dark:text-red-400">

@@ -449,7 +449,7 @@ export const PAYMENT_METHODS = ["UPI", "Bank Transfer", "Trydood Account", "Othe
 export const DETAIL_TABS = [
   "Overview",
   "Brand Info",
-  "Ambience",
+  "Showcase Media",
   "Sub-Brand",
   // "Listings",
   "Settlements",

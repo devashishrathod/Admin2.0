@@ -196,43 +196,43 @@ function apiVersionToRow(v) {
     brandName: brand?.brandName || brand?.legalBusinessName || voucher.brandId || personLabel(v.createdByUser, null) || "—",
     brand: brand
       ? {
-          name: brand.brandName || "—",
-          legalName: brand.legalBusinessName || "—",
-          uniqueId: brand.uniqueId || "—",
-          merchantId: brand.merchantId || "—",
-          logo: brand.logo || "",
-          whatsappNumber: brand.whatsappNumber || "—",
-          onboardingStatus: brand.status || "—",
-          isApproved: Boolean(brand.isApproved),
-          isSubscribed: Boolean(brand.isSubscribed),
-          description: brand.description || "",
-          businessEntityType: brand.businessEntityType || "—",
-          businessRegistrationStatus: brand.businessRegistrationStatus || "—",
-          joinedDate: brand.joinedDate ? formatDateTime(brand.joinedDate) : "—",
-          isRevoked: Boolean(brand.isRevoked),
-          isReviewed: Boolean(brand.isReviewed),
-          followersCount: brand.followersCount ?? 0,
-          franchises: {
-            used: brand.franchisesUsed ?? 0,
-            limit: brand.franchisesLimit ?? 0,
-            unlimited: Boolean(brand.isFranchisesUnlimited),
-          },
-          subBrands: {
-            used: brand.subBrandsUsed ?? 0,
-            limit: brand.subBrandsLimit ?? 0,
-            unlimited: Boolean(brand.isSubBrandsUnlimited),
-          },
-          showcase: {
-            used: brand.showcaseUsed ?? 0,
-            limit: brand.showcaseLimit ?? 0,
-            unlimited: Boolean(brand.isShowcaseUnlimited),
-          },
-          vouchers: {
-            used: brand.vouchersUsed ?? 0,
-            limit: brand.vouchersLimit ?? 0,
-            unlimited: Boolean(brand.isVouchersUnlimited),
-          },
-        }
+        name: brand.brandName || "—",
+        legalName: brand.legalBusinessName || "—",
+        uniqueId: brand.uniqueId || "—",
+        merchantId: brand.merchantId || "—",
+        logo: brand.logo || "",
+        whatsappNumber: brand.whatsappNumber || "—",
+        onboardingStatus: brand.status || "—",
+        isApproved: Boolean(brand.isApproved),
+        isSubscribed: Boolean(brand.isSubscribed),
+        description: brand.description || "",
+        businessEntityType: brand.businessEntityType || "—",
+        businessRegistrationStatus: brand.businessRegistrationStatus || "—",
+        joinedDate: brand.joinedDate ? formatDateTime(brand.joinedDate) : "—",
+        isRevoked: Boolean(brand.isRevoked),
+        isReviewed: Boolean(brand.isReviewed),
+        followersCount: brand.followersCount ?? 0,
+        franchises: {
+          used: brand.franchisesUsed ?? 0,
+          limit: brand.franchisesLimit ?? 0,
+          unlimited: Boolean(brand.isFranchisesUnlimited),
+        },
+        subBrands: {
+          used: brand.subBrandsUsed ?? 0,
+          limit: brand.subBrandsLimit ?? 0,
+          unlimited: Boolean(brand.isSubBrandsUnlimited),
+        },
+        showcase: {
+          used: brand.showcaseUsed ?? 0,
+          limit: brand.showcaseLimit ?? 0,
+          unlimited: Boolean(brand.isShowcaseUnlimited),
+        },
+        vouchers: {
+          used: brand.vouchersUsed ?? 0,
+          limit: brand.vouchersLimit ?? 0,
+          unlimited: Boolean(brand.isVouchersUnlimited),
+        },
+      }
       : null,
     category: category?.name || "—",
     subCategory: subCategory?.name || "—",
@@ -247,7 +247,11 @@ function apiVersionToRow(v) {
     images: (v.images || [])
       .slice()
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .map((img) => ({ url: img.url, sortOrder: img.sortOrder, provider: img.storage?.provider || null })),
+      .map((img) => ({
+        url: img.media?.url || img.url || null,
+        sortOrder: img.sortOrder,
+        provider: img.media?.storage?.provider || img.storage?.provider || null,
+      })),
     offers: v.offers || [],
     discount: primaryOffer?.title || "—",
     minBillAmount: primaryOffer?.minBillAmount ?? 0,
@@ -280,32 +284,32 @@ function apiVersionToRow(v) {
     // with a submittedBy fallback used elsewhere).
     creatorUser: creatorUser
       ? {
-          role: creatorUser.role || "—",
-          loginType: creatorUser.loginType || "—",
-          whatsappNumber: creatorUser.whatsappNumber || "—",
-          uniqueId: creatorUser.uniqueId || "—",
-          referralCode: creatorUser.referralCode || "—",
-          isEmailVerified: Boolean(creatorUser.isEmailVerified),
-          isMobileVerified: Boolean(creatorUser.isMobileVerified),
-          isOnBoardingCompleted: Boolean(creatorUser.isOnBoardingCompleted),
-          walletBalance: creatorUser.walletBalance ?? 0,
-          tCoinsBalance: creatorUser.tCoinsBalance ?? 0,
-          currentScreen: creatorUser.currentScreen || "—",
-        }
+        role: creatorUser.role || "—",
+        loginType: creatorUser.loginType || "—",
+        whatsappNumber: creatorUser.whatsappNumber || "—",
+        uniqueId: creatorUser.uniqueId || "—",
+        referralCode: creatorUser.referralCode || "—",
+        isEmailVerified: Boolean(creatorUser.isEmailVerified),
+        isMobileVerified: Boolean(creatorUser.isMobileVerified),
+        isOnBoardingCompleted: Boolean(creatorUser.isOnBoardingCompleted),
+        walletBalance: creatorUser.walletBalance ?? 0,
+        tCoinsBalance: creatorUser.tCoinsBalance ?? 0,
+        currentScreen: creatorUser.currentScreen || "—",
+      }
       : null,
     // The parent voucher record (as opposed to this version) — its own
     // lifecycle/status/timestamps, distinct from the version's.
     parentVoucher: v.voucher
       ? {
-          normalizedName: voucher.normalizedName || "—",
-          timezone: voucher.timezone || "—",
-          currentVersion: voucher.currentVersion ?? "—",
-          status: voucher.status || "—",
-          isActive: Boolean(voucher.isActive),
-          isDeleted: Boolean(voucher.isDeleted),
-          createdAtDisplay: voucher.createdAt ? formatDateTime(voucher.createdAt) : "—",
-          updatedAtDisplay: voucher.updatedAt ? formatDateTime(voucher.updatedAt) : "—",
-        }
+        normalizedName: voucher.normalizedName || "—",
+        timezone: voucher.timezone || "—",
+        currentVersion: voucher.currentVersion ?? "—",
+        status: voucher.status || "—",
+        isActive: Boolean(voucher.isActive),
+        isDeleted: Boolean(voucher.isDeleted),
+        createdAtDisplay: voucher.createdAt ? formatDateTime(voucher.createdAt) : "—",
+        updatedAtDisplay: voucher.updatedAt ? formatDateTime(voucher.updatedAt) : "—",
+      }
       : null,
     // The version's own `status` is the authoritative, up-to-date workflow
     // state — the parent `voucher.status` can lag behind it (e.g. a
@@ -605,11 +609,10 @@ export default function VoucherListing() {
             disabled={actionBusy}
             aria-label={row.isSuggested ? `Remove ${row.title} from suggestions` : `Suggest ${row.title}`}
             title={row.isSuggested ? "Remove from Suggested" : "Mark as Suggested"}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${
-              row.isSuggested
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors disabled:opacity-40 ${row.isSuggested
                 ? "text-amber-500 hover:bg-amber-400/10"
                 : "text-neutral-400 hover:bg-neutral-100 hover:text-amber-500 dark:text-neutral-500 dark:hover:bg-neutral-800"
-            }`}
+              }`}
           >
             <Star size={15} fill={row.isSuggested ? "currentColor" : "none"} />
           </button>
@@ -773,9 +776,8 @@ export default function VoucherListing() {
                       setPage(1);
                       setStatusMenuOpen(false);
                     }}
-                    className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-[13px] transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
-                      statusFilter === s ? "font-semibold text-neutral-900 dark:text-neutral-50" : "text-neutral-600 dark:text-neutral-400"
-                    }`}
+                    className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-[13px] transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 ${statusFilter === s ? "font-semibold text-neutral-900 dark:text-neutral-50" : "text-neutral-600 dark:text-neutral-400"
+                      }`}
                   >
                     <span className="flex items-center gap-2">
                       {s === "All" ? (

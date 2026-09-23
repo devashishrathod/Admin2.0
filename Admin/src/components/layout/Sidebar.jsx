@@ -71,7 +71,7 @@ const NAV_GROUPS = [
       { id: "banner", label: "Banner", icon: Image, path: "/banner" },
       { id: "promotional-ticker", label: "Promotional Ticker", icon: MonitorPlay, path: "/promotional-ticker" },
       { id: "settings", label: "Feature Campaign", icon: Megaphone, path: "/feature_campaign" },
-      { id: "coupon-code", label: "Coupon Code", icon: Tag, path: "/coupon" },
+      // { id: "coupon-code", label: "Coupon Code", icon: Tag, path: "/coupon" },
       { id: "promo-code", label: "Promo Code", icon: Percent, path: "/promo-code" },
       { id: "faq", label: "FAQ", icon: HelpCircle, path: "/faq" },
     ],

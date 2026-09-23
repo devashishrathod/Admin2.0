@@ -14,7 +14,7 @@ import VerificationDetails from "./VerificationDetails";
 function deriveStatus(raw) {
   if (raw.isRevoked) return "REVOKED";
   if (raw.isRejected) return "REJECTED";
-  if (raw.isAdminApproved) return "APPROVED";
+  if (raw.isAdminApproved || raw.status === "APPROVED") return "APPROVED";
   return raw.status || "PENDING";
 }
 
@@ -101,11 +101,11 @@ function mapVerification(raw) {
 // send (`derivedStatus` falls back to "PENDING" when `raw.status` itself is
 // empty, but returns "MANUAL_REVIEW" verbatim when that's the raw value) —
 // so the "Pending" tab below matches either.
-const STATUS_TABS = ["All", "Pending", "APPROVED", "REJECTED", "REVOKED"];
+const STATUS_TABS = ["All", "Pending", "REJECTED", "REVOKED"];
 const STATUS_TAB_LABELS = {
   All: "All",
   Pending: "Pending",
-  APPROVED: "Approved",
+  // APPROVED: "Approved",
   REJECTED: "Rejected",
   REVOKED: "Revoked",
 };
@@ -177,12 +177,7 @@ export default function NewOnboarding() {
 
   // Status filtering is client-side (within the current page) since the
   // list endpoint's confirmed query params are only page/limit/search.
-  const filtered =
-    statusTab === "All"
-      ? verifications
-      : statusTab === "Pending"
-      ? verifications.filter((v) => PENDING_STATUSES.includes(v.derivedStatus))
-      : verifications.filter((v) => v.derivedStatus === statusTab);
+  const filtered = (statusTab === "All" ? verifications : statusTab === "Pending" ? verifications.filter((v) => PENDING_STATUSES.includes(v.derivedStatus)) : verifications.filter((v) => v.derivedStatus === statusTab)).filter((v) => v.derivedStatus !== "APPROVED");
 
   const selected = verifications.find((v) => v.id === selectedId) || null;
 
@@ -201,7 +196,7 @@ export default function NewOnboarding() {
     }
   };
 
-  const handleApprove = (verification, note) => handleReview(verification, { action: "APPROVED", note }, "approve");
+  // const handleApprove = (verification, note) => handleReview(verification, { action: "APPROVED", note }, "approve");
   const handleReject = (verification, rejectionReason) =>
     handleReview(verification, { action: "REJECTED", rejectionReason }, "reject");
   // Case D — plain toggle, no explicit direction (server flips isReviewed).
@@ -217,7 +212,7 @@ export default function NewOnboarding() {
       <VerificationDetails
         verification={selected}
         onBack={() => setSelectedId(null)}
-        onApprove={(note) => handleApprove(selected, note)}
+        // onApprove={(note) => handleApprove(selected, note)}
         onReject={(reason) => handleReject(selected, reason)}
         onMarkReviewed={() => handleMarkReviewed(selected)}
         onForceReviewed={(isReviewed) => handleForceReviewed(selected, isReviewed)}
@@ -259,11 +254,10 @@ export default function NewOnboarding() {
               <button
                 key={tab}
                 onClick={() => setStatusTab(tab)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                  statusTab === tab
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${statusTab === tab
                     ? "bg-emerald-400 text-neutral-950"
                     : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
-                }`}
+                  }`}
               >
                 {STATUS_TAB_LABELS[tab] || tab}
               </button>

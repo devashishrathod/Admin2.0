@@ -29,10 +29,10 @@ function handleError(error) {
     throw new Error(message);
 }
 
-// ── Banner media type — the `type` field itself must be uppercase
-// (backend validates it as one of IMAGE | VIDEO | GIF), while the file
-// upload still goes under the lowercase field name (image/video/gif) —
-// see buildFormData below.
+// ── Banner media kind — FE-only, drives the type picker/UI (accept mime,
+// whether a poster is required). The backend no longer takes a `type`
+// field at all: it derives the kind itself from the uploaded file's real
+// mime type, so this never gets sent to the API.
 export const BANNER_TYPES = Object.freeze({
     IMAGE: 'IMAGE',
     VIDEO: 'VIDEO',
@@ -73,55 +73,151 @@ export function buildRedirectPayload({ type = REDIRECT_TYPES.NONE, targetId, url
     return JSON.stringify(payload);
 }
 
-// Builds multipart/form-data. `file` is uploaded under whichever field
-// name matches `type` (image/video/gif) — only appended when a new File
-// was actually selected, so updates can omit it to keep the existing media.
-function buildFormData({ title, description, type, redirect, startDate, endDate, isActive, file }) {
+// Builds multipart/form-data for create/update.
+// The media file field is ALWAYS named `media` (video's still-image poster
+// is always `poster`) — there is no more type-dependent field name, and no
+// `type` field at all; the backend reads the kind from the file's real
+// mime type. `mediaUploadId`/`posterUploadId` are the presigned-road
+// alternative — create-only, see presignUploadAndConfirm below.
+function buildFormData({ title, description, redirect, startDate, endDate, isActive, mediaFile, posterFile, mediaUploadId, posterUploadId }) {
     const fd = new FormData();
-    fd.append('title', title ?? '');
+    if (title !== undefined) fd.append('title', title ?? '');
     if (description !== undefined) fd.append('description', description ?? '');
-    if (type) fd.append('type', type);
     if (redirect) fd.append('redirect', typeof redirect === 'string' ? redirect : JSON.stringify(redirect));
     if (startDate) fd.append('startDate', startDate);
     if (endDate) fd.append('endDate', endDate);
-    fd.append('isActive', String(Boolean(isActive)));
-    // The file field name is lowercase (image/video/gif) even though the
-    // `type` value sent above is uppercase.
-    if (file instanceof File && type) {
-        fd.append(type.toLowerCase(), file);
+    if (isActive !== undefined) fd.append('isActive', String(Boolean(isActive)));
+
+    if (mediaUploadId) {
+        fd.append('mediaUploadId', mediaUploadId);
+    } else if (mediaFile instanceof File) {
+        fd.append('media', mediaFile);
+    }
+    if (posterUploadId) {
+        fd.append('posterUploadId', posterUploadId);
+    } else if (posterFile instanceof File) {
+        fd.append('poster', posterFile);
     }
     return fd;
 }
 
+// ── Presign → S3 → confirm upload flow (create-only for banners) ────────
+// Confirmed against the real API doc (super_admin_panel_api_doc.md, #111/#112):
+// 1. POST /uploads/presign  -> { uploadId, url, fields, expiresInSeconds, ... }
+// 2. POST <url>             -> straight to S3, multipart form: `fields`
+//    entries first, `file` appended LAST (S3 stops reading after the file
+//    part, so anything after it is dropped). Responds 204, no body.
+// 3. POST /uploads/confirm  -> { uploadId } only — no entityId needed from
+//    the panel; the surface endpoint (banners/create) attaches it once the
+//    row exists.
+// 4. POST /banners/create   -> body gets `mediaUploadId` (and, for a video,
+//    `posterUploadId`) instead of the raw file(s).
+//
+// Banner's two purposes (confirmed from the backend's own
+// "Unknown upload purpose" error message):
+export const BANNER_UPLOAD_PURPOSE = Object.freeze({
+    MEDIA: 'BANNER_MEDIA',
+    POSTER: 'BANNER_POSTER',
+});
+
+// Step 1 — POST {{TryDood2.0BaseUrl}}/uploads/presign
+// body: { purpose, contentType, sizeBytes, fileName }
+export async function presignUpload({ purpose, file }) {
+    try {
+        if (!purpose) throw new Error('purpose is required');
+        if (!file) throw new Error('file is required');
+        const { data } = await api.post('/uploads/presign', {
+            purpose,
+            contentType: file.type,
+            sizeBytes: file.size,
+            fileName: file.name,
+        });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// Step 2 — POST the file straight to S3 using the presigned policy fields.
+// Uses the bare `axios` instance (not `api`): this goes to S3, not our
+// backend, so no baseURL/Authorization header belongs on it.
+async function postFileToS3(presignResponse, file) {
+    const body = presignResponse?.data ?? presignResponse ?? {};
+    const { uploadId, url, fields } = body;
+    if (!uploadId || !url || !fields) {
+        throw new Error(
+            `Unexpected /uploads/presign response shape — expected uploadId/url/fields, got keys: ${Object.keys(body).join(', ') || '(empty)'}`
+        );
+    }
+    const form = new FormData();
+    Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+    form.append('file', file); // must be appended last
+    await axios.post(url, form);
+    return uploadId;
+}
+
+// Step 3 — POST {{TryDood2.0BaseUrl}}/uploads/confirm
+// body: { uploadId }
+export async function confirmUpload({ uploadId }) {
+    try {
+        if (!uploadId) throw new Error('uploadId is required');
+        await api.post('/uploads/confirm', { uploadId });
+        return uploadId;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// Full presign → S3 → confirm sequence for one file. Returns the id to
+// hand the surface endpoint as `mediaUploadId`/`posterUploadId` — confirm's
+// own response body (storage/metadata) is internal and never forwarded.
+export async function presignUploadAndConfirm({ file, purpose }) {
+    const presignResponse = await presignUpload({ purpose, file });
+    const uploadId = await postFileToS3(presignResponse, file);
+    await confirmUpload({ uploadId });
+    return uploadId;
+}
+
 /* -------------------------------------------------------------------------
- * Payload shape sent to / received from the API
+ * Payload shape sent to the API (create/update, multipart/form-data):
+ * { title, description,
+ *   media (file — image/video/gif, kind auto-detected from its mime type),
+ *   poster (file — required alongside a video `media`),
+ *   // presign road, create only:
+ *   mediaUploadId, posterUploadId,
+ *   redirect (JSON string): { type, targetId?, url? }, startDate, endDate,
+ *   isActive }
  *
+ * Shape received back from getAll/create/update — media is a single
+ * unified object:
  * {
- *   _id, title, description, type: "image"|"video"|"gif",
- *   image|video|gif (URL string on read, matching `type`),
- *   redirect: { type, targetId?, url? }, startDate, endDate,
- *   isActive: boolean, createdAt
+ *   _id, title, description,
+ *   media: { url, kind: "IMAGE"|"VIDEO"|"GIF", width, height, mimeType,
+ *            sizeBytes, originalName, provider,
+ *            // VIDEO only:
+ *            duration, thumbnail },
+ *   redirect: { type, targetId, url }, startDate, endDate,
+ *   isActive: boolean, createdBy, updatedBy, createdAt, updatedAt
  * }
  * ---------------------------------------------------------------------- */
 
 // ── Create Banner ─────────────────────────────────────────
 // POST {{TryDood2.0BaseUrl}}/banners/create
-// form-data: { title, description, type, redirect (JSON string),
-// startDate, endDate, isActive, image|video|gif (file, matching type) }
 export async function createBanner({
     title,
     description = '',
-    type,
     redirect,
     startDate,
     endDate,
     isActive = true,
-    file,
+    mediaFile,
+    posterFile,
+    mediaUploadId,
+    posterUploadId,
 }) {
     try {
         if (!title) throw new Error('title is required');
-        if (!type) throw new Error('type is required');
-        const fd = buildFormData({ title, description, type, redirect, startDate, endDate, isActive, file });
+        const fd = buildFormData({ title, description, redirect, startDate, endDate, isActive, mediaFile, posterFile, mediaUploadId, posterUploadId });
         const { data } = await api.post('/banners/create', fd, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -132,7 +228,7 @@ export async function createBanner({
 }
 
 // ── Get All Banners (paginated + searchable) ──────────────
-// GET {{TryDood2.0BaseUrl}}/banners/getAll?page=&limit=&search=
+// GET {{TryDood2.0BaseUrl}}/banners/get-all
 export async function getBanners({ page = 1, limit = 10, search = '' } = {}) {
     try {
         const params = { page, limit };
@@ -140,18 +236,25 @@ export async function getBanners({ page = 1, limit = 10, search = '' } = {}) {
         const { data } = await api.get('/banners/get-all', { params });
         return data;
     } catch (error) {
+        // The API answers an empty result set with 404 ("No any banner
+        // found") instead of 200 + an empty array — treat that as an
+        // empty page rather than a load failure.
+        if (error?.response?.status === 404) {
+            return { success: true, data: { total: 0, totalPages: 1, page, limit, data: [] } };
+        }
         handleError(error);
     }
 }
 
 // ── Update Banner ───────────────────────────────────────────
 // PUT {{TryDood2.0BaseUrl}}/banners/update/:id
-// form-data: same fields as create — `type`/file are optional and only
-// need sending if the banner's media is being changed.
-export async function updateBanner(id, { title, description, type, redirect, startDate, endDate, isActive = true, file } = {}) {
+// Multipart only — the presigned road isn't offered for update per the API
+// doc, only for create. `media`/`poster` are optional new files; omitting
+// both keeps the banner's existing media untouched.
+export async function updateBanner(id, { title, description, redirect, startDate, endDate, isActive = true, mediaFile, posterFile } = {}) {
     try {
         if (!id) throw new Error('id is required');
-        const fd = buildFormData({ title, description, type, redirect, startDate, endDate, isActive, file });
+        const fd = buildFormData({ title, description, redirect, startDate, endDate, isActive, mediaFile, posterFile });
         const { data } = await api.put(`/banners/update/${id}`, fd, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -179,6 +282,10 @@ export default {
     updateBanner,
     deleteBanner,
     buildRedirectPayload,
+    presignUpload,
+    presignUploadAndConfirm,
+    confirmUpload,
     BANNER_TYPES,
     REDIRECT_TYPES,
+    BANNER_UPLOAD_PURPOSE,
 };

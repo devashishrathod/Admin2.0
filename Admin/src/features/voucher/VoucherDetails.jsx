@@ -20,11 +20,9 @@ import {
   Layers3,
   UserRound,
   Lock,
-  Building2,
-  Wallet,
   Coins,
-  Smartphone,
   Globe,
+  Users,
   X,
 } from "lucide-react";
 import { computeStatus, VoucherStatusBadge } from "./VoucherList";
@@ -70,6 +68,7 @@ const HISTORY_ICONS = {
   Approved: CheckCircle2,
   Rejected: XCircle,
   Published: UploadCloud,
+  Paused: Clock,
   Expired: Clock,
   Archived: Clock,
 };
@@ -80,15 +79,49 @@ const HISTORY_COLORS = {
   Approved: "text-emerald-600 dark:text-emerald-400 bg-emerald-400/10",
   Rejected: "text-red-600 dark:text-red-400 bg-red-500/10",
   Published: "text-emerald-600 dark:text-emerald-400 bg-emerald-400/10",
+  Paused: "text-orange-600 dark:text-orange-400 bg-orange-400/10",
   Expired: "text-neutral-500 dark:text-neutral-400 bg-neutral-200 dark:bg-neutral-700/40",
   Archived: "text-neutral-500 dark:text-neutral-400 bg-neutral-200 dark:bg-neutral-700/40",
 };
 
+// A fixed, non-cycled categorical order (blue, orange, teal, amber, pink,
+// green, violet, red) — so each offer / each version gets its own distinct
+// color instead of blending together, and the same slot index always means
+// the same hue. Classes are written out in full (not built from a template
+// string) since Tailwind only picks up literal class names it can find in
+// source, not ones assembled at runtime.
+const ACCENT_STYLES = [
+  { dot: "bg-blue-500", left: "border-blue-400" },
+  { dot: "bg-orange-500", left: "border-orange-400" },
+  { dot: "bg-teal-500", left: "border-teal-400" },
+  { dot: "bg-amber-500", left: "border-amber-400" },
+  { dot: "bg-pink-500", left: "border-pink-400" },
+  { dot: "bg-green-500", left: "border-green-400" },
+  { dot: "bg-violet-500", left: "border-violet-400" },
+  { dot: "bg-red-500", left: "border-red-400" },
+];
 
-export default function VoucherDetails({ voucher, onBack, onApprove, onReject, onPublish, busy, actionError }) {
+export default function VoucherDetails({
+  voucher,
+  onBack,
+  onApprove,
+  onReject,
+  onPublish,
+  onApproveBanner,
+  onRejectBanner,
+  busy,
+  actionError,
+}) {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectBox, setShowRejectBox] = useState(false);
   const [rejectError, setRejectError] = useState("");
+
+  // Separate state for the banner's own reject flow — it's an independent
+  // approval gate from the version reject above, and both can't be
+  // in-flight for the same reason box at once.
+  const [bannerRejectReason, setBannerRejectReason] = useState("");
+  const [showBannerRejectBox, setShowBannerRejectBox] = useState(false);
+  const [bannerRejectError, setBannerRejectError] = useState("");
 
   const status = computeStatus(voucher);
 
@@ -102,6 +135,18 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
     setRejectReason("");
     setShowRejectBox(false);
     setRejectError("");
+  };
+
+  const handleBannerRejectSubmit = (e) => {
+    e.preventDefault();
+    if (!bannerRejectReason.trim()) {
+      setBannerRejectError("A reason is required so the vendor knows what to fix.");
+      return;
+    }
+    onRejectBanner(bannerRejectReason.trim());
+    setBannerRejectReason("");
+    setShowBannerRejectBox(false);
+    setBannerRejectError("");
   };
 
   return (
@@ -184,11 +229,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                   label="Version"
                   value={`${voucher.versionCode}`}
                 />
-                <InfoRow
-                  icon={UserRound}
-                  label="Created By"
-                  value={`${voucher.creator?.name || "—"}${voucher.creator?.role ? ` · ${voucher.creator.role}` : ""}`}
-                />
+                <InfoRow icon={UserRound} label="Created By" value={voucher.creator?.role || "—"} />
                 <InfoRow icon={Layers} label="Category" value={`${voucher.category} · ${voucher.subCategory}`} />
                 <InfoRow icon={Calendar} label="Created" value={voucher.createdAtDisplay} />
                 <InfoRow icon={Clock} label="Last Updated" value={voucher.updatedAtDisplay} />
@@ -197,7 +238,8 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 {voucher.publishedDate && (
                   <InfoRow icon={Calendar} label="Published" value={voucher.publishedDate} />
                 )}
-                <InfoRow icon={Calendar} label="Validity" value={`${voucher.startDate} → ${voucher.endDate}`} />
+                <InfoRow icon={Calendar} label="Start Date" value={voucher.startDate} />
+                <InfoRow icon={Calendar} label="End Date" value={voucher.endDate} />
                 {/* <InfoRow icon={Store} label="Sub-Brands Attached" value={voucher.attachedSubBrandsCount ?? 0} />*/}
                 <InfoRow
                   icon={Lock}
@@ -258,14 +300,9 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                           <Layers size={16} />
                         </div>
                       )}
-                      <div>
-                        <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">
-                          {voucher.categoryDetails.name}
-                        </p>
-                        {voucher.categoryDetails.description && (
-                          <p className="mt-0.5 text-[12px] text-neutral-500">{voucher.categoryDetails.description}</p>
-                        )}
-                      </div>
+                      <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">
+                        {voucher.categoryDetails.name}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -284,67 +321,101 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                           <Layers3 size={16} />
                         </div>
                       )}
-                      <div>
-                        <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">
-                          {voucher.subCategoryDetails.name}
-                        </p>
-                        {voucher.subCategoryDetails.description && (
-                          <p className="mt-0.5 text-[12px] text-neutral-500">{voucher.subCategoryDetails.description}</p>
-                        )}
-                      </div>
+                      <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">
+                        {voucher.subCategoryDetails.name}
+                      </p>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Offers */}
-            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-              <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+            {/* Offers — one color per offer (fixed order, never cycled per
+                render) so it's easy to tell rows apart at a glance. */}
+            <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <p className="px-5 pt-5 pb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                 Offers ({voucher.offers?.length ?? 0})
               </p>
               {voucher.offers?.length ? (
-                <div className="space-y-2.5">
-                  {voucher.offers.map((o) => (
-                    <div key={o._id} className="rounded-xl bg-neutral-50 p-3.5 dark:bg-neutral-950/60">
-                      <div className="mb-2.5 flex items-center justify-between gap-2">
-                        <span className="font-medium text-neutral-800 dark:text-neutral-100">{o.title}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[15px] font-bold text-emerald-600 dark:text-emerald-400">
-                            {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
-                          </span>
-                          {o.isActive ? (
-                            <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" />
-                          ) : (
-                            <XCircle size={14} className="text-neutral-400 dark:text-neutral-600" />
-                          )}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11.5px] sm:grid-cols-4">
-                        <div>
-                          <p className="text-neutral-500">Min Bill</p>
-                          <p className="font-medium text-neutral-800 dark:text-neutral-200">₹{o.minBillAmount}</p>
-                        </div>
-                        <div>
-                          <p className="text-neutral-500">Max Discount</p>
-                          <p className="font-medium text-neutral-800 dark:text-neutral-200">₹{o.maxDiscountAmount}</p>
-                        </div>
-                        <div>
-                          <p className="text-neutral-500">Usage</p>
-                          <p className="font-medium text-neutral-800 dark:text-neutral-200">{o.usageType}</p>
-                        </div>
-                        <div>
-                          <p className="text-neutral-500">Applicable On</p>
-                          <p className="font-medium text-neutral-800 dark:text-neutral-200">{o.discountApplicableOn}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-left text-[12.5px]">
+                    <thead className="text-[10.5px] uppercase tracking-wide text-neutral-400">
+                      <tr>
+                        <th className="px-5 py-2 font-medium">Offer</th>
+                        <th className="px-3 py-2 font-medium">Discount</th>
+                        <th className="px-3 py-2 font-medium">Min Bill</th>
+                        <th className="px-3 py-2 font-medium">Max Discount</th>
+                        <th className="px-3 py-2 font-medium">Usage</th>
+                        <th className="px-3 py-2 font-medium">Applicable On</th>
+                        <th className="px-5 py-2 text-right font-medium">Active</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {voucher.offers.map((o, i) => {
+                        const accent = ACCENT_STYLES[i % ACCENT_STYLES.length];
+                        return (
+                          <tr key={o._id} className="border-t border-neutral-100 dark:border-neutral-800">
+                            <td className={`border-l-4 px-5 py-3 ${accent.left}`}>
+                              <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-100">
+                                <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
+                                {o.title}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 font-semibold text-emerald-600 dark:text-emerald-400">
+                              {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
+                            </td>
+                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.minBillAmount}</td>
+                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.maxDiscountAmount}</td>
+                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.usageType}</td>
+                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.discountApplicableOn}</td>
+                            <td className="px-5 py-3 text-right">
+                              {o.isActive ? (
+                                <CheckCircle2 size={14} className="ml-auto text-emerald-600 dark:text-emerald-400" />
+                              ) : (
+                                <XCircle size={14} className="ml-auto text-neutral-400 dark:text-neutral-600" />
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
-                <p className="text-[12.5px] text-neutral-500">No offers on this version.</p>
+                <p className="px-5 pb-5 text-[12.5px] text-neutral-500">No offers on this version.</p>
               )}
             </div>
+
+            {/* Claims & Revenue */}
+            {voucher.stats && (
+              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+                  Claims & Revenue ({voucher.stats.currency || "INR"})
+                </p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <InfoRow icon={Users} label="Total Claims" value={voucher.stats.claims?.total ?? 0} />
+                  <InfoRow icon={Clock} label="Pending" value={voucher.stats.claims?.pending ?? 0} />
+                  <InfoRow icon={CheckCircle2} label="Paid" value={voucher.stats.claims?.paid ?? 0} />
+                  <InfoRow icon={CheckCircle2} label="Redeemed" value={voucher.stats.claims?.redeemed ?? 0} />
+                  <InfoRow icon={XCircle} label="Failed" value={voucher.stats.claims?.failed ?? 0} />
+                  <InfoRow icon={XCircle} label="Cancelled" value={voucher.stats.claims?.cancelled ?? 0} />
+                  <InfoRow icon={Clock} label="Expired" value={voucher.stats.claims?.expired ?? 0} />
+                  <InfoRow icon={XCircle} label="Refunded" value={voucher.stats.claims?.refunded ?? 0} />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <InfoRow icon={Coins} label="Bill Amount" value={`₹${voucher.stats.revenue?.billAmount ?? 0}`} />
+                  <InfoRow icon={Coins} label="Customer Paid" value={`₹${voucher.stats.revenue?.customerPaid ?? 0}`} />
+                  <InfoRow icon={Coins} label="Net Customer Paid" value={`₹${voucher.stats.revenue?.netCustomerPaid ?? 0}`} />
+                  <InfoRow icon={Coins} label="Offer Discount" value={`₹${voucher.stats.revenue?.offerDiscount ?? 0}`} />
+                  <InfoRow icon={Coins} label="Promo Discount" value={`₹${voucher.stats.revenue?.promoDiscount ?? 0}`} />
+                  <InfoRow icon={Coins} label="Convenience Fee" value={`₹${voucher.stats.revenue?.convenienceFee ?? 0}`} />
+                  <InfoRow icon={Coins} label="Tax" value={`₹${voucher.stats.revenue?.taxOnTop ?? 0}`} />
+                  <InfoRow icon={Coins} label="Vendor Payable" value={`₹${voucher.stats.revenue?.vendorPayable ?? 0}`} />
+                  <InfoRow icon={Coins} label="Commission" value={`₹${voucher.stats.revenue?.commission ?? 0}`} />
+                  <InfoRow icon={Coins} label="Refunded" value={`₹${voucher.stats.revenue?.refunded ?? 0}`} />
+                </div>
+              </div>
+            )}
 
             {/* History timeline */}
             {voucher.history?.length > 0 && (
@@ -380,6 +451,7 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 </div>
               </div>
             )}
+
           </div>
 
           {/* Right: Super Admin approval panel + brand + quick facts */}
@@ -478,6 +550,86 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
               )}
             </div>
 
+            {/* Banner Approval — a separate gate from the version workflow
+                above: the banner lives on the parent voucher and can be
+                replaced independently of any version's own review cycle. */}
+            {voucher.banner && (
+              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <div className="mb-4 flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
+                  <ImageIcon size={16} className="text-emerald-500 dark:text-emerald-400" /> Banner Approval
+                </div>
+
+                <table className="w-full text-left text-[12.5px]">
+                  <tbody>
+                    <tr className="border-b border-neutral-100 dark:border-neutral-800">
+                      <td className="w-28 py-2.5 align-top text-neutral-500">Current</td>
+                      <td className="py-2.5">
+                        {voucher.banner.current?.url ? (
+                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
+                            <img src={voucher.banner.current.url} alt="Current banner" className="h-full w-full object-cover" />
+                          </div>
+                        ) : (
+                          <span className="text-neutral-400 dark:text-neutral-600">No live banner yet</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-neutral-100 dark:border-neutral-800">
+                      <td className="py-2.5 align-top text-neutral-500">Pending</td>
+                      <td className="py-2.5">
+                        {voucher.banner.pending?.url ? (
+                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
+                            <img src={voucher.banner.pending.url} alt="Pending banner" className="h-full w-full object-cover" />
+                          </div>
+                        ) : (
+                          <span className="text-neutral-400 dark:text-neutral-600">Nothing awaiting review</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-neutral-100 dark:border-neutral-800">
+                      <td className="py-2.5 text-neutral-500">Status</td>
+                      <td className="py-2.5 font-semibold text-neutral-800 dark:text-neutral-200">
+                        {voucher.banner.status || "—"}
+                      </td>
+                    </tr>
+                    {voucher.banner.rejectionReason && (
+                      <tr className="border-b border-neutral-100 dark:border-neutral-800">
+                        <td className="py-2.5 align-top text-neutral-500">Rejection Reason</td>
+                        <td className="py-2.5 text-red-600 dark:text-red-400">{voucher.banner.rejectionReason}</td>
+                      </tr>
+                    )}
+                    {(voucher.banner.reviewedBy || voucher.banner.reviewedAt) && (
+                      <tr>
+                        <td className="py-2.5 text-neutral-500">Reviewed</td>
+                        <td className="py-2.5 text-neutral-700 dark:text-neutral-300">
+                          {[voucher.banner.reviewedBy, voucher.banner.reviewedAt].filter(Boolean).join(" · ")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {voucher.banner.pending && (
+                  <div className="mt-4 flex gap-2.5">
+                    <button
+                      onClick={onApproveBanner}
+                      disabled={busy}
+                      className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {busy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                      Approve Banner
+                    </button>
+                    <button
+                      onClick={() => setShowBannerRejectBox(true)}
+                      disabled={busy}
+                      className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-red-500/10 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+                    >
+                      <XCircle size={15} /> Reject Banner
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Brand */}
             {voucher.brand && (
               <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -500,42 +652,6 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <InfoRow icon={BadgeCheck} label="Brand ID" value={voucher.brand.uniqueId} />
                   <InfoRow icon={Store} label="Merchant ID" value={voucher.brand.merchantId} />
-                  <InfoRow icon={Phone} label="WhatsApp" value={voucher.brand.whatsappNumber} />
-                  <InfoRow icon={Building2} label="Business Type" value={voucher.brand.businessEntityType} />
-                  <InfoRow icon={FileText} label="Registration Status" value={voucher.brand.businessRegistrationStatus} />
-                  <InfoRow icon={Calendar} label="Joined" value={voucher.brand.joinedDate} />
-                </div>
-                {voucher.brand.description && (
-                  <div className="mt-3 rounded-xl bg-neutral-50 p-3.5 dark:bg-neutral-950/60">
-                    <p className="mb-1 text-[11px] uppercase tracking-wide text-neutral-500">About</p>
-                    <p className="text-[12.5px] leading-relaxed text-neutral-700 dark:text-neutral-300">{voucher.brand.description}</p>
-                  </div>
-                )}
-                <div className="mt-3 grid grid-cols-2 gap-2.5 text-[12px]">
-                  <div className="rounded-xl bg-neutral-50 p-2.5 dark:bg-neutral-950/60">
-                    <p className="text-neutral-500">Franchises</p>
-                    <p className="font-semibold text-neutral-800 dark:text-neutral-200">
-                      {voucher.brand.franchises.used}{voucher.brand.franchises.unlimited ? " / Unlimited" : ` / ${voucher.brand.franchises.limit}`}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-neutral-50 p-2.5 dark:bg-neutral-950/60">
-                    <p className="text-neutral-500">Sub-Brands</p>
-                    <p className="font-semibold text-neutral-800 dark:text-neutral-200">
-                      {voucher.brand.subBrands.used}{voucher.brand.subBrands.unlimited ? " / Unlimited" : ` / ${voucher.brand.subBrands.limit}`}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-neutral-50 p-2.5 dark:bg-neutral-950/60">
-                    <p className="text-neutral-500">Showcase</p>
-                    <p className="font-semibold text-neutral-800 dark:text-neutral-200">
-                      {voucher.brand.showcase.used}{voucher.brand.showcase.unlimited ? " / Unlimited" : ` / ${voucher.brand.showcase.limit}`}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-neutral-50 p-2.5 dark:bg-neutral-950/60">
-                    <p className="text-neutral-500">Vouchers</p>
-                    <p className="font-semibold text-neutral-800 dark:text-neutral-200">
-                      {voucher.brand.vouchers.used}{voucher.brand.vouchers.unlimited ? " / Unlimited" : ` / ${voucher.brand.vouchers.limit}`}
-                    </p>
-                  </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <span
@@ -547,75 +663,96 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                     {voucher.brand.isApproved ? "Brand Approved" : "Brand Pending Approval"}
                   </span>
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.brand.isSubscribed
-                        ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
-                        : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                      }`}
-                  >
-                    {voucher.brand.isSubscribed ? "Subscribed" : "Not Subscribed"}
-                  </span>
-                  <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-                    Onboarding: {voucher.brand.onboardingStatus}
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.brand.isReviewed
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.brand.isActive
                         ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                         : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
                       }`}
                   >
-                    {voucher.brand.isReviewed ? "Reviewed" : "Not Reviewed"}
+                    {voucher.brand.isActive ? "Brand Active" : "Brand Inactive"}
                   </span>
-                  {voucher.brand.isRevoked && (
-                    <span className="rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
-                      Revoked
-                    </span>
-                  )}
                 </div>
               </div>
             )}
 
-            {/* Created By (vendor user) */}
-            {voucher.creatorUser && (
+            {/* Attached Outlets */}
+            {voucher.outlets?.length > 0 && (
               <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
-                  Created By (Vendor User)
+                <p className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+                  Attached Outlets ({voucher.outletCount})
                 </p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <InfoRow icon={UserRound} label="Unique ID" value={voucher.creatorUser.uniqueId} />
-                  <InfoRow icon={BadgeCheck} label="Role" value={voucher.creatorUser.role} />
-                  <InfoRow icon={Smartphone} label="Login Type" value={voucher.creatorUser.loginType} />
-                  <InfoRow icon={Phone} label="WhatsApp" value={voucher.creatorUser.whatsappNumber} />
-                  <InfoRow icon={Tag} label="Referral Code" value={voucher.creatorUser.referralCode} />
-                  <InfoRow icon={Wallet} label="Wallet Balance" value={voucher.creatorUser.walletBalance} />
-                  <InfoRow icon={Coins} label="tCoins Balance" value={voucher.creatorUser.tCoinsBalance} />
-                  <InfoRow icon={Globe} label="Current Screen" value={voucher.creatorUser.currentScreen} />
+                <p className="mb-3 text-[11.5px] text-neutral-500">
+                  {voucher.liveOutletCount} live of {voucher.totalBrandOutlets} total brand outlets
+                  {voucher.isAppliedOnAllOutlets ? " · Applied on all outlets" : ""}
+                </p>
+                <div className="space-y-2">
+                  {voucher.outlets.map((o) => (
+                    <div key={o.id} className="rounded-xl bg-neutral-50 p-3.5 dark:bg-neutral-950/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-neutral-800 dark:text-neutral-100">{o.uniqueId}</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${o.isActive
+                              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
+                            }`}
+                        >
+                          {o.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-neutral-500">
+                        {o.outletType} · {o.storeId}
+                      </p>
+                      {o.address && <p className="mt-1 text-[11.5px] text-neutral-600 dark:text-neutral-400">{o.address}</p>}
+                      {o.whatsappNumber && (
+                        <p className="mt-1 flex items-center gap-1 text-[11px] text-neutral-500">
+                          <Phone size={10} /> {o.whatsappNumber}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.creatorUser.isMobileVerified
-                        ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                      }`}
-                  >
-                    {voucher.creatorUser.isMobileVerified ? "Mobile Verified" : "Mobile Not Verified"}
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.creatorUser.isEmailVerified
-                        ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                      }`}
-                  >
-                    {voucher.creatorUser.isEmailVerified ? "Email Verified" : "Email Not Verified"}
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${voucher.creatorUser.isOnBoardingCompleted
-                        ? "bg-sky-400/10 text-sky-600 dark:text-sky-400"
-                        : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-                      }`}
-                  >
-                    {voucher.creatorUser.isOnBoardingCompleted ? "Onboarding Complete" : "Onboarding Incomplete"}
-                  </span>
-                </div>
+              </div>
+            )}
+
+            {/* Version History — one color per version, same fixed order
+                as the Offers table, so a specific version is recognizable
+                at a glance between the two tables. */}
+            {voucher.versions?.length > 0 && (
+              <div className="overflow-hidden rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+                  Version History ({voucher.versionCount})
+                </p>
+                <table className="w-full text-left text-[12px]">
+                  <thead className="text-[10.5px] uppercase tracking-wide text-neutral-400">
+                    <tr>
+                      <th className="py-1.5 pr-2 font-medium">Version</th>
+                      <th className="py-1.5 pr-2 font-medium">Status</th>
+                      <th className="py-1.5 pr-2 font-medium">Validity</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Claims</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {voucher.versions.map((v, i) => {
+                      const accent = ACCENT_STYLES[i % ACCENT_STYLES.length];
+                      return (
+                        <tr key={v.id} className="border-t border-neutral-100 dark:border-neutral-800">
+                          <td className={`border-l-4 py-2 pl-2.5 pr-2 ${accent.left}`}>
+                            <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-200">
+                              <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
+                              {v.versionCode}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-2">
+                            <VoucherStatusBadge status={v.status} />
+                          </td>
+                          <td className="py-2 pr-2 text-neutral-500">
+                            {v.startDate} → {v.endDate}
+                          </td>
+                          <td className="py-2 pr-2 text-right text-neutral-700 dark:text-neutral-300">{v.claimCount}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
 
@@ -626,9 +763,8 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                   Parent Voucher Record
                 </p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <InfoRow icon={FileText} label="Normalized Name" value={voucher.parentVoucher.normalizedName} />
                   <InfoRow icon={Globe} label="Timezone" value={voucher.parentVoucher.timezone} />
-                  <InfoRow icon={Layers3} label="Current Version" value={voucher.parentVoucher.currentVersion} />
+                  <InfoRow icon={Layers3} label="Current Version" value={voucher.parentVoucher.currentVersionNumber} />
                   <InfoRow icon={ShieldCheck} label="Parent Status" value={voucher.parentVoucher.status} />
                   <InfoRow icon={Calendar} label="Created" value={voucher.parentVoucher.createdAtDisplay} />
                   <InfoRow icon={Clock} label="Last Updated" value={voucher.parentVoucher.updatedAtDisplay} />
@@ -748,6 +884,85 @@ export default function VoucherDetails({ voucher, onBack, onApprove, onReject, o
                   onClick={() => {
                     setShowRejectBox(false);
                     setRejectError("");
+                  }}
+                  disabled={busy}
+                  className="rounded-xl bg-neutral-100 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-800 disabled:opacity-60 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {busy && <Loader2 size={13} className="animate-spin" />}
+                  Confirm Rejection
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showBannerRejectBox && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="mb-4 flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-600 dark:text-red-400">
+                  <XCircle size={17} />
+                </span>
+                <div>
+                  <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Reject Banner</h2>
+                  <p className="mt-0.5 text-[12.5px] text-neutral-500">
+                    Tell the vendor why the pending banner for{" "}
+                    <span className="text-neutral-700 dark:text-neutral-300">{voucher.title}</span> is being rejected.
+                    This reason is shown to the vendor.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBannerRejectBox(false);
+                  setBannerRejectError("");
+                }}
+                aria-label="Close"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <form onSubmit={handleBannerRejectSubmit} className="space-y-3">
+              <div>
+                <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                  Reason for rejection <span className="text-red-600 dark:text-red-400">*</span>
+                </label>
+                <textarea
+                  value={bannerRejectReason}
+                  onChange={(e) => {
+                    setBannerRejectReason(e.target.value);
+                    if (bannerRejectError) setBannerRejectError("");
+                  }}
+                  rows={3}
+                  placeholder="e.g. Text card size par padha nahi ja raha."
+                  disabled={busy}
+                  className={`w-full resize-none rounded-xl bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${bannerRejectError ? "ring-1 ring-red-500/60 focus:ring-red-500/60" : "focus:ring-red-400/60"
+                    }`}
+                />
+                {bannerRejectError && (
+                  <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-red-600 dark:text-red-400">
+                    <AlertTriangle size={11} /> {bannerRejectError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBannerRejectBox(false);
+                    setBannerRejectError("");
                   }}
                   disabled={busy}
                   className="rounded-xl bg-neutral-100 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-neutral-800 disabled:opacity-60 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"

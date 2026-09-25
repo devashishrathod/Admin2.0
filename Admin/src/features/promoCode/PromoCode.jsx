@@ -1101,18 +1101,20 @@ export default function PromoCode() {
         discountPercent: Number(form.discountPercent) || 0,
         discountAmount: Number(form.discountAmount) || 0,
         maxDiscountAmount: positiveIntOrUndefined(form.maxDiscountAmount),
-        minOrderValue: Number(form.minOrderValue) || 0,
         validFrom: form.validFrom,
         validTill: form.validTill,
         totalUsageLimit: positiveIntOrUndefined(form.totalUsageLimit),
-        perBrandUsageLimit: positiveIntOrUndefined(form.perBrandUsageLimit),
         isActive: form.isActive,
         audience: form.audience,
 
-        // vendor scope
-        subscriptionIds: form.subscriptionIds,
-        applicableActions: form.applicableActions,
-        firstTimeOnly: form.firstTimeOnly,
+        // vendor scope — the backend rejects these keys outright on a
+        // CUSTOMER promo code (not just a non-empty value), so they must be
+        // left out of the payload entirely, not sent as 0 / [] / false.
+        minOrderValue: isCustomer ? undefined : Number(form.minOrderValue) || 0,
+        perBrandUsageLimit: isCustomer ? undefined : positiveIntOrUndefined(form.perBrandUsageLimit),
+        subscriptionIds: isCustomer ? undefined : form.subscriptionIds,
+        applicableActions: isCustomer ? undefined : form.applicableActions,
+        firstTimeOnly: isCustomer ? undefined : form.firstTimeOnly,
 
         // customer scope — the backend rejects these keys outright on a
         // VENDOR promo code (not just a non-empty value), so they must be

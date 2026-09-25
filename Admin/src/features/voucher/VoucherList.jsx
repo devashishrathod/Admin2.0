@@ -31,11 +31,14 @@ import { downloadCsv, printAsPdf } from "../../utils/exportTable";
 import { isNotFoundMessage } from "../../utils/helpers";
 import {
   getVouchers,
+  getVoucherById,
   approveVoucher,
   rejectVoucher,
   publishVoucher,
   deleteVoucher,
   updateVoucherSuggestion,
+  approveVoucherBanner,
+  rejectVoucherBanner,
   VOUCHER_STATUSES,
 } from "./services/VoucherApi";
 
@@ -234,6 +237,20 @@ function apiVersionToRow(v) {
         },
       }
       : null,
+    // The banner lives on the parent voucher (not any one version) — a
+    // separate approval gate from the version's own review/approve/publish
+    // workflow above. `pending` is the vendor's latest upload awaiting an
+    // admin decision; `current` is whatever's actually live right now.
+    banner: voucher.banner
+      ? {
+          current: voucher.banner.current || null,
+          pending: voucher.banner.pending || null,
+          status: voucher.banner.status || null,
+          rejectionReason: voucher.banner.rejectionReason || null,
+          reviewedBy: voucher.banner.reviewedBy || null,
+          reviewedAt: voucher.banner.reviewedAt ? formatDateTime(voucher.banner.reviewedAt) : null,
+        }
+      : null,
     category: category?.name || "—",
     subCategory: subCategory?.name || "—",
     categoryDetails: category
@@ -325,6 +342,153 @@ function apiVersionToRow(v) {
   };
 }
 
+// Who did it, for the timeline below — real names/usernames for an admin
+// actor, role-only for a vendor one (that's all GET /vouchers/get/:id
+// populates for a vendor's createdBy/submittedBy/etc.).
+function actorLabel(actor) {
+  if (!actor) return null;
+  return actor.name || actor.username || actor.role || null;
+}
+
+// Confirmed shape (GET /vouchers/get/:voucherId) — richer per-version
+// timestamps + real populated actors, instead of guessing from raw ids.
+function buildTimelineFromVersion(v) {
+  const entries = [];
+  if (v.createdAt) entries.push({ action: "Created", date: v.createdAt, by: actorLabel(v.createdBy), remarks: null });
+  if (v.submittedAt) {
+    entries.push({ action: "Submitted", date: v.submittedAt, by: actorLabel(v.submittedBy), remarks: "Submitted for review." });
+  }
+  if (v.rejectedAt) {
+    entries.push({ action: "Rejected", date: v.rejectedAt, by: actorLabel(v.rejectedBy), remarks: v.rejectionReason });
+  } else if (v.reviewedAt) {
+    entries.push({
+      action: "Approved",
+      date: v.reviewedAt,
+      by: actorLabel(v.approvedBy || v.reviewedBy),
+      remarks: "Approved by admin.",
+    });
+  }
+  if (v.publishedAt) {
+    entries.push({ action: "Published", date: v.publishedAt, by: actorLabel(v.approvedBy), remarks: "Made live in the app." });
+  }
+  if (v.pausedAt) entries.push({ action: "Paused", date: v.pausedAt, by: actorLabel(v.pausedBy), remarks: v.pauseReason });
+  if (v.expiredAt) entries.push({ action: "Expired", date: v.expiredAt, by: null, remarks: null });
+  if (v.archivedAt) entries.push({ action: "Archived", date: v.archivedAt, by: null, remarks: null });
+  return entries
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map((e) => ({ ...e, date: formatDateTime(e.date) }));
+}
+
+// Maps the confirmed GET /vouchers/get/:voucherId response — { voucher,
+// brand, currentVersion, publishedVersion, versions, versionCount, stats }
+// — into the details page's row shape. This endpoint is noticeably
+// slimmer than /vouchers/versions/get-all on some fields (brand has no
+// contact/subscription/limit info, category/subCategory have no
+// description, createdBy is role-only for a vendor) but adds real
+// claims/revenue stats, attached outlets, and full version history that
+// the list endpoint never had.
+function apiVoucherDetailToRow(payload) {
+  if (!payload) return null;
+  const voucher = payload.voucher || {};
+  const brand = payload.brand || null;
+  const cv = payload.currentVersion || {};
+
+  return {
+    id: cv._id || voucher.currentVersionId,
+    voucherId: voucher._id,
+    versionCode: cv.versionCode,
+    versionNumber: cv.versionNumber,
+    voucherCode: voucher.voucherCode || "—",
+    title: cv.name || voucher.name,
+    brandName: brand?.brandName || "—",
+    brand: brand
+      ? {
+          name: brand.brandName || "—",
+          legalName: brand.legalBusinessName || "—",
+          uniqueId: brand.uniqueId || "—",
+          merchantId: brand.merchantId || "—",
+          logo: brand.logo || "",
+          isApproved: Boolean(brand.isApproved),
+          isActive: Boolean(brand.isActive),
+        }
+      : null,
+    category: cv.category?.name || "—",
+    subCategory: cv.subCategory?.name || "—",
+    categoryDetails: cv.category ? { name: cv.category.name || "—", image: cv.category.image || "" } : null,
+    subCategoryDetails: cv.subCategory ? { name: cv.subCategory.name || "—", image: cv.subCategory.image || "" } : null,
+    description: cv.description || voucher.description || "",
+    tags: cv.tags || voucher.tags || [],
+    images: (cv.images || [])
+      .slice()
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map((img) => ({ url: img.media?.url || null, sortOrder: img.sortOrder, provider: img.media?.provider || null })),
+    offers: cv.offers || [],
+    banner: voucher.banner
+      ? {
+          current: voucher.banner.current || null,
+          pending: voucher.banner.pending || null,
+          status: voucher.banner.status || null,
+          rejectionReason: voucher.banner.rejectionReason || null,
+          reviewedBy: voucher.banner.reviewedBy || null,
+          reviewedAt: voucher.banner.reviewedAt ? formatDateTime(voucher.banner.reviewedAt) : null,
+        }
+      : null,
+    createdAtDisplay: formatDateTime(cv.createdAt || voucher.createdAt),
+    updatedAtDisplay: formatDateTime(cv.updatedAt || voucher.updatedAt),
+    publishedDate: cv.publishedAt ? formatDateTime(cv.publishedAt) : null,
+    startDate: formatDateTime(cv.startAt),
+    endDate: formatDateTime(cv.endAt),
+    // Only `_id`/`role` are populated for a vendor actor — no name at all.
+    creator: { role: cv.createdBy?.role || voucher.createdBy?.role || null },
+    approvalStatus: cv.status || voucher.status || VOUCHER_STATUSES.DRAFT,
+    isActive: Boolean(cv.isActive ?? voucher.isActive),
+    isDeleted: Boolean(cv.isDeleted ?? voucher.isDeleted),
+    isImmutable: Boolean(cv.isImmutable),
+    rejectionReason: cv.rejectionReason || null,
+    history: buildTimelineFromVersion(cv),
+
+    // Parent voucher record — same card as before, minus normalizedName
+    // (this endpoint never returns it).
+    parentVoucher: {
+      timezone: voucher.timezone || "—",
+      currentVersionNumber: voucher.currentVersionNumber ?? "—",
+      status: voucher.status || "—",
+      isActive: Boolean(voucher.isActive),
+      isDeleted: Boolean(voucher.isDeleted),
+      createdAtDisplay: voucher.createdAt ? formatDateTime(voucher.createdAt) : "—",
+      updatedAtDisplay: voucher.updatedAt ? formatDateTime(voucher.updatedAt) : "—",
+    },
+
+    // ---- New sections this endpoint uniquely provides ----
+    stats: payload.stats || cv.stats || null,
+    outlets: (cv.outlets || []).map((o) => ({
+      id: o._id,
+      uniqueId: o.uniqueId,
+      storeId: o.storeId,
+      outletType: o.outletType,
+      description: o.description || "",
+      whatsappNumber: o.whatsappNumber,
+      isActive: Boolean(o.isActive),
+      address: o.location?.formattedAddress || [o.location?.city, o.location?.state].filter(Boolean).join(", "),
+    })),
+    outletCount: cv.outletCount ?? 0,
+    liveOutletCount: cv.liveOutletCount ?? 0,
+    totalBrandOutlets: cv.totalBrandOutlets ?? 0,
+    isAppliedOnAllOutlets: Boolean(cv.isAppliedOnAllOutlets),
+    versions: (payload.versions || []).map((v) => ({
+      id: v._id,
+      versionNumber: v.versionNumber,
+      versionCode: v.versionCode,
+      status: v.status,
+      startDate: formatDateTime(v.startAt),
+      endDate: formatDateTime(v.endAt),
+      claimCount: v.claimCount ?? 0,
+      customerPaid: v.customerPaid ?? 0,
+    })),
+    versionCount: payload.versionCount ?? 0,
+  };
+}
+
 /* -------------------------------------------------------------------------
  * Main page — list <-> details (master/detail, no router required)
  * ---------------------------------------------------------------------- */
@@ -343,6 +507,11 @@ export default function VoucherListing() {
 
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+
+  // Fresh single-voucher fetch for the details page — the list row from
+  // getVouchers() is shown immediately (no blank flash on open), then
+  // overlaid with whatever this returns once it resolves.
+  const [voucherDetail, setVoucherDetail] = useState(null);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -393,7 +562,37 @@ export default function VoucherListing() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pagedRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const selectedVoucher = vouchers.find((v) => v.id === selectedId) || null;
+  const selectedListRow = vouchers.find((v) => v.id === selectedId) || null;
+
+  // GET /vouchers/get/:voucherId — fetches the fresher single-voucher
+  // detail once a row is opened. Ids that drive approve/reject/publish/
+  // banner actions always come from the list row, never from this fetch,
+  // since its exact response shape isn't confirmed yet.
+  useEffect(() => {
+    if (!selectedListRow) {
+      setVoucherDetail(null);
+      return;
+    }
+    let cancelled = false;
+    getVoucherById(selectedListRow.voucherId)
+      .then((res) => {
+        if (!cancelled) setVoucherDetail(apiVoucherDetailToRow(res?.data));
+      })
+      .catch((err) => {
+        // The list row (already showing) covers the UI — this fetch is a
+        // refresh on top of it, so a failure here shouldn't surface as a
+        // page-level error, just a note for debugging while the shape of
+        // GET /vouchers/get/:voucherId gets confirmed.
+        if (!cancelled) console.error("[VoucherList] GET /vouchers/get/:voucherId failed:", err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedListRow?.voucherId]);
+
+  const selectedVoucher = selectedListRow
+    ? { ...selectedListRow, ...(voucherDetail || {}), id: selectedListRow.id, voucherId: selectedListRow.voucherId }
+    : null;
 
   // Real status mix + monthly creation trend — both derived straight from
   // the already-loaded vouchers, no separate endpoint needed.
@@ -493,6 +692,34 @@ export default function VoucherListing() {
     }
   };
 
+  /* ---- Banner review — separate approval gate on the parent voucher,
+     independent of the version workflow above --------------------------- */
+  const handleApproveBanner = async (voucher) => {
+    setActionError("");
+    setActionBusy(true);
+    try {
+      await approveVoucherBanner(voucher.voucherId);
+      await fetchList();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleRejectBanner = async (voucher, reason) => {
+    setActionError("");
+    setActionBusy(true);
+    try {
+      await rejectVoucherBanner(voucher.voucherId, reason);
+      await fetchList();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   /* ---- Admin curation — feature/un-feature on the "Suggested" rail --- */
   const handleToggleSuggested = async (voucher) => {
     setActionError("");
@@ -519,6 +746,8 @@ export default function VoucherListing() {
         onApprove={() => handleApprove(selectedVoucher)}
         onReject={(reason) => handleReject(selectedVoucher, reason)}
         onPublish={() => handlePublish(selectedVoucher)}
+        onApproveBanner={() => handleApproveBanner(selectedVoucher)}
+        onRejectBanner={(reason) => handleRejectBanner(selectedVoucher, reason)}
         busy={actionBusy}
         actionError={actionError}
       />
@@ -580,13 +809,14 @@ export default function VoucherListing() {
       ),
     },
     {
-      key: "validity",
-      label: "Validity",
-      render: (row) => (
-        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
-          {row.startDate} → {row.endDate}
-        </span>
-      ),
+      key: "startDate",
+      label: "Start Date",
+      render: (row) => <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">{row.startDate}</span>,
+    },
+    {
+      key: "endDate",
+      label: "End Date",
+      render: (row) => <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">{row.endDate}</span>,
     },
     {
       key: "created",

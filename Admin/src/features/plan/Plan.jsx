@@ -32,7 +32,7 @@ import {
  * {
  *   id, name, description, price, strikePrice,
  *   discountType: "PERCENT" | "FLAT", discountPercent,
- *   type: "MONTHLY" | "YEARLY",
+ *   type: "WEEKLY" | "MONTHLY" | "QUATERLY" | "HALF_YEARLY" | "YEARLY",
  *   status: "Active" | "Inactive",
  *   popular: boolean,               // UI-only, not persisted by the API
  *   benefits: string[],
@@ -50,6 +50,53 @@ import {
  * ---------------------------------------------------------------------- */
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+// Billing cycle enum — matches the real backend values exactly (including
+// "QUATERLY", which is how the backend spells it — the UI label below is
+// spelled correctly, but the value sent to the API must match theirs).
+const PLAN_TYPES = Object.freeze({
+  WEEKLY: "WEEKLY",
+  MONTHLY: "MONTHLY",
+  QUATERLY: "QUATERLY",
+  HALF_YEARLY: "HALF_YEARLY",
+  YEARLY: "YEARLY",
+});
+
+const PLAN_TYPE_LABELS = {
+  [PLAN_TYPES.WEEKLY]: "Weekly",
+  [PLAN_TYPES.MONTHLY]: "Monthly",
+  [PLAN_TYPES.QUATERLY]: "Quarterly",
+  [PLAN_TYPES.HALF_YEARLY]: "Half-Yearly",
+  [PLAN_TYPES.YEARLY]: "Yearly",
+};
+
+// Short price-suffix per cycle, e.g. ₹499/mo, ₹1,999/qtr
+const PLAN_TYPE_SUFFIXES = {
+  [PLAN_TYPES.WEEKLY]: "wk",
+  [PLAN_TYPES.MONTHLY]: "mo",
+  [PLAN_TYPES.QUATERLY]: "qtr",
+  [PLAN_TYPES.HALF_YEARLY]: "6mo",
+  [PLAN_TYPES.YEARLY]: "yr",
+};
+
+// What `durationInDays` gets sent as for each cycle — there's no separate
+// duration input in the form, so this is derived straight from the type.
+const PLAN_TYPE_DEFAULT_DURATION_DAYS = {
+  [PLAN_TYPES.WEEKLY]: 7,
+  [PLAN_TYPES.MONTHLY]: 30,
+  [PLAN_TYPES.QUATERLY]: 90,
+  [PLAN_TYPES.HALF_YEARLY]: 182,
+  [PLAN_TYPES.YEARLY]: 365,
+};
+
+// Fixed, non-cycled categorical order for the billing-mix chart below.
+const PLAN_TYPE_CHART_COLORS = {
+  [PLAN_TYPES.WEEKLY]: "#2a78d6",
+  [PLAN_TYPES.MONTHLY]: "#38bdf8",
+  [PLAN_TYPES.QUATERLY]: "#eda100",
+  [PLAN_TYPES.HALF_YEARLY]: "#e87ba4",
+  [PLAN_TYPES.YEARLY]: "#34d399",
+};
 
 const emptyEntitlements = () => ({
   subBrands: { isUnlimited: false, limit: 0 },
@@ -199,7 +246,7 @@ function PlanCard({ plan, onView, onEdit, onDelete }) {
         <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">
           ₹{Number(plan.price || 0).toLocaleString("en-IN")}
         </span>
-        <span className="text-[12px] text-neutral-500">/{plan.type === "MONTHLY" ? "mo" : "yr"}</span>
+        <span className="text-[12px] text-neutral-500">/{PLAN_TYPE_SUFFIXES[plan.type] || "mo"}</span>
       </div>
       {hasDiscount && (
         <div className="mt-1 flex items-center gap-2">
@@ -661,8 +708,11 @@ function PlanFormModal({ draft, isNew, saving, onChange, onCancel, onSave }) {
               onChange={(e) => setField("type", e.target.value)}
               className={inputClass}
             >
-              <option value="MONTHLY">Monthly</option>
-              <option value="YEARLY">Yearly</option>
+              {Object.values(PLAN_TYPES).map((t) => (
+                <option key={t} value={t}>
+                  {PLAN_TYPE_LABELS[t]}
+                </option>
+              ))}
             </select>
           </Field>
 
@@ -941,7 +991,7 @@ export default function Plan() {
       discountType: cleaned.discountType,
       discountPercent: Number(cleaned.discountPercent) || 0,
       type: cleaned.type,
-      durationInDays: cleaned.type === "YEARLY" ? 365 : 30,
+      durationInDays: PLAN_TYPE_DEFAULT_DURATION_DAYS[cleaned.type] || 30,
       isActive: cleaned.status === "Active",
       benefits: cleaned.benefits,
       limitations: cleaned.limitations,
@@ -1100,10 +1150,13 @@ export default function Plan() {
 
   const priceCompare = plans.map((p) => ({ name: p.name, price: Number(p.price) || 0 }));
 
-  const billingMix = [
-    { name: "Monthly", value: plans.filter((p) => p.type === "MONTHLY").length, color: "#38bdf8" },
-    { name: "Yearly", value: plans.filter((p) => p.type !== "MONTHLY").length, color: "#34d399" },
-  ];
+  const billingMix = Object.values(PLAN_TYPES)
+    .map((t) => ({
+      name: PLAN_TYPE_LABELS[t],
+      value: plans.filter((p) => p.type === t).length,
+      color: PLAN_TYPE_CHART_COLORS[t],
+    }))
+    .filter((d) => d.value > 0);
 
   const featureCoverage = plans.map((p) => ({
     name: p.name,

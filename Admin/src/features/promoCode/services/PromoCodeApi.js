@@ -139,9 +139,44 @@ export async function getPromoCodeById(id) {
     }
 }
 
+// ── Campaign Report ──────────────────────────────────────────────
+// GET {{base_url}}/promoCodes/reports
+// Confirmed from Postman. Either `code` or `promoCodeId` scopes the report
+// to one code (omit both for an all-codes campaign view); `from`/`to` are
+// ISO dates (inclusive); `groupBy` is REPORT_GROUP_BY.DAY|MONTH; `audience`
+// is PROMO_AUDIENCE.VENDOR|CUSTOMER. Response (confirmed):
+// { data: {
+//     campaign, period: { from, to, groupBy, basis },
+//     summary: { codesUsed, brandsReached, claims, redemptions,
+//       openReservations, abandoned, conversionRate, discountGiven,
+//       revenueCollected, revenueBeforePromo, averageDiscount,
+//       averageOrderValue },
+//     byCode: [], byPlan: [], byAction: [], overTime: [], topBrands: []
+//     // per-item shape of those five arrays isn't confirmed yet — every
+//     // real response seen so far had them empty (zero usage). The report
+//     // page reads them defensively (dynamic columns) instead of assuming
+//     // field names.
+// } }
+export async function getPromoCodeReports({ code, promoCodeId, from, to, groupBy, audience } = {}) {
+    try {
+        const params = {};
+        if (code) params.code = code;
+        if (promoCodeId) params.promoCodeId = promoCodeId;
+        if (from) params.from = from;
+        if (to) params.to = to;
+        if (groupBy) params.groupBy = groupBy;
+        if (audience) params.audience = audience;
+        const { data } = await api.get('/promoCodes/reports', { params });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
     createPromoCode,
     getPromoCodes,
     updatePromoCode,
     getPromoCodeById,
+    getPromoCodeReports,
 };

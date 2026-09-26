@@ -960,8 +960,20 @@ export default function PromoCode() {
     // 100") — capped here for all three for consistency.
     getVouchers({ page: 1, limit: 100 })
       .then((res) => {
-        const rows = (res?.data?.data ?? []).map((v) => ({ id: v._id, label: v.name || v._id }));
-        setVouchers(rows);
+        // /vouchers/versions/get-all returns one row per VERSION — v._id is
+        // that version's own id, not the parent voucher's. The backend's
+        // voucherIds field checks against the parent Voucher collection, so
+        // sending a version id there always comes back "does not exist".
+        // Dedupe on the parent id too, since a voucher with multiple
+        // versions would otherwise show up more than once in the picker.
+        const seen = new Map();
+        (res?.data?.data ?? []).forEach((v) => {
+          const voucherId = v.voucherId || v.voucher?._id;
+          if (voucherId && !seen.has(voucherId)) {
+            seen.set(voucherId, { id: voucherId, label: v.name || voucherId });
+          }
+        });
+        setVouchers(Array.from(seen.values()));
       })
       .catch((err) => {
         console.error("Failed to load vouchers for promo code picker:", err.message);
@@ -1095,11 +1107,15 @@ export default function PromoCode() {
         const n = Number(value);
         return Number.isFinite(n) && n >= 1 ? n : undefined;
       };
+      const isPercent = form.discountType === PROMO_DISCOUNT_TYPES.PERCENT;
       const payload = {
         description: form.description.trim(),
         discountType: form.discountType,
-        discountPercent: Number(form.discountPercent) || 0,
-        discountAmount: Number(form.discountAmount) || 0,
+        // Only the field matching discountType is a real value — the other
+        // one is unused by the form and must be omitted, not sent as 0,
+        // for the same `.min(1).optional()` reason as the fields above.
+        discountPercent: isPercent ? positiveIntOrUndefined(form.discountPercent) : undefined,
+        discountAmount: isPercent ? undefined : positiveIntOrUndefined(form.discountAmount),
         maxDiscountAmount: positiveIntOrUndefined(form.maxDiscountAmount),
         validFrom: form.validFrom,
         validTill: form.validTill,

@@ -31,6 +31,7 @@ import {
   Percent,
   Bell,
   HelpCircle,
+  TrendingUp,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -73,6 +74,7 @@ const NAV_GROUPS = [
       { id: "settings", label: "Feature Campaign", icon: Megaphone, path: "/feature_campaign" },
       // { id: "coupon-code", label: "Coupon Code", icon: Tag, path: "/coupon" },
       { id: "promo-code", label: "Promo Code", icon: Percent, path: "/promo-code" },
+      { id: "promo-code-reports", label: "Promo Code Reports", icon: TrendingUp, path: "/promo-code/reports" },
       { id: "faq", label: "FAQ", icon: HelpCircle, path: "/faq" },
     ],
   },

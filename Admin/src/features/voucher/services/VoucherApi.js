@@ -182,17 +182,15 @@ export async function getVouchers({
     }
 }
 
-// ── Get Single Voucher (for View/Edit prefill) ──────────────────
-// There's no confirmed standalone "get one" endpoint — reuse the confirmed
-// GET /vouchers/versions/get-all list endpoint filtered by voucherId
-// instead of guessing an unconfirmed route. Returns the same envelope as
-// getVouchers(); callers should read res.data.data[0] for the version.
+// ── Get Single Voucher (for the details page) ────────────────────
+// GET {{TryDood2.0BaseUrl}}/vouchers/get/:voucherId
+// Takes the parent voucherId (not a version id). Response shape not fully
+// confirmed yet — VoucherList.jsx maps it defensively and falls back to
+// the already-loaded list row for anything it doesn't recognize.
 export async function getVoucherById(voucherId) {
     try {
         if (!voucherId) throw new Error('voucherId is required');
-        const { data } = await api.get('/vouchers/versions/get-all', {
-            params: { voucherId, page: 1, limit: 1 },
-        });
+        const { data } = await api.get(`/vouchers/get/${voucherId}`);
         return data;
     } catch (error) {
         handleError(error);
@@ -363,6 +361,39 @@ export async function approveVoucher(versionId) {
 // `rejectionReason` and stored on the version for the vendor to see.
 export async function rejectVoucher(versionId, reason) {
     return reviewVoucher(versionId, { action: VOUCHER_STATUSES.REJECTED, rejectionReason: reason });
+}
+
+// ── Review a voucher's banner (approve or reject the pending upload) ────
+// POST {{TryDood2.0BaseUrl}}/vouchers/:voucherId/banner/review
+// Confirmed from Postman. Same one-endpoint/two-outcomes shape as
+// reviewVoucher, but takes the parent voucherId (not a version id) — the
+// banner lives on the parent voucher, shared across all its versions.
+export async function reviewVoucherBanner(voucherId, { action, rejectionReason } = {}) {
+    try {
+        if (!voucherId) throw new Error('voucherId is required');
+        if (action !== VOUCHER_STATUSES.APPROVED && action !== VOUCHER_STATUSES.REJECTED) {
+            throw new Error('action must be "APPROVED" or "REJECTED"');
+        }
+        const body = { action };
+        if (action === VOUCHER_STATUSES.REJECTED) {
+            if (!rejectionReason || !rejectionReason.trim()) {
+                throw new Error('Rejection reason is required');
+            }
+            body.rejectionReason = rejectionReason.trim();
+        }
+        const { data } = await api.post(`/vouchers/${voucherId}/banner/review`, body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+export async function approveVoucherBanner(voucherId) {
+    return reviewVoucherBanner(voucherId, { action: VOUCHER_STATUSES.APPROVED });
+}
+
+export async function rejectVoucherBanner(voucherId, reason) {
+    return reviewVoucherBanner(voucherId, { action: VOUCHER_STATUSES.REJECTED, rejectionReason: reason });
 }
 
 // ══════════════════════════════════════════════════════════════

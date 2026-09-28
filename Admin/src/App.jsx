@@ -30,6 +30,7 @@ import Banner from './features/banner/Banner'
 import PromotionalTicker from './features/promotionalTicker/PromotionalTicker'
 import Settings from './features/settings/Settings'
 import PromoCode from './features/promoCode/PromoCode'
+import PromoCodeReports from './features/promoCode/PromoCodeReports'
 import Notification from './features/notification/Notification'
 import Subscriptions from './features/subscriptions/Subscriptions'
 import Faq from './features/faq/Faq'
@@ -170,6 +171,15 @@ function App() {
           element={
             <Layout>
               <PromoCode />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/promo-code/reports"
+          element={
+            <Layout>
+              <PromoCodeReports />
             </Layout>
           }
         />

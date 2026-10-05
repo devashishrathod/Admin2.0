@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Loader2,
   Clock3,
+  Link as LinkIcon,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
@@ -21,6 +22,7 @@ import {
   REDIRECT_TYPES,
 } from "./services/PromotionalTickerApi";
 import { getCategories } from "../category/services/CategoryApi";
+import { getAllBrands } from "../brand/services/BrandApi";
 
 const EMPTY_FORM = {
   id: null,
@@ -31,7 +33,35 @@ const EMPTY_FORM = {
   startDateLocal: "", // datetime-local input value
   endDateLocal: "",
   isActive: true,
+  redirectType: REDIRECT_TYPES.NONE,
+  targetId: "",
+  url: "",
 };
+
+const REDIRECT_OPTIONS = [
+  { value: REDIRECT_TYPES.NONE, label: "None" },
+  { value: REDIRECT_TYPES.CATEGORY, label: "Category" },
+  { value: REDIRECT_TYPES.DEAL, label: "Deal" },
+  { value: REDIRECT_TYPES.BRAND, label: "Brand" },
+  { value: REDIRECT_TYPES.OFFER, label: "Offer" },
+  { value: REDIRECT_TYPES.EXTERNAL_URL, label: "External URL" },
+];
+
+// Redirect types that take a pasted id (CATEGORY and BRAND have pickers).
+const TARGET_ID_TYPES = [REDIRECT_TYPES.DEAL, REDIRECT_TYPES.OFFER];
+const PICKER_TYPES = [REDIRECT_TYPES.CATEGORY, REDIRECT_TYPES.BRAND];
+
+// Always the full shape — unused keys go as null:
+// { type: "NONE", targetId: null, url: null }
+function buildRedirect(form) {
+  const type = form.redirectType || REDIRECT_TYPES.NONE;
+  const needsTarget = PICKER_TYPES.includes(type) || TARGET_ID_TYPES.includes(type);
+  return {
+    type,
+    targetId: needsTarget ? form.targetId.trim() || null : null,
+    url: type === REDIRECT_TYPES.EXTERNAL_URL ? form.url.trim() || null : null,
+  };
+}
 
 /* ---- date helpers -------------------------------------------------------*/
 function isoToLocalInput(iso) {
@@ -58,7 +88,7 @@ function formatDateTime(iso) {
  * Add / Edit modal — icon upload + title + redirect target + display order
  * ---------------------------------------------------------------------- */
 
-function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
+function TickerFormModal({ open, initialData, categories = [], brands = [], saving, onClose, onSave }) {
   const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
@@ -91,6 +121,12 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
     if (!form.endDateLocal) nextErrors.endDateLocal = "End date is required";
     if (form.startDateLocal && form.endDateLocal && form.startDateLocal > form.endDateLocal) {
       nextErrors.endDateLocal = "End date must be after start date";
+    }
+    if ((TARGET_ID_TYPES.includes(form.redirectType) || PICKER_TYPES.includes(form.redirectType)) && !form.targetId.trim()) {
+      nextErrors.targetId = "A target is required for this redirect type";
+    }
+    if (form.redirectType === REDIRECT_TYPES.EXTERNAL_URL && !form.url.trim()) {
+      nextErrors.url = "A URL is required for redirect type External URL";
     }
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
@@ -184,8 +220,85 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
             />
           </div>
 
+          {/* Redirect */}
+          <div className="mb-4">
+            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Redirect On Tap</label>
+            <select
+              value={form.redirectType}
+              onChange={(e) => setForm((prev) => ({ ...prev, redirectType: e.target.value, targetId: "", url: "" }))}
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+            >
+              {REDIRECT_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+
+            {PICKER_TYPES.includes(form.redirectType) && (
+              <div className="mt-2.5">
+                <select
+                  value={form.targetId}
+                  onChange={handleChange("targetId")}
+                  className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 ${
+                    errors.targetId
+                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
+                  }`}
+                >
+                  <option value="">
+                    {form.redirectType === REDIRECT_TYPES.BRAND ? "Select a brand…" : "Select a category…"}
+                  </option>
+                  {(form.redirectType === REDIRECT_TYPES.BRAND ? brands : categories).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.targetId && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.targetId}</p>}
+              </div>
+            )}
+
+            {TARGET_ID_TYPES.includes(form.redirectType) && (
+              <div className="mt-2.5">
+                <input
+                  value={form.targetId}
+                  onChange={handleChange("targetId")}
+                  placeholder={`${REDIRECT_OPTIONS.find((r) => r.value === form.redirectType)?.label} ID`}
+                  className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
+                    errors.targetId
+                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
+                  }`}
+                />
+                {errors.targetId && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.targetId}</p>}
+              </div>
+            )}
+
+            {form.redirectType === REDIRECT_TYPES.EXTERNAL_URL && (
+              <div className="mt-2.5">
+                <div
+                  className={`flex items-center gap-2 rounded-xl border bg-neutral-50 px-3.5 py-2.5 focus-within:ring-1 dark:bg-neutral-950 ${
+                    errors.url
+                      ? "border-red-500/60 focus-within:border-red-500/60 focus-within:ring-red-500/60"
+                      : "border-neutral-200 focus-within:border-emerald-400/60 focus-within:ring-emerald-400/60 dark:border-neutral-800"
+                  }`}
+                >
+                  <LinkIcon size={14} className="shrink-0 text-neutral-500" />
+                  <input
+                    value={form.url}
+                    onChange={handleChange("url")}
+                    placeholder="https://trydood.com"
+                    className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-neutral-200 dark:placeholder:text-neutral-600"
+                  />
+                </div>
+                {errors.url && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.url}</p>}
+              </div>
+            )}
+          </div>
+
           {/* Validity */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Start Date</label>
               <input
@@ -269,7 +382,7 @@ function TickerFormModal({ open, initialData, saving, onClose, onSave }) {
  * View modal — read-only details for a ticker
  * ---------------------------------------------------------------------- */
 
-function TickerViewModal({ open, ticker, categories, onClose }) {
+function TickerViewModal({ open, ticker, categories, brands, onClose }) {
   if (!open || !ticker) return null;
 
   return (
@@ -307,7 +420,7 @@ function TickerViewModal({ open, ticker, categories, onClose }) {
             </div>
           </div>
 
-          <p className="mt-3 text-[12.5px] text-sky-600 dark:text-sky-400">{redirectSummary(ticker.redirect, categories)}</p>
+          <p className="mt-3 text-[12.5px] text-sky-600 dark:text-sky-400">{redirectSummary(ticker.redirect, categories, brands)}</p>
 
           <div className="mt-5 grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
@@ -393,12 +506,16 @@ function parseRedirect(ticker) {
   return r || { type: REDIRECT_TYPES.NONE };
 }
 
-function redirectSummary(redirect, categories) {
+function redirectSummary(redirect, categories, brands = []) {
   if (!redirect || redirect.type === REDIRECT_TYPES.NONE) return "No redirect";
   if (redirect.type === REDIRECT_TYPES.EXTERNAL_URL) return redirect.url || "External URL";
   if (redirect.type === REDIRECT_TYPES.CATEGORY) {
     const cat = categories.find((c) => c.id === redirect.targetId);
     return `Category: ${cat?.name || redirect.targetId}`;
+  }
+  if (redirect.type === REDIRECT_TYPES.BRAND) {
+    const brand = brands.find((b) => b.id === redirect.targetId);
+    return `Brand: ${brand?.name || redirect.targetId}`;
   }
   return `${redirect.type}: ${redirect.targetId}`;
 }
@@ -434,6 +551,9 @@ function rowToFormDraft(row) {
     startDateLocal: isoToLocalInput(row.startDate),
     endDateLocal: isoToLocalInput(row.endDate),
     isActive: Boolean(row.isActive),
+    redirectType: row.redirect?.type || REDIRECT_TYPES.NONE,
+    targetId: row.redirect?.targetId || "",
+    url: row.redirect?.url || "",
   };
 }
 
@@ -452,6 +572,7 @@ export default function PromotionalTicker() {
   const [chartsError, setChartsError] = useState("");
 
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -475,6 +596,13 @@ export default function PromotionalTicker() {
       .then((res) => {
         const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name }));
         setCategories(rows);
+      })
+      .catch(() => {});
+    // Brands power the picker when redirect type is BRAND.
+    getAllBrands({ page: 1, limit: 100 })
+      .then((res) => {
+        const rows = (res?.data?.data ?? res?.data ?? []).map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.name || b._id }));
+        setBrands(rows);
       })
       .catch(() => {});
   }, []);
@@ -549,6 +677,7 @@ export default function PromotionalTicker() {
         endDate: localInputToIso(form.endDateLocal),
         isActive: form.isActive,
         icon: form.icon,
+        redirect: buildRedirect(form),
       };
       if (form.id) {
         await updatePromotionalTicker(form.id, payload);
@@ -630,7 +759,7 @@ export default function PromotionalTicker() {
       key: "redirect",
       label: "Redirect",
       render: (row) => (
-        <span className="max-w-[200px] truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
+        <span className="max-w-50 truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories, brands)}</span>
       ),
     },
     {
@@ -685,12 +814,12 @@ export default function PromotionalTicker() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Promotional Ticker</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Promotional Ticker</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Manage the scrolling promotional tickers shown in the app.
             </p>
@@ -715,7 +844,7 @@ export default function PromotionalTicker() {
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
-              <div className="relative flex h-[130px] items-center justify-center">
+              <div className="relative flex h-32.5 items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
@@ -735,7 +864,7 @@ export default function PromotionalTicker() {
 
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Redirect Mix</p>
-              <div className="h-[130px]">
+              <div className="h-32.5">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={redirectMix} barCategoryGap="25%">
                     <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#a3a3a3" }} axisLine={false} tickLine={false} interval={0} />
@@ -749,7 +878,7 @@ export default function PromotionalTicker() {
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Expiring Soon</p>
               {expiringData.length ? (
-                <div className="relative flex h-[130px] items-center justify-center">
+                <div className="relative flex h-32.5 items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={expiringData} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
@@ -766,7 +895,7 @@ export default function PromotionalTicker() {
                   </div>
                 </div>
               ) : (
-                <div className="flex h-[130px] items-center justify-center text-[12.5px] text-neutral-500">No tickers yet.</div>
+                <div className="flex h-32.5 items-center justify-center text-[12.5px] text-neutral-500">No tickers yet.</div>
               )}
             </div>
           </div>
@@ -832,6 +961,8 @@ export default function PromotionalTicker() {
       <TickerFormModal
         open={modalOpen}
         initialData={editingTicker}
+        categories={categories}
+        brands={brands}
         saving={saving}
         onClose={() => {
           if (saving) return;
@@ -851,6 +982,7 @@ export default function PromotionalTicker() {
         open={Boolean(viewTarget)}
         ticker={viewTarget}
         categories={categories}
+        brands={brands}
         onClose={() => setViewTarget(null)}
       />
 

@@ -21,7 +21,7 @@ export default function ToggleSwitch({ checked, onChange, disabled, title }) {
     >
       <span
         className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-          checked ? "translate-x-[18px]" : "translate-x-0.5"
+          checked ? "translate-x-4.5" : "translate-x-0.5"
         }`}
       />
     </button>

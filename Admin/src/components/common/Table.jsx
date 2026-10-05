@@ -30,6 +30,10 @@ export function StatusBadge({ status, activeLabel = "Active" }) {
  *   - label: header text shown in <th>
  *   - align: "left" | "center" | "right" (default "left")
  *   - width: optional tailwind width class, e.g. "w-16"
+ *   - cellClass: optional classes for this column's <td>. Cells default to
+ *     whitespace-nowrap so dates and codes never break across lines; pass
+ *     e.g. "min-w-48 max-w-64 whitespace-normal" for a long-text column
+ *     that should wrap to a couple of lines instead of widening the table.
  *   - render: optional custom cell renderer; falls back to row[key]
  *
  * data: array of row objects, each should have a unique `id`
@@ -66,8 +70,8 @@ export default function Table({
   const showPagination = typeof onPageChange === "function" && totalPages > 1;
   const rangeStart = page && pageSize ? (page - 1) * pageSize + 1 : null;
   const rangeEnd = page && pageSize ? Math.min((page - 1) * pageSize + data.length, total ?? Infinity) : null;
-  const cellPad = dense ? "px-3.5 py-2.5" : "px-5 py-[18px]";
-  const bodyTextSize = dense ? "text-[12.5px]" : "text-[13.5px]";
+  const cellPad = dense ? "px-3 py-2" : "px-4 py-3";
+  const bodyTextSize = dense ? "text-xs" : "text-[13px]";
 
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -78,7 +82,7 @@ export default function Table({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`${cellPad} text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
+                  className={`${cellPad} whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
                     col.align
                   )} ${col.width || ""}`}
                 >
@@ -106,9 +110,9 @@ export default function Table({
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`${cellPad} text-neutral-700 dark:text-neutral-300 ${alignClass(
+                      className={`${cellPad} align-middle text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
-                      )}`}
+                      )} ${col.cellClass || "whitespace-nowrap"}`}
                     >
                       {col.render
                         ? col.render(row, rowIndex)

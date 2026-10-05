@@ -44,7 +44,7 @@ export default function Header({ mobileOpen, setMobileOpen }) {
     "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-neutral-500 transition-colors hover:bg-white hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50";
 
   return (
-    <header className="sticky top-0 z-20 flex h-[72px] items-center gap-2 bg-white px-4 backdrop-blur-md dark:bg-neutral-950/80 sm:gap-3 sm:px-6">
+    <header className="sticky top-0 z-20 flex h-18 items-center gap-2 bg-white px-4 backdrop-blur-md dark:bg-neutral-950/80 sm:gap-3 sm:px-6">
       <button
         onClick={() => setMobileOpen((v) => !v)}
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-neutral-500 transition-colors hover:bg-white hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50 lg:hidden"
@@ -90,7 +90,7 @@ export default function Header({ mobileOpen, setMobileOpen }) {
             </div>
             {/* Hidden on narrow phones so a long name never forces the
                 header to overflow horizontally. */}
-            <span className="hidden max-w-[120px] truncate sm:inline">{displayName}</span>
+            <span className="hidden max-w-30 truncate sm:inline">{displayName}</span>
             <ChevronDown
               size={13}
               className={`hidden shrink-0 text-neutral-400 transition-transform duration-150 dark:text-neutral-500 sm:block ${
@@ -102,7 +102,7 @@ export default function Header({ mobileOpen, setMobileOpen }) {
           {userMenu && (
             <div
               role="menu"
-              className="absolute right-0 top-[calc(100%+10px)] w-56 overflow-hidden rounded-2xl border border-neutral-200 bg-white py-1.5 shadow-xl shadow-black/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30"
+              className="absolute right-0 top-full mt-2.5 w-56 overflow-hidden rounded-2xl border border-neutral-200 bg-white py-1.5 shadow-xl shadow-black/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30"
             >
               <div className="flex items-center gap-2.5 px-3.5 py-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-lime-400 text-[11px] font-bold text-neutral-950">

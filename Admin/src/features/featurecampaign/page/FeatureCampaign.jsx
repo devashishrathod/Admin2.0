@@ -514,7 +514,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
           </div>
 
           {/* Brand + Category */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Brand</label>
               <input
@@ -580,7 +580,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
           </div>
 
           {/* Budget + Dates */}
-          <div className="mb-4 grid grid-cols-3 gap-3">
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Budget (₹)</label>
               <input
@@ -633,7 +633,7 @@ function CampaignFormModal({ open, initialData, onClose, onSave }) {
               <ShieldCheck size={12} />
               Ad Account Details
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Ad Account ID</label>
                 <input
@@ -1055,12 +1055,12 @@ export default function FeatureCampaign() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Feature Campaigns</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Feature Campaigns</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Brands submit ad campaigns here. A Super Admin verifies the ad account before
               approving — once approved, the campaign goes live on the requested platforms.

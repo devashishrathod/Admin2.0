@@ -26,7 +26,7 @@ export default function SelectDropdown({ value, options, onChange, icon: Icon, c
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-[38px] items-center gap-1.5 whitespace-nowrap rounded-xl border border-neutral-200 bg-white px-3 text-[12.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+        className="flex h-9.5 items-center gap-1.5 whitespace-nowrap rounded-xl border border-neutral-200 bg-white px-3 text-[12.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
       >
         {Icon && <Icon size={14} className="shrink-0 text-neutral-500" />}
         {value}

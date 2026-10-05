@@ -72,7 +72,7 @@ export function Table({
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="no-scrollbar overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[13px]">
+        <table className="w-full min-w-225 border-collapse text-[13px]">
           <thead>
             <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
               {columns.map((col) => (
@@ -449,12 +449,12 @@ export default function Transaction() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Transactions
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">

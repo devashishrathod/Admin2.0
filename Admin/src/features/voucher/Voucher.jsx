@@ -456,7 +456,7 @@ function EditModal({ item, type, onCancel, onSave }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{meta.priceLabel}</label>
               <input
@@ -714,7 +714,7 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
   };
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         <button
           onClick={onBack}
@@ -1158,11 +1158,11 @@ export default function Voucher() {
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Page title */}
         <div className="mb-6">
-          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
             Vendor Submissions
           </h1>
           <p className="mt-1 text-[13px] text-neutral-500">

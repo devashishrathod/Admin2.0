@@ -345,7 +345,7 @@ export default function CampaignDetails({
   const isApproved = campaign.approvalStatus === "Approved";
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         {/* Top bar */}
         <div className="mb-4 flex items-center justify-between">
@@ -373,7 +373,7 @@ export default function CampaignDetails({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[19px] font-semibold text-neutral-900 dark:text-neutral-50">{campaign.title}</h1>
+                <h1 className="text-lg sm:text-xl font-semibold text-neutral-900 dark:text-neutral-50">{campaign.title}</h1>
                 <CampaignStatusBadge status={status} />
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-[13px] text-neutral-500">

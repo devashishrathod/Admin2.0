@@ -260,7 +260,7 @@ function RoleChipInput({ roles, onChange }) {
           }}
           onBlur={commit}
           placeholder={roles.length ? "" : "e.g. VENDOR, then Enter"}
-          className="min-w-[120px] flex-1 bg-transparent px-1 py-1 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
+          className="min-w-30 flex-1 bg-transparent px-1 py-1 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
         />
       </div>
     </div>
@@ -597,14 +597,14 @@ function BroadcastSection() {
           </div>
 
           <div className="lg:sticky lg:top-6">
-            <div className="mx-auto w-[240px]">
+            <div className="mx-auto w-60">
               {/* Phone frame — a real lock-screen mockup, not a watch face */}
               <div className="relative aspect-[9/19.5] overflow-hidden rounded-[2.75rem] border-[6px] border-neutral-800 bg-neutral-950 shadow-xl shadow-black/40">
                 {/* Wallpaper */}
                 <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/30 via-neutral-900 to-neutral-950" />
 
                 {/* Dynamic island */}
-                <div className="absolute left-1/2 top-2 z-20 h-5 w-[86px] -translate-x-1/2 rounded-full bg-neutral-950" />
+                <div className="absolute left-1/2 top-2 z-20 h-5 w-21.5 -translate-x-1/2 rounded-full bg-neutral-950" />
 
                 <div className="relative z-10 flex h-full flex-col">
                   {/* Status bar */}
@@ -665,14 +665,14 @@ function BroadcastSection() {
 
 export default function Notification() {
   return (
-    <div className="min-h-screen p-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex items-center gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
             <Bell size={19} />
           </span>
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Notifications</h1>
+            <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Notifications</h1>
             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">Push notification setup and broadcast tools.</p>
           </div>
         </div>

@@ -528,7 +528,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
     settlement.canApprove || settlement.canPay || settlement.canRetry || settlement.status === "Processing" || canReverse;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="w-full">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <button
           onClick={onBack}
@@ -1690,7 +1690,7 @@ export default function Settlement() {
 
   if (selected && showReserveBasis) {
     return (
-      <div className="min-h-screen p-6">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <SettlementReserveBasis settlement={selected} onBack={() => setShowReserveBasis(false)} />
       </div>
     );
@@ -1698,7 +1698,7 @@ export default function Settlement() {
 
   if (selected) {
     return (
-      <div className="min-h-screen p-6">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <SettlementDetail
           settlement={selected}
           detailLoading={detailLoading}
@@ -1711,12 +1711,12 @@ export default function Settlement() {
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Settlement
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -1819,7 +1819,7 @@ export default function Settlement() {
               setShowTodayOnly((v) => !v);
               setPage(1);
             }}
-            className={`flex h-[38px] items-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
+            className={`flex h-9.5 items-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
               showTodayOnly
                 ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-600 dark:text-cyan-400"
                 : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -1836,7 +1836,7 @@ export default function Settlement() {
           <button
             onClick={handleExport}
             disabled={filtered.length === 0}
-            className="flex h-[38px] items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            className="flex h-9.5 items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
             <Download size={14} />
             Export

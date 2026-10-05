@@ -581,10 +581,12 @@ export default function Category() {
   // the current paginated page, so they reflect the true full set.
   const activeCount = allCategories.filter((c) => c.isActive).length;
   const inactiveCount = allCategories.length - activeCount;
-  const statusMix = [
+  // Tiles always show both statuses; the donut only draws non-empty slices.
+  const statusTiles = [
     { name: "Active", value: activeCount, color: "#2FDE8C" },
     { name: "Inactive", value: inactiveCount, color: "#A3A3A3" },
-  ].filter((s) => s.value > 0);
+  ];
+  const statusMix = statusTiles.filter((s) => s.value > 0);
 
   // One combined breakdown chart (rather than 4 separate single-metric
   // charts) so all real stats — sub-categories, brands, vouchers, promo
@@ -696,12 +698,12 @@ export default function Category() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Category
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -725,41 +727,59 @@ export default function Category() {
           </div>
         )}
         <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
-          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
+          <div className="flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <div className="flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
               <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
             </div>
-            <div className="flex flex-col items-center">
-              <div className="relative h-[110px] w-[110px] shrink-0">
+            <p className="mt-0.5 text-[11.5px] text-neutral-500">Categories by current state</p>
+
+            <div className="flex flex-1 items-center gap-4 pt-3">
+              {/* Box is larger than the donut's diameter (2 × outerRadius)
+                  plus Recharts' 5px margin, so the ring never gets clipped. */}
+              <div className="relative h-36 w-36 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={statusMix}
+                      data={statusMix.length ? statusMix : [{ name: "None", value: 1, color: "#E5E5E5" }]}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={34}
-                      outerRadius={52}
-                      paddingAngle={3}
+                      innerRadius={48}
+                      outerRadius={64}
+                      paddingAngle={statusMix.length > 1 ? 3 : 0}
+                      cornerRadius={6}
                       isAnimationActive={false}
                     >
-                      {statusMix.map((s) => (
+                      {(statusMix.length ? statusMix : [{ name: "None", color: "#E5E5E5" }]).map((s) => (
                         <Cell key={s.name} fill={s.color} stroke="none" />
                       ))}
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{allCategories.length}</span>
-                  <span className="text-[8.5px] text-neutral-500">Total</span>
+                  <span className="text-[22px] font-bold leading-none text-neutral-900 dark:text-neutral-50">{allCategories.length}</span>
+                  <span className="mt-1 text-[10.5px] text-neutral-500">Total</span>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
-                {statusMix.map((s) => (
-                  <div key={s.name} className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                    {s.name} · {s.value}
-                  </div>
-                ))}
+
+              <div className="min-w-0 flex-1 space-y-2">
+                {statusTiles.map((s) => {
+                  const pct = allCategories.length ? Math.round((s.value / allCategories.length) * 100) : 0;
+                  return (
+                    <div key={s.name} className="rounded-xl bg-neutral-50 px-3 py-2.5 dark:bg-neutral-950/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-neutral-500">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                          {s.name}
+                        </span>
+                        <span className="text-[10.5px] font-semibold text-neutral-400">{pct}%</span>
+                      </div>
+                      <p className="mt-0.5 text-[18px] font-bold leading-tight text-neutral-900 dark:text-neutral-50">{s.value}</p>
+                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: s.color }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -784,7 +804,7 @@ export default function Category() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[190px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+              <div className="flex h-47.5 items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
             )}
           </div>
         </div>

@@ -275,7 +275,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
           <div className="mb-5 rounded-2xl bg-neutral-50 p-4 dark:bg-neutral-950/60">
             <SectionLabel>Pricing Breakdown</SectionLabel>
             <div className="flex flex-col items-center gap-3 sm:flex-row">
-              <ResponsiveContainer width="100%" height={160} className="sm:max-w-[160px]">
+              <ResponsiveContainer width="100%" height={160} className="sm:max-w-40">
                 <PieChart>
                   <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={70} paddingAngle={3}>
                     {pieData.map((s) => (
@@ -594,14 +594,14 @@ export default function Subscriptions() {
   })();
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         <div className="mb-6 flex items-center gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
             <CreditCard size={19} />
           </span>
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Subscriptions</h1>
+            <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Subscriptions</h1>
             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
               Every brand's plan, across the whole platform — {total} total.
             </p>
@@ -707,7 +707,7 @@ export default function Subscriptions() {
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[160px] items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
+              <div className="flex h-40 items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
             )}
           </div>
         </div>

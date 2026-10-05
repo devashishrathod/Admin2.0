@@ -218,7 +218,9 @@ function deriveBrandStatus(raw) {
   // `isApproved` stays false even on revoked/rejected/deactivated brands —
   // it only means "has an admin ever approved this", not "still pending" —
   // so PENDING must be judged from `status` alone, not `isApproved`.
-  if (raw.status === 'PENDING') return 'Pending';
+  // MANUAL_REVIEW is also "not yet approved" (same as New Onboarding's
+  // PENDING_STATUSES) — without this it fell through to Active/Deactive.
+  if (raw.status === 'PENDING' || raw.status === 'MANUAL_REVIEW') return 'Pending';
 
   const endsInDays =
     raw.subscription?.endsInDays ??

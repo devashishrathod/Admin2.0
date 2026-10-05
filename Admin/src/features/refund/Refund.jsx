@@ -18,6 +18,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { getRefundWorklist, approveRefund, rejectRefund } from "./services/RefundApi";
+import { canAdminDecide } from "./refundUtils";
 import { formatDate, fmtTime, inr, todayStr } from "../transaction/transactionUtils";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
 import { downloadCsv } from "../../utils/exportTable";
@@ -34,7 +35,7 @@ function Table({ columns = [], data = [], emptyMessage = "No records found.", ro
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="no-scrollbar overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[13px]">
+        <table className="w-full min-w-225 border-collapse text-[13px]">
           <thead>
             <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
               {columns.map((col) => (
@@ -101,18 +102,24 @@ function humanizeEnum(value) {
 // Buckets the real status values into the 3 tabs/stat groups this page
 // shows. COMPLETED/ADMIN_APPROVED (statusLabel "Refunded" / "Approved -
 // processing") count as "approved". AWAITING_BANK_DETAILS still needs
-// admin/customer follow-up, so it stays "pending".
+// admin/customer follow-up, so it stays "pending". VENDOR_APPROVED
+// (statusLabel "Approved by the outlet") already carries an approvedAmount,
+// so it counts as "approved" too.
 function bucketRefundStatus(status) {
   switch (status) {
     case "APPROVED":
+    case "VENDOR_APPROVED":
     case "ADMIN_APPROVED":
     case "COMPLETED":
       return "approved";
     case "REJECTED":
     case "ADMIN_REJECTED":
-    case "FAILED":
     case "CANCELLED":
+    case "WITHDRAWN":
       return "rejected";
+    // FAILED stays isOpen ("Refund failed — we are on it") and needs the
+    // admin to retry, so it lives in Pending — RefundStatusBadge still
+    // colours it red.
     default:
       return "pending";
   }
@@ -131,6 +138,7 @@ function normalizeRefundRow(raw) {
     transactionId: raw.transactionId || "—",
     claimCode: raw.claimCode || "—",
     brandId: raw.brandId || "—",
+    subBrandId: raw.subBrandId || "",
     customerId: raw.customerId || "—",
     date: dateStr,
     time: d && !Number.isNaN(d.getTime()) ? fmtTime(ts) : "—",
@@ -144,7 +152,7 @@ function normalizeRefundRow(raw) {
     statusLabel: raw.statusLabel || humanizeEnum(status),
     statusBucket: bucketRefundStatus(status),
     isOpen: Boolean(raw.isOpen),
-    canDecide: Boolean(raw.canDecide),
+    canDecide: canAdminDecide({ canDecide: raw.canDecide, isOpen: raw.isOpen, status }),
     canWithdraw: Boolean(raw.canWithdraw),
     // Not real API flags — inferred from the confirmed status values:
     // once an admin has approved a refund it can be paid out via /pay, or
@@ -157,6 +165,11 @@ function normalizeRefundRow(raw) {
     completedAt: raw.completedAt || null,
     adminDecisionAt: raw.adminDecisionAt || null,
     adminNote: raw.adminNote || "",
+    vendorRespondBy: raw.vendorRespondBy || null,
+    vendorDecisionAt: raw.vendorDecisionAt || null,
+    vendorDecisionBy: raw.vendorDecisionBy || "",
+    vendorNote: raw.vendorNote || "",
+    updatedAt: raw.updatedAt || null,
     remindersSent: Number(raw.remindersSent) || 0,
     attemptCount: Number(raw.attemptCount) || 0,
     isOverride: Boolean(raw.isOverride),
@@ -174,7 +187,7 @@ function RefundStatusBadge({ status, statusLabel }) {
     rejected: { cls: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400", icon: XCircle },
     pending: { cls: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400", icon: Clock3 },
   };
-  const cfg = map[bucketRefundStatus(status)] || map.pending;
+  const cfg = status === "FAILED" ? map.rejected : map[bucketRefundStatus(status)] || map.pending;
   const Icon = cfg.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium ring-1 ${cfg.cls}`}>
@@ -258,7 +271,7 @@ function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
-            placeholder="e.g. Only the starter was wrong."
+            placeholder="e.g. Customer ki baat sahi hai - approve."
             className={inputClass}
           />
         </label>
@@ -322,7 +335,7 @@ function RejectRefundModal({ refund, onClose, onSubmit, submitting, error }) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
-            placeholder="e.g. Customer collected the order in full."
+            placeholder="e.g. Bill aur claim match nahi kar rahe."
             className={inputClass}
           />
         </label>
@@ -454,6 +467,9 @@ export default function Refund() {
         !q ||
         r.claimCode.toLowerCase().includes(q) ||
         r.brandId.toLowerCase().includes(q) ||
+        r.subBrandId.toLowerCase().includes(q) ||
+        r.reasonNote.toLowerCase().includes(q) ||
+        r.vendorNote.toLowerCase().includes(q) ||
         r.customerId.toLowerCase().includes(q) ||
         r.reason.toLowerCase().includes(q);
       const inDateFrom = !dateFrom || r.date >= dateFrom;
@@ -475,6 +491,7 @@ export default function Refund() {
       { label: "Transaction Id", key: "transactionId" },
       { label: "Claim Code", key: "claimCode" },
       { label: "Brand Id", key: "brandId" },
+      { label: "Sub Brand Id", key: "subBrandId" },
       { label: "Customer Id", key: "customerId" },
       { label: "Date", key: "date" },
       { label: "Time", key: "time" },
@@ -495,6 +512,11 @@ export default function Refund() {
       { label: "Completed At", key: "completedAt" },
       { label: "Admin Decision At", key: "adminDecisionAt" },
       { label: "Admin Note", key: "adminNote" },
+      { label: "Vendor Respond By", key: "vendorRespondBy" },
+      { label: "Vendor Decision At", key: "vendorDecisionAt" },
+      { label: "Vendor Decision By", key: "vendorDecisionBy" },
+      { label: "Vendor Note", key: "vendorNote" },
+      { label: "Updated At", key: "updatedAt" },
       { label: "Reminders Sent", key: "remindersSent" },
       { label: "Attempt Count", key: "attemptCount" },
       { label: "Is Override", value: (r) => (r.isOverride ? "Yes" : "No") },
@@ -553,10 +575,55 @@ export default function Refund() {
         </button>
       ),
     },
-    { key: "brandId", label: "Brand", render: (r) => <span className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400">{r.brandId}</span> },
+    {
+      key: "brandId",
+      label: "Brand",
+      render: (r) => (
+        <div className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400">
+          <p>{r.brandId}</p>
+          {r.subBrandId && <p className="mt-0.5 text-[11px] text-neutral-400">Sub · {r.subBrandId}</p>}
+        </div>
+      ),
+    },
     { key: "customerId", label: "Customer", render: (r) => <span className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400">{r.customerId}</span> },
-    { key: "reason", label: "Reason" },
-    { key: "method", label: "Method" },
+    {
+      key: "reason",
+      label: "Reason",
+      render: (r) => (
+        <div className="max-w-48">
+          <p className="text-neutral-800 dark:text-neutral-100">{r.reason}</p>
+          {r.reasonNote && (
+            <p className="mt-0.5 truncate text-[11.5px] text-neutral-500" title={r.reasonNote}>
+              {r.reasonNote}
+            </p>
+          )}
+        </div>
+      ),
+    },
+    { key: "method", label: "Method", render: (r) => humanizeEnum(r.method) },
+    {
+      key: "vendorDecision",
+      label: "Vendor Decision",
+      render: (r) =>
+        r.vendorDecisionAt ? (
+          <div className="max-w-48">
+            <p className="text-[12px] text-neutral-500">
+              {formatDate(r.vendorDecisionAt.slice(0, 10))} · {fmtTime(r.vendorDecisionAt)}
+            </p>
+            {r.vendorNote && (
+              <p className="mt-0.5 truncate text-[11.5px] text-neutral-700 dark:text-neutral-300" title={r.vendorNote}>
+                “{r.vendorNote}”
+              </p>
+            )}
+          </div>
+        ) : r.vendorRespondBy ? (
+          <span className="text-[12px] text-amber-600 dark:text-amber-400">
+            Respond by {formatDate(r.vendorRespondBy.slice(0, 10))} · {fmtTime(r.vendorRespondBy)}
+          </span>
+        ) : (
+          <span className="text-neutral-400">—</span>
+        ),
+    },
     {
       key: "date",
       label: "Date",
@@ -634,12 +701,12 @@ export default function Refund() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Refunds
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -750,7 +817,7 @@ export default function Refund() {
           <button
             onClick={handleExport}
             disabled={filtered.length === 0}
-            className="flex h-[38px] items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            className="flex h-9.5 items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
             <Download size={14} />
             Export

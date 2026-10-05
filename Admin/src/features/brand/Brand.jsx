@@ -5,9 +5,8 @@ import {
   LayoutGrid,
   List,
   MapPin,
-  Store,
-  Users,
-  CreditCard,
+  BadgeCheck,
+  Crown,
   ChevronRight,
   Trash2,
   FileDown,
@@ -155,39 +154,67 @@ function useConfirmDelete(onConfirm) {
 }
 
 /* -------------------------------------------------------------------------
- * Brand card (list view)
+ * Brand card (list view) — storefront-style profile card: cover image,
+ * overlapping logo, then the brand's identity and numbers.
  * ---------------------------------------------------------------------- */
-const STATUS_ACCENTS = {
-  Active: "from-emerald-400/25 via-emerald-400/0",
-  Pending: "from-amber-400/25 via-amber-400/0",
-  Rejected: "from-red-400/25 via-red-400/0",
+
+// Fallback covers when a brand has no ambience photo — picked from the
+// brand name so each brand keeps the same one across renders.
+const COVER_GRADIENTS = [
+  "from-emerald-400 via-teal-400 to-sky-500",
+  "from-orange-400 via-rose-400 to-pink-500",
+  "from-violet-500 via-purple-400 to-fuchsia-400",
+  "from-sky-400 via-cyan-400 to-emerald-400",
+  "from-amber-400 via-orange-400 to-red-400",
+  "from-indigo-500 via-blue-500 to-sky-400",
+];
+const coverGradientFor = (name = "") =>
+  COVER_GRADIENTS[[...name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % COVER_GRADIENTS.length];
+
+// ambiencePhotos can come back as plain URLs or as media objects.
+const coverPhotoOf = (brand) => {
+  const first = brand.ambiencePhotos?.[0];
+  if (!first) return null;
+  return typeof first === "string" ? first : first.url || first.media?.url || null;
 };
 
-function StatChip({ icon: Icon, value, label }) {
+function BrandStat({ value, label }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl bg-neutral-50/60 px-2.5 py-1.5 dark:bg-neutral-950/60">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-        <Icon size={12} />
-      </span>
-      <div className="leading-tight">
-        <p className="text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-200">{value}</p>
-        <p className="text-[9.5px] uppercase tracking-wide text-neutral-500">{label}</p>
-      </div>
+    <div className="min-w-0 flex-1 text-center">
+      <p className="truncate text-[15px] font-bold leading-tight text-neutral-900 dark:text-neutral-50">{value}</p>
+      <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">{label}</p>
     </div>
   );
 }
 
 function BrandCard({ brand, onOpen, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const accent = STATUS_ACCENTS[brand.status] || "from-neutral-500/20 via-neutral-500/0";
   const outletCount = Number(String(brand.subBrandCount).split("/")[0]) || 0;
+  const cover = coverPhotoOf(brand);
+  const followers = Number(brand.followers) || 0;
+  const hasPlan = brand.subscriptionPlan && brand.subscriptionPlan !== "—";
+  const remaining = Math.min(100, Math.round(Number(brand.remainderPercent) || 0));
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:shadow-black/30">
-      <div className={`pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${accent} opacity-70`} />
+    <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:shadow-black/40">
+      {/* Cover */}
+      <button onClick={() => onOpen(brand)} className="relative block h-28 w-full overflow-hidden" aria-label={`Open ${brand.brandName}`}>
+        {cover ? (
+          <img src={cover} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        ) : (
+          <div className={`relative h-full w-full bg-gradient-to-br ${coverGradientFor(brand.brandName)}`}>
+            <div className="absolute -right-6 -top-10 h-32 w-32 rounded-full bg-white/20 blur-xl" />
+            <div className="absolute -bottom-12 left-10 h-28 w-28 rounded-full bg-black/10 blur-xl" />
+            <span className="absolute bottom-1 right-3 select-none text-[56px] font-black leading-none text-white/15">
+              {brand.brandName?.charAt(0)?.toUpperCase()}
+            </span>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/0 to-black/10" />
+      </button>
 
       {brand.isTopBrand && (
-        <span className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-semibold text-neutral-950">
+        <span className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-neutral-950 shadow-sm">
           <Sparkles size={10} />
           Top #{brand.topOrder}
         </span>
@@ -197,7 +224,7 @@ function BrandCard({ brand, onOpen, onDelete }) {
         <button
           onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
           aria-label={`More actions for ${brand.brandName}`}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-neutral-200 bg-neutral-50/80 text-neutral-500 backdrop-blur transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950/80 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-neutral-600 shadow-sm backdrop-blur transition-colors hover:text-neutral-900 dark:bg-neutral-900/80 dark:text-neutral-300 dark:hover:text-neutral-100"
         >
           <MoreVertical size={14} />
         </button>
@@ -218,68 +245,71 @@ function BrandCard({ brand, onOpen, onDelete }) {
         )}
       </div>
 
-      <button onClick={() => onOpen(brand)} className="relative flex flex-col text-left p-4">
-        <div className="mb-3 flex items-start justify-between pr-8">
-          <div className="flex items-center gap-2.5">
-            <div className="rounded-2xl ring-2 ring-neutral-50 dark:ring-neutral-950">
-              <BrandAvatar brand={brand} />
-            </div>
-            <div>
-              <h3 className="text-[14.5px] font-semibold leading-tight text-neutral-900 dark:text-neutral-50">
-                {brand.brandName}
-              </h3>
-              <p className="mt-0.5 flex items-center gap-1 text-[11px] text-neutral-500">
-                <MapPin size={10} />
-                {brand.location}
-              </p>
-            </div>
+      <button onClick={() => onOpen(brand)} className="relative flex flex-1 flex-col px-4 pb-4 text-left">
+        {/* Logo overlapping the cover + status */}
+        <div className="-mt-8 mb-2.5 flex items-end justify-between">
+          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-md ring-4 ring-white dark:bg-neutral-800 dark:ring-neutral-900">
+            {brand.logo ? (
+              <img src={brand.logo} alt={brand.brandName} className="h-full w-full object-cover" />
+            ) : (
+              <span className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${coverGradientFor(brand.brandName)} text-[24px] font-bold text-white`}>
+                {brand.brandName?.charAt(0)?.toUpperCase() || "?"}
+              </span>
+            )}
           </div>
-        </div>
-
-        <div className="mb-3 flex items-center gap-2">
           <BrandStatusBadge brand={brand} />
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${categoryPillClass(brand.category)}`}>
-            {brand.category}
-          </span>
         </div>
 
-        <p className="mb-3.5 line-clamp-1 text-[12px] text-neutral-500">
+        <h3 className="flex items-center gap-1.5 text-[16px] font-bold leading-tight tracking-tight text-neutral-900 dark:text-neutral-50">
+          <span className="truncate">{brand.brandName}</span>
+          <BadgeCheck size={16} className="shrink-0 text-sky-500" aria-label="Approved brand" />
+        </h3>
+        <p className="mt-1 line-clamp-1 text-[12px] text-neutral-500">
           {brand.tagline || "No description added yet"}
         </p>
 
-        <div className="mb-3.5 grid grid-cols-2 gap-2">
-          <StatChip icon={Users} value={brand.followers} label="Followers" />
-          <StatChip icon={Store} value={brand.subBrandCount} label={outletCount === 1 ? "Outlet" : "Outlets"} />
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-medium ${categoryPillClass(brand.category)}`}>
+            {brand.category}
+          </span>
+          {brand.location !== "—" && (
+            <span className="flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+              <MapPin size={10} />
+              {brand.location}
+            </span>
+          )}
         </div>
 
-        {Number(brand.remainderPercent) > 0 && (
-          <div className="mb-2.5">
-            <div className="mb-1 flex items-center justify-between text-[9.5px] text-neutral-500">
-              <span>Plan Remaining</span>
-              <span className="font-semibold text-neutral-700 dark:text-neutral-300">{Math.round(brand.remainderPercent)}%</span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
-                style={{ width: `${Math.min(100, brand.remainderPercent)}%` }}
-              />
-            </div>
-          </div>
-        )}
+        {/* Social-style numbers */}
+        <div className="my-3.5 flex items-center divide-x divide-neutral-200 rounded-xl bg-neutral-50 py-2.5 dark:divide-neutral-800 dark:bg-neutral-950/60">
+          <BrandStat value={followers >= 1000 ? `${(followers / 1000).toFixed(1)}K` : followers} label="Followers" />
+          <BrandStat value={brand.subBrandCount} label={outletCount === 1 ? "Outlet" : "Outlets"} />
+          <BrandStat value={brand.liveSince} label="Since" />
+        </div>
 
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-neutral-50 px-3 py-2.5 dark:bg-neutral-950/60">
-          <span className="flex min-w-0 items-center gap-2">
-            <CreditCard size={12} className="shrink-0 text-neutral-500" />
-            <span className="min-w-0">
-              <span className="block truncate text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-                {brand.subscriptionPlan} Plan
-              </span>
-              <span className="block text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-200">
-                {brand.planPrice}
-              </span>
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 transition-colors group-hover:bg-emerald-400/15 dark:text-emerald-400">
+        {/* Plan + CTA */}
+        <div className="mt-auto flex items-end justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1 truncate text-[11px] font-medium text-neutral-500">
+              <Crown size={11} className={hasPlan ? "shrink-0 text-amber-500" : "shrink-0 text-neutral-400"} />
+              {hasPlan ? `${brand.subscriptionPlan} Plan` : "No active plan"}
+              {brand.planPrice !== "—" && (
+                <span className="font-semibold text-neutral-800 dark:text-neutral-200">· {brand.planPrice}</span>
+              )}
+            </p>
+            {remaining > 0 && (
+              <div className="mt-1.5 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                  <div
+                    className={`h-full rounded-full ${remaining <= 15 ? "bg-red-400" : "bg-gradient-to-r from-emerald-600 to-emerald-400"}`}
+                    style={{ width: `${remaining}%` }}
+                  />
+                </div>
+                <span className="shrink-0 text-[10px] font-semibold text-neutral-500">{remaining}% left</span>
+              </div>
+            )}
+          </div>
+          <span className="flex shrink-0 items-center gap-1 rounded-xl bg-neutral-900 px-3 py-2 text-[11.5px] font-semibold text-white transition-colors group-hover:bg-emerald-400 group-hover:text-neutral-950 dark:bg-neutral-50 dark:text-neutral-900">
             View Profile <ChevronRight size={12} />
           </span>
         </div>
@@ -481,12 +511,12 @@ export default function Brand() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Brands</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Brands</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Browse onboarded brands and open a brand to see its full profile.
             </p>
@@ -532,16 +562,19 @@ export default function Brand() {
               <PieChartIcon size={13} className="text-emerald-500" /> Status Mix
             </div>
             <div className="flex items-center gap-2.5">
-              <div className="relative h-[78px] w-[78px] shrink-0">
+              {/* Box is larger than the donut's diameter (2 × outerRadius)
+                  plus Recharts' 5px margin, so the ring never gets clipped. */}
+              <div className="relative h-24 w-24 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={statusMix}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={24}
-                      outerRadius={38}
+                      innerRadius={30}
+                      outerRadius={42}
                       paddingAngle={3}
+                      cornerRadius={4}
                       isAnimationActive={false}
                     >
                       {statusMix.map((s) => (
@@ -551,7 +584,8 @@ export default function Brand() {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-[12px] font-bold text-neutral-900 dark:text-neutral-50">{brands.length}</span>
+                  <span className="text-[16px] font-bold leading-none text-neutral-900 dark:text-neutral-50">{brands.length}</span>
+                  <span className="mt-0.5 text-[9px] text-neutral-500">Total</span>
                 </div>
               </div>
               <div className="min-w-0 flex-1 space-y-1">
@@ -580,7 +614,7 @@ export default function Brand() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[90px] items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
+              <div className="flex h-22.5 items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
             )}
           </div>
 
@@ -598,7 +632,7 @@ export default function Brand() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[90px] items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
+              <div className="flex h-22.5 items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
             )}
           </div>
         </div>
@@ -753,7 +787,7 @@ export default function Brand() {
               disabled={!filtersActive}
               title="Reset all filters"
               aria-label="Reset all filters"
-              className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl border transition-colors ${
+              className={`flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl border transition-colors ${
                 filtersActive
                   ? "border-neutral-200 bg-white text-neutral-700 hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:text-red-400"
                   : "cursor-not-allowed border-neutral-200/60 bg-neutral-100/60 text-neutral-400 dark:border-neutral-800/60 dark:bg-neutral-900/60 dark:text-neutral-700"
@@ -802,8 +836,24 @@ export default function Brand() {
           </div>
         ) : view === "grid" ? (
           paged.length === 0 ? (
-            <div className="rounded-2xl bg-white px-4 py-10 text-center text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-              No brands found.
+            <div className="flex flex-col items-center gap-3 rounded-2xl bg-white px-4 py-16 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-500">
+                <BadgeCheck size={22} />
+              </span>
+              <div>
+                <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">No brands found</p>
+                <p className="mt-0.5 text-[12.5px] text-neutral-500">
+                  {filtersActive ? "Try a different search or filter." : "Approved brands will appear here."}
+                </p>
+              </div>
+              {filtersActive && (
+                <button
+                  onClick={resetFilters}
+                  className="rounded-xl border border-neutral-200 px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

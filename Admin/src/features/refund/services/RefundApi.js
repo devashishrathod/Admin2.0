@@ -165,6 +165,21 @@ export async function confirmBankPayout(refundRequestId, { utr, mode, paidAt } =
     }
 }
 
+// ── Fail Bank Payout ────────────────────────────────────────────────
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/fail-bank-payout
+// body: { reason } — marks the open manual NEFT leg (opened by
+// /pay-to-bank) as failed, e.g. the bank bounced it for a beneficiary
+// name mismatch, so the admin can retry /pay-to-bank.
+export async function failBankPayout(refundRequestId, { reason } = {}) {
+    try {
+        if (!refundRequestId) throw new Error('refundRequestId is required');
+        const { data } = await api.patch(`/refunds/admin/${refundRequestId}/fail-bank-payout`, { reason });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
     getRefundWorklist,
     getRefundById,
@@ -174,4 +189,5 @@ export default {
     requestBankDetails,
     payToBank,
     confirmBankPayout,
+    failBankPayout,
 };

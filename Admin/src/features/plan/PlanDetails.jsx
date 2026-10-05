@@ -20,9 +20,21 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { getPlanById } from "./services/planApi";
+import { getPlanById, getPlanFeatures } from "./services/planApi";
 import { normalizePlan } from "./Plan";
+import { extractFeatures } from "./FeatureMaster";
+import { formatEntitlementValue } from "./PlanModals";
 import { RingStat } from "../brand/BrandShared";
+
+const ENFORCED_KEYS = ["subBrands", "franchises", "vouchers", "showcase", "dealPack", "prioritySupport"];
+const ENFORCED_LABELS = {
+  subBrands: "Outlets",
+  franchises: "Franchises",
+  vouchers: "Vouchers",
+  showcase: "Showcase",
+  dealPack: "Deal Pack",
+  prioritySupport: "Priority Support",
+};
 
 /* -------------------------------------------------------------------------
  * PlanDetails — read-only, full-page view of a single subscription plan.
@@ -103,6 +115,7 @@ function FeatureTile({ icon: Icon, label, value, available }) {
 
 export default function PlanDetails({ planId, onBack }) {
   const [plan, setPlan] = useState(null);
+  const [masterFeatures, setMasterFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -121,21 +134,49 @@ export default function PlanDetails({ planId, onBack }) {
         if (!cancelled) setLoading(false);
       }
     })();
+    // Labels for featureValues — the plan only stores key + value.
+    getPlanFeatures()
+      .then((res) => !cancelled && setMasterFeatures(extractFeatures(res)))
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [planId]);
 
-  const availableFeatures = plan?.features.filter((f) => f.available).length ?? 0;
-  const totalFeatures = plan?.features.length ?? 0;
+  // Every feature the backend returns in featureValues (system limits and
+  // display features, in feature-master order), plus any legacy free-text
+  // features still on older plans.
+  const displayFeatures = plan
+    ? [
+        ...plan.featureValues
+          .filter((fv) => fv.value != null)
+          .map((fv) => {
+            const master = masterFeatures.find((f) => f.key === fv.key);
+            const shown = formatEntitlementValue(fv.value);
+            const v = fv.value || {};
+            return {
+              id: fv.key,
+              title: fv.label ?? master?.label ?? ENFORCED_LABELS[fv.key] ?? fv.key,
+              value: master?.unit && "number" in v ? `${shown} ${master.unit}` : shown,
+              available: v.isEnabled !== false && !("limit" in v && !v.isUnlimited && !Number(v.limit)),
+              order: master?.sortOrder ?? ENFORCED_KEYS.indexOf(fv.key),
+            };
+          })
+          .sort((a, b) => a.order - b.order),
+        ...plan.features,
+      ]
+    : [];
+  const availableFeatures = displayFeatures.filter((f) => f.available).length;
+  const totalFeatures = displayFeatures.length;
   const booleanEntitlements = plan
     ? [plan.entitlements.dealPack.isEnabled, plan.entitlements.prioritySupport.isEnabled]
     : [];
   const enabledEntitlements = booleanEntitlements.filter(Boolean).length;
   const savings =
-    plan && plan.strikePrice
-      ? Math.max(0, Number(plan.strikePrice) - Number(plan.price || 0))
+    plan && plan.discountedPrice != null
+      ? Math.max(0, Number(plan.price || 0) - Number(plan.discountedPrice))
       : 0;
+  const entitlementLabel = (key, fallback) => masterFeatures.find((f) => f.key === key)?.label || fallback;
 
   const featureCoverageData = totalFeatures
     ? [
@@ -152,8 +193,8 @@ export default function PlanDetails({ planId, onBack }) {
     : [];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -163,7 +204,7 @@ export default function PlanDetails({ planId, onBack }) {
             >
               <ArrowLeft size={16} />
             </button>
-            <h1 className="text-[22px] font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
               {plan?.name || "Plan Details"}
             </h1>
           </div>
@@ -178,7 +219,7 @@ export default function PlanDetails({ planId, onBack }) {
               />
               <RingStat
                 pct={plan.entitlements.vouchers.isUnlimited ? 100 : 0}
-                label="Vouchers"
+                label={entitlementLabel("vouchers", "Vouchers")}
                 caption={plan.entitlements.vouchers.isUnlimited ? "Unlimited" : `${plan.entitlements.vouchers.limit} limit`}
                 tint="sky"
               />
@@ -216,37 +257,51 @@ export default function PlanDetails({ planId, onBack }) {
                   Most Popular
                 </span>
               )}
-              <div className="flex items-center gap-2">
-                <h1 className="text-[20px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h1>
+              <div className="flex items-center gap-3">
+                {plan.image && <img src={plan.image} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />}
+                <h1 className="text-lg sm:text-xl font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h1>
                 <StatusBadge status={plan.status} />
+                {plan.isTrial && (
+                  <span className="rounded-full bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                    Free trial
+                  </span>
+                )}
               </div>
               <p className="mt-1 text-[13px] text-neutral-500">{plan.description || "No description added."}</p>
 
               <div className="mt-5 flex flex-wrap items-end gap-3">
                 <span className="text-[32px] font-bold text-neutral-900 dark:text-neutral-50">
-                  ₹{Number(plan.price || 0).toLocaleString("en-IN")}
+                  ₹{Number(plan.discountedPrice ?? plan.price ?? 0).toLocaleString("en-IN")}
                 </span>
-                <span className="mb-1 rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                  {plan.type === "MONTHLY" ? "Monthly" : "Yearly"}
+                {plan.typeLabel && (
+                  <span className="mb-1 rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-semibold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                    {plan.typeLabel}
+                  </span>
+                )}
+                <span className="mb-1 rounded-full bg-violet-400/10 px-2.5 py-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400">
+                  {plan.tier != null ? `Tier ${plan.tier}` : "No tier"}
                 </span>
-                {plan.strikePrice ? (
+                {savings > 0 ? (
                   <span className="mb-1 text-[14px] text-neutral-500 line-through">
-                    ₹{Number(plan.strikePrice).toLocaleString("en-IN")}
+                    ₹{Number(plan.price).toLocaleString("en-IN")}
                   </span>
                 ) : null}
-                {Number(plan.discountPercent) > 0 ? (
+                {plan.discountType === "PERCENT" && Number(plan.discountPercent) > 0 ? (
                   <span className="mb-1 rounded-md bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    {plan.discountType === "PERCENT"
-                      ? `${Math.round(Number(plan.discountPercent))}% OFF`
-                      : `₹${Number(plan.discountPercent).toLocaleString("en-IN")} OFF`}
+                    {Math.round(Number(plan.discountPercent))}% OFF
+                  </span>
+                ) : null}
+                {plan.discountType === "FLAT" && Number(plan.discountAmount) > 0 ? (
+                  <span className="mb-1 rounded-md bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    ₹{Number(plan.discountAmount).toLocaleString("en-IN")} OFF
                   </span>
                 ) : null}
               </div>
 
-              {plan.durationInDays ? (
+              {plan.durationLabel ? (
                 <p className="mt-3 flex items-center gap-1.5 text-[12px] text-neutral-500">
                   <Calendar size={12} />
-                  Valid for {plan.durationInDays} days
+                  Valid for {plan.durationLabel}
                 </p>
               ) : null}
             </div>
@@ -271,7 +326,7 @@ export default function PlanDetails({ planId, onBack }) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <SectionCard title="Feature Coverage">
                 {featureCoverageData.length ? (
-                  <div className="relative flex h-[140px] items-center justify-center">
+                  <div className="relative flex h-35 items-center justify-center">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -298,7 +353,7 @@ export default function PlanDetails({ planId, onBack }) {
                     </div>
                   </div>
                 ) : (
-                  <p className="flex h-[140px] items-center justify-center text-[12.5px] text-neutral-500">
+                  <p className="flex h-35 items-center justify-center text-[12.5px] text-neutral-500">
                     No features added yet.
                   </p>
                 )}
@@ -306,7 +361,7 @@ export default function PlanDetails({ planId, onBack }) {
 
               <SectionCard title="Entitlements Enabled">
                 {entitlementsData.length ? (
-                  <div className="relative flex h-[140px] items-center justify-center">
+                  <div className="relative flex h-35 items-center justify-center">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -333,7 +388,7 @@ export default function PlanDetails({ planId, onBack }) {
                     </div>
                   </div>
                 ) : (
-                  <p className="flex h-[140px] items-center justify-center text-[12.5px] text-neutral-500">
+                  <p className="flex h-35 items-center justify-center text-[12.5px] text-neutral-500">
                     No entitlements configured.
                   </p>
                 )}
@@ -375,9 +430,9 @@ export default function PlanDetails({ planId, onBack }) {
 
             {/* Features */}
             <SectionCard title="Features">
-              {plan.features.length ? (
+              {displayFeatures.length ? (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                  {plan.features.map((f) => (
+                  {displayFeatures.map((f) => (
                     <FeatureTile key={f.id} icon={ListChecks} label={f.title || "—"} value={f.value} available={f.available} />
                   ))}
                 </div>
@@ -391,32 +446,32 @@ export default function PlanDetails({ planId, onBack }) {
               <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
                 <InfoRow
                   icon={Store}
-                  label="Sub Brands"
+                  label={entitlementLabel("subBrands", "Sub Brands")}
                   value={plan.entitlements.subBrands.isUnlimited ? "Unlimited" : plan.entitlements.subBrands.limit}
                 />
                 <InfoRow
                   icon={LayoutGrid}
-                  label="Franchises"
+                  label={entitlementLabel("franchises", "Franchises")}
                   value={plan.entitlements.franchises.isUnlimited ? "Unlimited" : plan.entitlements.franchises.limit}
                 />
                 <InfoRow
                   icon={Ticket}
-                  label="Vouchers"
+                  label={entitlementLabel("vouchers", "Vouchers")}
                   value={plan.entitlements.vouchers.isUnlimited ? "Unlimited" : plan.entitlements.vouchers.limit}
                 />
                 <InfoRow
                   icon={Gift}
-                  label="Deal Pack"
+                  label={entitlementLabel("dealPack", "Deal Pack")}
                   value={plan.entitlements.dealPack.isEnabled ? "Enabled" : "Disabled"}
                 />
                 <InfoRow
                   icon={Headphones}
-                  label="Priority Support"
+                  label={entitlementLabel("prioritySupport", "Priority Support")}
                   value={plan.entitlements.prioritySupport.isEnabled ? "Enabled" : "Disabled"}
                 />
                 <InfoRow
                   icon={LayoutGrid}
-                  label="Showcase"
+                  label={entitlementLabel("showcase", "Showcase")}
                   value={plan.entitlements.showcase.isUnlimited ? "Unlimited" : plan.entitlements.showcase.limit}
                 />
               </div>

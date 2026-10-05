@@ -153,12 +153,12 @@ export default function CustomerPlanAnalytics() {
   );
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Customer Plan Analytics
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -356,7 +356,7 @@ export default function CustomerPlanAnalytics() {
             </button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] border-collapse text-[13px]">
+            <table className="w-full min-w-170 border-collapse text-[13px]">
               <thead>
                 <tr className="bg-neutral-50 dark:bg-neutral-900/60">
                   <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-500">

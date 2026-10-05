@@ -537,7 +537,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
         <div className="rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Renewal</p>
           {brand.expiredInDays > 0 ? (
-            <div className="relative mt-1 flex h-[64px] items-center justify-center">
+            <div className="relative mt-1 flex h-16 items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -567,7 +567,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
         <div className="rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">Price Split</p>
           {pricingBreakdown.length ? (
-            <div className="relative flex h-[64px] items-center justify-center">
+            <div className="relative flex h-16 items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={pricingBreakdown} dataKey="value" innerRadius={20} outerRadius={30} paddingAngle={3} stroke="none">
@@ -748,7 +748,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
           <div className="space-y-3">
             {historyTrend.length > 1 && historyTrend.some((d) => d.amount > 0) && (
               <SectionCard title="Amount Over Time">
-                <div className="h-[110px]">
+                <div className="h-27.5">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={historyTrend} barCategoryGap="30%">
                       <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />

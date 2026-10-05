@@ -18,7 +18,7 @@ export default function DateRangeFilter({ startDate, endDate, onStartChange, onE
         onChange={(e) => onStartChange(e.target.value)}
         max={endDate || undefined}
         aria-label="Start date"
-        className="w-[122px] bg-transparent text-[12.5px] text-neutral-800 focus:outline-none dark:text-neutral-200 [color-scheme:light] dark:[color-scheme:dark]"
+        className="w-30.5 bg-transparent text-[12.5px] text-neutral-800 focus:outline-none dark:text-neutral-200 [color-scheme:light] dark:[color-scheme:dark]"
       />
       <span className="text-neutral-400">–</span>
       <input
@@ -27,7 +27,7 @@ export default function DateRangeFilter({ startDate, endDate, onStartChange, onE
         onChange={(e) => onEndChange(e.target.value)}
         min={startDate || undefined}
         aria-label="End date"
-        className="w-[122px] bg-transparent text-[12.5px] text-neutral-800 focus:outline-none dark:text-neutral-200 [color-scheme:light] dark:[color-scheme:dark]"
+        className="w-30.5 bg-transparent text-[12.5px] text-neutral-800 focus:outline-none dark:text-neutral-200 [color-scheme:light] dark:[color-scheme:dark]"
       />
       {hasRange && (
         <button

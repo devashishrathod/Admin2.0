@@ -224,11 +224,11 @@ export default function NewOnboarding() {
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
             Brand Onboarding Verifications
           </h1>
           <p className="mt-1 text-[13px] text-neutral-500">

@@ -475,7 +475,7 @@ function PlanFormModal({ open, initialData, onClose, onSave }) {
             />
           </div>
 
-          <div className="mb-4 grid grid-cols-2 gap-3">
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Price (₹)</label>
               <input
@@ -787,7 +787,7 @@ function CustomerDetail({
       <div className="mb-5 overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className={`h-16 bg-gradient-to-r ${detailCoverAccent} to-transparent`} />
         <div className="flex flex-wrap items-end gap-4 px-5 pb-5">
-          <div className={`-mt-9 flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-2xl text-[30px] shadow-md ring-4 ring-white dark:ring-neutral-900 ${avatarBg}`}>
+          <div className={`-mt-9 flex h-18 w-18 shrink-0 items-center justify-center rounded-2xl text-[30px] shadow-md ring-4 ring-white dark:ring-neutral-900 ${avatarBg}`}>
             {customer.avatar}
           </div>
           <div className="min-w-0 flex-1 pb-0.5">
@@ -933,7 +933,7 @@ function CustomerDetail({
                 {claimsBreakdown.length > 0 && (
                   <div className="col-span-2 row-span-2 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
                     <p className="mb-1 text-[11px] font-medium text-neutral-500">Claims Breakdown</p>
-                    <div className="relative h-[150px]">
+                    <div className="relative h-37.5">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie data={claimsBreakdown} dataKey="value" nameKey="name" innerRadius={40} outerRadius={60} paddingAngle={3}>
@@ -964,7 +964,7 @@ function CustomerDetail({
                 {spendOverview.length > 0 && (
                   <div className="col-span-2 row-span-2 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
                     <p className="mb-1 text-[11px] font-medium text-neutral-500">Spend Overview</p>
-                    <div className="h-[160px]">
+                    <div className="h-40">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={spendOverview} layout="vertical" margin={{ left: 8, right: 12 }}>
                           <XAxis type="number" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
@@ -998,7 +998,7 @@ function CustomerDetail({
                 {refundsBreakdown.length > 0 && (
                   <div className="col-span-2 row-span-2 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
                     <p className="mb-1 text-[11px] font-medium text-neutral-500">Refunds Breakdown</p>
-                    <div className="relative h-[150px]">
+                    <div className="relative h-37.5">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie data={refundsBreakdown} dataKey="value" nameKey="name" innerRadius={40} outerRadius={60} paddingAngle={3}>
@@ -1467,8 +1467,8 @@ export default function Customer() {
   );
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {selectedCustomer ? (
           <CustomerDetail
             customer={selectedCustomer}
@@ -1485,7 +1485,7 @@ export default function Customer() {
             {/* Header */}
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Customers</h1>
+                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Customers</h1>
                 <p className="mt-1 text-[13px] text-neutral-500">
                   Manage mobile customers, their membership plans and activity.
                 </p>

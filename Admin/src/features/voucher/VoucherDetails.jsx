@@ -150,8 +150,8 @@ export default function VoucherDetails({
   };
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
@@ -164,7 +164,7 @@ export default function VoucherDetails({
             </button>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-[19px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">{voucher.title}</h1>
+                <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">{voucher.title}</h1>
                 <VoucherStatusBadge status={status} />
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-neutral-500">
@@ -338,7 +338,7 @@ export default function VoucherDetails({
               </p>
               {voucher.offers?.length ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-left text-[12.5px]">
+                  <table className="w-full min-w-140 text-left text-[12.5px]">
                     <thead className="text-[10.5px] uppercase tracking-wide text-neutral-400">
                       <tr>
                         <th className="px-5 py-2 font-medium">Offer</th>
@@ -430,7 +430,7 @@ export default function VoucherDetails({
                     const isLast = i === voucher.history.length - 1;
                     return (
                       <div key={`${h.action}-${i}`} className={`relative flex gap-3 ${isLast ? "" : "pb-4"}`}>
-                        {!isLast && <span className="absolute bottom-0 left-[11px] top-6 w-px bg-neutral-200 dark:bg-neutral-800" />}
+                        {!isLast && <span className="absolute bottom-0 left-2.75 top-6 w-px bg-neutral-200 dark:bg-neutral-800" />}
                         <span className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-4 ring-white dark:ring-neutral-900 ${color}`}>
                           <Icon size={12} />
                         </span>

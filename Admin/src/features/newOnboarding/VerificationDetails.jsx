@@ -237,7 +237,7 @@ function TimelineEntry({ entry, isLast }) {
 
   return (
     <div className={`relative flex gap-3 ${isLast ? "" : "pb-5"}`}>
-      {!isLast && <span className="absolute bottom-0 left-[13px] top-7 w-px bg-neutral-200 dark:bg-neutral-800" />}
+      {!isLast && <span className="absolute bottom-0 left-3.25 top-7 w-px bg-neutral-200 dark:bg-neutral-800" />}
 
       <span className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-4 ring-white dark:ring-neutral-900 ${meta.tint}`}>
         <Icon size={13} />
@@ -471,8 +471,8 @@ export default function VerificationDetails({
   ].filter((g) => g.ids?.length);
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Back */}
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <button
@@ -509,7 +509,7 @@ export default function VerificationDetails({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-[19px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+                <h1 className="truncate text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
                   {brand.brandName}
                 </h1>
                 <StatusBadge status={statusLabel} activeLabel="Approved" />

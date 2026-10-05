@@ -749,7 +749,7 @@ function OverviewTab() {
           <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <p className="mb-1 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">Brand Status</p>
             <div className="flex items-center gap-3">
-              <div className="relative h-[92px] w-[92px] shrink-0">
+              <div className="relative h-23 w-23 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -973,8 +973,8 @@ function BrandAnalyticsTab() {
         />
       </div>
 
-      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-        <table className="w-full min-w-[720px] text-left text-[13px]">
+      <div className="overflow-x-auto rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+        <table className="w-full min-w-180 text-left text-[13px]">
           <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Brand</th>
@@ -1135,7 +1135,7 @@ function BrandFactsPanel({ brand }) {
         <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Renewal Window</p>
           {renewalData.length ? (
-            <div className="relative flex h-[110px] items-center justify-center">
+            <div className="relative flex h-27.5 items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={renewalData} dataKey="value" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
@@ -1151,13 +1151,13 @@ function BrandFactsPanel({ brand }) {
               </div>
             </div>
           ) : (
-            <div className="flex h-[110px] items-center justify-center text-[12px] text-neutral-500">No active plan window.</div>
+            <div className="flex h-27.5 items-center justify-center text-[12px] text-neutral-500">No active plan window.</div>
           )}
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Reach</p>
-          <div className="h-[110px]">
+          <div className="h-27.5">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={reachData} margin={{ top: 18, right: 4, left: -18, bottom: 0 }}>
                 <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9.5 }} axisLine={false} tickLine={false} />
@@ -1305,8 +1305,8 @@ function DealPackTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full min-w-[760px] text-left text-[13px]">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-neutral-800">
+        <table className="w-full min-w-190 text-left text-[13px]">
           <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period === "Month" ? "Month" : "Year"}</th>
@@ -1445,8 +1445,8 @@ function MembershipTab() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full min-w-[780px] text-left text-[13px]">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-neutral-800">
+        <table className="w-full min-w-195 text-left text-[13px]">
           <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Plan</th>
@@ -1682,8 +1682,8 @@ function VouchersTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-        <table className="w-full min-w-[880px] text-left text-[13px]">
+      <div className="overflow-x-auto rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+        <table className="w-full min-w-220 text-left text-[13px]">
           <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period === "Month" ? "Month" : "Year"}</th>
@@ -1860,8 +1860,8 @@ function TransactionTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-        <table className="w-full min-w-[680px] text-left text-[13px]">
+      <div className="overflow-x-auto rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+        <table className="w-full min-w-170 text-left text-[13px]">
           <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">Month</th>
@@ -1960,8 +1960,8 @@ function SettlementAnalyticsTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-        <table className="w-full min-w-[560px] text-left text-[13px]">
+      <div className="overflow-x-auto rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+        <table className="w-full min-w-140 text-left text-[13px]">
           <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-medium">{period}</th>
@@ -2005,11 +2005,11 @@ export default function AnalyticsReport() {
   const [tab, setTab] = useState("Overview");
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               <BarChart3 size={20} className="text-emerald-400" />
               Analytics Report
             </h1>

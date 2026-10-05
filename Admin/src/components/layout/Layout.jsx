@@ -7,7 +7,7 @@ export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAF7] text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
+    <div className="flex h-dvh overflow-hidden bg-[#F8FAF7] text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
       <Sidebar
         collapsed={collapsed}
         setCollapsed={setCollapsed}

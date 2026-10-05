@@ -500,7 +500,7 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
         </div>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Coupon Code</label>
               <input
@@ -552,7 +552,7 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Discount Type</label>
               <div className="flex gap-2">
@@ -585,7 +585,7 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Min Purchase (₹)</label>
               <input
@@ -606,7 +606,7 @@ function CouponFormModal({ type, initial, onCancel, onSave }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Valid From</label>
               <input
@@ -761,8 +761,8 @@ function CouponTable({ type, rows, onView, onEdit, onDelete, onApprove, onReject
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-      <table className="w-full min-w-[820px] text-left text-[13px]">
+    <div className="overflow-x-auto rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+      <table className="w-full min-w-205 text-left text-[13px]">
         <thead className="text-[11px] uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
           <tr>
             <th className="px-5 py-4 font-medium">Code</th>
@@ -955,12 +955,12 @@ export default function CouponCode() {
   };
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header — matches the Analytics Report page style */}
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               <Ticket size={20} className="text-emerald-400" />
               Coupon Codes
             </h1>

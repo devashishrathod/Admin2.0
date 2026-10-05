@@ -209,8 +209,8 @@ export default function PromoCodeReports() {
   }, [byAction]);
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -222,7 +222,7 @@ export default function PromoCodeReports() {
               <ArrowLeft size={16} />
             </button>
             <div>
-              <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+              <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
                 <TrendingUp size={20} className="text-emerald-500" />
                 Promo Code Campaign Report
               </h1>
@@ -300,7 +300,7 @@ export default function PromoCodeReports() {
             <button
               onClick={fetchReport}
               disabled={loading}
-              className="flex h-[38px] shrink-0 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-9.5 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Apply
@@ -387,7 +387,7 @@ export default function PromoCodeReports() {
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-[220px] items-center justify-center text-[12.5px] text-neutral-500">
+                  <div className="flex h-55 items-center justify-center text-[12.5px] text-neutral-500">
                     No usage in this period yet.
                   </div>
                 )}
@@ -397,7 +397,7 @@ export default function PromoCodeReports() {
                 <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">By Action</p>
                 {byActionChartData.length ? (
                   <div className="flex items-center gap-3">
-                    <div className="relative h-[140px] w-[140px] shrink-0">
+                    <div className="relative h-35 w-35 shrink-0">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie data={byActionChartData} dataKey="value" nameKey="name" innerRadius={40} outerRadius={62} paddingAngle={3} isAnimationActive={false}>
@@ -420,7 +420,7 @@ export default function PromoCodeReports() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex h-[140px] items-center justify-center text-[12.5px] text-neutral-500">No action data yet.</div>
+                  <div className="flex h-35 items-center justify-center text-[12.5px] text-neutral-500">No action data yet.</div>
                 )}
               </div>
             </div>

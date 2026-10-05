@@ -244,7 +244,7 @@ export default function TransactionDetails() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-2 p-6 text-[13px] text-neutral-500">
+      <div className="flex min-h-96 items-center justify-center gap-2 px-4 py-6 text-[13px] text-neutral-500">
         <Loader2 size={16} className="animate-spin" />
         Loading claim details…
       </div>
@@ -253,7 +253,7 @@ export default function TransactionDetails() {
 
   if (error || !details?.payment) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+      <div className="flex min-h-96 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
         <p className="flex items-center gap-2 text-[15px] font-semibold text-neutral-800 dark:text-neutral-200">
           <AlertTriangle size={16} className="text-red-500" />
           {error ? "Failed to load claim" : "Claim not found"}
@@ -300,7 +300,7 @@ export default function TransactionDetails() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
         <button
           onClick={() => navigate("/transaction")}
@@ -583,7 +583,7 @@ export default function TransactionDetails() {
                 Price Breakdown
               </h3>
               <div className="flex items-center gap-5">
-                <div className="relative h-[140px] w-[140px] shrink-0">
+                <div className="relative h-35 w-35 shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -635,7 +635,7 @@ export default function TransactionDetails() {
               <h3 className="mb-4 text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">
                 Amount Flow
               </h3>
-              <div className="h-[220px]">
+              <div className="h-55">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={amountFlow} layout="vertical" margin={{ left: 8, right: 16 }}>
                     <XAxis type="number" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />

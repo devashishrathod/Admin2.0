@@ -423,11 +423,11 @@ function MediaEditor({ items, onChange }) {
           )}
           {m.url && m.type === "video" && (
             getYouTubeEmbedUrl(m.url) ? (
-              <div className="mt-2.5 aspect-video w-full max-w-[280px] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+              <div className="mt-2.5 aspect-video w-full max-w-70 overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
                 <iframe src={getYouTubeEmbedUrl(m.url)} title="Preview" className="h-full w-full" allowFullScreen />
               </div>
             ) : (
-              <video src={m.url} controls className="mt-2.5 h-28 w-full max-w-[280px] rounded-lg border border-neutral-200 bg-black object-contain dark:border-neutral-800" />
+              <video src={m.url} controls className="mt-2.5 h-28 w-full max-w-70 rounded-lg border border-neutral-200 bg-black object-contain dark:border-neutral-800" />
             )
           )}
         </div>
@@ -569,7 +569,7 @@ function FaqFormModal({ open, initialData, allFaqs, onClose, onSave }) {
                 <button
                   type="button"
                   onClick={() => setIsFeatured((v) => !v)}
-                  className={`flex h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
+                  className={`flex h-10.5 w-full items-center justify-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
                     isFeatured
                       ? "border-amber-400/60 bg-amber-400/10 text-amber-600 dark:text-amber-400"
                       : "border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400"
@@ -1022,12 +1022,12 @@ export default function Faq() {
   );
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">FAQs</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">FAQs</h1>
             <p className="mt-1 text-[13px] text-neutral-500">Frequently asked questions, grouped by type.</p>
           </div>
           <button

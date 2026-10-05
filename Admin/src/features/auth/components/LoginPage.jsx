@@ -208,7 +208,7 @@ function OtpModal({ open, onClose, onVerifySuccess }) {
                         </div>
 
                         {/* Error */}
-                        <p className="text-xs text-red-500 text-center mb-3 min-h-[16px] dark:text-red-400">{displayError}</p>
+                        <p className="text-xs text-red-500 text-center mb-3 min-h-4 dark:text-red-400">{displayError}</p>
 
                         {/* Verify button */}
                         <button
@@ -279,7 +279,7 @@ export default function LoginPage() {
     const iconColor = inputType === 'whatsapp' ? '#10b981' : '#9ca3af';
 
     return (
-        <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden bg-white dark:bg-neutral-950">
+        <div className="min-h-dvh flex flex-col lg:flex-row relative overflow-hidden bg-white dark:bg-neutral-950">
 
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
@@ -315,7 +315,7 @@ export default function LoginPage() {
             `}</style>
 
             {/* ── Soft gradient blob ── */}
-            <div className="absolute bottom-0 left-0 w-[500px] h-[500px] pointer-events-none"
+            <div className="absolute bottom-0 left-0 w-125 h-125 pointer-events-none"
                 style={{ background: 'radial-gradient(ellipse at bottom left, rgba(16,185,129,0.15) 0%, transparent 70%)' }}
             />
 
@@ -389,7 +389,7 @@ export default function LoginPage() {
                         </div>
 
                         {/* Helper label */}
-                        <p className="text-xs pl-1 min-h-[16px] transition-all duration-200"
+                        <p className="text-xs pl-1 min-h-4 transition-all duration-200"
                             style={{ color: inputType === 'whatsapp' ? '#10b981' : '#9ca3af' }}>
                             {inputType === 'whatsapp' && '✦ OTP will be sent via WhatsApp'}
                             {!inputType && value.length > 0 && 'Enter a valid 10-digit WhatsApp number'}

@@ -360,7 +360,7 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
           </div>
 
           {/* Validity */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Start Date</label>
               <input
@@ -889,7 +889,7 @@ export default function Banner() {
       key: "redirect",
       label: "Redirect",
       render: (row) => (
-        <span className="max-w-[200px] truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
+        <span className="max-w-50 truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
       ),
     },
     {
@@ -939,12 +939,12 @@ export default function Banner() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Banner</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Banner</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Upload and manage promotional banners shown in the app.
             </p>
@@ -969,7 +969,7 @@ export default function Banner() {
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
-              <div className="relative flex h-[130px] items-center justify-center">
+              <div className="relative flex h-32.5 items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
@@ -989,7 +989,7 @@ export default function Banner() {
 
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Type Mix</p>
-              <div className="h-[130px]">
+              <div className="h-32.5">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={typeMix} barCategoryGap="30%">
                     <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
@@ -1003,7 +1003,7 @@ export default function Banner() {
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Expiring Soon</p>
               {expiringData.length ? (
-                <div className="relative flex h-[130px] items-center justify-center">
+                <div className="relative flex h-32.5 items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={expiringData} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
@@ -1020,7 +1020,7 @@ export default function Banner() {
                   </div>
                 </div>
               ) : (
-                <div className="flex h-[130px] items-center justify-center text-[12.5px] text-neutral-500">No banners yet.</div>
+                <div className="flex h-32.5 items-center justify-center text-[12.5px] text-neutral-500">No banners yet.</div>
               )}
             </div>
           </div>

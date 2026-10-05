@@ -1213,7 +1213,7 @@ function SystemVerificationTab({ brand }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SectionCard title="Trust Score">
           {sv.score != null ? (
-            <div className="relative h-[110px]">
+            <div className="relative h-27.5">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -1238,7 +1238,7 @@ function SystemVerificationTab({ brand }) {
               </div>
             </div>
           ) : (
-            <div className="flex h-[110px] items-center justify-center text-[12.5px] text-neutral-500">No score yet.</div>
+            <div className="flex h-27.5 items-center justify-center text-[12.5px] text-neutral-500">No score yet.</div>
           )}
         </SectionCard>
 
@@ -1288,7 +1288,7 @@ function SystemVerificationTab({ brand }) {
       {sv.nameMatch && (
         <SectionCard title="Name Match Scores">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="h-[130px]">
+            <div className="h-32.5">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={[
@@ -1330,7 +1330,7 @@ function SystemVerificationTab({ brand }) {
       {sv.bankNameMatch && (
         <SectionCard title="Bank Name Match Scores">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="h-[130px]">
+            <div className="h-32.5">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={[
@@ -1439,7 +1439,7 @@ function SystemVerificationTab({ brand }) {
         return (
           <SectionCard title="Verification Flags">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="relative flex h-[110px] items-center justify-center">
+              <div className="relative flex h-27.5 items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={flagsChartData} dataKey="value" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
@@ -1567,8 +1567,8 @@ export default function BrandDetails({
   };
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <button
             onClick={onBack}
@@ -1623,7 +1623,7 @@ export default function BrandDetails({
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-[19px] font-semibold text-neutral-900 dark:text-neutral-50 capitalize">{brand.brandName}</h1>
+                  <h1 className="text-lg sm:text-xl font-semibold text-neutral-900 dark:text-neutral-50 capitalize">{brand.brandName}</h1>
                   {brand.isTopBrand && (
                     <span className="flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-amber-600 dark:text-amber-400">
                       <Sparkles size={10} />

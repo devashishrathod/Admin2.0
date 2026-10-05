@@ -25,7 +25,7 @@ export function BrandAvatar({ brand, size = "md", className = "" }) {
     sm: "h-9 w-9 text-[13px] rounded-lg",
     md: "h-11 w-11 text-[16px] rounded-xl",
     lg: "h-14 w-14 text-[20px] rounded-2xl",
-    xl: "h-[86px] w-[86px] text-[26px] rounded-2xl",
+    xl: "h-21.5 w-21.5 text-[26px] rounded-2xl",
   };
   return (
     <div
@@ -57,7 +57,7 @@ export function ToggleSwitch({ checked, onChange, title }) {
     >
       <span
         className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-[8px]" : "translate-x-[-22px]"
+          checked ? "translate-x-2" : "translate-x-[-22px]"
         }`}
       />
     </button>
@@ -197,7 +197,7 @@ export function RejectionBadge({ brand, className = "" }) {
       title={brand.rejectionReason}
     >
       <MessageSquareWarning size={10} />
-      <span className="max-w-[220px] truncate">{brand.rejectionReason}</span>
+      <span className="max-w-55 truncate">{brand.rejectionReason}</span>
     </span>
   );
 }

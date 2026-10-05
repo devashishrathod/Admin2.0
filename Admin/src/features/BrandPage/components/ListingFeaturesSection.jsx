@@ -29,7 +29,7 @@ const ListingFeaturesSection = ({
       </div>
 
       <div className="mt-5 overflow-x-auto rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
-        <table className="w-full min-w-[640px] text-left text-sm">
+        <table className="w-full min-w-160 text-left text-sm">
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
               <th className="px-5 py-3">S.NO</th>

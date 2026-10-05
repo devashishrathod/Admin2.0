@@ -333,7 +333,7 @@ function DropdownField({ label, value, options, onChange }) {
 function PickerErrorNote({ what }) {
   return (
     <div className="mb-1.5 flex items-start gap-1.5 rounded-lg bg-amber-400/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-      <AlertTriangle size={12} className="mt-[1px] shrink-0" />
+      <AlertTriangle size={12} className="mt-px shrink-0" />
       <span>Couldn't load {what} right now — check the browser console or try reopening this form.</span>
     </div>
   );
@@ -516,7 +516,7 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
 
           {/* Step 3 — Discount */}
           <FormCard step={3} icon={Percent} title="Discount">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <SegmentedField
                 label="Discount Type"
                 value={form.discountType}
@@ -677,7 +677,7 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Per-Customer Usage Limit</label>
                   <input
@@ -747,7 +747,7 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
 
           {/* Step 6 — Usage limits */}
           <FormCard step={6} icon={Layers} title="Usage Limits">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Total Usage Limit</label>
                 <input
@@ -775,7 +775,7 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
 
           {/* Step 7 — Validity & status */}
           <FormCard step={7} icon={Calendar} title="Validity & Status" span={2}>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Valid From</label>
                 <input
@@ -1179,7 +1179,7 @@ export default function PromoCode() {
             <Tag size={12} className="text-emerald-500 dark:text-emerald-400" />
             {row.code}
           </span>
-          {row.description && <p className="mt-0.5 max-w-[220px] truncate text-[11px] text-neutral-500">{row.description}</p>}
+          {row.description && <p className="mt-0.5 max-w-55 truncate text-[11px] text-neutral-500">{row.description}</p>}
         </div>
       ),
     },
@@ -1293,12 +1293,12 @@ export default function PromoCode() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-7xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Promo Codes</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Promo Codes</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Manage discounts, campaigns and promotional offers.
             </p>

@@ -108,7 +108,7 @@ const NAV_GROUPS = [
 function GrowthMark() {
   // Concentric "growth ring" mark — the signature brand glyph.
   return (
-    <div className="relative h-[34px] w-[34px] shrink-0">
+    <div className="relative h-8.5 w-8.5 shrink-0">
       <svg viewBox="0 0 40 40" width={34} height={34}>
         <circle
           className="animate-pulse fill-none stroke-emerald-400"
@@ -146,7 +146,7 @@ function NavButton({ item, isActive, collapsed, onClick }) {
       to={item.path}
       onClick={onClick}
       title={collapsed ? item.label : undefined}
-      className={`group relative flex h-[44px] w-full items-center gap-3 rounded-2xl px-3.5 text-left text-[13.5px] font-medium no-underline transition-all duration-150
+      className={`group relative flex h-11 w-full items-center gap-3 rounded-2xl px-3.5 text-left text-[13.5px] font-medium no-underline transition-all duration-150
         ${isActive
           ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:bg-emerald-500 dark:text-white"
           : "text-neutral-500 hover:bg-white hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800/70 dark:hover:text-neutral-50"
@@ -195,13 +195,13 @@ export default function Sidebar({
   return (
     <>
       <aside
-        className={`fixed top-0 z-30 flex h-screen flex-col bg-white transition-all duration-300 dark:bg-neutral-950 lg:sticky
-          ${collapsed ? "lg:w-[76px]" : "lg:w-[252px]"}
-          ${mobileOpen ? "left-0 w-[240px]" : "-left-[260px] w-[240px] lg:left-0"}
+        className={`fixed top-0 z-30 flex h-dvh flex-col bg-white transition-all duration-300 dark:bg-neutral-950 lg:sticky
+          ${collapsed ? "lg:w-19" : "lg:w-63"}
+          ${mobileOpen ? "left-0 w-60" : "-left-65 w-60 lg:left-0"}
         `}
       >
         {/* Head */}
-        <div className="flex min-h-[68px] items-center gap-2.5  border-neutral-200 px-4.5 py-5 dark:border-neutral-800">
+        <div className="flex min-h-17 items-center gap-2.5  border-neutral-200 px-4.5 py-5 dark:border-neutral-800">
           <GrowthMark />
           <span
             className={`overflow-hidden whitespace-nowrap font-semibold text-[17px] tracking-tight text-neutral-900 transition-opacity duration-150 dark:text-neutral-50

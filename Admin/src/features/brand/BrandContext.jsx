@@ -20,6 +20,8 @@ import { getPlanById } from "../plan/services/planApi";
 
 const BrandContext = createContext(null);
 
+const UNAPPROVED_STATUSES = new Set(["Pending", "Rejected", "Revoked"]);
+
 export function BrandProvider({ children }) {
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,10 +33,11 @@ export function BrandProvider({ children }) {
     try {
       const res = await getAllBrands({ page, limit, search, status });
       const list = res?.data?.data || res?.data || [];
-      // Pending (not-yet-reviewed) brands belong to the New Onboarding
-      // review flow, not the main Brand list/analytics — exclude them here
-      // so they never show up anywhere BrandContext is consumed.
-      setBrands(list.map(mapBrandListItem).filter((b) => b.status !== "Pending"));
+      // Only approved brands belong in the main Brand list/analytics.
+      // Pending / Rejected / Revoked brands live in the New Onboarding
+      // review flow — exclude them so they never show up anywhere
+      // BrandContext is consumed.
+      setBrands(list.map(mapBrandListItem).filter((b) => !UNAPPROVED_STATUSES.has(b.status)));
     } catch (err) {
       setError(err.message);
     } finally {

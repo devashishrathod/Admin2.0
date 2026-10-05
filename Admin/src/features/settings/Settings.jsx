@@ -505,7 +505,7 @@ function ToggleField({ label, checked, onChange }) {
       >
         <span
           className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-            checked ? "translate-x-[18px]" : "translate-x-1"
+            checked ? "translate-x-4.5" : "translate-x-1"
           }`}
         />
       </span>
@@ -657,11 +657,11 @@ export default function Settings() {
   const isLegalSection = activeSection === "legal.terms" || activeSection === "legal.privacy";
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Settings</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Settings</h1>
           <p className="mt-1 text-[13px] text-neutral-500">
             Platform-wide configuration — each section below saves independently.
           </p>

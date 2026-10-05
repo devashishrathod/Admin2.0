@@ -235,7 +235,7 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
   return (
     <div className="overflow-hidden rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-[13px]">
+        <table className="w-full min-w-160 border-collapse text-[13px]">
           <thead>
             <tr className="bg-white dark:bg-neutral-900">
               <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
@@ -364,7 +364,7 @@ function PlanFormModal({ draft, isNew, featureList, onChange, onCancel, onSave }
         </div>
 
         {/* Basic info */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Plan Name">
             <input
               value={draft.name}
@@ -707,12 +707,12 @@ export default function CustomerPlan() {
   );
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
               Customer Plans
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
@@ -733,7 +733,7 @@ export default function CustomerPlan() {
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Status Mix</p>
-              <div className="relative flex h-[130px] items-center justify-center">
+              <div className="relative flex h-32.5 items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
@@ -752,7 +752,7 @@ export default function CustomerPlan() {
             </div>
             <div className="sm:col-span-2 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Price Comparison</p>
-              <div className="h-[130px]">
+              <div className="h-32.5">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={priceCompare} barCategoryGap="30%">
                     <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />

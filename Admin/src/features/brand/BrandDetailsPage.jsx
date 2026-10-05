@@ -33,7 +33,7 @@ export default function BrandDetailsPage() {
 
   if (!brand) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+      <div className="flex min-h-96 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
         <p className="text-[15px] font-semibold text-neutral-800 dark:text-neutral-200">Brand not found</p>
         <p className="text-[13px] text-neutral-500">
           It may have been deleted, or the link is no longer valid.

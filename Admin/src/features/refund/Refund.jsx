@@ -99,12 +99,7 @@ function humanizeEnum(value) {
     .join(" ");
 }
 
-// Buckets the real status values into the 3 tabs/stat groups this page
-// shows. COMPLETED/ADMIN_APPROVED (statusLabel "Refunded" / "Approved -
-// processing") count as "approved". AWAITING_BANK_DETAILS still needs
-// admin/customer follow-up, so it stays "pending". VENDOR_APPROVED
-// (statusLabel "Approved by the outlet") already carries an approvedAmount,
-// so it counts as "approved" too.
+
 function bucketRefundStatus(status) {
   switch (status) {
     case "APPROVED":

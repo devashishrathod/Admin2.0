@@ -4,7 +4,6 @@ import {
   Search,
   LayoutGrid,
   List,
-  MapPin,
   BadgeCheck,
   Crown,
   ChevronRight,
@@ -32,18 +31,6 @@ import {
 } from "recharts";
 import Table from "../../components/common/Table";
 import { useBrands } from "./BrandContext";
-
-/* -------------------------------------------------------------------------
- * Cosmetic-only category color coding
- * ---------------------------------------------------------------------- */
-const CATEGORY_COLORS = {
-  "Beauty & Personal Care": "bg-purple-500/15 text-purple-700 dark:text-purple-300",
-  "Food & Beverage": "bg-sky-500/15 text-sky-600 dark:text-sky-300",
-  Electronics: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",
-  "Home & Furniture": "bg-amber-500/15 text-amber-600 dark:text-amber-300",
-};
-const categoryPillClass = (category) =>
-  CATEGORY_COLORS[category] || "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400";
 
 const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Expired Brand", "Top Brand"];
 const STATUS_TAB_LABELS = {
@@ -154,35 +141,15 @@ function useConfirmDelete(onConfirm) {
 }
 
 /* -------------------------------------------------------------------------
- * Brand card (list view) — storefront-style profile card: cover image,
- * overlapping logo, then the brand's identity and numbers.
+ * Brand card (list view) — minimal profile card: logo + identity header,
+ * a short description, key numbers, then plan and the open action.
  * ---------------------------------------------------------------------- */
-
-// Fallback covers when a brand has no ambience photo — picked from the
-// brand name so each brand keeps the same one across renders.
-const COVER_GRADIENTS = [
-  "from-emerald-400 via-teal-400 to-sky-500",
-  "from-orange-400 via-rose-400 to-pink-500",
-  "from-violet-500 via-purple-400 to-fuchsia-400",
-  "from-sky-400 via-cyan-400 to-emerald-400",
-  "from-amber-400 via-orange-400 to-red-400",
-  "from-indigo-500 via-blue-500 to-sky-400",
-];
-const coverGradientFor = (name = "") =>
-  COVER_GRADIENTS[[...name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % COVER_GRADIENTS.length];
-
-// ambiencePhotos can come back as plain URLs or as media objects.
-const coverPhotoOf = (brand) => {
-  const first = brand.ambiencePhotos?.[0];
-  if (!first) return null;
-  return typeof first === "string" ? first : first.url || first.media?.url || null;
-};
 
 function BrandStat({ value, label }) {
   return (
-    <div className="min-w-0 flex-1 text-center">
-      <p className="truncate text-[15px] font-bold leading-tight text-neutral-900 dark:text-neutral-50">{value}</p>
-      <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">{label}</p>
+    <div className="min-w-0">
+      <p className="truncate text-[17px] font-semibold leading-none tracking-tight text-neutral-900 dark:text-neutral-50">{value}</p>
+      <p className="mt-1.5 text-[11px] text-neutral-400">{label}</p>
     </div>
   );
 }
@@ -190,49 +157,26 @@ function BrandStat({ value, label }) {
 function BrandCard({ brand, onOpen, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const outletCount = Number(String(brand.subBrandCount).split("/")[0]) || 0;
-  const cover = coverPhotoOf(brand);
   const followers = Number(brand.followers) || 0;
   const hasPlan = brand.subscriptionPlan && brand.subscriptionPlan !== "—";
   const remaining = Math.min(100, Math.round(Number(brand.remainderPercent) || 0));
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:shadow-black/40">
-      {/* Cover */}
-      <button onClick={() => onOpen(brand)} className="relative block h-28 w-full overflow-hidden" aria-label={`Open ${brand.brandName}`}>
-        {cover ? (
-          <img src={cover} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-        ) : (
-          <div className={`relative h-full w-full bg-gradient-to-br ${coverGradientFor(brand.brandName)}`}>
-            <div className="absolute -right-6 -top-10 h-32 w-32 rounded-full bg-white/20 blur-xl" />
-            <div className="absolute -bottom-12 left-10 h-28 w-28 rounded-full bg-black/10 blur-xl" />
-            <span className="absolute bottom-1 right-3 select-none text-[56px] font-black leading-none text-white/15">
-              {brand.brandName?.charAt(0)?.toUpperCase()}
-            </span>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/0 to-black/10" />
-      </button>
-
-      {brand.isTopBrand && (
-        <span className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-neutral-950 shadow-sm">
-          <Sparkles size={10} />
-          Top #{brand.topOrder}
-        </span>
-      )}
-
+    <div className="group relative flex flex-col rounded-2xl border border-neutral-200/80 bg-white p-5 text-left transition-all duration-200 hover:border-neutral-300 hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)] dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700 dark:hover:shadow-black/30">
+      {/* Menu */}
       <div className="absolute right-3 top-3 z-10">
         <button
           onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
           aria-label={`More actions for ${brand.brandName}`}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-neutral-600 shadow-sm backdrop-blur transition-colors hover:text-neutral-900 dark:bg-neutral-900/80 dark:text-neutral-300 dark:hover:text-neutral-100"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
         >
-          <MoreVertical size={14} />
+          <MoreVertical size={15} />
         </button>
 
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 z-20 mt-1.5 w-40 overflow-hidden rounded-xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
+            <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
               <button
                 onClick={() => { setMenuOpen(false); onDelete(brand); }}
                 className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
@@ -245,72 +189,74 @@ function BrandCard({ brand, onOpen, onDelete }) {
         )}
       </div>
 
-      <button onClick={() => onOpen(brand)} className="relative flex flex-1 flex-col px-4 pb-4 text-left">
-        {/* Logo overlapping the cover + status */}
-        <div className="-mt-8 mb-2.5 flex items-end justify-between">
-          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-md ring-4 ring-white dark:bg-neutral-800 dark:ring-neutral-900">
+      <button onClick={() => onOpen(brand)} className="flex flex-1 flex-col text-left" aria-label={`Open ${brand.brandName}`}>
+        {/* Identity */}
+        <div className="flex items-center gap-3.5 pr-8">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800">
             {brand.logo ? (
-              <img src={brand.logo} alt={brand.brandName} className="h-full w-full object-cover" />
+              <img src={brand.logo} alt={brand.brandName} className="h-full w-full object-contain p-1" />
             ) : (
-              <span className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${coverGradientFor(brand.brandName)} text-[24px] font-bold text-white`}>
+              <span className="text-[20px] font-semibold text-neutral-500 dark:text-neutral-300">
                 {brand.brandName?.charAt(0)?.toUpperCase() || "?"}
               </span>
             )}
           </div>
-          <BrandStatusBadge brand={brand} />
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-1.5 text-[15.5px] font-semibold leading-tight tracking-tight text-neutral-900 dark:text-neutral-50">
+              <span className="truncate">{brand.brandName}</span>
+              <BadgeCheck size={15} className="shrink-0 text-sky-500" aria-label="Approved brand" />
+            </h3>
+            <p className="mt-1 truncate text-[12px] text-neutral-500">
+              {brand.category}
+              {brand.location !== "—" && <span className="text-neutral-400"> · {brand.location}</span>}
+            </p>
+          </div>
         </div>
 
-        <h3 className="flex items-center gap-1.5 text-[16px] font-bold leading-tight tracking-tight text-neutral-900 dark:text-neutral-50">
-          <span className="truncate">{brand.brandName}</span>
-          <BadgeCheck size={16} className="shrink-0 text-sky-500" aria-label="Approved brand" />
-        </h3>
-        <p className="mt-1 line-clamp-1 text-[12px] text-neutral-500">
-          {brand.tagline || "No description added yet"}
-        </p>
-
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-medium ${categoryPillClass(brand.category)}`}>
-            {brand.category}
-          </span>
-          {brand.location !== "—" && (
-            <span className="flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-              <MapPin size={10} />
-              {brand.location}
+        {/* Status + top tag */}
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          <BrandStatusBadge brand={brand} />
+          {brand.isTopBrand && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white dark:bg-neutral-100 dark:text-neutral-900">
+              <Sparkles size={11} />
+              Top #{brand.topOrder}
             </span>
           )}
         </div>
 
-        {/* Social-style numbers */}
-        <div className="my-3.5 flex items-center divide-x divide-neutral-200 rounded-xl bg-neutral-50 py-2.5 dark:divide-neutral-800 dark:bg-neutral-950/60">
+        <p className="mt-3 line-clamp-2 min-h-[2.5rem] text-[12.5px] leading-5 text-neutral-500 dark:text-neutral-400">
+          {brand.tagline || "No description added yet"}
+        </p>
+
+        {/* Numbers */}
+        <div className="mt-4 grid grid-cols-3 gap-3 border-t border-neutral-100 pt-4 dark:border-neutral-800">
           <BrandStat value={followers >= 1000 ? `${(followers / 1000).toFixed(1)}K` : followers} label="Followers" />
           <BrandStat value={brand.subBrandCount} label={outletCount === 1 ? "Outlet" : "Outlets"} />
           <BrandStat value={brand.liveSince} label="Since" />
         </div>
 
-        {/* Plan + CTA */}
-        <div className="mt-auto flex items-end justify-between gap-3">
+        {/* Plan + action */}
+        <div className="mt-auto flex items-center justify-between gap-4 pt-5">
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1 truncate text-[11px] font-medium text-neutral-500">
-              <Crown size={11} className={hasPlan ? "shrink-0 text-amber-500" : "shrink-0 text-neutral-400"} />
-              {hasPlan ? `${brand.subscriptionPlan} Plan` : "No active plan"}
-              {brand.planPrice !== "—" && (
-                <span className="font-semibold text-neutral-800 dark:text-neutral-200">· {brand.planPrice}</span>
-              )}
-            </p>
+            <div className="flex items-center justify-between gap-2 text-[11.5px]">
+              <span className="flex min-w-0 items-center gap-1 truncate font-medium text-neutral-600 dark:text-neutral-300">
+                <Crown size={12} className="shrink-0 text-neutral-400" />
+                <span className="truncate capitalize">{hasPlan ? `${brand.subscriptionPlan} plan` : "No active plan"}</span>
+                {brand.planPrice !== "—" && <span className="text-neutral-400">· {brand.planPrice}</span>}
+              </span>
+              {remaining > 0 && <span className="shrink-0 tabular-nums text-neutral-400">{remaining}%</span>}
+            </div>
             {remaining > 0 && (
-              <div className="mt-1.5 flex items-center gap-2">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                  <div
-                    className={`h-full rounded-full ${remaining <= 15 ? "bg-red-400" : "bg-gradient-to-r from-emerald-600 to-emerald-400"}`}
-                    style={{ width: `${remaining}%` }}
-                  />
-                </div>
-                <span className="shrink-0 text-[10px] font-semibold text-neutral-500">{remaining}% left</span>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                <div
+                  className={`h-full rounded-full ${remaining <= 15 ? "bg-red-500" : "bg-neutral-900 dark:bg-neutral-100"}`}
+                  style={{ width: `${remaining}%` }}
+                />
               </div>
             )}
           </div>
-          <span className="flex shrink-0 items-center gap-1 rounded-xl bg-neutral-900 px-3 py-2 text-[11.5px] font-semibold text-white transition-colors group-hover:bg-emerald-400 group-hover:text-neutral-950 dark:bg-neutral-50 dark:text-neutral-900">
-            View Profile <ChevronRight size={12} />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-all group-hover:border-neutral-900 group-hover:bg-neutral-900 group-hover:text-white dark:border-neutral-700 dark:text-neutral-300 dark:group-hover:border-neutral-100 dark:group-hover:bg-neutral-100 dark:group-hover:text-neutral-900">
+            <ChevronRight size={16} />
           </span>
         </div>
       </button>

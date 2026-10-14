@@ -130,6 +130,9 @@ export default function VoucherDetails({
   busy,
   actionError,
 }) {
+  // Dummy (isDummy) vouchers are view-only: no approve/reject/publish,
+  // pause/resume, banner review/upload or image reorder.
+  const readOnly = Boolean(voucher.isDummy);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectBox, setShowRejectBox] = useState(false);
   const [rejectError, setRejectError] = useState("");
@@ -204,7 +207,7 @@ export default function VoucherDetails({
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Pause a live voucher / resume a paused one (API doc #57a/#57b) —
                 opens the parent's confirm dialog. */}
-            {onRequestStep && status === VOUCHER_STATUSES.PUBLISHED && (
+            {onRequestStep && !readOnly && status === VOUCHER_STATUSES.PUBLISHED && (
               <button
                 onClick={() => onRequestStep("pause")}
                 disabled={busy}
@@ -213,7 +216,7 @@ export default function VoucherDetails({
                 <PauseCircle size={14} /> Pause voucher
               </button>
             )}
-            {onRequestStep && status === VOUCHER_STATUSES.PAUSED && (
+            {onRequestStep && !readOnly && status === VOUCHER_STATUSES.PAUSED && (
               <button
                 onClick={() => onRequestStep("resume")}
                 disabled={busy}
@@ -259,7 +262,7 @@ export default function VoucherDetails({
                 key={voucher.images.map((img) => img.id || img.url).join("|")}
                 images={voucher.images}
                 title={voucher.title}
-                onReorder={onReorderImages}
+                onReorder={readOnly ? undefined : onReorderImages}
                 // Backend only reorders DRAFT / REJECTED versions (API doc #57d) —
                 // a published/approved version's images are part of what was approved.
                 lockedReason={
@@ -454,7 +457,18 @@ export default function VoucherDetails({
           <div className="min-w-0 space-y-4">
             {/* Hidden once the voucher is live (PUBLISHED) — there's nothing left
                 to approve; for every other status it holds the actions / info. */}
-            {status !== VOUCHER_STATUSES.PUBLISHED && (
+            {readOnly && (
+              <div className="flex items-start gap-2.5 rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
+                <Lock size={16} className="mt-0.5 shrink-0 text-violet-600 dark:text-violet-400" />
+                <div>
+                  <p className="text-[13px] font-semibold text-violet-700 dark:text-violet-300">View only · Dummy voucher</p>
+                  <p className="mt-0.5 text-[12px] text-violet-700/80 dark:text-violet-300/80">
+                    Test / demo data — it can't be approved, published, paused, edited or deleted.
+                  </p>
+                </div>
+              </div>
+            )}
+            {status !== VOUCHER_STATUSES.PUBLISHED && !readOnly && (
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <div className="mb-4 flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
                 <ShieldCheck size={16} className="text-emerald-500 dark:text-emerald-400" /> Super Admin Approval
@@ -561,7 +575,7 @@ export default function VoucherDetails({
                   <span className="flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
                     <ImageIcon size={16} className="text-emerald-500 dark:text-emerald-400" /> Banner
                   </span>
-                  {onUploadBanner && (
+                  {onUploadBanner && !readOnly && (
                     <button
                       onClick={() => setBannerModal("add")}
                       className="flex items-center gap-1.5 rounded-lg bg-emerald-400 px-3 py-1.5 text-[12px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
@@ -579,7 +593,7 @@ export default function VoucherDetails({
                         {voucher.banner?.current?.url ? (
                           <div className="flex flex-wrap items-center gap-3">
                             <BannerThumb media={voucher.banner?.current} label="Current" onClick={() => setBannerView("current")} />
-                            {onUploadBanner && (
+                            {onUploadBanner && !readOnly && (
                               <button
                                 onClick={() => setBannerModal("replace-current")}
                                 className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-300 dark:hover:text-emerald-400"
@@ -599,7 +613,7 @@ export default function VoucherDetails({
                         {voucher.banner?.pending?.url ? (
                           <div className="flex flex-wrap items-center gap-3">
                             <BannerThumb media={voucher.banner?.pending} label="Pending" onClick={() => setBannerView("pending")} />
-                            {onUploadBanner && (
+                            {onUploadBanner && !readOnly && (
                               <button
                                 onClick={() => setBannerModal("replace-pending")}
                                 className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-300 dark:hover:text-emerald-400"
@@ -643,7 +657,7 @@ export default function VoucherDetails({
                   </tbody>
                 </table>
 
-                {voucher.banner?.pending && (
+                {voucher.banner?.pending && !readOnly && (
                   <div className="mt-4 flex gap-2.5">
                     <button
                       onClick={onApproveBanner}
@@ -669,8 +683,8 @@ export default function VoucherDetails({
                     pending={voucher.banner?.pending}
                     focus={bannerView}
                     busy={busy}
-                    onApprove={onApproveBanner}
-                    onReject={onRejectBanner}
+                    onApprove={readOnly ? undefined : onApproveBanner}
+                    onReject={readOnly ? undefined : onRejectBanner}
                     onClose={() => setBannerView(null)}
                   />
                 )}

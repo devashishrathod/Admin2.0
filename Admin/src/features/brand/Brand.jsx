@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -28,6 +28,7 @@ import {
   FlaskConical,
   Layers,
   EyeOff,
+  Power,
   Copy,
   ChevronDown,
   ShieldCheck,
@@ -38,6 +39,7 @@ import {
   Landmark,
   X,
   Pencil,
+  Lock,
 } from "lucide-react";
 import {
   PieChart,
@@ -51,6 +53,7 @@ import {
 } from "recharts";
 import Table from "../../components/common/Table";
 import { useBrands } from "./BrandContext";
+import { ToggleActiveConfirmModal } from "./BrandShared";
 
 const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Expired Brand", "Top Brand"];
 const STATUS_TAB_LABELS = {
@@ -270,17 +273,20 @@ function LogoActions({ onView, onEdit, size = "sm" }) {
       >
         <Eye size={icon} />
       </span>
-      <span
-        role="button"
-        tabIndex={0}
-        title="Edit brand"
-        aria-label="Edit brand"
-        onClick={fire(onEdit)}
-        onKeyDown={keyFire(onEdit)}
-        className={`flex ${btn} items-center justify-center rounded-full bg-white text-emerald-600 shadow-md transition-transform hover:scale-110`}
-      >
-        <Pencil size={icon} />
-      </span>
+      {/* No Edit for view-only (dummy) brands — onEdit is left undefined. */}
+      {onEdit && (
+        <span
+          role="button"
+          tabIndex={0}
+          title="Edit brand"
+          aria-label="Edit brand"
+          onClick={fire(onEdit)}
+          onKeyDown={keyFire(onEdit)}
+          className={`flex ${btn} items-center justify-center rounded-full bg-white text-emerald-600 shadow-md transition-transform hover:scale-110`}
+        >
+          <Pencil size={icon} />
+        </span>
+      )}
     </span>
   );
 }
@@ -288,7 +294,47 @@ function LogoActions({ onView, onEdit, size = "sm" }) {
 // Enum words kept upper-case when the entity type key is prettified.
 const ENTITY_ACRONYMS = new Set(["LLP", "OPC", "HUF", "NGO"]);
 
-function BrandCard({ brand, onOpen, onEdit, onDelete }) {
+/* Compact icon + switch used on the brand card's top-right. `tone` is the
+   "on" colour: emerald for Active, amber for Hidden-from-customers. */
+function MiniToggle({ icon: Icon, checked, tone = "emerald", label, onClick }) {
+  const onTrack = tone === "amber" ? "bg-amber-400" : "bg-emerald-500";
+  const onIcon = tone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
+      className="flex items-center gap-1"
+    >
+      <Icon size={13} className={`shrink-0 ${checked ? onIcon : "text-neutral-400"}`} />
+      {/* Track must be a block box — an inline <span> ignores width/height,
+          which let the knob slide outside the pill. */}
+      <span
+        className={`relative inline-block h-[18px] w-8 shrink-0 rounded-full transition-colors ${
+          checked ? onTrack : "bg-neutral-300 dark:bg-neutral-700"
+        }`}
+      >
+        <span
+          className={`absolute left-[2px] top-[2px] block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-200 ${
+            checked ? "translate-x-[14px]" : "translate-x-0"
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
+
+function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHidden }) {
+  // Dummy (isDummy) brands are view-only: no Edit, no Delete.
+  const readOnly = Boolean(brand.isDummy);
+  // Confirm popup for Active/Inactive (same one the details page uses).
+  const [showActiveConfirm, setShowActiveConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // Verification details (business, onboarding, KYC) start collapsed too.
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -346,31 +392,79 @@ function BrandCard({ brand, onOpen, onEdit, onDelete }) {
 
   return (
     <div className="group relative flex flex-col rounded-[22px] border border-neutral-200/80 bg-white p-2.5 text-left shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(15,23,42,0.10)] dark:border-neutral-800 dark:bg-neutral-900 dark:hover:shadow-black/30">
-      {/* Menu */}
-      <div className="absolute right-5 top-5 z-10">
-        <button
-          onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
-          aria-label={`More actions for ${brand.brandName}`}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-600 shadow-sm backdrop-blur transition-colors hover:bg-white hover:text-neutral-900 dark:bg-neutral-900/80 dark:text-neutral-300 dark:hover:bg-neutral-900"
-        >
-          <MoreVertical size={15} />
-        </button>
+      {/* Top-right: Active/Inactive + Hide-from-customers toggles, then the
+          ⋮ menu (Delete). Dummy brands get the two toggles too, but a lock
+          instead of the menu — they can't be deleted or edited. */}
+      <div className="absolute right-5 top-5 z-10 flex items-center gap-1.5">
+        <div className="flex items-center gap-2 rounded-full bg-white/90 px-2 py-1.5 shadow-sm backdrop-blur dark:bg-neutral-900/80">
+          <MiniToggle
+            icon={Power}
+            checked={Boolean(brand.active)}
+            tone="emerald"
+            label={brand.active ? "Active — click to deactivate" : "Inactive — click to activate"}
+            onClick={() => setShowActiveConfirm(true)}
+          />
+          <span className="h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
+          <MiniToggle
+            icon={brand.hiddenFromCustomers ? EyeOff : Eye}
+            checked={Boolean(brand.hiddenFromCustomers)}
+            tone="amber"
+            label={
+              brand.hiddenFromCustomers
+                ? "Hidden from customers — click to show"
+                : "Visible to customers — click to hide"
+            }
+            onClick={() => onToggleHidden?.(brand, !brand.hiddenFromCustomers)}
+          />
+        </div>
 
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
-              <button
-                onClick={() => { setMenuOpen(false); onDelete(brand); }}
-                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
-              >
-                <Trash2 size={13} />
-                Delete Brand
-              </button>
-            </div>
-          </>
+        {readOnly ? (
+          <span
+            title="Dummy brand — view only"
+            aria-label="View only"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-violet-600 shadow-sm backdrop-blur dark:bg-neutral-900/80 dark:text-violet-400"
+          >
+            <Lock size={14} />
+          </span>
+        ) : (
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+            aria-label={`More actions for ${brand.brandName}`}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-600 shadow-sm backdrop-blur transition-colors hover:bg-white hover:text-neutral-900 dark:bg-neutral-900/80 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            <MoreVertical size={15} />
+          </button>
+
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+                <button
+                  onClick={() => { setMenuOpen(false); onDelete(brand); }}
+                  className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
+                >
+                  <Trash2 size={13} />
+                  Delete Brand
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         )}
       </div>
+
+      {showActiveConfirm && (
+        <ToggleActiveConfirmModal
+          brand={brand}
+          willActivate={!brand.active}
+          onClose={() => setShowActiveConfirm(false)}
+          onConfirm={(hideFromCustomers) => {
+            onToggleActive?.(brand, hideFromCustomers);
+            setShowActiveConfirm(false);
+          }}
+        />
+      )}
 
       <button onClick={() => onOpen(brand)} className="flex flex-1 flex-col text-left" aria-label={`Open ${brand.brandName}`}>
         {/* Cover — the brand's coverImage (or first ambience photo), with the
@@ -404,14 +498,14 @@ function BrandCard({ brand, onOpen, onEdit, onDelete }) {
                       {brand.brandName?.charAt(0)?.toUpperCase() || "?"}
                     </span>
                   )}
-                  <LogoActions size="lg" onView={() => onOpen(brand)} onEdit={() => onEdit?.(brand)} />
+                  <LogoActions size="lg" onView={() => onOpen(brand)} onEdit={readOnly ? undefined : () => onEdit?.(brand)} />
                 </div>
               </div>
             </>
           )}
 
           {/* Pill tags */}
-          <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5 pr-12">
+          <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5 pr-40">
             {/* "Verified" is the blue tick next to the name below;
                 Expired / Inactive still get their own pill here. */}
             {brand.isDummy && (
@@ -443,7 +537,7 @@ function BrandCard({ brand, onOpen, onEdit, onDelete }) {
             ) : (
               <span className="text-[24px] font-bold text-emerald-500">{brand.brandName?.charAt(0)?.toUpperCase() || "?"}</span>
             )}
-            <LogoActions onView={() => onOpen(brand)} onEdit={() => onEdit?.(brand)} />
+            <LogoActions onView={() => onOpen(brand)} onEdit={readOnly ? undefined : () => onEdit?.(brand)} />
           </div>
         )}
         </div>
@@ -671,6 +765,23 @@ function BrandCard({ brand, onOpen, onEdit, onDelete }) {
  * ---------------------------------------------------------------------- */
 const PAGE_SIZE = 6;
 
+// sessionStorage can throw (private mode / blocked storage) — never let that
+// break the page.
+function readSession(key) {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeSession(key, value) {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
 // scope "live" = Live Brands (every approved brand); "expired" = Expired
 // Brands (only approved brands whose plan has run out).
 const isExpired = (b) => b.status === "Expired" || isExpiredBrand(b);
@@ -686,18 +797,26 @@ export default function Brand({ scope = "live" }) {
     error,
     fetchBrands,
     deleteBrandById,
+    toggleActive,
+    setHiddenFromCustomers,
   } = useBrands();
   // Everything below (charts, tabs, filters, table) works on this list.
   const brands = isDummyScope ? dummyBrands : isExpiredScope ? liveBrands.filter(isExpired) : liveBrands;
 
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState("All");
-  const [view, setView] = useState("table");
+  // Grid by default. View + page are remembered per list (Live / Expired /
+  // Dummy) for the session, so Back from a brand returns to the same spot.
+  const [view, setView] = useState(() => readSession(`brands:${scope}:view`) || "grid");
   const [planFilter, setPlanFilter] = useState("All Plans");
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Number(readSession(`brands:${scope}:page`)) || 1);
+  useEffect(() => {
+    writeSession(`brands:${scope}:view`, view);
+    writeSession(`brands:${scope}:page`, String(page));
+  }, [scope, view, page]);
 
   const hasValue = (v) => Boolean(v) && v !== "—";
   const categories = [...new Set(brands.map((b) => b.category).filter(hasValue))].sort();
@@ -964,14 +1083,25 @@ export default function Brand({ scope = "live" }) {
           >
             <Eye size={13} />
           </button>
-          <button
-            onClick={() => deleteBrand(row)}
-            aria-label={`Delete ${row.brandName}`}
-            title="Delete"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
-          >
-            <Trash2 size={13} />
-          </button>
+          {row.isDummy ? (
+            // Dummy brands are view-only — no Delete.
+            <span
+              title="Dummy brand — view only"
+              aria-label="View only"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-400/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+            >
+              <Lock size={13} />
+            </span>
+          ) : (
+            <button
+              onClick={() => deleteBrand(row)}
+              aria-label={`Delete ${row.brandName}`}
+              title="Delete"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -1305,7 +1435,15 @@ export default function Brand({ scope = "live" }) {
             // usage / Onboarding on one card doesn't stretch its neighbours.
             <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {paged.map((brand) => (
-                <BrandCard key={brand.id} brand={brand} onOpen={handleOpenBrand} onEdit={handleEditBrand} onDelete={deleteBrand} />
+                <BrandCard
+                  key={brand.id}
+                  brand={brand}
+                  onOpen={handleOpenBrand}
+                  onEdit={handleEditBrand}
+                  onDelete={deleteBrand}
+                  onToggleActive={toggleActive}
+                  onToggleHidden={setHiddenFromCustomers}
+                />
               ))}
             </div>
           )

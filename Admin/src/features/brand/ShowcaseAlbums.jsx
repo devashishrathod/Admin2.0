@@ -189,8 +189,23 @@ function UploadMediaModal({ files, uploading, progress, error, onClose, onConfir
  * closes the modal immediately rather than trying to reflect a
  * mutated/deleted item it can no longer see once the section reloads.
  * ---------------------------------------------------------------------- */
-function MediaPreviewHeader({ onEdit, onReplace, onDelete, replacing, deleting, onClose, children }) {
+function MediaPreviewHeader({ onEdit, onReplace, onDelete, replacing, deleting, onClose, children, readOnly = false }) {
   const fileInputRef = useRef(null);
+  // Dummy brands are view-only — just the Close button.
+  if (readOnly) {
+    return (
+      <div className="mb-3 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white transition-colors hover:bg-white/20"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="mb-3 flex items-center justify-end gap-2">
       {children}
@@ -243,22 +258,22 @@ function MediaPreviewHeader({ onEdit, onReplace, onDelete, replacing, deleting, 
   );
 }
 
-function ImageModal({ media, replacing, deleting, onClose, onEdit, onReplace, onDelete }) {
+function ImageModal({ media, replacing, deleting, onClose, onEdit, onReplace, onDelete, readOnly = false }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm px-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl">
-        <MediaPreviewHeader replacing={replacing} deleting={deleting} onEdit={onEdit} onReplace={onReplace} onDelete={onDelete} onClose={onClose} />
+        <MediaPreviewHeader readOnly={readOnly} replacing={replacing} deleting={deleting} onEdit={onEdit} onReplace={onReplace} onDelete={onDelete} onClose={onClose} />
         <img src={media.url} alt={media.altText} className="max-h-[75vh] w-full rounded-2xl object-contain" />
       </div>
     </div>
   );
 }
 
-function VideoModal({ media, replacing, deleting, togglingClips, onClose, onEdit, onReplace, onDelete, onToggleClips }) {
+function VideoModal({ media, replacing, deleting, togglingClips, onClose, onEdit, onReplace, onDelete, onToggleClips, readOnly = false }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm px-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl">
-        <MediaPreviewHeader replacing={replacing} deleting={deleting} onEdit={onEdit} onReplace={onReplace} onDelete={onDelete} onClose={onClose}>
+        <MediaPreviewHeader readOnly={readOnly} replacing={replacing} deleting={deleting} onEdit={onEdit} onReplace={onReplace} onDelete={onDelete} onClose={onClose}>
           <button
             type="button"
             onClick={onToggleClips}
@@ -428,8 +443,8 @@ function EditMediaModal({ media, submitting, error, onClose, onSave }) {
  * One media tile in the grid — simultaneously the sortable root, the drag
  * handle, AND the click target (see useClickWithoutDrag in dndHelpers.js).
  * ---------------------------------------------------------------------- */
-function ShowcaseMediaTile({ media, index, onPreview, onEdit, onDelete, deleting }) {
-  const { ref, handleRef, isDragging } = useSortable({ id: media.id, index });
+function ShowcaseMediaTile({ media, index, onPreview, onEdit, onDelete, deleting, readOnly = false }) {
+  const { ref, handleRef, isDragging } = useSortable({ id: media.id, index, disabled: readOnly });
   const onPointerDown = useClickWithoutDrag(() => onPreview(media));
 
   return (
@@ -455,6 +470,7 @@ function ShowcaseMediaTile({ media, index, onPreview, onEdit, onDelete, deleting
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
       )}
+      {!readOnly && (
       <div className="absolute right-1.5 top-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
@@ -480,6 +496,7 @@ function ShowcaseMediaTile({ media, index, onPreview, onEdit, onDelete, deleting
           {deleting ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
         </button>
       </div>
+      )}
     </div>
   );
 }
@@ -522,8 +539,8 @@ function ShowcaseOrderRow({ media, index }) {
  * counts, a draggable-to-reorder media grid (or an alternate Order list),
  * and the staged Add Media modal.
  * ---------------------------------------------------------------------- */
-function ShowcaseSectionCard({ brand, section, index, onChanged }) {
-  const { ref, handleRef, isDragging } = useSortable({ id: section._id, index });
+function ShowcaseSectionCard({ brand, section, index, onChanged, readOnly = false }) {
+  const { ref, handleRef, isDragging } = useSortable({ id: section._id, index, disabled: readOnly });
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -651,6 +668,7 @@ function ShowcaseSectionCard({ brand, section, index, onChanged }) {
   // Media reordering — its own DragDropProvider, nested inside the
   // section-level one (a genuinely separate draggable set).
   const handleMediaDragEnd = async (event) => {
+    if (readOnly) return;
     if (event.canceled) return;
     const draggedId = event.operation.source?.id;
     if (draggedId == null) return;
@@ -697,6 +715,7 @@ function ShowcaseSectionCard({ brand, section, index, onChanged }) {
             </p>
           </div>
         </div>
+        {!readOnly && (
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
@@ -739,6 +758,7 @@ function ShowcaseSectionCard({ brand, section, index, onChanged }) {
             className="hidden"
           />
         </div>
+        )}
       </div>
 
       {error && <p className="px-4 pb-2 text-[11.5px] text-red-600 dark:text-red-400">{error}</p>}
@@ -758,6 +778,7 @@ function ShowcaseSectionCard({ brand, section, index, onChanged }) {
               {media.map((m, i) => (
                 <ShowcaseMediaTile
                   key={m.id}
+                  readOnly={readOnly}
                   media={m}
                   index={i}
                   onPreview={setPreviewMedia}
@@ -794,6 +815,7 @@ function ShowcaseSectionCard({ brand, section, index, onChanged }) {
       {previewMedia &&
         (previewMedia.isVideo ? (
           <VideoModal
+            readOnly={readOnly}
             media={previewMedia}
             replacing={replacing}
             deleting={deletingId === previewMedia.id}
@@ -806,6 +828,7 @@ function ShowcaseSectionCard({ brand, section, index, onChanged }) {
           />
         ) : (
           <ImageModal
+            readOnly={readOnly}
             media={previewMedia}
             replacing={replacing}
             deleting={deletingId === previewMedia.id}
@@ -839,7 +862,9 @@ function ShowcaseSectionCard({ brand, section, index, onChanged }) {
  * reorderable (sections AND media) via drag-and-drop, and editable via the
  * add-media/replace-media/delete-media/delete-section endpoints.
  * ---------------------------------------------------------------------- */
-export default function ShowcaseAlbums({ brand }) {
+// readOnly (dummy brands): albums and media are view-only — no add, upload,
+// edit, replace, delete or reorder.
+export default function ShowcaseAlbums({ brand, readOnly = false }) {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -887,6 +912,7 @@ export default function ShowcaseAlbums({ brand }) {
   // Section reordering — same move()-then-persist pattern as media
   // reordering, one level up.
   const handleSectionDragEnd = async (event) => {
+    if (readOnly) return;
     if (event.canceled) return;
     const draggedId = event.operation.source?.id;
     if (draggedId == null) return;
@@ -917,6 +943,7 @@ export default function ShowcaseAlbums({ brand }) {
             <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">Showcase</p>
             <p className="mt-0.5 text-[12px] text-neutral-500">Real ambience, menu and event albums shown on this brand's profile.</p>
           </div>
+          {!readOnly && (
           <button
             type="button"
             onClick={() => setAddingSection((v) => !v)}
@@ -925,6 +952,7 @@ export default function ShowcaseAlbums({ brand }) {
             <Plus size={13} />
             Add Album
           </button>
+          )}
         </div>
 
         {addingSection && (
@@ -978,7 +1006,7 @@ export default function ShowcaseAlbums({ brand }) {
           <DragDropProvider sensors={dragSensors} onDragEnd={handleSectionDragEnd}>
             <div className="space-y-3">
               {sections.map((s, index) => (
-                <ShowcaseSectionCard key={s._id} brand={brand} section={s} index={index} onChanged={fetchShowcase} />
+                <ShowcaseSectionCard key={s._id} brand={brand} section={s} index={index} onChanged={fetchShowcase} readOnly={readOnly} />
               ))}
             </div>
           </DragDropProvider>

@@ -311,6 +311,10 @@ export function mapBrandListItem(raw) {
     ownerName: raw.legalBusinessName || raw.brandName,
     // The actual person behind the vendor account (list payload's `vendor`).
     vendorName: raw.vendor?.name || null,
+    // "Hide from customers" switch — separate from active/inactive.
+    // List payload sends isVisibleToCustomers; status PUT takes hideFromCustomers.
+    hiddenFromCustomers:
+      raw.isVisibleToCustomers != null ? !raw.isVisibleToCustomers : Boolean(raw.hideFromCustomers),
     // Raw enum keys (e.g. "PRIVATE_LIMITED", "REGISTERED") for the card.
     entityTypeKey: raw.businessEntityType || null,
     registrationKey: raw.businessRegistrationStatus || null,
@@ -485,6 +489,9 @@ export function mapBrandDetail(raw) {
     topOrder: raw.topOrder ?? 0,
     // null (not false) when missing, so mergeKnown keeps the list's value.
     isDummy: raw.isDummy ?? null,
+    // null (not false) when missing, so mergeKnown keeps the list's value.
+    hiddenFromCustomers:
+      raw.isVisibleToCustomers != null ? !raw.isVisibleToCustomers : raw.hideFromCustomers ?? null,
     dummyBatch: raw.dummyBatch || null,
   };
 }

@@ -439,7 +439,7 @@ function StatTile({ icon: Icon, label, value, tint = "emerald" }) {
   );
 }
 
-export function SubscriptionTab({ brand, onUpdate }) {
+export function SubscriptionTab({ brand, onUpdate, readOnly = false }) {
   const [modalAction, setModalAction] = useState(null); // null | 'free' | 'offline' | 'downgrade' | 'change-tier'
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
@@ -720,6 +720,8 @@ export function SubscriptionTab({ brand, onUpdate }) {
         </CollapsibleSectionCard>
       )}
 
+      {/* Dummy brands are view-only — no grant / change / cancel. */}
+      {!readOnly && (<>
       <div>
         <p className="mb-2.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
           Grant / Change Subscription
@@ -745,6 +747,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
           Cancel
         </button>
       </div>
+      </>)}
 
       <div>
         <p className="mb-2.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">

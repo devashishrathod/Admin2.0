@@ -27,6 +27,7 @@ import {
   PauseCircle,
   PlayCircle,
   FlaskConical,
+  Lock,
 } from "lucide-react";
 import {
   AreaChart,
@@ -612,13 +613,18 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, bus
       {/* Status pill = workflow button. Sits outside the cover <button>
           (a button can't contain another button). */}
       <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-1.5 pr-12">
-        <StatusStepButton
-          label={STATUS_LABELS[voucher.approvalStatus] || voucher.approvalStatus}
-          tone={VOUCHER_TONES[voucher.approvalStatus]}
-          stepLabel={onStep ? step?.label : null}
-          disabled={busy}
-          onClick={() => onStep(voucher, step)}
-        />
+        {/* Dummy vouchers are view-only — plain status, no workflow step. */}
+        {voucher.isDummy ? (
+          <VoucherStatusBadge status={voucher.approvalStatus} />
+        ) : (
+          <StatusStepButton
+            label={STATUS_LABELS[voucher.approvalStatus] || voucher.approvalStatus}
+            tone={VOUCHER_TONES[voucher.approvalStatus]}
+            stepLabel={onStep ? step?.label : null}
+            disabled={busy}
+            onClick={() => onStep(voucher, step)}
+          />
+        )}
         {voucher.isDummy && <DummyBadge />}
       </div>
       <button onClick={() => onOpen(voucher)} className="relative block h-36 w-full overflow-hidden text-left">
@@ -640,6 +646,15 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, bus
         </span>
       </button>
 
+      {voucher.isDummy ? (
+        <span
+          title="Dummy voucher — view only"
+          aria-label="View only"
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-violet-600 backdrop-blur dark:bg-neutral-900/80 dark:text-violet-400"
+        >
+          <Lock size={14} />
+        </span>
+      ) : (
       <button
         onClick={() => onToggleSuggested(voucher)}
         disabled={busy}
@@ -651,6 +666,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, bus
       >
         <Star size={14} fill={voucher.isSuggested ? "currentColor" : "none"} />
       </button>
+      )}
 
       <div className="flex flex-1 flex-col p-4">
         <div className="mb-3 flex items-center gap-2">
@@ -696,15 +712,17 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, bus
           <span className="flex min-w-0 flex-1 items-center gap-1 truncate font-mono text-[10.5px] text-neutral-400">
             <Tag size={10} className="shrink-0" /> {voucher.versionCode}
           </span>
-          <button
-            onClick={() => onDelete(voucher)}
-            disabled={busy}
-            aria-label={`Delete ${voucher.title}`}
-            title="Delete"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
-          >
-            <Trash2 size={13} />
-          </button>
+          {!voucher.isDummy && (
+            <button
+              onClick={() => onDelete(voucher)}
+              disabled={busy}
+              aria-label={`Delete ${voucher.title}`}
+              title="Delete"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
           <button
             onClick={() => onOpen(voucher)}
             className="flex items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1.5 text-[11.5px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/15 dark:text-emerald-400"
@@ -1262,7 +1280,10 @@ export default function VoucherListing({ scope = "all" }) {
   };
 
   // Delete opens the confirm dialog (optional reason); runStep does the call.
-  const handleDelete = (voucher) => setStepping({ row: voucher, kind: "delete" });
+  const handleDelete = (voucher) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
+    setStepping({ row: voucher, kind: "delete" });
+  };
 
   /* Runs one confirmed step from ConfirmStepDialog (table, cards or the
      details page). approve / publish / banner keep their own error banner;
@@ -1283,12 +1304,17 @@ export default function VoucherListing({ scope = "all" }) {
   };
   const confirmStep = async (reason) => {
     const { row, kind } = stepping;
+    if (row?.isDummy) {
+      setStepping(null); // dummy vouchers are view-only
+      return;
+    }
     await runStep(kind, row, reason);
     setStepping(null);
   };
 
   /* ---- Approval workflow (Super Admin) ------------------------------ */
   const handleApprove = async (voucher) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     setActionError("");
     setActionBusy(true);
     try {
@@ -1302,6 +1328,7 @@ export default function VoucherListing({ scope = "all" }) {
   };
 
   const handleReject = async (voucher, reason) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     setActionError("");
     setActionBusy(true);
     try {
@@ -1315,6 +1342,7 @@ export default function VoucherListing({ scope = "all" }) {
   };
 
   const handlePublish = async (voucher) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     setActionError("");
     setActionBusy(true);
     try {
@@ -1330,6 +1358,7 @@ export default function VoucherListing({ scope = "all" }) {
   /* ---- Banner review — separate approval gate on the parent voucher,
      independent of the version workflow above --------------------------- */
   const handleApproveBanner = async (voucher) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     setActionError("");
     setActionBusy(true);
     try {
@@ -1343,6 +1372,7 @@ export default function VoucherListing({ scope = "all" }) {
   };
 
   const handleRejectBanner = async (voucher, reason) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     setActionError("");
     setActionBusy(true);
     try {
@@ -1359,17 +1389,20 @@ export default function VoucherListing({ scope = "all" }) {
      the gallery / uploader can show the error inline. ------------------- */
   // Images belong to the version, so this takes the version id (voucher.id).
   const handleReorderImages = async (voucher, imageIds) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     await reorderVoucherImages(voucher.id, imageIds);
     await refreshAfterAction();
   };
   // Banner lives on the parent voucher (voucherId); video needs a poster.
   const handleUploadBanner = async (voucher, media, poster) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     await uploadVoucherBanner(voucher.voucherId, media, poster);
     await refreshAfterAction();
   };
 
   /* ---- Admin curation — feature/un-feature on the "Suggested" rail --- */
   const handleToggleSuggested = async (voucher) => {
+    if (voucher?.isDummy) return; // dummy vouchers are view-only
     setActionError("");
     setActionBusy(true);
     try {
@@ -1535,7 +1568,7 @@ export default function VoucherListing({ scope = "all" }) {
       key: "action",
       label: "Action",
       align: "right",
-      render: (row) => (
+      render: (row) => row.isDummy ? dummyActions(row) : (
         <div className="flex items-center justify-end gap-1.5">
           <button
             onClick={() => handleToggleSuggested(row)}
@@ -1583,12 +1616,29 @@ export default function VoucherListing({ scope = "all" }) {
     </button>
   );
 
+  // Dummy vouchers are view-only: View + a lock, no other actions.
+  function dummyActions(row) {
+    return (
+      <div className="flex items-center justify-end gap-1.5">
+        <span
+          title="Dummy voucher — view only"
+          aria-label="View only"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-400/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+        >
+          <Lock size={13} />
+        </span>
+        {viewButton(row)}
+      </div>
+    );
+  }
+
   // Status pill doubles as the workflow button (Approve → Publish), on
-  // every voucher page's table.
+  // every voucher page's table. Dummy vouchers just get the plain badge.
   const statusStepColumn = {
     key: "status",
     label: "Status",
     render: (row) => {
+      if (row.isDummy) return <VoucherStatusBadge status={row.approvalStatus} />;
       const step = getVoucherStep(row);
       return (
         <StatusStepButton
@@ -1607,7 +1657,7 @@ export default function VoucherListing({ scope = "all" }) {
     key: "action",
     label: "Action",
     align: "right",
-    render: (row) => (
+    render: (row) => row.isDummy ? dummyActions(row) : (
       <div className="flex items-center justify-end gap-1.5">
         <RejectIconButton busy={actionBusy} label={`Reject ${row.title}`} onClick={() => setRejecting({ row, kind: "voucher" })} />
         {viewButton(row)}
@@ -1646,7 +1696,7 @@ export default function VoucherListing({ scope = "all" }) {
   const bannerStatusColumn = {
     key: "bannerStatus",
     label: "Banner Status",
-    render: (row) => (
+    render: (row) => row.isDummy ? <VoucherStatusBadge status={row.approvalStatus} /> : (
       <StatusStepButton
         label="Banner Pending"
         tone="amber"
@@ -1660,7 +1710,7 @@ export default function VoucherListing({ scope = "all" }) {
     key: "action",
     label: "Action",
     align: "right",
-    render: (row) => (
+    render: (row) => row.isDummy ? dummyActions(row) : (
       <div className="flex items-center justify-end gap-1.5">
         <RejectIconButton busy={actionBusy} label={`Reject banner for ${row.title}`} onClick={() => setRejecting({ row, kind: "banner" })} />
         {viewButton(row)}

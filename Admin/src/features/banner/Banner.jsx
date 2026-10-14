@@ -13,6 +13,9 @@ import {
   AlertTriangle,
   Loader2,
   Clock3,
+  Play,
+  Tag,
+  CalendarDays,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
@@ -28,6 +31,8 @@ import {
   REDIRECT_TYPES,
 } from "./services/BannerApi";
 import { getCategories } from "../category/services/CategoryApi";
+import { getAllBrands } from "../brand/services/BrandApi";
+import StatusStepButton from "../../components/common/StatusStepButton";
 
 const TYPE_OPTIONS = [
   { value: BANNER_TYPES.IMAGE, label: "Image", icon: ImageIcon, accept: "image/*" },
@@ -88,7 +93,7 @@ function formatDateTime(iso) {
  * Add / Edit modal — type-aware media upload + title + redirect target
  * ---------------------------------------------------------------------- */
 
-function BannerFormModal({ open, initialData, saving, categories, onClose, onSave }) {
+function BannerFormModal({ open, initialData, saving, categories, brands, onClose, onSave }) {
   const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
@@ -321,7 +326,30 @@ function BannerFormModal({ open, initialData, saving, categories, onClose, onSav
               </div>
             )}
 
-            {TARGET_ID_TYPES.includes(form.redirectType) && (
+            {/* Brand target = dropdown of real brands (dummy ones left out). */}
+            {form.redirectType === REDIRECT_TYPES.BRAND && (
+              <div className="mt-2.5">
+                <select
+                  value={form.targetId}
+                  onChange={handleChange("targetId")}
+                  className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 ${
+                    errors.targetId
+                      ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                      : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
+                  }`}
+                >
+                  <option value="">Select a brand…</option>
+                  {brands.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+                {errors.targetId && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.targetId}</p>}
+              </div>
+            )}
+
+            {TARGET_ID_TYPES.includes(form.redirectType) && form.redirectType !== REDIRECT_TYPES.BRAND && (
               <div className="mt-2.5">
                 <input
                   value={form.targetId}
@@ -633,9 +661,43 @@ function apiToRow(banner) {
     // Computed once at fetch time (not during render) so the "expiring
     // soon" chart never calls Date.now() from inside the component body.
     daysLeft: banner.endDate ? (new Date(banner.endDate).getTime() - Date.now()) / 86400000 : null,
+    startsInDays: banner.startDate ? (new Date(banner.startDate).getTime() - Date.now()) / 86400000 : null,
     isActive: Boolean(banner.isActive),
     status: banner.isActive ? "Active" : "Inactive",
+    // What the customer actually sees right now, for the table's status pill:
+    // inactive → Inactive; past end date → Expired; before start → Scheduled.
+    liveState: !banner.isActive
+      ? "Inactive"
+      : banner.endDate && new Date(banner.endDate).getTime() < Date.now()
+      ? "Expired"
+      : banner.startDate && new Date(banner.startDate).getTime() > Date.now()
+      ? "Scheduled"
+      : "Live",
     createdAt: banner.createdAt,
+  };
+}
+
+const LIVE_STATE_TONES = { Live: "emerald", Scheduled: "sky", Expired: "red", Inactive: "neutral" };
+const TYPE_BADGE = {
+  [BANNER_TYPES.IMAGE]: { label: "Image", icon: ImageIcon },
+  [BANNER_TYPES.VIDEO]: { label: "Video", icon: Video },
+  [BANNER_TYPES.GIF]: { label: "GIF", icon: Film },
+};
+const shortDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+// "x days left" / "Starts in x days" / "Expired" chip for the Schedule column.
+function scheduleChip(row) {
+  if (row.liveState === "Scheduled") {
+    const d = Math.ceil(row.startsInDays);
+    return { label: d <= 1 ? "Starts tomorrow" : `Starts in ${d} days`, tone: "bg-sky-400/10 text-sky-600 dark:text-sky-400" };
+  }
+  if (row.daysLeft == null) return { label: "No end date", tone: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800" };
+  if (row.daysLeft < 0) return { label: "Expired", tone: "bg-red-500/10 text-red-600 dark:text-red-400" };
+  const d = Math.ceil(row.daysLeft);
+  return {
+    label: d <= 1 ? "Ends today" : `${d} days left`,
+    tone: d <= 7 ? "bg-amber-400/10 text-amber-600 dark:text-amber-400" : "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
   };
 }
 
@@ -673,6 +735,7 @@ export default function Banner() {
   const [chartsError, setChartsError] = useState("");
 
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -696,6 +759,15 @@ export default function Banner() {
       .then((res) => {
         const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name }));
         setCategories(rows);
+      })
+      .catch(() => {});
+    // Brands for the BRAND redirect picker — real brands only (isDummy skipped).
+    getAllBrands({ page: 1, limit: 100 })
+      .then((res) => {
+        const rows = (res?.data?.data ?? res?.data ?? [])
+          .filter((b) => !b.isDummy)
+          .map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.uniqueId || b._id }));
+        setBrands(rows);
       })
       .catch(() => {});
   }, []);
@@ -846,65 +918,121 @@ export default function Banner() {
   ];
   const expiringData = expiringMix.filter((d) => d.value > 0);
 
-  // Column config for the shared Table component.
+  // Column config for the shared Table component — same look as the
+  // voucher table.
+  const iconBtn =
+    "flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors dark:border-neutral-800 dark:text-neutral-400";
   const columns = [
     {
       key: "sno",
       label: "S.No",
-      width: "w-16",
+      width: "w-14",
       render: (_row, index) => <span className="text-neutral-500">{(page - 1) * limit + index + 1}</span>,
     },
     {
-      key: "media",
+      key: "banner",
       label: "Banner",
-      render: (row) => (
-        <div className="flex h-10 w-20 items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
-          {row.type === BANNER_TYPES.VIDEO && row.posterUrl ? (
-            // The poster is a still image — lighter than loading video bytes
-            // just to show a thumbnail.
-            <img src={row.posterUrl} alt={row.title} className="h-full w-full object-cover" />
-          ) : row.mediaUrl ? (
-            row.type === BANNER_TYPES.VIDEO ? (
-              <video src={row.mediaUrl} className="h-full w-full object-cover" muted />
-            ) : (
-              <img src={row.mediaUrl} alt={row.title} className="h-full w-full object-cover" />
-            )
-          ) : (
-            <ImageIcon size={15} className="text-neutral-600" />
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "title",
-      label: "Title",
-      render: (row) => <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.title}</span>,
-    },
-    {
-      key: "type",
-      label: "Type",
-      render: (row) => <span className="capitalize text-neutral-700 dark:text-neutral-300">{row.type?.toLowerCase()}</span>,
+      cellClass: "min-w-72 whitespace-normal",
+      render: (row) => {
+        const badge = TYPE_BADGE[row.type] || TYPE_BADGE[BANNER_TYPES.IMAGE];
+        const BadgeIcon = badge.icon;
+        const thumb = row.type === BANNER_TYPES.VIDEO ? row.posterUrl || "" : row.mediaUrl;
+        return (
+          <button onClick={() => setViewTarget(row)} className="group flex items-center gap-3 text-left">
+            <div className="relative h-14 w-28 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-emerald-400/20 via-sky-400/15 to-violet-400/20">
+              {thumb ? (
+                <img src={thumb} alt={row.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+              ) : row.type === BANNER_TYPES.VIDEO && row.mediaUrl ? (
+                <video src={row.mediaUrl} className="h-full w-full object-cover" muted />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <ImageIcon size={18} className="text-neutral-400" />
+                </div>
+              )}
+              {row.type === BANNER_TYPES.VIDEO && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
+                    <Play size={11} fill="currentColor" />
+                  </span>
+                </span>
+              )}
+              <span className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                <BadgeIcon size={9} /> {badge.label}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="line-clamp-1 font-semibold text-neutral-900 group-hover:text-emerald-600 dark:text-neutral-50 dark:group-hover:text-emerald-400">
+                {row.title}
+              </p>
+              {row.description && row.description !== row.title && (
+                <p className="mt-0.5 line-clamp-1 text-[11.5px] text-neutral-500">{row.description}</p>
+              )}
+              <p className="mt-0.5 flex items-center gap-1 text-[10.5px] text-neutral-400">
+                <CalendarDays size={10} /> Added {shortDate(row.createdAt)}
+              </p>
+            </div>
+          </button>
+        );
+      },
     },
     {
       key: "redirect",
       label: "Redirect",
-      render: (row) => (
-        <span className="max-w-50 truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories)}</span>
-      ),
+      cellClass: "max-w-56 whitespace-normal",
+      render: (row) => {
+        const r = row.redirect;
+        if (!r || r.type === REDIRECT_TYPES.NONE) return <span className="text-[12px] text-neutral-400">No redirect</span>;
+        if (r.type === REDIRECT_TYPES.EXTERNAL_URL) {
+          let host = r.url || "External URL";
+          try {
+            host = new URL(r.url).hostname.replace(/^www./, "");
+          } catch {
+            // keep the raw text if it isn't a full URL
+          }
+          return (
+            <a
+              href={r.url}
+              target="_blank"
+              rel="noreferrer"
+              title={r.url}
+              className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-sky-400/10 px-2 py-1 text-[11.5px] font-medium text-sky-700 hover:underline dark:text-sky-400"
+            >
+              <LinkIcon size={11} className="shrink-0" /> <span className="truncate normal-case">{host}</span>
+            </a>
+          );
+        }
+        return (
+          <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-violet-400/10 px-2 py-1 text-[11.5px] font-medium text-violet-700 dark:text-violet-400">
+            <Tag size={11} className="shrink-0" />{" "}
+            <span className="truncate" title={redirectSummary(r, categories)}>
+              {/* The tag icon already says "category", so drop the "Category: " prefix */}
+              {redirectSummary(r, categories).replace(/^Category:\s*/, "")}
+            </span>
+          </span>
+        );
+      },
     },
     {
-      key: "validity",
-      label: "Validity",
-      render: (row) => (
-        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
-          {formatDateTime(row.startDate)} → {formatDateTime(row.endDate)}
-        </span>
-      ),
+      key: "schedule",
+      label: "Schedule",
+      render: (row) => {
+        const chip = scheduleChip(row);
+        return (
+          <div>
+            <p className="whitespace-nowrap text-[12px] text-neutral-600 dark:text-neutral-300">
+              {shortDate(row.startDate)} – {shortDate(row.endDate)}
+            </p>
+            <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
+              <Clock3 size={10} /> {chip.label}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => <StatusStepButton label={row.liveState} tone={LIVE_STATE_TONES[row.liveState]} />,
     },
     {
       key: "action",
@@ -912,31 +1040,20 @@ export default function Banner() {
       align: "right",
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
-          <button
-            onClick={() => setViewTarget(row)}
-            aria-label={`View ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
-          >
-            <Eye size={15} />
+          <button onClick={() => setViewTarget(row)} aria-label={`View ${row.title}`} title="View" className={`${iconBtn} hover:border-sky-400/40 hover:text-sky-600 dark:hover:text-sky-400`}>
+            <Eye size={13} />
           </button>
-          <button
-            onClick={() => handleEdit(row)}
-            aria-label={`Edit ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
-          >
-            <Pencil size={15} />
+          <button onClick={() => handleEdit(row)} aria-label={`Edit ${row.title}`} title="Edit" className={`${iconBtn} hover:border-emerald-400/40 hover:text-emerald-600 dark:hover:text-emerald-400`}>
+            <Pencil size={13} />
           </button>
-          <button
-            onClick={() => setDeleteTarget(row)}
-            aria-label={`Delete ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
-          >
-            <Trash2 size={15} />
+          <button onClick={() => setDeleteTarget(row)} aria-label={`Delete ${row.title}`} title="Delete" className={`${iconBtn} hover:border-red-500/40 hover:text-red-600 dark:hover:text-red-400`}>
+            <Trash2 size={13} />
           </button>
         </div>
       ),
     },
   ];
+
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -1054,7 +1171,7 @@ export default function Banner() {
         {!loading && !loadError && (
           <>
             {/* Table */}
-            <Table columns={columns} data={banners} emptyMessage="No banners yet. Add one to get started." />
+            <Table columns={columns} data={banners} emptyMessage="No banners yet. Add one to get started." minWidth={960} />
 
             {/* Pagination */}
             {totalPages > 1 && (
@@ -1088,6 +1205,7 @@ export default function Banner() {
         initialData={editingBanner}
         saving={saving}
         categories={categories}
+        brands={brands}
         onClose={() => {
           if (saving) return;
           setModalOpen(false);

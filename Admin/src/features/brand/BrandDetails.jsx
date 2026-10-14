@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import {
   MapPin,
@@ -31,6 +32,9 @@ import {
   HandCoins,
   Repeat,
   UserCog,
+  ArrowLeftRight,
+  Undo2,
+  FlaskConical,
 } from "lucide-react";
 import {
   BUSINESS_STATUSES,
@@ -60,6 +64,10 @@ import {
 } from "./BrandShared";
 import { SubscriptionTab } from "./SubscriptionCenter";
 import { getVouchers } from "../voucher/services/VoucherApi";
+import { getSettlements } from "../settlement/services/SettlementApi";
+import { TransactionsTab, RefundsTab } from "./BrandMoneyTabs";
+import { mapSettlementStatus, SETTLEMENT_TONES } from "../settlement/settlementUtils";
+import StatusStepButton from "../../components/common/StatusStepButton";
 import { isNotFoundMessage } from "../../utils/helpers";
 import ShowcaseAlbums from "./ShowcaseAlbums";
 
@@ -925,44 +933,130 @@ function ListingsTab({ brand }) {
   );
 }
 
+/* Settlements tab — this brand's real payouts, fetched by the brand's id
+   (GET /settlements?brandId=…). The rows are also filtered by brandId
+   here, since it isn't confirmed the backend applies that filter. */
+const inrAmount = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+const shortDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
 function SettlementsTab({ brand }) {
-  if (!brand.settlements?.length) return <EmptyState label="No settlements recorded." />;
-  const paidCount = brand.settlements.filter((s) => s.status === "Paid").length;
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!brand.id) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await getSettlements({ brandId: brand.id, page: 1, limit: 100 });
+        const list = res?.data?.data ?? res?.data ?? [];
+        const mine = (Array.isArray(list) ? list : [])
+          .filter((r) => String(r.brandId) === String(brand.id))
+          .map((r) => ({
+            id: r._id,
+            number: r.settlementNumber || r._id,
+            period:
+              r.periodStart && r.periodEnd ? `${shortDate(r.periodStart)} – ${shortDate(r.periodEnd)}` : shortDate(r.createdAt),
+            paidAt: r.paidAt,
+            transactionCount: Number(r.transactionCount) || 0,
+            gross: Number(r.breakup?.grossCollected ?? r.grossCollected) || 0,
+            amount: Number(r.netPayable) || 0,
+            status: mapSettlementStatus(r.status),
+          }));
+        if (!cancelled) setRows(mine);
+      } catch (err) {
+        if (!cancelled) {
+          if (isNotFoundMessage(err.message)) setRows([]);
+          else setError(err.message);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [brand.id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white py-12 text-[13px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900">
+        <Loader2 size={15} className="animate-spin" /> Loading settlements…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
+        <AlertTriangle size={14} className="shrink-0" /> Failed to load settlements: {error}
+      </div>
+    );
+  }
+  if (!rows.length) return <EmptyState label="No settlements for this brand yet." />;
+
+  const paid = rows.filter((r) => r.status === "Settlement done");
+  const pending = rows.filter((r) => ["Pending Approval", "Approved", "Processing", "On hold"].includes(r.status));
+  const sum = (list) => list.reduce((s, r) => s + r.amount, 0);
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SectionCard title="Total Settlements">
-          <p className="text-[20px] font-bold text-neutral-800 dark:text-neutral-200">{brand.settlements.length}</p>
+          <p className="text-[20px] font-bold text-neutral-800 dark:text-neutral-200">{rows.length}</p>
+          <p className="text-[11.5px] text-neutral-500">{inrAmount(sum(rows))} net</p>
         </SectionCard>
-        <SectionCard title="Paid">
-          <p className="text-[20px] font-bold text-emerald-600 dark:text-emerald-400">{paidCount}</p>
+        <SectionCard title="Paid Out">
+          <p className="text-[20px] font-bold text-emerald-600 dark:text-emerald-400">{inrAmount(sum(paid))}</p>
+          <p className="text-[11.5px] text-neutral-500">{paid.length} settlements</p>
         </SectionCard>
-        <SectionCard title="Pending" className="col-span-2 sm:col-span-1">
-          <p className="text-[20px] font-bold text-amber-600 dark:text-amber-400">{brand.settlements.length - paidCount}</p>
+        <SectionCard title="Pending">
+          <p className="text-[20px] font-bold text-amber-600 dark:text-amber-400">{inrAmount(sum(pending))}</p>
+          <p className="text-[11.5px] text-neutral-500">{pending.length} settlements</p>
+        </SectionCard>
+        <SectionCard title="Last Payout">
+          <p className="text-[16px] font-bold text-neutral-800 dark:text-neutral-200">
+            {shortDate(paid.map((r) => r.paidAt).filter(Boolean).sort().pop())}
+          </p>
         </SectionCard>
       </div>
 
-      <div className="space-y-2.5">
-        {brand.settlements.map((s) => (
-          <div
-            key={s.id}
-            className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-                <HandCoins size={15} />
-              </div>
-              <div>
-                <p className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{s.id}</p>
-                <p className="text-[11.5px] text-neutral-500">{s.date}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <p className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">{s.amount}</p>
-              <StatusBadge status={s.status} activeLabel="Paid" />
-            </div>
-          </div>
-        ))}
+      <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className="no-scrollbar overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-[13px]">
+            <thead className="bg-neutral-100/80 text-[11px] uppercase tracking-wider text-neutral-500 dark:bg-neutral-950/50">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Settlement</th>
+                <th className="px-4 py-3 font-semibold">Period</th>
+                <th className="px-4 py-3 text-center font-semibold">Txns</th>
+                <th className="px-4 py-3 text-right font-semibold">Net Payable</th>
+                <th className="px-4 py-3 font-semibold">Paid On</th>
+                <th className="px-4 py-3 font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-neutral-100 text-neutral-700 dark:border-neutral-800/60 dark:text-neutral-300">
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <span className="flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-50">
+                      <HandCoins size={13} className="text-neutral-400" /> {r.number}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-[12px]">{r.period}</td>
+                  <td className="px-4 py-3 text-center">{r.transactionCount}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-neutral-900 dark:text-neutral-50">{inrAmount(r.amount)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-[12px]">{shortDate(r.paidAt)}</td>
+                  <td className="px-4 py-3">
+                    <StatusStepButton label={r.status} tone={SETTLEMENT_TONES[r.status]} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -1503,6 +1597,8 @@ const TAB_ICONS = {
   "Sub-Brand": Store,
   Listings: Ticket,
   Settlements: HandCoins,
+  Transactions: ArrowLeftRight,
+  Refunds: Undo2,
   Voucher: Ticket,
   Subscription: Repeat,
   "System Verification": ShieldCheck,
@@ -1536,7 +1632,9 @@ export default function BrandDetails({
   onSetTopBrand,
 }) {
   const [tab, setTab] = useState("Overview");
-  const [showEditModal, setShowEditModal] = useState(false);
+  // The Brand list's logo-hover "Edit" opens this page with { openEdit: true }.
+  const location = useLocation();
+  const [showEditModal, setShowEditModal] = useState(Boolean(location.state?.openEdit));
   const [showToggleConfirm, setShowToggleConfirm] = useState(false);
   const [showTopBrandModal, setShowTopBrandModal] = useState(false);
 
@@ -1547,6 +1645,8 @@ export default function BrandDetails({
     "Sub-Brand": <SubBrandTab brand={brand} />,
     Listings: <ListingsTab brand={brand} />,
     Settlements: <SettlementsTab brand={brand} />,
+    Transactions: <TransactionsTab brand={brand} />,
+    Refunds: <RefundsTab brand={brand} />,
     Voucher: <VoucherTab brand={brand} />,
     Subscription: <SubscriptionTab brand={brand} onUpdate={onUpdate} />,
     "System Verification": <SystemVerificationTab brand={brand} />,
@@ -1628,6 +1728,17 @@ export default function BrandDetails({
                     <span className="flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-amber-600 dark:text-amber-400">
                       <Sparkles size={10} />
                       Top #{brand.topOrder}
+                    </span>
+                  )}
+                  {brand.isDummy && (
+                    <span className="flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10.5px] font-semibold text-violet-600 dark:text-violet-400">
+                      <FlaskConical size={10} />
+                      Dummy
+                    </span>
+                  )}
+                  {brand.isDummy && brand.dummyBatch && (
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[10.5px] text-violet-600 dark:bg-neutral-800 dark:text-violet-400">
+                      {brand.dummyBatch}
                     </span>
                   )}
                   {incomplete ? (

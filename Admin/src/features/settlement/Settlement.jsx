@@ -12,13 +12,13 @@ import {
   Receipt,
   CheckCircle2,
   Clock3,
-  Plus,
+  Upload,
   RefreshCw,
   Eye,
   PauseCircle,
+  PlayCircle,
   Ban,
   RotateCcw,
-  X,
   CalendarClock,
   Loader2,
   AlertTriangle,
@@ -28,6 +28,8 @@ import {
   Percent,
   Users2,
   History,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react";
 import {
   getSettlements,
@@ -40,12 +42,19 @@ import {
   retrySettlementPayout,
   reverseSettlementPayout,
   holdSettlement,
+  unholdSettlement,
   cancelSettlement,
 } from "./services/SettlementApi";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
+import BulkActionModal from "../../components/common/BulkActionModal";
+import BulkSelectBar from "../../components/common/BulkSelectBar";
+import StatusStepButton from "../../components/common/StatusStepButton";
+import { mapSettlementStatus, SETTLEMENT_TONES } from "./settlementUtils";
 import SelectDropdown from "../../components/common/SelectDropdown";
 import { downloadCsv } from "../../utils/exportTable";
 import { todayStr } from "../transaction/transactionUtils";
+import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
+import { pctChange, weekOverWeek } from "../../utils/overviewStats";
 
 
 /* -------------------------------------------------------------------------
@@ -168,30 +177,7 @@ function formatDMYFromISO(iso) {
   return formatDMY(d);
 }
 
-// Maps the backend's real status enum onto the labels this UI renders
-// (StatusBadge / DueBadge / STATUS_OPTIONS), matching the confirmed
-// settlement lifecycle exactly:
-//
-//   PENDING_APPROVAL → APPROVED → PROCESSING → PAID → REVERSED
-//           ↓              ↓           ↓
-//        ON_HOLD       CANCELLED     FAILED → APPROVED (retry)
-//                                       ↓
-//                                   ABANDONED
-//
-// Anything unrecognized falls back to "Processing" rather than crashing
-// the badge lookup.
-function mapSettlementStatus(raw) {
-  const s = String(raw || "").toUpperCase();
-  if (["PAID", "COMPLETED", "DONE", "SETTLED", "SUCCESS", "SETTLEMENT_DONE"].includes(s)) return "Settlement done";
-  if (["PENDING_APPROVAL", "PENDING"].includes(s)) return "Pending Approval";
-  if (s === "APPROVED") return "Approved";
-  if (["ON_HOLD", "HOLD", "ONHOLD"].includes(s)) return "On hold";
-  if (["CANCELLED", "CANCELED"].includes(s)) return "Cancelled";
-  if (s === "REVERSED") return "Reversed";
-  if (s === "FAILED") return "Failed";
-  if (s === "ABANDONED") return "Abandoned";
-  return "Processing";
-}
+// mapSettlementStatus (raw status → label) lives in ./settlementUtils.
 
 // Amount breakup — confirmed against the real GET /settlements response.
 // These are the platform's actual settlement ledger fields (gross
@@ -312,34 +298,6 @@ const STATUS_OPTIONS = [
   "Failed",
   "Abandoned",
 ];
-const FORM_STATUS_OPTIONS = STATUS_OPTIONS.slice(1);
-
-const VENDOR_OPTIONS = [
-  "Rajwada Sweets & Namkeen",
-  "Kavya Mehndi Art Studio",
-  "UrbanFit Studio",
-];
-
-const EMPTY_FORM = {
-  id: null,
-  settlementId: "",
-  vendor: VENDOR_OPTIONS[0],
-  paymentReceivedDate: "",
-  settlementDate: "",
-  transactionCount: "",
-  bankName: "",
-  requestId: "",
-  status: "Processing",
-  grossCollected: "",
-  vendorPromoCost: "",
-  commissionAmount: "",
-  commissionTax: "",
-  commissionDeduction: "",
-  refundAdjustment: "",
-  chargebackAdjustment: "",
-  reserveHeld: "",
-  netPayable: "",
-};
 
 /* -------------------------------------------------------------------------
  * Small shared bits
@@ -422,26 +380,31 @@ function DueBadge({ schedule }) {
   );
 }
 
-function StatCard({ icon: Icon, label, amount, sub, live }) {
-  return (
-    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-        <Icon size={15} className="text-emerald-400" />
-        {label}
-        {live && (
-          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Live Update
-          </span>
-        )}
-      </div>
-      <div className="mt-3 text-[22px] font-semibold text-neutral-900 dark:text-neutral-50">
-        {inr(amount)}
-      </div>
-      <div className="mt-1 text-[12px] text-neutral-500">{sub}</div>
-    </div>
-  );
-}
+// Overview widgets — status colours mirror StatusBadge above.
+const STATUS_MIX_COLORS = {
+  "Pending Approval": "#F59E0B",
+  Approved: "#38BDF8",
+  Processing: "#FBBF24",
+  "Settlement done": "#10B981",
+  Reversed: "#8B5CF6",
+  "On hold": "#F87171",
+  Cancelled: "#A3A3A3",
+  Failed: "#EF4444",
+  Abandoned: "#D4D4D4",
+};
+
+const STATUS_TABS = [
+  { key: "All", label: "All" },
+  { key: "Pending Approval", label: "Pending Approval" },
+  { key: "Approved", label: "Approved" },
+  { key: "Processing", label: "Processing" },
+  { key: "Settlement done", label: "Settled" },
+];
+
+const AWAITING_PAYOUT = ["Pending Approval", "Approved", "Processing"];
+
+const getSettlementDate = (s) => s.dateForFilter;
+const getSettlementAmount = (s) => s.amount;
 
 /* -------------------------------------------------------------------------
  * Detail view (mirrors the vendor-side settlement detail screen)
@@ -1115,21 +1078,6 @@ function Field({ label, value, accent }) {
   );
 }
 
-/* -------------------------------------------------------------------------
- * Add / Edit Settlement form modal
- * ---------------------------------------------------------------------- */
-
-const NUMBER_FIELDS = [
-  { key: "grossCollected", label: "Gross Collected" },
-  { key: "vendorPromoCost", label: "Vendor Promo Cost" },
-  { key: "commissionAmount", label: "Commission Amount" },
-  { key: "commissionTax", label: "Commission Tax" },
-  { key: "commissionDeduction", label: "Commission Deduction" },
-  { key: "refundAdjustment", label: "Refund Adjustment" },
-  { key: "chargebackAdjustment", label: "Chargeback Adjustment" },
-  { key: "reserveHeld", label: "Reserve Held" },
-];
-
 function TextField({ label, value, onChange, placeholder, error, type = "text" }) {
   return (
     <div>
@@ -1155,7 +1103,7 @@ function TextField({ label, value, onChange, placeholder, error, type = "text" }
 // Shared reason-prompt modal for the list row's Hold / Cancel icon
 // actions — both just need a required reason before calling the real
 // PATCH /settlements/admin/:id/{hold,cancel} endpoint.
-function SettlementReasonModal({ title, description, actionLabel, tone = "amber", submitting, error, onClose, onConfirm }) {
+function SettlementReasonModal({ title, description, actionLabel, tone = "amber", placeholder = "e.g. Bank details need re-verification.", submitting, error, onClose, onConfirm }) {
   const [reason, setReason] = useState("");
 
   return (
@@ -1169,7 +1117,7 @@ function SettlementReasonModal({ title, description, actionLabel, tone = "amber"
             label="Reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="e.g. Bank details need re-verification."
+            placeholder={placeholder}
           />
         </div>
 
@@ -1204,228 +1152,154 @@ function SettlementReasonModal({ title, description, actionLabel, tone = "amber"
   );
 }
 
-function SettlementFormModal({ open, initialData, onClose, onSave }) {
-  const [form, setForm] = useState(initialData || EMPTY_FORM);
-  const [errors, setErrors] = useState({});
+/* -------------------------------------------------------------------------
+ * Settlement workflow, run straight from the table:
+ *   Pending Approval → Approve → Approved → Start Payout → Processing →
+ *   Confirm Payout (UTR) → Settlement done.  (Failed → Retry Payout.)
+ * Each row offers only the one valid next step, gated by the settlement's
+ * real canApprove / canPay / canRetry flags — same rules as the detail page.
+ * ---------------------------------------------------------------------- */
+function getNextStep(s) {
+  if (s.canApprove) return { key: "approve", label: "Approve" };
+  if (s.canPay) return { key: "payout", label: "Start Payout" };
+  if (s.status === "Processing") return { key: "confirm", label: "Confirm Payout" };
+  if (s.canRetry) return { key: "retry", label: "Retry" };
+  if (s.status === "On hold") return { key: "unhold", label: "Unhold" };
+  return null;
+}
 
-  React.useEffect(() => {
-    if (open) {
-      setForm(initialData || EMPTY_FORM);
-      setErrors({});
+// What a row looks like right after a step succeeds — applied instantly so
+// the pill changes on click, then the silent refetch brings the real data.
+const STEP_RESULT = {
+  approve: { status: "Approved", canApprove: false, canPay: true },
+  payout: { status: "Processing", canPay: false },
+  confirm: { status: "Settlement done" },
+  retry: { status: "Processing", canRetry: false },
+  // PAID → REVERSED: the bank pulled the credit back after payout.
+  reverse: { status: "Reversed" },
+  hold: { status: "On hold", canApprove: false },
+  unhold: { status: "Pending Approval", canApprove: true },
+};
+
+/* The status pill is the workflow button — see components/common/StatusStepButton. */
+function SettlementStatusStep({ settlement, onStep }) {
+  const step = getNextStep(settlement);
+  return (
+    <StatusStepButton
+      label={settlement.status}
+      tone={SETTLEMENT_TONES[settlement.status]}
+      stepLabel={step?.label}
+      onClick={() => onStep(settlement, step)}
+    />
+  );
+}
+
+const STEP_COPY = {
+  approve: { title: "Approve settlement?", description: "It moves to Approved and becomes ready for payout.", action: "Approve" },
+  payout: { title: "Start payout?", description: "This starts the bank transfer for this settlement.", action: "Start Payout" },
+  confirm: { title: "Confirm payout", description: "Enter the bank UTR once the money has reached the vendor.", action: "Confirm" },
+  retry: { title: "Retry payout?", description: "The failed payout will be attempted again.", action: "Retry Payout" },
+  unhold: { title: "Take off hold?", description: "It goes back to Pending Approval so it can be approved and paid.", action: "Unhold" },
+};
+
+function SettlementStepModal({ settlement, step, submitting, error, onClose, onConfirm }) {
+  const copy = STEP_COPY[step.key];
+  const [note, setNote] = useState("");
+  const [confirmForm, setConfirmForm] = useState({ utr: "", mode: "NEFT", paidAt: "" });
+  const needsUtr = step.key === "confirm";
+
+  const submit = () => {
+    if (step.key === "approve") return onConfirm({ note: note.trim() || undefined });
+    if (needsUtr) {
+      return onConfirm({
+        utr: confirmForm.utr.trim(),
+        mode: confirmForm.mode,
+        paidAt: confirmForm.paidAt ? new Date(confirmForm.paidAt).toISOString() : new Date().toISOString(),
+      });
     }
-  }, [open, initialData]);
-
-  if (!open) return null;
-
-  const isEdit = Boolean(form.id);
-
-  const setField = (field) => (e) =>
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-
-  const autoFillNetPayable = () => {
-    const sum =
-      Number(form.grossCollected || 0) -
-      Number(form.vendorPromoCost || 0) -
-      Number(form.commissionAmount || 0) -
-      Number(form.commissionTax || 0) -
-      Number(form.commissionDeduction || 0) -
-      Number(form.refundAdjustment || 0) -
-      Number(form.chargebackAdjustment || 0) -
-      Number(form.reserveHeld || 0);
-    setForm((prev) => ({ ...prev, netPayable: sum > 0 ? sum : 0 }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const nextErrors = {};
-    if (!form.vendor) nextErrors.vendor = "Select a vendor";
-    if (!form.settlementId.trim())
-      nextErrors.settlementId = "Settlement id is required";
-    if (!form.netPayable || Number(form.netPayable) <= 0)
-      nextErrors.netPayable = "Enter a valid settlement amount";
-    if (Object.keys(nextErrors).length) {
-      setErrors(nextErrors);
-      return;
-    }
-    onSave(form);
+    return onConfirm({});
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 py-8 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-          <div>
-            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-              {isEdit ? "Edit Settlement" : "Add Settlement"}
-            </h2>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500">
-              {isEdit
-                ? "Update this vendor's settlement record."
-                : "Manually create a settlement record for a vendor."}
-            </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={submitting ? undefined : onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
+        <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{copy.title}</h2>
+        <p className="mt-1 text-[12.5px] text-neutral-500">
+          <span className="font-medium text-neutral-700 dark:text-neutral-300">{settlement.settlementNumber || settlement.id}</span>
+          {" · "}
+          {inr(settlement.amount)} — {copy.description}
+        </p>
+
+        {step.key === "approve" && (
+          <div className="mt-4">
+            <TextField
+              label="Note (optional)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Numbers checked against the statement."
+            />
           </div>
+        )}
+
+        {needsUtr && (
+          <div className="mt-4 space-y-3">
+            <TextField
+              label="UTR"
+              value={confirmForm.utr}
+              onChange={(e) => setConfirmForm((p) => ({ ...p, utr: e.target.value }))}
+              placeholder="PNFXSTL000000001"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Mode</label>
+                <select
+                  value={confirmForm.mode}
+                  onChange={(e) => setConfirmForm((p) => ({ ...p, mode: e.target.value }))}
+                  className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+                >
+                  {["NEFT", "IMPS", "RTGS", "UPI"].map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <TextField
+                label="Paid At"
+                type="datetime-local"
+                value={confirmForm.paidAt}
+                onChange={(e) => setConfirmForm((p) => ({ ...p, paidAt: e.target.value }))}
+              />
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={14} className="shrink-0" />
+            {error}
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+            disabled={submitting}
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            <X size={16} />
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting || (needsUtr && !confirmForm.utr.trim())}
+            className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
+            {copy.action}
           </button>
         </div>
-
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="max-h-[75vh] overflow-y-auto px-5 py-5">
-          {/* Vendor + identifiers */}
-          <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-                Vendor
-              </label>
-              <select
-                value={form.vendor}
-                onChange={setField("vendor")}
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
-              >
-                {VENDOR_OPTIONS.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-              {errors.vendor && (
-                <p className="mt-1.5 text-[12px] text-red-400">{errors.vendor}</p>
-              )}
-            </div>
-            <TextField
-              label="Settlement Id"
-              value={form.settlementId}
-              onChange={setField("settlementId")}
-              placeholder="setl_XXXXXXXXXXXX"
-              error={errors.settlementId}
-            />
-            <TextField
-              label="Transaction Count"
-              type="number"
-              value={form.transactionCount}
-              onChange={setField("transactionCount")}
-              placeholder="e.g. 2"
-            />
-            <TextField
-              label="Settlement Request Id"
-              value={form.requestId}
-              onChange={setField("requestId")}
-              placeholder="Optional"
-            />
-            <TextField
-              label="Bank Name"
-              value={form.bankName}
-              onChange={setField("bankName")}
-              placeholder="e.g. Kotak Mahindra Bank"
-            />
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-                Status
-              </label>
-              <select
-                value={form.status}
-                onChange={setField("status")}
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
-              >
-                {FORM_STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <TextField
-                label="Payment Received Date"
-                type="date"
-                value={form.paymentReceivedDate}
-                onChange={setField("paymentReceivedDate")}
-              />
-              <p className="mt-1.5 text-[11.5px] text-neutral-600">
-                Settlement due date auto-calculates as T+{SETTLEMENT_CYCLE_DAYS} from this date.
-              </p>
-            </div>
-            <TextField
-              label="Settlement Date"
-              type="date"
-              value={form.settlementDate}
-              onChange={setField("settlementDate")}
-            />
-          </div>
-
-          {/* Amount breakup */}
-          <div className="mb-2 flex items-center justify-between">
-            <label className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Amount Breakup
-            </label>
-            <button
-              type="button"
-              onClick={autoFillNetPayable}
-              className="text-[12px] font-medium text-emerald-400 hover:underline"
-            >
-              Auto-calculate net payable
-            </button>
-          </div>
-          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {NUMBER_FIELDS.map((f) => (
-              <TextField
-                key={f.key}
-                label={f.label}
-                type="number"
-                value={form[f.key]}
-                onChange={setField(f.key)}
-                placeholder="0"
-              />
-            ))}
-          </div>
-
-          <div className="mb-6">
-            <TextField
-              label="Net Payable (paid to vendor)"
-              type="number"
-              value={form.netPayable}
-              onChange={setField("netPayable")}
-              placeholder="0"
-              error={errors.netPayable}
-            />
-          </div>
-
-          {/* Footer actions */}
-          <div className="flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
-            >
-              {isEdit ? "Save Changes" : "Add Settlement"}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------
- * List / overview view
- * ---------------------------------------------------------------------- */
 
 export default function Settlement() {
   const [settlements, setSettlements] = useState([]);
@@ -1442,8 +1316,6 @@ export default function Settlement() {
   const [selected, setSelected] = useState(null); // -> detail view
   const [showReserveBasis, setShowReserveBasis] = useState(false); // -> reserve basis page
   const [detailLoading, setDetailLoading] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingSettlement, setEditingSettlement] = useState(null);
 
   // Hold / Cancel — quick row-level actions, gated on the confirmed
   // lifecycle (ON_HOLD only ever follows Pending Approval, CANCELLED only
@@ -1453,9 +1325,13 @@ export default function Settlement() {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [rowActionSubmitting, setRowActionSubmitting] = useState(false);
   const [rowActionError, setRowActionError] = useState("");
+  // Next workflow step started from a table row — { row, step }.
+  const [stepTarget, setStepTarget] = useState(null);
 
-  const fetchSettlements = useCallback(async () => {
-    setLoading(true);
+  // `silent` = background refresh after an action — keeps the table on
+  // screen instead of swapping it for the loading state.
+  const fetchSettlements = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setLoadError("");
     try {
       const res = await getSettlements({ page: 1, limit: 100 });
@@ -1536,68 +1412,99 @@ export default function Settlement() {
     return done[0] || null;
   }, [settlements]);
 
-  const handleAddClick = () => {
-    setEditingSettlement(null);
-    setModalOpen(true);
-  };
-
-  // Create-only now — editing a settlement's own ledger fields isn't a
-  // real admin action (there's no update-settlement API; the workflow
-  // actions above are the only real way to change one), so the per-row
-  // Edit entry point was removed. This local-only record just seeds the
-  // page for demo/testing until a real "create settlement" endpoint
-  // exists.
-  const handleSave = (form) => {
-    const breakup = {
-      grossCollected: Number(form.grossCollected || 0),
-      vendorPromoCost: Number(form.vendorPromoCost || 0),
-      commissionAmount: Number(form.commissionAmount || 0),
-      commissionTax: Number(form.commissionTax || 0),
-      commissionDeduction: Number(form.commissionDeduction || 0),
-      refundAdjustment: Number(form.refundAdjustment || 0),
-      chargebackAdjustment: Number(form.chargebackAdjustment || 0),
-      reserveHeld: Number(form.reserveHeld || 0),
-      reservePercent: 0,
-      reserveReleased: 0,
-      netPayable: Number(form.netPayable || 0),
+  const kpis = useMemo(() => {
+    const summarize = (rows) => {
+      const paid = rows.filter((s) => s.status === "Settlement done");
+      const awaiting = rows.filter((s) => AWAITING_PAYOUT.includes(s.status));
+      return {
+        paidOut: paid.reduce((sum, s) => sum + s.amount, 0),
+        awaitingAmount: awaiting.reduce((sum, s) => sum + s.amount, 0),
+        awaitingCount: awaiting.length,
+        avg: rows.length ? rows.reduce((sum, s) => sum + s.amount, 0) / rows.length : 0,
+      };
     };
+    const all = summarize(settlements);
+    const { cur, prev } = weekOverWeek(settlements, summarize, getSettlementDate);
+    return {
+      ...all,
+      paidOutTrend: pctChange(cur.paidOut, prev.paidOut),
+      avgTrend: pctChange(cur.avg, prev.avg),
+    };
+  }, [settlements]);
 
-    setSettlements((prev) => [
-      {
-        id: form.settlementId.trim(),
-        settlementNumber: form.settlementId.trim(),
-        vendor: form.vendor,
-        paymentReceivedDate: form.paymentReceivedDate || "—",
-        settlementDate: form.settlementDate || "—",
-        transactionCount: Number(form.transactionCount) || 0,
-        bankName: form.bankName,
-        requestId: form.requestId,
-        status: form.status,
-        amount: breakup.netPayable,
-        breakup,
-        transactions: [
-          {
-            stage: "Collection Payment",
-            title: "Payment received from customer",
-            date: form.paymentReceivedDate || "—",
-            meta: [{ label: "Payment Platform", value: "—" }],
-          },
-        ],
-        tickets: [],
-      },
-      ...prev,
-    ]);
-    setModalOpen(false);
-    setEditingSettlement(null);
-  };
+  const statusMix = useMemo(() => {
+    const counts = {};
+    settlements.forEach((s) => {
+      counts[s.status] = (counts[s.status] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, count]) => ({
+      name: name === "Settlement done" ? "Settled" : name,
+      count,
+      color: STATUS_MIX_COLORS[name],
+    }));
+  }, [settlements]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { All: settlements.length };
+    settlements.forEach((s) => {
+      counts[s.status] = (counts[s.status] || 0) + 1;
+    });
+    return counts;
+  }, [settlements]);
 
   const handleHoldConfirm = async (reason) => {
     setRowActionSubmitting(true);
     setRowActionError("");
     try {
       await holdSettlement(holdTarget.id, { reason });
+      setSettlements((prev) => prev.map((x) => (x.id === holdTarget.id ? { ...x, ...STEP_RESULT.hold } : x)));
       setHoldTarget(null);
-      fetchSettlements();
+      fetchSettlements({ silent: true });
+    } catch (err) {
+      setRowActionError(err.message);
+    } finally {
+      setRowActionSubmitting(false);
+    }
+  };
+
+  const STEP_ACTIONS = {
+    approve: (id, payload) => approveSettlement(id, payload),
+    payout: (id) => startSettlementPayout(id),
+    confirm: (id, payload) => confirmSettlementPayout(id, payload),
+    retry: (id) => retrySettlementPayout(id),
+    reverse: (id, payload) => reverseSettlementPayout(id, payload),
+    hold: (id, payload) => holdSettlement(id, payload),
+    unhold: (id) => unholdSettlement(id),
+  };
+
+  const handleStepConfirm = async (payload) => {
+    setRowActionSubmitting(true);
+    setRowActionError("");
+    try {
+      const { row, step } = stepTarget;
+      await STEP_ACTIONS[step.key](row.id, payload);
+      setStepTarget(null);
+      // Flip the row's pill to its next state at once, then quietly refetch
+      // (no table spinner) for the server's real status and flags.
+      setSettlements((prev) => prev.map((x) => (x.id === row.id ? { ...x, ...STEP_RESULT[step.key] } : x)));
+      fetchSettlements({ silent: true });
+    } catch (err) {
+      setRowActionError(err.message);
+    } finally {
+      setRowActionSubmitting(false);
+    }
+  };
+
+  // Reverse — only for a completed payout ("Settlement done"); reason required.
+  const [reverseTarget, setReverseTarget] = useState(null);
+  const handleReverseConfirm = async (reason) => {
+    setRowActionSubmitting(true);
+    setRowActionError("");
+    try {
+      await reverseSettlementPayout(reverseTarget.id, { reason });
+      setSettlements((prev) => prev.map((x) => (x.id === reverseTarget.id ? { ...x, ...STEP_RESULT.reverse } : x)));
+      setReverseTarget(null);
+      fetchSettlements({ silent: true });
     } catch (err) {
       setRowActionError(err.message);
     } finally {
@@ -1611,7 +1518,7 @@ export default function Settlement() {
     try {
       await cancelSettlement(cancelTarget.id, { reason });
       setCancelTarget(null);
-      fetchSettlements();
+      fetchSettlements({ silent: true });
     } catch (err) {
       setRowActionError(err.message);
     } finally {
@@ -1688,6 +1595,56 @@ export default function Settlement() {
     page * rowsPerPage
   );
 
+  /* ---- Multi-select + bulk actions ----------------------------------- */
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkKind, setBulkKind] = useState(null); // "approve" | "payout" | "confirm"
+
+  const toggleSelected = (id) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // Selects every settlement of one status (across all pages, within the
+  // current search/date filters).
+  const selectByStatus = (status) => setSelectedIds(new Set(filtered.filter((s) => s.status === status).map((s) => s.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectedRows = settlements.filter((s) => selectedIds.has(s.id));
+  // Each bulk action only runs on the selected settlements it's valid for.
+  const BULK_ELIGIBLE = {
+    approve: (s) => s.canApprove,
+    payout: (s) => s.canPay,
+    confirm: (s) => s.status === "Processing",
+    reverse: (s) => s.status === "Settlement done",
+    hold: (s) => s.status === "Pending Approval",
+    unhold: (s) => s.status === "On hold",
+  };
+  const BULK_COPY = {
+    approve: { title: "Approve settlements", action: "Approve", input: "note" },
+    payout: { title: "Start payout", action: "Start Payout", input: "none" },
+    confirm: { title: "Confirm payouts", action: "Confirm Payouts", input: "utr" },
+    reverse: { title: "Reverse payouts", action: "Reverse", input: "reason" },
+    hold: { title: "Put on hold", action: "Hold", input: "reason" },
+    unhold: { title: "Take off hold", action: "Unhold", input: "none" },
+  };
+  const bulkRows = bulkKind ? selectedRows.filter(BULK_ELIGIBLE[bulkKind]) : [];
+
+  // Called once per settlement by the bulk dialog; a throw marks that row failed.
+  const runBulkOne = async (row, payload) => {
+    // The shared modal sends a note/reason as `text`; approve takes `note`, reverse takes `reason`.
+    const body = bulkKind === "approve" ? { note: payload.text } : ["reverse", "hold"].includes(bulkKind) ? { reason: payload.text } : payload;
+    await STEP_ACTIONS[bulkKind](row.id, body);
+    setSettlements((prev) => prev.map((x) => (x.id === row.id ? { ...x, ...STEP_RESULT[bulkKind] } : x)));
+  };
+  const closeBulk = () => {
+    setBulkKind(null);
+    clearSelection();
+    fetchSettlements({ silent: true });
+  };
+
+
   if (selected && showReserveBasis) {
     return (
       <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -1703,7 +1660,12 @@ export default function Settlement() {
           settlement={selected}
           detailLoading={detailLoading}
           onBack={() => setSelected(null)}
-          onRefresh={() => handleOpenSettlement(selected)}
+          // Refresh the open detail and the list behind it, so the rows and
+          // stat cards are already current when the admin goes Back.
+          onRefresh={() => {
+            handleOpenSettlement(selected);
+            fetchSettlements({ silent: true });
+          }}
           onViewReserveBasis={() => setShowReserveBasis(true)}
         />
       </div>
@@ -1726,13 +1688,6 @@ export default function Settlement() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={handleAddClick}
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 hover:bg-emerald-300"
-            >
-              <Plus size={15} />
-              Add Settlement
-            </button>
-            <button
               onClick={fetchSettlements}
               disabled={loading}
               className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -1743,34 +1698,66 @@ export default function Settlement() {
           </div>
         </div>
 
-        {/* Stat cards */}
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard
+        {/* KPI cards */}
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard
             icon={Wallet}
-            label="Previous settlement"
-            amount={previousSettlement?.amount || 0}
-            sub={previousSettlement ? `Settled on ${previousSettlement.settlementDate}` : "No settlements yet"}
+            label="Total Paid Out"
+            value={inr(kpis.paidOut)}
+            trend={kpis.paidOutTrend}
+            sub={
+              previousSettlement
+                ? `Last ${inr(previousSettlement.amount)} on ${previousSettlement.settlementDate}`
+                : "No settlements paid yet"
+            }
           />
-          <StatCard
-            icon={CalendarClock}
-            label="Today settlement"
-            amount={todaySettlementStats.amount}
-            sub={`No. of Count : ${String(todaySettlementStats.count).padStart(2, "0")} · T+${SETTLEMENT_CYCLE_DAYS} due today`}
-            live
-          />
-          <StatCard
+          <KpiCard
             icon={Landmark}
-            label="Available balance"
-            amount={0}
-            sub="No live balance API yet"
+            label="Awaiting Payout"
+            value={inr(kpis.awaitingAmount)}
+            sub={`${kpis.awaitingCount} settlement${kpis.awaitingCount === 1 ? "" : "s"} pending · approved · processing`}
           />
-          <StatCard
-            icon={Receipt}
-            label="GST balance"
-            amount={0}
-            sub="No live balance API yet"
+          <KpiCard
+            icon={CalendarClock}
+            label="Due Today"
+            value={inr(todaySettlementStats.amount)}
+            sub={`${todaySettlementStats.count} due today · T+${SETTLEMENT_CYCLE_DAYS} cycle`}
+          />
+          <KpiCard icon={Receipt} label="Avg. Settlement" value={inr(kpis.avg)} trend={kpis.avgTrend} />
+        </div>
+
+        {/* Net payable per day + status mix */}
+        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <DailyBarsCard
+            className="lg:col-span-2"
+            title="Settlement Overview"
+            subtitle="Net payable per day (by period end)"
+            icon={BarChart3}
+            rows={settlements}
+            getDate={getSettlementDate}
+            getValue={getSettlementAmount}
+            countLabel="settlements"
+            emptyText="No settlements in this period."
+            gradientId="settlementDailyBar"
+          />
+          <MixCard
+            title="Status mix"
+            icon={PieChartIcon}
+            total={settlements.length}
+            totalLabel="settlements"
+            items={statusMix}
+            emptyText="No settlements yet."
           />
         </div>
+
+        <PillTabs
+          tabs={STATUS_TABS.map((t) => ({ ...t, count: statusCounts[t.key] || 0 }))}
+          active={statusFilter}
+          onChange={(key) => {
+            setStatusFilter(key);
+            setPage(1);
+          }}
+        />
 
         {/* Toolbar — search, status, due-today, date range and export all
             live in one wrapping row so the filter UI reads the same way
@@ -1843,6 +1830,30 @@ export default function Settlement() {
           </button>
         </div>
 
+        {/* Bulk bar — pick settlements by status in one click, then run one
+            action on all of them. */}
+        {!loading && !loadError && (
+          <BulkSelectBar
+            groups={["Pending Approval", "Approved", "Processing", "Settlement done", "On hold"].map((status) => ({
+              key: status,
+              label: status,
+              count: filtered.filter((s) => s.status === status).length,
+              onSelect: () => selectByStatus(status),
+            }))}
+            selectedCount={selectedIds.size}
+            selectedTotal={inr(selectedRows.reduce((sum, s) => sum + (Number(s.amount) || 0), 0))}
+            actions={[
+              { key: "approve", label: "Approve", icon: CheckCircle2 },
+              { key: "payout", label: "Start Payout", icon: Wallet },
+              { key: "confirm", label: "Confirm Payout", icon: Upload },
+              { key: "hold", label: "Hold", icon: PauseCircle, tone: "red" },
+              { key: "unhold", label: "Unhold", icon: PlayCircle },
+              { key: "reverse", label: "Reverse", icon: RotateCcw, tone: "red" },
+            ].map((a) => ({ ...a, count: selectedRows.filter(BULK_ELIGIBLE[a.key]).length, onClick: () => setBulkKind(a.key) }))}
+            onClear={clearSelection}
+          />
+        )}
+
         {/* Table */}
         {loading ? (
           <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
@@ -1857,9 +1868,25 @@ export default function Settlement() {
         ) : (
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="no-scrollbar overflow-x-auto">
-            <table className="w-full border-collapse text-left" style={{ minWidth: "980px" }}>
+            <table className="w-full border-collapse text-left" style={{ minWidth: "1040px" }}>
               <thead>
                 <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
+                  <th className="w-10 py-3.5 pl-4">
+                    {/* Header checkbox: select / clear every row on this page */}
+                    <input
+                      type="checkbox"
+                      aria-label="Select all on this page"
+                      checked={pageRows.length > 0 && pageRows.every((s) => selectedIds.has(s.id))}
+                      onChange={(e) =>
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          pageRows.forEach((s) => (e.target.checked ? next.add(s.id) : next.delete(s.id)));
+                          return next;
+                        })
+                      }
+                      className="h-4 w-4 cursor-pointer accent-emerald-500"
+                    />
+                  </th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Settlement Id</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Vendor</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Payment Received</th>
@@ -1875,7 +1902,7 @@ export default function Settlement() {
                 {pageRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-[13px] text-neutral-500"
                     >
                       No settlements match your filters.
@@ -1889,9 +1916,18 @@ export default function Settlement() {
                     <React.Fragment key={s.id}>
                       <tr
                         className={`border-t border-neutral-100 text-[13px] text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-neutral-800/60 dark:text-neutral-300 dark:hover:bg-neutral-800/30 ${
-                          schedule?.isToday ? "bg-cyan-400/[0.04]" : ""
+                          selectedIds.has(s.id) ? "bg-emerald-400/[0.06]" : schedule?.isToday ? "bg-cyan-400/[0.04]" : ""
                         }`}
                       >
+                        <td className="w-10 py-3.5 pl-4">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${s.settlementNumber || s.id}`}
+                            checked={selectedIds.has(s.id)}
+                            onChange={() => toggleSelected(s.id)}
+                            className="h-4 w-4 cursor-pointer accent-emerald-500"
+                          />
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3.5">
                           <button
                             onClick={() => handleOpenSettlement(s)}
@@ -1910,7 +1946,13 @@ export default function Settlement() {
                           {inr(s.amount)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3.5">
-                          <StatusBadge status={s.status} />
+                          <SettlementStatusStep
+                            settlement={s}
+                            onStep={(row, step) => {
+                              setRowActionError("");
+                              setStepTarget({ row, step });
+                            }}
+                          />
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center justify-center gap-1">
@@ -1931,6 +1973,19 @@ export default function Settlement() {
                                 className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-amber-400/10 hover:text-amber-600 dark:text-neutral-400 dark:hover:text-amber-400"
                               >
                                 <PauseCircle size={14} />
+                              </button>
+                            )}
+                            {s.status === "Settlement done" && (
+                              <button
+                                onClick={() => {
+                                  setRowActionError("");
+                                  setReverseTarget(s);
+                                }}
+                                aria-label="Reverse payout"
+                                title="Reverse payout"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
+                              >
+                                <RotateCcw size={14} />
                               </button>
                             )}
                             {s.status === "Approved" && (
@@ -1963,7 +2018,7 @@ export default function Settlement() {
                       </tr>
                       {open && (
                         <tr className="border-t border-neutral-100 bg-neutral-50 dark:border-neutral-800/60 dark:bg-neutral-950/60">
-                          <td colSpan={9} className="px-6 py-4">
+                          <td colSpan={10} className="px-6 py-4">
                             <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                               Amount Breakup
                             </p>
@@ -2026,16 +2081,6 @@ export default function Settlement() {
         </div>
       </div>
 
-      <SettlementFormModal
-        open={modalOpen}
-        initialData={editingSettlement}
-        onClose={() => {
-          setModalOpen(false);
-          setEditingSettlement(null);
-        }}
-        onSave={handleSave}
-      />
-
       {holdTarget && (
         <SettlementReasonModal
           title="Hold settlement?"
@@ -2050,6 +2095,54 @@ export default function Settlement() {
             setRowActionError("");
           }}
           onConfirm={handleHoldConfirm}
+        />
+      )}
+
+      {bulkKind && (
+        <BulkActionModal
+          title={BULK_COPY[bulkKind].title}
+          actionLabel={BULK_COPY[bulkKind].action}
+          input={BULK_COPY[bulkKind].input}
+          templateName={`settlements-${bulkKind}`}
+          rows={bulkRows}
+          getRef={(s) => s.settlementNumber || s.id}
+          getAmount={(s) => s.amount}
+          getSubtitle={(s) => s.vendor}
+          onRun={runBulkOne}
+          onClose={closeBulk}
+        />
+      )}
+
+      {stepTarget && (
+        <SettlementStepModal
+          settlement={stepTarget.row}
+          step={stepTarget.step}
+          submitting={rowActionSubmitting}
+          error={rowActionError}
+          onClose={() => {
+            if (rowActionSubmitting) return;
+            setStepTarget(null);
+            setRowActionError("");
+          }}
+          onConfirm={handleStepConfirm}
+        />
+      )}
+
+      {reverseTarget && (
+        <SettlementReasonModal
+          title="Reverse payout?"
+          description={`"${reverseTarget.settlementNumber || reverseTarget.id}" (${inr(reverseTarget.amount)}) moves to Reversed — use this when the bank pulled the credit back and the vendor never got the money.`}
+          actionLabel="Reverse Payout"
+          tone="red"
+          placeholder="e.g. Bank ne credit wapas le liya — vendor ko paisa nahi mila."
+          submitting={rowActionSubmitting}
+          error={rowActionError}
+          onClose={() => {
+            if (rowActionSubmitting) return;
+            setReverseTarget(null);
+            setRowActionError("");
+          }}
+          onConfirm={handleReverseConfirm}
         />
       )}
 

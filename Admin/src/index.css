@@ -111,6 +111,30 @@ body {
   display: none;
 }
 
+/* Bento glass cards, app-wide. Every page's white card (stat tiles above
+   tables, chart/detail panels) shares the same Tailwind classes:
+   `bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]`. This turns all of them
+   into the dashboard's frosted-glass look in one place instead of editing
+   each page. It's deliberately unlayered CSS: Tailwind v4 puts utilities in
+   a cascade layer, and unlayered rules win over layered ones, so this
+   reliably overrides `bg-white` / `dark:bg-neutral-900`.
+   Scope: only inside the page area (`main`), and never inside a fixed
+   overlay (`.fixed *`), so modals and drawers stay solid and readable.
+   Opt a single element out with the `no-glass` class. */
+main .bg-white.shadow-\[0_1px_3px_rgba\(15\,23\,42\,0\.06\)\]:not(.no-glass):not(.fixed *) {
+  background-color: rgb(255 255 255 / 0.65);
+  border: 1px solid rgb(255 255 255 / 0.8);
+  box-shadow: 0 8px 30px rgb(16 185 129 / 0.07);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+.dark main .bg-white.shadow-\[0_1px_3px_rgba\(15\,23\,42\,0\.06\)\]:not(.no-glass):not(.fixed *) {
+  background-color: rgb(23 23 23 / 0.6);
+  border-color: rgb(255 255 255 / 0.05);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.3);
+}
+
 /* Reusable "export as PDF" support — any table page can wrap its
    exportable content in a `print-area` div and add `no-print` to
    controls that shouldn't appear in the printed/PDF output. Triggered by

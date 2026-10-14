@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{base_url}}
@@ -11,6 +12,9 @@ const api = axios.create({
         'Content-Type': 'application/json',
     },
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as brand/services/subscriptionApi.js)
 api.interceptors.request.use(async (config) => {
@@ -73,6 +77,24 @@ export async function getAllSubscriptions({
     }
 }
 
+/* Every page of getAllSubscriptions (limit is capped at 100 per call) —
+ * returns the flat array of rows. Used to split real vs dummy (isDummy)
+ * subscriptions client-side, since the endpoint has no isDummy filter. */
+export async function getAllSubscriptionPages(params = {}) {
+    const limit = 100;
+    const first = await getAllSubscriptions({ ...params, page: 1, limit });
+    const rows = [...(first?.data?.data ?? [])];
+    const totalPages = first?.data?.totalPages ?? 1;
+    if (totalPages > 1) {
+        const rest = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) => getAllSubscriptions({ ...params, page: i + 2, limit }))
+        );
+        rest.forEach((r) => rows.push(...(r?.data?.data ?? [])));
+    }
+    return rows;
+}
+
 export default {
     getAllSubscriptions,
+    getAllSubscriptionPages,
 };

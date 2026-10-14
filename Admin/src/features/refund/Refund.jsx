@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LabelList, ResponsiveContainer } from "recharts";
 import {
   Search,
   RefreshCw,
-  Clock3,
   CheckCircle2,
-  XCircle,
   Wallet,
+  Landmark,
+  Upload,
   Loader2,
   AlertTriangle,
   X,
@@ -16,12 +15,20 @@ import {
   Eye,
   Download,
   BarChart3,
+  RotateCcw,
+  Percent,
+  ListChecks,
 } from "lucide-react";
-import { getRefundWorklist, approveRefund, rejectRefund } from "./services/RefundApi";
+import { getRefundWorklist, approveRefund, rejectRefund, payRefund, payToBank, confirmBankPayout } from "./services/RefundApi";
+import BulkActionModal from "../../components/common/BulkActionModal";
+import BulkSelectBar from "../../components/common/BulkSelectBar";
+import StatusStepButton from "../../components/common/StatusStepButton";
 import { canAdminDecide } from "./refundUtils";
 import { formatDate, fmtTime, inr, todayStr } from "../transaction/transactionUtils";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
 import { downloadCsv } from "../../utils/exportTable";
+import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
+import { pctChange, weekOverWeek } from "../../utils/overviewStats";
 
 /* -------------------------------------------------------------------------
  * Shared Table — mirrors Transaction.jsx's local table so this page keeps
@@ -113,11 +120,19 @@ function bucketRefundStatus(status) {
     case "WITHDRAWN":
       return "rejected";
     // FAILED stays isOpen ("Refund failed — we are on it") and needs the
-    // admin to retry, so it lives in Pending — RefundStatusBadge still
-    // colours it red.
+    // admin to retry, so it lives in Pending — refundTone still colours
+    // its pill red.
     default:
       return "pending";
   }
+}
+
+// Refund status → pill colour for StatusStepButton.
+function refundTone(status) {
+  if (status === "FAILED") return "red";
+  if (status === "ADMIN_APPROVED") return "sky";
+  if (status === "PROCESSING") return "violet";
+  return { approved: "emerald", rejected: "red", pending: "amber" }[bucketRefundStatus(status)];
 }
 
 function normalizeRefundRow(raw) {
@@ -149,12 +164,19 @@ function normalizeRefundRow(raw) {
     isOpen: Boolean(raw.isOpen),
     canDecide: canAdminDecide({ canDecide: raw.canDecide, isOpen: raw.isOpen, status }),
     canWithdraw: Boolean(raw.canWithdraw),
-    // Not real API flags — inferred from the confirmed status values:
-    // once an admin has approved a refund it can be paid out via /pay, or
-    // (if that fails, or it's a manual-bank refund) sent to
-    // /request-bank-details instead. Both stay available until the
-    // refund reaches a terminal state.
-    canPay: status === "ADMIN_APPROVED",
+    // Not real API flags — inferred from status + method, the same rules
+    // RefundDetails uses for its action buttons:
+    //  - gateway refund, approved (or failed) → /pay
+    //  - manual-bank refund, approved or bank details on file → /pay-to-bank
+    //  - manual-bank refund with an open payout leg (PROCESSING) → confirm UTR
+    canPay: raw.isOpen !== false && raw.method !== "MANUAL_BANK" && (status === "ADMIN_APPROVED" || status === "FAILED"),
+    canPayToBank:
+      raw.method === "MANUAL_BANK" &&
+      raw.isOpen !== false &&
+      !["PROCESSING", "COMPLETED"].includes(status) &&
+      bucketRefundStatus(status) !== "rejected" &&
+      (status === "ADMIN_APPROVED" || Boolean(raw.customerBankAccountId)),
+    canConfirmBankPayout: status === "PROCESSING" && raw.method === "MANUAL_BANK",
     canRequestBankDetails: status === "ADMIN_APPROVED",
     razorpayRefundId: raw.razorpayRefundId || "—",
     completedAt: raw.completedAt || null,
@@ -176,61 +198,7 @@ function normalizeRefundRow(raw) {
  * Small shared bits
  * ---------------------------------------------------------------------- */
 
-function RefundStatusBadge({ status, statusLabel }) {
-  const map = {
-    approved: { cls: "bg-emerald-400/10 text-emerald-600 ring-emerald-400/30 dark:text-emerald-400", icon: CheckCircle2 },
-    rejected: { cls: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400", icon: XCircle },
-    pending: { cls: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400", icon: Clock3 },
-  };
-  const cfg = status === "FAILED" ? map.rejected : map[bucketRefundStatus(status)] || map.pending;
-  const Icon = cfg.icon;
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium ring-1 ${cfg.cls}`}>
-      <Icon size={12} />
-      {statusLabel || status}
-    </span>
-  );
-}
-
-function StatCard({ icon: Icon, label, amount, sub, tone = "emerald" }) {
-  const toneCls = {
-    emerald: "text-emerald-600 dark:text-emerald-400",
-    amber: "text-amber-600 dark:text-amber-400",
-    red: "text-red-600 dark:text-red-400",
-  }[tone];
-  return (
-    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-        <Icon size={15} className={toneCls} />
-        {label}
-      </div>
-      <div className="mt-3 text-[22px] font-semibold text-neutral-900 dark:text-neutral-50">{inr(amount)}</div>
-      <div className="mt-1 text-[12px] text-neutral-500">{sub}</div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
- * Top Refund Reasons — a single-series horizontal bar ranking every
- * refund reason by how many requests cite it, so an admin can see at a
- * glance what's actually driving refunds instead of digging through the
- * table row by row.
- * ---------------------------------------------------------------------- */
-
-const REASON_BAR_COLOR = "#fbbf24"; // amber — this page's existing "needs attention" tone
-
-function ReasonTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
-  return (
-    <div className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
-      <p className="font-medium text-neutral-800 dark:text-neutral-100">{row.reason}</p>
-      <p className="mt-0.5 text-neutral-500 dark:text-neutral-400">
-        {row.count} refund{row.count === 1 ? "" : "s"} · {inr(row.amount)} requested
-      </p>
-    </div>
-  );
-}
+const getRequestedAmount = (r) => r.requestedAmount;
 
 const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
@@ -292,6 +260,51 @@ function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             Approve
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Confirm before triggering the gateway refund (PATCH .../pay). If the
+   gateway can't process it, the error shows here and the admin can switch
+   to the bank-transfer flow from the refund's detail page. */
+function PayRefundModal({ refund, onClose, onSubmit, submitting, error }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Pay refund?</h2>
+        <p className="mt-1 text-[12.5px] text-neutral-500">
+          Claim <span className="font-mono text-neutral-700 dark:text-neutral-300">{refund.claimCode}</span> ·{" "}
+          {inr(refund.approvedAmount ?? refund.requestedAmount)} will be refunded to the customer through the payment gateway.
+        </p>
+
+        {error && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>
+              {error}
+              <span className="mt-1 block text-neutral-500">You can pay it by bank transfer from the refund's detail page instead.</span>
+            </span>
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={submitting}
+            className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />}
+            Pay Refund
           </button>
         </div>
       </div>
@@ -368,7 +381,7 @@ function RejectRefundModal({ refund, onClose, onSubmit, submitting, error }) {
  * ---------------------------------------------------------------------- */
 
 const TABS = [
-  { key: "all", label: "All Refunds" },
+  { key: "all", label: "All" },
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
   { key: "rejected", label: "Rejected" },
@@ -397,11 +410,20 @@ export default function Refund() {
 
   const [approveTarget, setApproveTarget] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
+  const [payTarget, setPayTarget] = useState(null);
+  // Instant local update of one row after an action succeeds (the silent
+  // refetch that follows then brings the server's real values).
+  const patchRefund = (id, patch) =>
+    setRefunds((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...patch, statusBucket: bucketRefundStatus(patch.status ?? r.status) } : r))
+    );
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const fetchRefunds = useCallback(async () => {
-    setLoading(true);
+  // `silent` = background refresh after an action — keeps the table on
+  // screen instead of swapping it for the loading state.
+  const fetchRefunds = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setLoadError("");
     try {
       const res = await getRefundWorklist({ page: 1, limit: 100 });
@@ -431,27 +453,46 @@ export default function Refund() {
     };
   }, [refunds]);
 
+  // Week-over-week KPIs. Requests and requested amount going up is bad
+  // news, so those trend badges render inverted (red when rising).
+  const kpis = useMemo(() => {
+    const summarize = (rows) => {
+      const approved = rows.filter((r) => r.statusBucket === "approved");
+      const decided = rows.filter((r) => r.statusBucket !== "pending");
+      return {
+        requested: rows.reduce((s, r) => s + r.requestedAmount, 0),
+        count: rows.length,
+        approvedAmount: approved.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0),
+        approvalRate: decided.length ? (approved.length / decided.length) * 100 : 0,
+        decided: decided.length,
+      };
+    };
+    const all = summarize(refunds);
+    const { cur, prev } = weekOverWeek(refunds, summarize);
+    return {
+      ...all,
+      requestedTrend: pctChange(cur.requested, prev.requested),
+      countTrend: pctChange(cur.count, prev.count),
+      approvedTrend: pctChange(cur.approvedAmount, prev.approvedAmount),
+      approvalRateTrend: prev.decided ? cur.approvalRate - prev.approvalRate : cur.decided ? null : 0,
+    };
+  }, [refunds]);
+
   // Ranks every reason by how many refunds cite it, across all fetched
   // refunds (not just the current search/date filter) so this stays a
   // stable "what's driving refunds" summary. Past the top 6, the rest
-  // fold into "Other" rather than crowding the chart with long tail slices.
+  // fold into "Other" rather than crowding the card with long-tail rows.
   const reasonBreakdown = useMemo(() => {
     const map = new Map();
     refunds.forEach((r) => {
       const key = r.reason || "Unspecified";
-      const entry = map.get(key) || { reason: key, count: 0, amount: 0 };
-      entry.count += 1;
-      entry.amount += r.requestedAmount;
-      map.set(key, entry);
+      map.set(key, (map.get(key) || 0) + 1);
     });
-    const rows = Array.from(map.values()).sort((a, b) => b.count - a.count);
+    const rows = Array.from(map, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     const TOP_N = 6;
     if (rows.length <= TOP_N) return rows;
-    const other = rows.slice(TOP_N - 1).reduce(
-      (acc, r) => ({ reason: "Other", count: acc.count + r.count, amount: acc.amount + r.amount }),
-      { reason: "Other", count: 0, amount: 0 }
-    );
-    return [...rows.slice(0, TOP_N - 1), other];
+    const otherCount = rows.slice(TOP_N - 1).reduce((s, r) => s + r.count, 0);
+    return [...rows.slice(0, TOP_N - 1), { name: "Other", count: otherCount }];
   }, [refunds]);
 
   const filtered = useMemo(() => {
@@ -475,6 +516,72 @@ export default function Refund() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const pageRows = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+  /* ---- Multi-select + bulk actions ----------------------------------- */
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkKind, setBulkKind] = useState(null);
+
+  const toggleSelected = (id) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const clearSelection = () => setSelectedIds(new Set());
+  const selectedRows = refunds.filter((r) => selectedIds.has(r.id));
+
+  // One entry per bulk action: who it applies to, what to fill in, the API
+  // call, and how the row looks right after it succeeds.
+  const BULK = {
+    approve: {
+      label: "Approve", title: "Approve refunds", icon: Check, input: "note",
+      eligible: (r) => r.canDecide,
+      run: (r, p) => approveRefund(r.id, { note: p.text }),
+      result: { status: "ADMIN_APPROVED", statusLabel: "Admin Approved", canDecide: false },
+    },
+    reject: {
+      label: "Reject", title: "Reject refunds", icon: Ban, input: "reason", tone: "red",
+      eligible: (r) => r.canDecide,
+      run: (r, p) => rejectRefund(r.id, { note: p.text }),
+      result: { status: "ADMIN_REJECTED", statusLabel: "Admin Rejected", canDecide: false, canPay: false, canPayToBank: false },
+    },
+    pay: {
+      label: "Pay Refund", title: "Pay refunds (gateway)", icon: Wallet, input: "none",
+      eligible: (r) => r.canPay,
+      run: (r) => payRefund(r.id),
+      result: { status: "PROCESSING", statusLabel: "Processing", canPay: false },
+    },
+    payToBank: {
+      label: "Pay to Bank", title: "Start bank payouts", icon: Landmark, input: "none",
+      eligible: (r) => r.canPayToBank,
+      run: (r) => payToBank(r.id),
+      result: { status: "PROCESSING", statusLabel: "Processing", canPayToBank: false, canConfirmBankPayout: true },
+    },
+    confirmBank: {
+      label: "Confirm Bank Payout", title: "Confirm bank payouts", icon: Upload, input: "utr",
+      eligible: (r) => r.canConfirmBankPayout,
+      run: (r, p) => confirmBankPayout(r.id, p),
+      result: { status: "COMPLETED", statusLabel: "Completed", canConfirmBankPayout: false },
+    },
+  };
+  // "Select all" groups — every refund needing that next step, across pages.
+  const SELECT_GROUPS = [
+    { key: "decide", label: "Awaiting decision", match: (r) => r.canDecide },
+    { key: "pay", label: "Ready to pay", match: (r) => r.canPay || r.canPayToBank },
+    { key: "bank", label: "Bank payout open", match: (r) => r.canConfirmBankPayout },
+  ];
+  const bulkRows = bulkKind ? selectedRows.filter(BULK[bulkKind].eligible) : [];
+
+  const runBulkOne = async (row, payload) => {
+    await BULK[bulkKind].run(row, payload);
+    patchRefund(row.id, BULK[bulkKind].result);
+  };
+  const closeBulk = () => {
+    setBulkKind(null);
+    clearSelection();
+    fetchRefunds({ silent: true });
+  };
 
   // Every scalar field on the normalized row, including the split ledger —
   // nothing left out — so the export is a full data dump, not a curated
@@ -534,8 +641,10 @@ export default function Refund() {
     setActionError("");
     try {
       await approveRefund(approveTarget.id, { note });
+      // Flip the pill at once (Approved → next step Pay), then refresh quietly.
+      patchRefund(approveTarget.id, { status: "ADMIN_APPROVED", statusLabel: "Admin Approved", canDecide: false, canPay: true });
       setApproveTarget(null);
-      await fetchRefunds();
+      fetchRefunds({ silent: true });
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -548,8 +657,24 @@ export default function Refund() {
     setActionError("");
     try {
       await rejectRefund(rejectTarget.id, { note });
+      patchRefund(rejectTarget.id, { status: "ADMIN_REJECTED", statusLabel: "Admin Rejected", canDecide: false, canPay: false });
       setRejectTarget(null);
-      await fetchRefunds();
+      fetchRefunds({ silent: true });
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  const handlePay = async () => {
+    setActionSubmitting(true);
+    setActionError("");
+    try {
+      await payRefund(payTarget.id);
+      patchRefund(payTarget.id, { status: "PROCESSING", statusLabel: "Processing", canPay: false });
+      setPayTarget(null);
+      fetchRefunds({ silent: true });
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -558,6 +683,34 @@ export default function Refund() {
   };
 
   const columns = [
+    {
+      key: "select",
+      label: (
+        <input
+          type="checkbox"
+          aria-label="Select all on this page"
+          checked={pageRows.length > 0 && pageRows.every((r) => selectedIds.has(r.id))}
+          onChange={(e) =>
+            setSelectedIds((prev) => {
+              const next = new Set(prev);
+              pageRows.forEach((r) => (e.target.checked ? next.add(r.id) : next.delete(r.id)));
+              return next;
+            })
+          }
+          className="h-4 w-4 cursor-pointer accent-emerald-500"
+        />
+      ),
+      width: "w-10",
+      render: (r) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${r.claimCode}`}
+          checked={selectedIds.has(r.id)}
+          onChange={() => toggleSelected(r.id)}
+          className="h-4 w-4 cursor-pointer accent-emerald-500"
+        />
+      ),
+    },
     {
       key: "claimCode",
       label: "Claim",
@@ -656,7 +809,19 @@ export default function Refund() {
     {
       key: "status",
       label: "Status",
-      render: (r) => <RefundStatusBadge status={r.status} statusLabel={r.statusLabel} />,
+      // Status pill doubles as the workflow button: Approve → Pay Refund.
+      render: (r) => (
+        <StatusStepButton
+          label={r.statusLabel || r.status}
+          tone={refundTone(r.status)}
+          stepLabel={r.canDecide ? "Approve" : r.canPay ? "Pay Refund" : null}
+          onClick={() => {
+            setActionError("");
+            if (r.canDecide) setApproveTarget(r);
+            else setPayTarget(r);
+          }}
+        />
+      ),
     },
     {
       key: "actions",
@@ -665,22 +830,14 @@ export default function Refund() {
       render: (r) => (
         <div className="flex items-center justify-end gap-1.5">
           {r.canDecide && (
-            <>
-              <button
-                onClick={() => setApproveTarget(r)}
-                className="flex h-8 items-center gap-1 rounded-lg bg-emerald-400/10 px-2.5 text-[12px] font-medium text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
-              >
-                <Check size={13} />
-                Approve
-              </button>
-              <button
-                onClick={() => setRejectTarget(r)}
-                className="flex h-8 items-center gap-1 rounded-lg bg-red-400/10 px-2.5 text-[12px] font-medium text-red-600 transition-colors hover:bg-red-400/20 dark:text-red-400"
-              >
-                <Ban size={13} />
-                Reject
-              </button>
-            </>
+            <button
+              onClick={() => setRejectTarget(r)}
+              aria-label="Reject refund"
+              title="Reject"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
+            >
+              <Ban size={15} />
+            </button>
           )}
           <button
             onClick={() => navigate(`/refund/${r.id}`)}
@@ -718,64 +875,51 @@ export default function Refund() {
           </button>
         </div>
 
-        {/* Stat cards */}
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard icon={Wallet} label="All Requests" amount={stats.all.amount} sub={`${stats.all.count} refunds`} />
-          <StatCard
-            icon={Clock3}
-            label="Pending"
-            amount={stats.pending.amount}
-            sub={`${stats.pending.count} refunds`}
-            tone="amber"
-          />
-          <StatCard
-            icon={CheckCircle2}
-            label="Approved"
-            amount={stats.approved.amount}
-            sub={`${stats.approved.count} refunds`}
-            tone="emerald"
-          />
-          <StatCard
-            icon={XCircle}
-            label="Rejected"
-            amount={stats.rejected.amount}
-            sub={`${stats.rejected.count} refunds`}
-            tone="red"
+        {/* KPI cards */}
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard icon={Wallet} label="Total Requested" value={inr(kpis.requested)} trend={kpis.requestedTrend} invert />
+          <KpiCard icon={RotateCcw} label="Refund Requests" value={kpis.count.toLocaleString("en-IN")} trend={kpis.countTrend} invert />
+          <KpiCard icon={CheckCircle2} label="Approved Amount" value={inr(kpis.approvedAmount)} trend={kpis.approvedTrend} invert />
+          <KpiCard
+            icon={Percent}
+            label="Approval Rate"
+            value={`${kpis.approvalRate.toFixed(1)}%`}
+            trend={kpis.approvalRateTrend}
+            trendSuffix=" pts"
           />
         </div>
 
-        {/* Tabs */}
-        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl bg-white p-1.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-          {TABS.map((t) => {
-            const count = stats[t.key === "all" ? "all" : t.key]?.count;
-            const active = activeTab === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => {
-                  setActiveTab(t.key);
-                  setPage(1);
-                }}
-                className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors ${
-                  active
-                    ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                }`}
-              >
-                {t.label}
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold ${
-                    active
-                      ? "bg-neutral-950/20 text-neutral-950"
-                      : "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+        {/* Refunds per day + reason mix */}
+        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <DailyBarsCard
+            className="lg:col-span-2"
+            title="Refund Overview"
+            subtitle="Requested refund amount per day"
+            icon={BarChart3}
+            rows={refunds}
+            getValue={getRequestedAmount}
+            countLabel="refunds"
+            emptyText="No refund requests in this period."
+            gradientId="refundDailyBar"
+          />
+          <MixCard
+            title="Top refund reasons"
+            icon={ListChecks}
+            total={refunds.length}
+            totalLabel="refunds"
+            items={reasonBreakdown}
+            emptyText="No refunds yet."
+          />
         </div>
+
+        <PillTabs
+          tabs={TABS.map((t) => ({ ...t, count: stats[t.key]?.count }))}
+          active={activeTab}
+          onChange={(key) => {
+            setActiveTab(key);
+            setPage(1);
+          }}
+        />
 
         {/* Toolbar — search, date range and export in one wrapping row,
             matching Settlement/Transaction's filter layout. */}
@@ -831,7 +975,28 @@ export default function Refund() {
             Failed to load refunds: {loadError}
           </div>
         ) : (
+          <>
+          <BulkSelectBar
+            groups={SELECT_GROUPS.map((g) => ({
+              key: g.key,
+              label: g.label,
+              count: filtered.filter(g.match).length,
+              onSelect: () => setSelectedIds(new Set(filtered.filter(g.match).map((r) => r.id))),
+            }))}
+            selectedCount={selectedIds.size}
+            selectedTotal={inr(selectedRows.reduce((sum, r) => sum + (Number(r.requestedAmount) || 0), 0))}
+            actions={Object.entries(BULK).map(([key, b]) => ({
+              key,
+              label: b.label,
+              icon: b.icon,
+              tone: b.tone,
+              count: selectedRows.filter(b.eligible).length,
+              onClick: () => setBulkKind(key),
+            }))}
+            onClear={clearSelection}
+          />
           <Table columns={columns} data={pageRows} emptyMessage="No refunds match your filters." />
+          </>
         )}
 
         {/* Pagination */}
@@ -873,38 +1038,6 @@ export default function Refund() {
           </div>
         </div>
 
-        {/* Top Refund Reasons — a single stable place to see what's driving
-            refunds the most, independent of the table's current search/tab
-            filters. */}
-        {reasonBreakdown.length > 0 && (
-          <div className="mt-5 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">
-              <BarChart3 size={14} className="text-amber-500" />
-              Top Refund Reasons
-            </div>
-            <p className="mb-4 text-[12px] text-neutral-500">
-              Which reasons are driving the most refund requests, across all {refunds.length} refunds.
-            </p>
-            <ResponsiveContainer width="100%" height={Math.max(180, reasonBreakdown.length * 42)}>
-              <BarChart data={reasonBreakdown} layout="vertical" margin={{ top: 4, right: 40, left: 4, bottom: 4 }}>
-                <CartesianGrid horizontal={false} stroke="#e1e0d9" strokeDasharray="0" />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-                <YAxis
-                  type="category"
-                  dataKey="reason"
-                  width={150}
-                  tick={{ fontSize: 12, fill: "#9ca3af" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip content={<ReasonTooltip />} cursor={{ fill: "rgba(251, 191, 36, 0.08)" }} />
-                <Bar dataKey="count" fill={REASON_BAR_COLOR} radius={[0, 4, 4, 0]} maxBarSize={22}>
-                  <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: "#71717a" }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
       </div>
 
       {approveTarget && (
@@ -915,6 +1048,33 @@ export default function Refund() {
             setActionError("");
           }}
           onSubmit={handleApprove}
+          submitting={actionSubmitting}
+          error={actionError}
+        />
+      )}
+      {bulkKind && (
+        <BulkActionModal
+          title={BULK[bulkKind].title}
+          actionLabel={BULK[bulkKind].label}
+          input={BULK[bulkKind].input}
+          templateName={`refunds-${bulkKind}`}
+          rows={bulkRows}
+          getRef={(r) => r.claimCode !== "—" ? r.claimCode : r.id}
+          getAmount={(r) => r.approvedAmount ?? r.requestedAmount}
+          getSubtitle={(r) => r.reason}
+          onRun={runBulkOne}
+          onClose={closeBulk}
+        />
+      )}
+      {payTarget && (
+        <PayRefundModal
+          refund={payTarget}
+          onClose={() => {
+            if (actionSubmitting) return;
+            setPayTarget(null);
+            setActionError("");
+          }}
+          onSubmit={handlePay}
           submitting={actionSubmitting}
           error={actionError}
         />

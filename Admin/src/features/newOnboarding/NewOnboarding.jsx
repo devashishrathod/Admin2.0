@@ -1,323 +1,201 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Search, Loader2 } from "lucide-react";
-import { getBrandVerifications, reviewBrandVerification } from "./services/NewOnboardingApi";
-import BrandCard from "./BrandCard";
-import VerificationDetails from "./VerificationDetails";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Search, Loader2, Plus, AlertTriangle, Phone, CalendarDays, ChevronRight } from "lucide-react";
+import { useBrands } from "../brand/BrandContext";
+import { BrandAvatar, RejectionBadge } from "../brand/BrandShared";
 
 /* -------------------------------------------------------------------------
- * Maps one API brand-verification record into the flat shape this page's
- * UI uses. `derivedStatus` is computed from the confirmed boolean flags
- * (isAdminApproved/isRejected/isRevoked) rather than the raw `status`
- * enum, since only "MANUAL_REVIEW" has been confirmed as a possible value
- * for that field so far.
+ * New Onboarding — brands that aren't live yet and aren't waiting for
+ * approval either:
+ *   - Onboarding: status PENDING and vendor.isOnBoardingCompleted false
+ *                 (vendor hasn't finished onboarding, not approved yet)
+ *   - Rejected:   rejected by an admin
+ * Pending-approval brands are on Brand Waiting, approved ones on Live Brands.
+ * Also the entry point for adding a brand from the admin panel.
  * ---------------------------------------------------------------------- */
-function deriveStatus(raw) {
-  if (raw.isRevoked) return "REVOKED";
-  if (raw.isRejected) return "REJECTED";
-  if (raw.isAdminApproved || raw.status === "APPROVED") return "APPROVED";
-  return raw.status || "PENDING";
-}
 
-function mapVerification(raw) {
-  const brand = raw.brand || {};
-  const vendor = raw.vendor || {};
-  return {
-    id: raw._id,
-    brandId: raw.brandId,
-    attemptNumber: raw.attemptNumber,
-    score: raw.score ?? 0,
-    status: raw.status,
-    derivedStatus: deriveStatus(raw),
-    flags: raw.flags || {},
-    nameMatch: raw.nameMatch || {},
-    bankNameMatch: raw.bankNameMatch || {},
-    entityMatch: raw.entityMatch || {},
-    duplicateDetails: raw.duplicateDetails || {},
-    remarks: Array.isArray(raw.remarks) ? raw.remarks : [],
-    verifiedAt: raw.verifiedAt,
-    verifiedBy: raw.verifiedBy,
-    rejectedAt: raw.rejectedAt,
-    rejectedBy: raw.rejectedBy,
-    rejectionReason: raw.rejectionReason,
-    reviewedAt: raw.reviewedAt,
-    reviewedByAdminId: raw.reviewedByAdminId,
-    adminApprovedAt: raw.adminApprovedAt,
-    revokedAt: raw.revokedAt,
-    revokedBy: raw.revokedBy,
-    revokeReason: raw.revokeReason,
-    isReviewed: Boolean(raw.isReviewed),
-    isAdminApproved: Boolean(raw.isAdminApproved),
-    isRejected: Boolean(raw.isRejected),
-    isRevoked: Boolean(raw.isRevoked),
-    isSuperseded: Boolean(raw.isSuperseded),
-    createdAt: raw.createdAt,
-    updatedAt: raw.updatedAt,
-    rejectionCount: raw.rejectionCount ?? 0,
-    revocationCount: raw.revocationCount ?? 0,
-    submissionCount: raw.submissionCount ?? 0,
-    reviewedByAdmin: raw.reviewedByAdmin || null,
-    verifiedByAdmin: raw.verifiedByAdmin || null,
-    rejectedByAdmin: raw.rejectedByAdmin || null,
-    revokedByAdmin: raw.revokedByAdmin || null,
-    brand: {
-      id: brand._id,
-      brandName: brand.brandName || "Untitled Brand",
-      legalBusinessName: brand.legalBusinessName || "",
-      uniqueId: brand.uniqueId || "",
-      merchantId: brand.merchantId || "",
-      logo: brand.logo || "",
-      status: brand.status || "",
-      isApproved: Boolean(brand.isApproved),
-      isReviewed: Boolean(brand.isReviewed),
-      isRejected: Boolean(brand.isRejected),
-      email: brand.email || "",
-      mobile: brand.mobile || "",
-      whatsappNumber: brand.whatsappNumber || "",
-      businessEntityType: brand.businessEntityType || "",
-      businessRegistrationStatus: brand.businessRegistrationStatus || "",
-      verificationAttemptCount: brand.verificationAttemptCount ?? 0,
-    },
-    // Real vendor user record — this platform logs in via WhatsApp OTP, so
-    // there's no name/email/mobile field to map; uniqueId + whatsappNumber
-    // are the real identifiers.
-    vendor: {
-      id: vendor._id,
-      uniqueId: vendor.uniqueId || "",
-      role: vendor.role || "",
-      loginType: vendor.loginType || "",
-      whatsappNumber: vendor.whatsappNumber || "",
-      referralCode: vendor.referralCode || "",
-      walletBalance: vendor.walletBalance ?? 0,
-      tCoinsBalance: vendor.tCoinsBalance ?? 0,
-      isMobileVerified: Boolean(vendor.isMobileVerified),
-      isEmailVerified: Boolean(vendor.isEmailVerified),
-      isOnBoardingCompleted: Boolean(vendor.isOnBoardingCompleted),
-      currentScreen: vendor.currentScreen || "",
-    },
-  };
-}
+// Labels for the list payload's `onboarding` checklist (has* flags).
+const ONBOARDING_STEPS = [
+  ["hasPan", "PAN"],
+  ["hasGst", "GST"],
+  ["hasBank", "Bank"],
+  ["hasLocation", "Location"],
+  ["hasWorkHours", "Work hours"],
+  ["hasFirstOutlet", "First outlet"],
+  ["hasSystemVerification", "Verification"],
+  ["hasAcceptedPartnershipDeed", "Partnership deed"],
+];
 
-// "Pending" covers both possible not-yet-decided values the backend can
-// send (`derivedStatus` falls back to "PENDING" when `raw.status` itself is
-// empty, but returns "MANUAL_REVIEW" verbatim when that's the raw value) —
-// so the "Pending" tab below matches either.
-const STATUS_TABS = ["All", "Pending", "REJECTED", "REVOKED"];
-const STATUS_TAB_LABELS = {
-  All: "All",
-  Pending: "Pending",
-  // APPROVED: "Approved",
-  REJECTED: "Rejected",
-  REVOKED: "Revoked",
+const doneStepCount = (b) => ONBOARDING_STEPS.filter(([key]) => b.onboardingFlags?.[key]).length;
+
+// "PAN_VERIFICATION" -> "Pan verification"
+const formatScreen = (screen) => {
+  const text = screen.replace(/_/g, " ").toLowerCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
 };
-const PENDING_STATUSES = ["MANUAL_REVIEW", "PENDING"];
 
-/* -------------------------------------------------------------------------
- * Main page — list (grid) + navigation into the verification details page.
- * ---------------------------------------------------------------------- */
+const isRejected = (b) => b.status === "Rejected";
+// Not approved yet and the vendor hasn't finished onboarding. Approved
+// brands are Live even when vendor.isOnBoardingCompleted is still false.
+const isIncomplete = (b) => b.isOnboarding === false && b.status === "Pending";
+
+const TABS = [
+  { key: "All", label: "All", match: (b) => isIncomplete(b) || isRejected(b) },
+  { key: "Onboarding", label: "Onboarding", match: isIncomplete },
+  { key: "Rejected", label: "Rejected", match: isRejected },
+];
+
+function OnboardingCard({ brand, onOpen }) {
+  const rejected = isRejected(brand);
+  const done = doneStepCount(brand);
+  return (
+    <button
+      onClick={() => onOpen(brand)}
+      className="group flex flex-col rounded-2xl border border-neutral-200/80 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(15,23,42,0.10)] dark:border-neutral-800 dark:bg-neutral-900 dark:hover:shadow-black/30"
+    >
+      <div className="flex items-center gap-3">
+        <BrandAvatar brand={brand} />
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{brand.brandName}</h3>
+          <p className="truncate text-[12px] text-neutral-500">
+            {[brand.category !== "—" && brand.category, brand.location !== "—" && brand.location].filter(Boolean).join(" · ") || brand.brandId}
+          </p>
+        </div>
+        <ChevronRight size={16} className="shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <span
+          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+            rejected
+              ? "bg-red-500/10 text-red-600 dark:text-red-400"
+              : "bg-amber-400/10 text-amber-600 dark:text-amber-400"
+          }`}
+        >
+          {rejected ? "Rejected" : "Onboarding incomplete"}
+        </span>
+        {rejected && <RejectionBadge brand={brand} />}
+      </div>
+
+      {!rejected && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between gap-2 text-[11.5px] text-neutral-500">
+            <span className="truncate">
+              {brand.onboardingScreen ? (
+                <>Now on: <span className="font-medium text-neutral-700 dark:text-neutral-300">{formatScreen(brand.onboardingScreen)}</span></>
+              ) : (
+                "Not started"
+              )}
+            </span>
+            <span className="shrink-0 tabular-nums">{done}/{ONBOARDING_STEPS.length} steps</span>
+          </div>
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+            <div className="h-full rounded-full bg-amber-400" style={{ width: `${(done / ONBOARDING_STEPS.length) * 100}%` }} />
+          </div>
+        </div>
+      )}
+
+      <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-4 text-[12px] text-neutral-500">
+        <span className="flex items-center gap-1.5"><Phone size={13} /> {brand.contactPhone}</span>
+        {brand.joinedDate && (
+          <span className="flex items-center gap-1.5">
+            <CalendarDays size={13} /> {new Date(brand.joinedDate).toLocaleDateString("en-IN")}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
 
 export default function NewOnboarding() {
-  const [verifications, setVerifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
+  const navigate = useNavigate();
+  const { allBrands: everyBrand, loading, error, fetchBrands } = useBrands();
+  // Dummy brands live only on the Dummy Brands page.
+  const allBrands = everyBrand.filter((b) => !b.isDummy);
   const [search, setSearch] = useState("");
-  const [statusTab, setStatusTab] = useState("All");
-  const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const [tab, setTab] = useState("All");
 
-  const [selectedId, setSelectedId] = useState(null);
+  const query = search.trim().toLowerCase();
+  const matchesSearch = (b) =>
+    !query || [b.brandName, b.brandId, b.ownerName].some((v) => String(v ?? "").toLowerCase().includes(query));
 
-  // Which single review action is currently in flight — "approve" | "reject" |
-  // "reviewed" | "force-on" | "force-off" | "revoke" | null. Tracking this
-  // per-action (instead of one shared busy boolean) means clicking the
-  // Reviewed toggle only spins the Reviewed toggle, not the Approve button.
-  const [busyAction, setBusyAction] = useState(null);
-  const [actionError, setActionError] = useState("");
-
-  const fetchVerifications = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getBrandVerifications({ page, limit, search });
-      const payload = res?.data ?? {};
-      const rows = (payload.data ?? []).map(mapVerification);
-      const rowTotal = payload.total ?? payload.totalCount ?? payload.count;
-      setVerifications(rows);
-      setTotal(rowTotal ?? rows.length);
-      // Some list endpoints in this API don't echo `totalPages` even
-      // though `total` is present — fall back to computing it so
-      // pagination doesn't silently disappear when that happens.
-      setTotalPages(
-        payload.totalPages ?? payload.pages ?? (rowTotal ? Math.max(1, Math.ceil(rowTotal / limit)) : 1)
-      );
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, search]);
-
-  // Debounce search so we don't hit the API on every keystroke
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1);
-      fetchVerifications();
-    }, 400);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
-
-  // Refetch on page change (search effect already handles search changes)
-  useEffect(() => {
-    fetchVerifications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
-
-  // Status filtering is client-side (within the current page) since the
-  // list endpoint's confirmed query params are only page/limit/search.
-  const filtered = (statusTab === "All" ? verifications : statusTab === "Pending" ? verifications.filter((v) => PENDING_STATUSES.includes(v.derivedStatus)) : verifications.filter((v) => v.derivedStatus === statusTab)).filter((v) => v.derivedStatus !== "APPROVED");
-
-  const selected = verifications.find((v) => v.id === selectedId) || null;
-
-  /* ---- Review workflow (Approve / Reject / Reviewed / Force / Revoke) --- */
-  const handleReview = async (verification, payload, key) => {
-    setActionError("");
-    setBusyAction(key);
-    try {
-      const brandId = verification.brandId || verification.brand?.id;
-      await reviewBrandVerification(brandId, payload);
-      await fetchVerifications();
-    } catch (err) {
-      setActionError(err.message);
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleApprove = (verification, note) => handleReview(verification, { action: "APPROVED", note }, "approve");
-  const handleReject = (verification, rejectionReason) =>
-    handleReview(verification, { action: "REJECTED", rejectionReason }, "reject");
-  // Case D — plain toggle, no explicit direction (server flips isReviewed).
-  const handleMarkReviewed = (verification) => handleReview(verification, { action: "REVIEWED" }, "reviewed");
-  // Case D2 — force isReviewed to an explicit true/false.
-  const handleForceReviewed = (verification, isReviewed) =>
-    handleReview(verification, { action: "REVIEWED", isReviewed }, isReviewed ? "force-on" : "force-off");
-  const handleRevoke = (verification, revokeReason) =>
-    handleReview(verification, { action: "REVOKED", revokeReason }, "revoke");
-
-  if (selected) {
-    return (
-      <VerificationDetails
-        verification={selected}
-        onBack={() => setSelectedId(null)}
-        onApprove={(note) => handleApprove(selected, note)}
-        onReject={(reason) => handleReject(selected, reason)}
-        onMarkReviewed={() => handleMarkReviewed(selected)}
-        onForceReviewed={(isReviewed) => handleForceReviewed(selected, isReviewed)}
-        onRevoke={(reason) => handleRevoke(selected, reason)}
-        busyAction={busyAction}
-        actionError={actionError}
-      />
-    );
-  }
+  const activeTab = TABS.find((t) => t.key === tab);
+  const filtered = allBrands.filter((b) => activeTab.match(b) && matchesSearch(b));
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div className="w-full">
-        {/* Header */}
-        <div className="mb-6">
+      {/* Header */}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-            Brand Onboarding Verifications
+            New Onboarding
           </h1>
           <p className="mt-1 text-[13px] text-neutral-500">
-            Automated verification attempts from vendor brand onboarding — review scores, checks and
-            open a card for the full breakdown. {total} total.
+            Brands still completing onboarding, and brands that were rejected.
           </p>
         </div>
+        <button
+          onClick={() => navigate("/brand/onboard")}
+          className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 py-2 text-[12.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
+        >
+          <Plus size={14} />
+          Add Brand
+        </button>
+      </div>
 
-        {/* Search + status tabs */}
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs">
-            <Search size={16} className="shrink-0 text-neutral-500" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search brand name..."
-              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setStatusTab(tab)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${statusTab === tab
-                    ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-              >
-                {STATUS_TAB_LABELS[tab] || tab}
-              </button>
-            ))}
-          </div>
+      {/* Search + tabs */}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs sm:flex-1">
+          <Search size={16} className="shrink-0 text-neutral-500" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search brand name..."
+            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+          />
         </div>
 
-        {/* Load state */}
-        {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading verifications…
-          </div>
-        )}
-
-        {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load verifications: {loadError}
-          </div>
-        )}
-
-        {!loading && !loadError && (
-          <>
-            {filtered.length === 0 ? (
-              <div className="rounded-2xl bg-white px-4 py-10 text-center text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                No verifications found.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filtered.map((v) => (
-                  <BrandCard key={v.id} verification={v} onOpen={(row) => setSelectedId(row.id)} />
-                ))}
-              </div>
-            )}
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Prev
-                </button>
-                <span className="text-[12.5px] text-neutral-500">
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </>
-        )}
+        <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                tab === t.key
+                  ? "bg-emerald-400 text-neutral-950"
+                  : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
+              }`}
+            >
+              {t.label}
+              <span className="text-[10.5px] opacity-70">{allBrands.filter(t.match).length}</span>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
+          <Loader2 size={16} className="animate-spin" />
+          Loading brands…
+        </div>
+      ) : error ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-red-500/[0.06] px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
+          <span className="flex items-center gap-2"><AlertTriangle size={14} /> {error}</span>
+          <button onClick={() => fetchBrands()} className="font-semibold underline underline-offset-2">
+            Retry
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl bg-white px-4 py-10 text-center text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          {query ? "No brands match your search." : "No brands in onboarding right now."}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((b) => (
+            <OnboardingCard key={b.id} brand={b} onOpen={(brand) => navigate(`/brands/${brand.id}`)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

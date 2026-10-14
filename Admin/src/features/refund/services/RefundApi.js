@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{base_url}}
@@ -8,6 +9,9 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const api = axios.create({
     baseURL: BASE_URL,
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as TransactionApi.js / VoucherApi.js)
 api.interceptors.request.use(async (config) => {
@@ -36,11 +40,14 @@ function handleError(error) {
 
 // ── Get Refund Worklist ────────────────────────────────────────────
 // GET {{base_url}}/refunds?open=&page=&limit=&outletId=
-export async function getRefundWorklist({ open, page = 1, limit = 20, outletId } = {}) {
+// `brandId` is used by a brand's detail page — not confirmed that the
+// backend filters on it, so callers also filter rows by `brandId` themselves.
+export async function getRefundWorklist({ open, page = 1, limit = 20, outletId, brandId } = {}) {
     try {
         const params = { page, limit };
         if (open !== undefined) params.open = open;
         if (outletId) params.outletId = outletId;
+        if (brandId) params.brandId = brandId;
         const { data } = await api.get('/refunds', { params });
         return data;
     } catch (error) {

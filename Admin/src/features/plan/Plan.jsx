@@ -590,19 +590,38 @@ function inferFeatureKind(value) {
   return FEATURE_KINDS.DISPLAY_TEXT;
 }
 
-function FeatureRow({ label, badge, children }) {
+// A feature master default as short text — "4 tracks", "Yes", "Unlimited".
+function defaultValueText(value, unit) {
+  if (value == null) return "";
+  if (value.number != null) return `${value.number}${unit ? ` ${unit}` : ""}`;
+  if (value.text) return value.text;
+  if (value.isUnlimited) return "Unlimited";
+  if (value.limit != null) return String(value.limit);
+  if (value.isEnabled != null) return value.isEnabled ? "Yes" : "No";
+  return "";
+}
+
+function FeatureRow({ label, badge, defaultText, plansWithValue, children }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
       <div className="min-w-0">
         <p className="truncate text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</p>
-        <p className="text-[10.5px] text-neutral-400">{badge}</p>
+        <p className="text-[10.5px] text-neutral-400">
+          {badge}
+          {defaultText && <span className="font-medium text-neutral-500 dark:text-neutral-400"> · Default: {defaultText}</span>}
+        </p>
+        {plansWithValue != null && (
+          <p className="text-[10.5px] text-neutral-400">
+            Used on {plansWithValue} plan{plansWithValue === 1 ? "" : "s"}
+          </p>
+        )}
       </div>
       <div className="w-44 shrink-0">{children}</div>
     </div>
   );
 }
 
-function PlanFeaturesEditor({ entitlements, displayRows, displayValues, labels, onEntitlementsChange, onDisplayChange }) {
+function PlanFeaturesEditor({ entitlements, displayRows, displayValues, labels, featureMeta, onEntitlementsChange, onDisplayChange }) {
   return (
     <div>
       <p className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
@@ -613,7 +632,13 @@ function PlanFeaturesEditor({ entitlements, displayRows, displayValues, labels, 
         {ENTITLEMENT_KEYS.map((key) => {
           const isLimit = LIMIT_KEYS.includes(key);
           return (
-            <FeatureRow key={key} label={labels[key] || ENTITLEMENT_LABELS[key]} badge={isLimit ? "Limit · enforced" : "Flag · enforced"}>
+            <FeatureRow
+              key={key}
+              label={labels[key] || ENTITLEMENT_LABELS[key]}
+              badge={isLimit ? "Limit · enforced" : "Flag · enforced"}
+              defaultText={defaultValueText(featureMeta[key]?.defaultValue, featureMeta[key]?.unit)}
+              plansWithValue={featureMeta[key]?.plansWithValue}
+            >
               <FeatureValueInput
                 kind={isLimit ? FEATURE_KINDS.LIMIT : FEATURE_KINDS.FLAG}
                 value={entitlements[key]}
@@ -623,7 +648,13 @@ function PlanFeaturesEditor({ entitlements, displayRows, displayValues, labels, 
           );
         })}
         {displayRows.map((row) => (
-          <FeatureRow key={row.key} label={row.label} badge={row.group ? `Display · ${row.group}` : "Display"}>
+          <FeatureRow
+            key={row.key}
+            label={row.label}
+            badge={row.group ? `Display · ${row.group}` : "Display"}
+            defaultText={defaultValueText(row.defaultValue, row.unit)}
+            plansWithValue={featureMeta[row.key]?.plansWithValue}
+          >
             <FeatureValueInput
               kind={row.kind}
               unit={row.unit}
@@ -705,7 +736,7 @@ function validateDraft(draft, isNew) {
   return "";
 }
 
-function PlanFormModal({ draft, isNew, saving, entitlementLabels, displayRows, onChange, onCancel, onSave }) {
+function PlanFormModal({ draft, isNew, saving, entitlementLabels, featureMeta, displayRows, onChange, onCancel, onSave }) {
   const [imageError, setImageError] = useState("");
   const setField = (field, value) => onChange({ ...draft, [field]: value });
   const problem = validateDraft(draft, isNew);
@@ -941,6 +972,7 @@ function PlanFormModal({ draft, isNew, saving, entitlementLabels, displayRows, o
             displayRows={displayRows}
             displayValues={draft.displayValues}
             labels={entitlementLabels}
+            featureMeta={featureMeta}
             onEntitlementsChange={(next) => setField("entitlements", next)}
             onDisplayChange={(next) => setField("displayValues", next)}
           />
@@ -1109,21 +1141,34 @@ export default function Plan() {
     return out;
   }, [features]);
 
-  // Display (non-system) features the plan being edited has a value for —
-  // label / kind / unit from the feature master, else read off the value.
+  // Display (non-system) features shown in the plan form: every active one
+  // from the feature master, plus any the plan being edited already has a
+  // value for — label / kind / unit from the master, else read off the value.
   const displayRows = useMemo(() => {
-    const rows = (draftOrigin?.featureValues ?? [])
-      .filter((fv) => !ENTITLEMENT_KEYS.includes(fv.key))
-      .map((fv) => {
+    const rows = features
+      .filter((f) => !f.isSystem && !ENTITLEMENT_KEYS.includes(f.key) && f.isActive !== false && !f.isRetired)
+      .map((f) => ({
+        key: f.key,
+        label: f.label ?? f.key,
+        kind: f.kind,
+        unit: f.unit ?? "",
+        group: f.group ?? "",
+        sortOrder: f.sortOrder ?? Infinity,
+        defaultValue: f.defaultValue ?? null,
+      }));
+    (draftOrigin?.featureValues ?? [])
+      .filter((fv) => !ENTITLEMENT_KEYS.includes(fv.key) && !rows.some((r) => r.key === fv.key))
+      .forEach((fv) => {
         const master = features.find((f) => f.key === fv.key);
-        return {
+        rows.push({
           key: fv.key,
           label: master?.label ?? fv.label ?? fv.key,
           kind: master?.kind ?? inferFeatureKind(fv.value),
           unit: master?.unit ?? "",
           group: master?.group ?? "",
           sortOrder: master?.sortOrder ?? Infinity,
-        };
+          defaultValue: master?.defaultValue ?? null,
+        });
       });
     return rows.sort((a, b) => a.sortOrder - b.sortOrder);
   }, [draftOrigin, features]);
@@ -1140,7 +1185,19 @@ export default function Plan() {
   );
 
   const openAdd = () => {
-    setDraft(emptyPlanDraft());
+    // A new plan starts from each active feature's default value.
+    const fresh = emptyPlanDraft();
+    features.forEach((f) => {
+      if (f.defaultValue == null || f.isActive === false || f.isRetired) return;
+      if (ENTITLEMENT_KEYS.includes(f.key)) {
+        fresh.entitlements[f.key] = LIMIT_KEYS.includes(f.key)
+          ? { isUnlimited: Boolean(f.defaultValue.isUnlimited), limit: f.defaultValue.limit ?? 0 }
+          : { isEnabled: Boolean(f.defaultValue.isEnabled) };
+      } else {
+        fresh.displayValues[f.key] = f.defaultValue;
+      }
+    });
+    setDraft(fresh);
     setDraftOrigin(null);
     setIsNew(true);
     setSaveError("");
@@ -1386,7 +1443,16 @@ export default function Plan() {
         <Tabs tab={tab} onChange={setTab} />
 
 
-        {tab === "features" && <FeatureMaster onChanged={loadFeatures} />}
+        {/* Reload plans too — adding/deleting a feature changes the plans'
+            feature values, which the plan cards show. */}
+        {tab === "features" && (
+          <FeatureMaster
+            onChanged={() => {
+              loadFeatures();
+              loadPlans();
+            }}
+          />
+        )}
         {tab === "compare" && <PlanCompare />}
 
         {tab === "plans" && (
@@ -1532,6 +1598,7 @@ export default function Plan() {
           isNew={isNew}
           saving={saving}
           entitlementLabels={entitlementLabels}
+          featureMeta={featureMeta}
           displayRows={displayRows}
           onChange={setDraft}
           onCancel={closeModal}

@@ -28,6 +28,7 @@ function formatBusinessEntityType(type) {
     PRIVATE_LIMITED: 'Private Limited Company',
     PARTNERSHIP: 'Partnership',
     SOLE_PROPRIETORSHIP: 'Sole Proprietorship',
+    PROPRIETORSHIP: 'Sole Proprietorship',
     LLP: 'Limited Liability Partnership',
   };
   return map[type] || type || '—';
@@ -245,11 +246,19 @@ export function mapBrandListItem(raw) {
   return {
     id: raw._id,
     brandId: raw.uniqueId,
-    brandName: raw.brandName,
+    // Brand-new signups have no brandName until the vendor fills it in.
+    brandName: raw.brandName || 'Untitled brand',
     tagline: raw.description || '',
     emoji: raw.brandName?.charAt(0)?.toUpperCase() || '?',
     logo: raw.logo || null,
+    coverImage: raw.coverImage || null,
     followers: raw.followersCount ?? 0,
+    // Customers who chose to avoid/hide this brand.
+    avoidanceCount: raw.avoidanceCount ?? 0,
+    // Total outlets across sub-brands + franchises (separate from the
+    // per-type plan usage in `usage`).
+    outletCount: raw.outletCount ?? null,
+    categoryImage: raw.category?.image || raw.subCategory?.image || null,
     // list payload doesn't include a resolved address yet — fill in once
     // the backend adds it, or fetch brand details for the exact location.
     location: raw?.location?.city
@@ -261,6 +270,21 @@ export function mapBrandListItem(raw) {
     active: status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
+    // `false` = the vendor hasn't finished onboarding yet (New Onboarding
+    // page). The list payload carries this as vendor.isOnBoardingCompleted;
+    // left undefined when the vendor block is missing.
+    isOnboarding: raw.isOnboarding ?? raw.vendor?.isOnBoardingCompleted,
+    // Per-step checklist (hasPan, hasGst, hasBank, hasLocation, ...) —
+    // New Onboarding shows which steps are still missing.
+    onboardingFlags: raw.onboarding || {},
+    // Screen the vendor is on in the onboarding flow, e.g. "PAN_VERIFICATION".
+    onboardingScreen: raw.vendor?.currentScreen || '',
+    // Extra list fields for the Live Brand table.
+    subCategory: raw.subCategory?.name || '',
+    // Plan usage: { subBrands, franchises, vouchers, showcase } → { used, limit, isUnlimited }.
+    usage: raw.usage || null,
+    planEndDate: raw.subscription?.endDate || null,
+    planStatus: raw.subscription?.status || '',
 
     subBrandCount: `${outletsUsed}/${outletsLimit}`,
     outlets: [], // not returned by the list endpoint — see mapBrandDetail
@@ -285,6 +309,12 @@ export function mapBrandListItem(raw) {
       : 0,
 
     ownerName: raw.legalBusinessName || raw.brandName,
+    // The actual person behind the vendor account (list payload's `vendor`).
+    vendorName: raw.vendor?.name || null,
+    // Raw enum keys (e.g. "PRIVATE_LIMITED", "REGISTERED") for the card.
+    entityTypeKey: raw.businessEntityType || null,
+    registrationKey: raw.businessRegistrationStatus || null,
+    planIsFree: Boolean(raw.subscription?.isFreeGrant),
     // the list endpoint only exposes onboarding flags, not the actual
     // GST/PAN numbers — fetch brand details for those.
     gstNumber: '—',
@@ -313,6 +343,10 @@ export function mapBrandListItem(raw) {
 
     isTopBrand: raw.isTopBrand ?? false,
     topOrder: raw.topOrder ?? 0,
+    // Test/demo brand — kept off Live Brands, shown only on Dummy Brands.
+    isDummy: Boolean(raw.isDummy),
+    // Which seed batch a dummy brand came from, e.g. "CHENNAI-DUMMY-1".
+    dummyBatch: raw.dummyBatch || null,
   };
 }
 
@@ -328,10 +362,13 @@ export function mapBrandDetail(raw) {
   return {
     id: raw._id,
     brandId: raw.uniqueId,
-    brandName: raw.brandName,
+    // Brand-new signups have no brandName until the vendor fills it in.
+    brandName: raw.brandName || 'Untitled brand',
     tagline: raw.description || '',
     emoji: raw.brandName?.charAt(0)?.toUpperCase() || '?',
     logo: raw.logo || null,
+    // null (not a default) when missing, so mergeKnown keeps the list's value.
+    coverImage: raw.coverImage || null,
     followers: raw.user?.followerCount ?? 0,
     location: outlet?.location?.city
       ? `${outlet.location.city}, ${outlet.location.state || ''}`.replace(/, $/, '')
@@ -446,5 +483,8 @@ export function mapBrandDetail(raw) {
 
     isTopBrand: raw.isTopBrand ?? false,
     topOrder: raw.topOrder ?? 0,
+    // null (not false) when missing, so mergeKnown keeps the list's value.
+    isDummy: raw.isDummy ?? null,
+    dummyBatch: raw.dummyBatch || null,
   };
 }

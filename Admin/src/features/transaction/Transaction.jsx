@@ -5,18 +5,21 @@ import {
   Filter,
   Download,
   RefreshCw,
-  CalendarClock,
   CheckCircle2,
   Clock3,
   XCircle,
   Wallet,
   Loader2,
   AlertTriangle,
-  ScanLine,
-  ArrowRight,
   Eye,
+  ArrowLeftRight,
+  Receipt,
+  BarChart3,
+  CreditCard,
 } from "lucide-react";
-import { getVoucherClaimPayments, getVoucherClaimByCode } from "./services/TransactionApi";
+import { getVoucherClaimPayments } from "./services/TransactionApi";
+import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
+import { pctChange, weekOverWeek } from "../../utils/overviewStats";
 import {
   todayStr,
   formatDate,
@@ -205,45 +208,19 @@ export function TxnStatusBadge({ status }) {
   );
 }
 
-function StatCard({ icon: Icon, label, amount, sub, tone = "emerald", live }) {
-  const toneCls = {
-    emerald: "text-emerald-600 dark:text-emerald-400",
-    cyan: "text-cyan-600 dark:text-cyan-400",
-    amber: "text-amber-600 dark:text-amber-400",
-    red: "text-red-600 dark:text-red-400",
-  }[tone];
-  return (
-    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-        <Icon size={15} className={toneCls} />
-        {label}
-        {live && (
-          <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Live
-          </span>
-        )}
-      </div>
-      <div className="mt-3 text-[22px] font-semibold text-neutral-900 dark:text-neutral-50">
-        {inr(amount)}
-      </div>
-      <div className="mt-1 text-[12px] text-neutral-500">{sub}</div>
-    </div>
-  );
-}
-
-
 /* -------------------------------------------------------------------------
  * Tabs config
  * ---------------------------------------------------------------------- */
 
 const TABS = [
-  { key: "all", label: "All Transactions" },
-  { key: "today", label: "Today Transaction" },
-  { key: "pending", label: "Pending Transaction" },
-  { key: "success", label: "Success Transaction" },
-  { key: "failed", label: "Failed Transaction" },
+  { key: "all", label: "All" },
+  { key: "today", label: "Today" },
+  { key: "pending", label: "Pending" },
+  { key: "success", label: "Success" },
+  { key: "failed", label: "Failed" },
 ];
+
+const getTxnAmount = (t) => t.amount;
 
 function matchesTab(row, tab) {
   switch (tab) {
@@ -276,10 +253,6 @@ export default function Transaction() {
   const [dateTo, setDateTo] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const [claimCode, setClaimCode] = useState("");
-  const [verifyLoading, setVerifyLoading] = useState(false);
-  const [verifyError, setVerifyError] = useState("");
-  const [verifyResult, setVerifyResult] = useState(null);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -312,6 +285,39 @@ export default function Transaction() {
       success: { amount: sum(success), count: success.length },
       failed: { amount: sum(failed), count: failed.length },
     };
+  }, [transactions]);
+
+  const kpis = useMemo(() => {
+    const summarize = (rows) => {
+      const success = rows.filter((r) => r.status === "Success");
+      const revenue = success.reduce((s, r) => s + r.amount, 0);
+      return {
+        revenue,
+        count: rows.length,
+        aov: success.length ? revenue / success.length : 0,
+        successRate: rows.length ? (success.length / rows.length) * 100 : 0,
+      };
+    };
+    const all = summarize(transactions);
+    const { cur, prev } = weekOverWeek(transactions, summarize);
+    return {
+      ...all,
+      revenueTrend: pctChange(cur.revenue, prev.revenue),
+      countTrend: pctChange(cur.count, prev.count),
+      aovTrend: pctChange(cur.aov, prev.aov),
+      // Percentage-point difference, not a relative change.
+      successRateTrend: prev.count ? cur.successRate - prev.successRate : cur.count ? null : 0,
+    };
+  }, [transactions]);
+
+  const successfulTxns = useMemo(() => transactions.filter((t) => t.status === "Success"), [transactions]);
+
+  const methodMix = useMemo(() => {
+    const counts = {};
+    transactions.forEach((t) => {
+      counts[t.method] = (counts[t.method] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
   }, [transactions]);
 
   const filtered = useMemo(() => {
@@ -354,34 +360,6 @@ export default function Transaction() {
       { label: "Reference", key: "reference" },
       { label: "Failure Reason", value: (r) => r.failureReason || "" },
     ], filtered);
-  };
-
-  const handleVerifyCode = async (e) => {
-    e.preventDefault();
-    const code = claimCode.trim();
-    if (!code) return;
-    setVerifyLoading(true);
-    setVerifyError("");
-    setVerifyResult(null);
-    try {
-      const res = await getVoucherClaimByCode(code);
-      const raw = res?.data ?? res;
-      const claim = raw?.claim ?? raw;
-      if (!claim) throw new Error("No claim found for this code.");
-      setVerifyResult({
-        claimId: claim._id || raw?.payment?.voucher?.claimId || null,
-        claimCode: claim.claimCode || code,
-        status: claim.status || "—",
-        voucherName: claim.voucherSnapshot?.name || "—",
-        brandName: claim.brandSnapshot?.name || raw?.brand?.brandName || "—",
-        outletId: claim.outletSnapshot?.uniqueId || raw?.outlet?.uniqueId || "—",
-        billAmount: claim.billAmount ?? claim.pricing?.billAmount ?? null,
-      });
-    } catch (err) {
-      setVerifyError(err.message);
-    } finally {
-      setVerifyLoading(false);
-    }
   };
 
   const columns = [
@@ -481,146 +459,51 @@ export default function Transaction() {
           </div>
         </div>
 
-        {/* Verify claim code (counter verification) */}
-        <div className="mb-6 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-          <form onSubmit={handleVerifyCode} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex flex-1 items-center gap-2 rounded-xl border border-neutral-200 px-3.5 py-2.5 dark:border-neutral-800">
-              <ScanLine size={15} className="shrink-0 text-neutral-500" />
-              <input
-                value={claimCode}
-                onChange={(e) => setClaimCode(e.target.value)}
-                placeholder="Verify a claim code (e.g. TD-W46DVM)…"
-                className="w-full bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={verifyLoading || !claimCode.trim()}
-              className="flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {verifyLoading ? <Loader2 size={15} className="animate-spin" /> : <ScanLine size={15} />}
-              Verify
-            </button>
-          </form>
-
-          {verifyError && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-              <AlertTriangle size={14} className="shrink-0" />
-              {verifyError}
-            </div>
-          )}
-
-          {verifyResult && (
-            <div className="mt-3 flex flex-col gap-3 rounded-xl bg-neutral-50 px-4 py-3 dark:bg-neutral-950 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px]">
-                <span className="font-mono font-semibold text-neutral-900 dark:text-neutral-50">
-                  {verifyResult.claimCode}
-                </span>
-                <span className="text-neutral-500">{verifyResult.voucherName}</span>
-                <span className="text-neutral-500">{verifyResult.brandName}</span>
-                <span className="text-neutral-500">Outlet {verifyResult.outletId}</span>
-                {verifyResult.billAmount != null && (
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">
-                    {inr(verifyResult.billAmount)}
-                  </span>
-                )}
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    verifyResult.status === "REDEEMED"
-                      ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : "bg-amber-400/10 text-amber-600 dark:text-amber-400"
-                  }`}
-                >
-                  {verifyResult.status}
-                </span>
-              </div>
-              {verifyResult.claimId && (
-                <button
-                  onClick={() => navigate(`/transaction/${verifyResult.claimId}`)}
-                  className="flex items-center gap-1 self-start text-[12.5px] font-medium text-emerald-600 hover:underline dark:text-emerald-400 sm:self-auto"
-                >
-                  View Full Timeline
-                  <ArrowRight size={13} />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Stat cards */}
-        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <StatCard
-            icon={Wallet}
-            label="Total"
-            amount={stats.total.amount}
-            sub={`${stats.total.count} transactions`}
-          />
-          <StatCard
-            icon={CalendarClock}
-            label="Today"
-            amount={stats.today.amount}
-            sub={`${stats.today.count} transactions`}
-            tone="cyan"
-            live
-          />
-          <StatCard
-            icon={Clock3}
-            label="Pending"
-            amount={stats.pending.amount}
-            sub={`${stats.pending.count} transactions`}
-            tone="amber"
-          />
-          <StatCard
+        {/* KPI cards */}
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard icon={Wallet} label="Total Revenue" value={inr(kpis.revenue)} trend={kpis.revenueTrend} />
+          <KpiCard icon={ArrowLeftRight} label="Transactions" value={kpis.count.toLocaleString("en-IN")} trend={kpis.countTrend} />
+          <KpiCard icon={Receipt} label="Avg. Order Value" value={inr(kpis.aov)} trend={kpis.aovTrend} />
+          <KpiCard
             icon={CheckCircle2}
-            label="Success"
-            amount={stats.success.amount}
-            sub={`${stats.success.count} transactions`}
-            tone="emerald"
-          />
-          <StatCard
-            icon={XCircle}
-            label="Failed"
-            amount={stats.failed.amount}
-            sub={`${stats.failed.count} transactions`}
-            tone="red"
+            label="Success Rate"
+            value={`${kpis.successRate.toFixed(1)}%`}
+            trend={kpis.successRateTrend}
+            trendSuffix=" pts"
           />
         </div>
 
-        {/* Tabs */}
-        <div className="mb-4 flex flex-wrap gap-1.5 rounded-xl bg-white p-1.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-          {TABS.map((t) => {
-            const count =
-              t.key === "all"
-                ? stats.total.count
-                : stats[t.key === "today" ? "today" : t.key]?.count;
-            const active = activeTab === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => {
-                  setActiveTab(t.key);
-                  setPage(1);
-                }}
-                className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors ${
-                  active
-                    ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                }`}
-              >
-                {t.label}
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold ${
-                    active
-                      ? "bg-neutral-950/20 text-neutral-950"
-                      : "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+        {/* Revenue overview + payment method mix */}
+        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <DailyBarsCard
+            className="lg:col-span-2"
+            title="Revenue Overview"
+            subtitle="Successful payments per day"
+            icon={BarChart3}
+            rows={successfulTxns}
+            getValue={getTxnAmount}
+            countLabel="txn"
+            emptyText="No successful payments in this period."
+            gradientId="txnRevenueBar"
+          />
+          <MixCard
+            title="Payment method mix"
+            icon={CreditCard}
+            total={transactions.length}
+            totalLabel="transactions"
+            items={methodMix}
+            emptyText="No transactions yet."
+          />
         </div>
+
+        <PillTabs
+          tabs={TABS.map((t) => ({ ...t, count: t.key === "all" ? stats.total.count : stats[t.key]?.count }))}
+          active={activeTab}
+          onChange={(key) => {
+            setActiveTab(key);
+            setPage(1);
+          }}
+        />
 
         {/* Toolbar — search, method filter, date range and export share one
             wrapping row, matching Settlement/Refund's filter layout. */}

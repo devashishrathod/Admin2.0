@@ -35,6 +35,8 @@ export function StatusBadge({ status, activeLabel = "Active" }) {
  *     e.g. "min-w-48 max-w-64 whitespace-normal" for a long-text column
  *     that should wrap to a couple of lines instead of widening the table.
  *   - render: optional custom cell renderer; falls back to row[key]
+ *   - sticky: pin the column to the right edge while the table scrolls
+ *     sideways (use on the last "Action" column so it's never cut off)
  *
  * data: array of row objects, each should have a unique `id`
  * emptyMessage: text shown when data is empty
@@ -74,17 +76,21 @@ export default function Table({
   const bodyTextSize = dense ? "text-xs" : "text-[13px]";
 
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <div className="no-scrollbar overflow-x-auto">
+    // Soft emerald → white diagonal gradient behind the rows (ends on plain
+    // white / neutral-900 at the right, matching the sticky column's bg).
+    <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-50/70 via-white to-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] ring-1 ring-emerald-100/70 dark:from-emerald-950/40 dark:via-neutral-900 dark:to-neutral-900 dark:shadow-black/20 dark:ring-emerald-900/30">
+      <div className="overflow-x-auto">
         <table className={`w-full border-collapse ${bodyTextSize}`} style={{ minWidth: minWidth ? `${minWidth}px` : undefined }}>
           <thead>
-            <tr className="bg-neutral-100/80 dark:bg-neutral-950/50">
+            <tr className="border-b border-emerald-200/70 bg-gradient-to-r from-emerald-100 to-emerald-50 dark:border-emerald-900/60 dark:from-emerald-950 dark:to-emerald-950/80">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`${cellPad} whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 ${alignClass(
+                  className={`${cellPad} whitespace-nowrap text-[10.5px] font-bold uppercase tracking-[0.08em] text-emerald-800 dark:text-emerald-300 ${alignClass(
                     col.align
-                  )} ${col.width || ""}`}
+                  )} ${col.width || ""} ${
+                    col.sticky ? "sticky right-0 z-10 bg-emerald-50 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.25)] dark:bg-emerald-950" : ""
+                  }`}
                 >
                   {col.label}
                 </th>
@@ -105,14 +111,18 @@ export default function Table({
               data.map((row, rowIndex) => (
                 <tr
                   key={row[rowKey] ?? rowIndex}
-                  className="transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/40"
+                  className="group/row border-b border-emerald-100/60 transition-colors last:border-b-0 hover:bg-emerald-50/60 dark:border-neutral-800/70 dark:hover:bg-emerald-950/30"
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
                       className={`${cellPad} align-middle text-neutral-700 dark:text-neutral-300 ${alignClass(
                         col.align
-                      )} ${col.cellClass || "whitespace-nowrap"}`}
+                      )} ${col.cellClass || "whitespace-nowrap"} ${
+                        col.sticky
+                          ? "sticky right-0 z-10 bg-white shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.25)] group-hover/row:bg-emerald-50 dark:bg-neutral-900 dark:group-hover/row:bg-[#0f1f1a]"
+                          : ""
+                      }`}
                     >
                       {col.render
                         ? col.render(row, rowIndex)

@@ -4,7 +4,8 @@
 
 
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Navigate } from 'react-router-dom';
+import { isTokenValid } from '../session';
 import Image1 from "@/assets/svg/device-sync.svg";
 import Image2 from "../../../assets/Logo1.jpg";
 import { useAuthStore } from "../store/authStore";
@@ -271,10 +272,31 @@ export default function LoginPage() {
         await sendOtp('ADMIN'); // sets maskedValue + opens modal on success (store.error set on failure)
     }
 
+    // Where to go after login: the page the admin was on when the session
+    // ended (?from=…, set by the route guard / 401 handler), else the dashboard.
+    // Only same-app paths are accepted — never an absolute / protocol-relative URL.
+    const [searchParams] = useSearchParams();
+    const fromParam = searchParams.get('from');
+    const returnTo = fromParam && fromParam.startsWith('/') && !fromParam.startsWith('//') ? fromParam : '/dashboard';
+    const sessionExpired = searchParams.get('session') === 'expired';
+
+    const accessToken = useAuthStore((s) => s.accessToken);
+    const logout = useAuthStore((s) => s.logout);
+    const alreadyLoggedIn = isTokenValid(accessToken);
+
+    // A stale (expired) token left in storage — clear it so the form starts clean.
+    useEffect(() => {
+        if (accessToken && !alreadyLoggedIn) logout();
+    }, [accessToken, alreadyLoggedIn, logout]);
+
     function handleVerifySuccess() {
-        navigate('/dashboard');
-        console.log('Admin verified! Redirecting…');
+        navigate(returnTo, { replace: true });
     }
+
+    // Already logged in with a valid token → skip the login screen entirely.
+    // (Opening the site root used to always show this page, which looked
+    // like being logged out.)
+    if (alreadyLoggedIn) return <Navigate to={returnTo} replace />;
 
     const iconColor = inputType === 'whatsapp' ? '#10b981' : '#9ca3af';
 
@@ -398,6 +420,13 @@ export default function LoginPage() {
                         {/* Send-OTP level error (e.g. network/API failure) */}
                         {error && !modalOpen && (
                             <p className="text-xs text-red-500 pl-1">{error}</p>
+                        )}
+
+                        {/* Sent here because the token expired (route guard / API 401). */}
+                        {sessionExpired && !error && (
+                            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-400/10 dark:text-amber-300">
+                                Your session has expired. Please log in again.
+                            </p>
                         )}
                     </div>
 

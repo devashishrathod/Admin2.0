@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{TryDood2.0BaseUrl}}
@@ -8,6 +9,9 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const api = axios.create({
     baseURL: BASE_URL,
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as authApi.js / BannerApi.js)
 api.interceptors.request.use(async (config) => {

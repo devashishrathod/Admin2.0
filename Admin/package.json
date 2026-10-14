@@ -20,6 +20,7 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1",
+    "read-excel-file": "9.3.10",
     "recharts": "^3.9.1",
     "tailwindcss": "^4.3.0",
     "vite-plugin-svgr": "^5.2.0",

@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, X, Bell, ChevronDown, LogOut, User, Settings as SettingsIcon } from "lucide-react";
+import { Menu, X, ChevronDown, LogOut, User, Settings as SettingsIcon } from "lucide-react";
 import { useAuthStore } from "../../features/auth/store/authStore";
 import ThemeToggle from "../common/ThemeToggle";
-
-const UNREAD_NOTIFICATIONS = 3;
+import NotificationBell from "./NotificationBell";
 
 export default function Header({ mobileOpen, setMobileOpen }) {
   const [userMenu, setUserMenu] = useState(false);
@@ -41,10 +40,10 @@ export default function Header({ mobileOpen, setMobileOpen }) {
   }
 
   const iconButtonClass =
-    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-neutral-500 transition-colors hover:bg-white hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50";
+    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-neutral-500 transition-colors hover:bg-white/80 hover:text-emerald-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50";
 
   return (
-    <header className="sticky top-0 z-20 flex h-18 items-center gap-2 bg-white px-4 backdrop-blur-md dark:bg-neutral-950/80 sm:gap-3 sm:px-6">
+    <header className="sticky top-0 z-20 flex h-18 items-center gap-2 border-b border-white/60 bg-white/45 px-4 backdrop-blur-xl dark:border-white/5 dark:bg-neutral-950/50 sm:gap-3 sm:px-6">
       <button
         onClick={() => setMobileOpen((v) => !v)}
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-neutral-500 transition-colors hover:bg-white hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50 lg:hidden"
@@ -65,14 +64,7 @@ export default function Header({ mobileOpen, setMobileOpen }) {
       <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
         <ThemeToggle />
 
-        <button aria-label="Notifications" className={iconButtonClass}>
-          <Bell size={18} />
-          {UNREAD_NOTIFICATIONS > 0 && (
-            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white dark:ring-neutral-950">
-              {UNREAD_NOTIFICATIONS > 9 ? "9+" : UNREAD_NOTIFICATIONS}
-            </span>
-          )}
-        </button>
+        <NotificationBell buttonClass={iconButtonClass} />
 
         <span className="mx-1 hidden h-6 w-px shrink-0 bg-neutral-200 dark:bg-neutral-800 sm:block" />
 

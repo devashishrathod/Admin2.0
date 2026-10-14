@@ -300,6 +300,7 @@ export default function VerificationDetails({
   onRevoke,
   busyAction,
   actionError,
+  reloadKey = 0,
 }) {
   const { brand, flags, nameMatch, bankNameMatch, entityMatch, duplicateDetails } = verification;
   const checklist = buildChecklist(flags);
@@ -358,7 +359,10 @@ export default function VerificationDetails({
     } finally {
       setHistoryLoading(false);
     }
-  }, [brandId, historyPage]);
+    // reloadKey: bumped by the parent after every review action, so the
+    // history and brand snapshot below refetch without a page reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandId, historyPage, reloadKey]);
 
   useEffect(() => {
     fetchHistory();
@@ -388,7 +392,7 @@ export default function VerificationDetails({
     return () => {
       cancelled = true;
     };
-  }, [brandId]);
+  }, [brandId, reloadKey]);
 
 
   // Listing data — the vouchers this brand has created, GET

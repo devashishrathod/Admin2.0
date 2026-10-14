@@ -453,6 +453,8 @@ export const DETAIL_TABS = [
   "Sub-Brand",
   // "Listings",
   "Settlements",
+  "Transactions",
+  "Refunds",
   "Voucher",
   "Subscription",
   "System Verification",

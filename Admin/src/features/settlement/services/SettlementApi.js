@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{base_url}}
@@ -8,6 +9,9 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const api = axios.create({
     baseURL: BASE_URL,
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as TransactionApi.js / RefundApi.js)
 api.interceptors.request.use(async (config) => {
@@ -45,7 +49,10 @@ function buildParams(params = {}) {
  * ---------------------------------------------------------------------- */
 
 // ── Get All Settlements ("Mere payouts") ──────────────────────────
-// GET {{base_url}}/settlements?page=&limit=&status=&open=&from=&to=
+// GET {{base_url}}/settlements?page=&limit=&status=&open=&from=&to=&brandId=
+// `brandId` (brand's Mongo _id) is used by a brand's detail page. It isn't
+// confirmed that the backend filters on it, so callers should still filter
+// the rows by `brandId` themselves (every settlement record carries it).
 export async function getSettlements({
     page = 1,
     limit = 20,
@@ -53,10 +60,11 @@ export async function getSettlements({
     open,
     from,
     to,
+    brandId,
 } = {}) {
     try {
         const { data } = await api.get('/settlements', {
-            params: buildParams({ page, limit, status, open, from, to }),
+            params: buildParams({ page, limit, status, open, from, to, brandId }),
         });
         return data;
     } catch (error) {
@@ -170,6 +178,22 @@ export async function holdSettlement(settlementId, { reason } = {}) {
     try {
         if (!settlementId) throw new Error('settlementId is required');
         const { data } = await api.patch(`/settlements/admin/${settlementId}/hold`, { reason });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Take a settlement off hold ("Unhold karo") — NOT CONFIRMED ─────
+// PATCH {{base_url}}/settlements/admin/:id/unhold  body: { reason? }
+// Path assumed from the /hold pattern — no Postman request for it yet.
+// If the backend uses a different path (e.g. /release or /resume), change
+// it here only. Expected result: ON_HOLD → back to PENDING_APPROVAL.
+export async function unholdSettlement(settlementId, { reason } = {}) {
+    try {
+        if (!settlementId) throw new Error('settlementId is required');
+        const body = reason ? { reason } : {};
+        const { data } = await api.patch(`/settlements/admin/${settlementId}/unhold`, body);
         return data;
     } catch (error) {
         handleError(error);

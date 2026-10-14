@@ -24,6 +24,9 @@ import {
   XCircle,
   RefreshCw,
   X,
+  PauseCircle,
+  PlayCircle,
+  FlaskConical,
 } from "lucide-react";
 import {
   AreaChart,
@@ -38,19 +41,24 @@ import {
   Tooltip,
 } from "recharts";
 import Table from "../../components/common/Table";
+import StatusStepButton from "../../components/common/StatusStepButton";
 import VoucherDetails from "./VoucherDetails";
 import { downloadCsv, printAsPdf } from "../../utils/exportTable";
 import { isNotFoundMessage } from "../../utils/helpers";
 import {
-  getVouchers,
+  getAllVoucherVersions,
   getVoucherById,
   approveVoucher,
   rejectVoucher,
   publishVoucher,
   deleteVoucher,
+  pauseVoucher,
+  resumeVoucher,
   updateVoucherSuggestion,
   approveVoucherBanner,
   rejectVoucherBanner,
+  reorderVoucherImages,
+  uploadVoucherBanner,
   VOUCHER_STATUSES,
 } from "./services/VoucherApi";
 
@@ -277,6 +285,8 @@ function apiVersionToRow(v) {
       .slice()
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       .map((img) => ({
+        // Image id — needed to save a new order (drag & drop on the details page).
+        id: img._id || null,
         url: img.media?.url || img.url || null,
         sortOrder: img.sortOrder,
         provider: img.media?.storage?.provider || img.storage?.provider || null,
@@ -352,6 +362,11 @@ function apiVersionToRow(v) {
     isActive: Boolean(v.isActive),
     isDeleted: Boolean(v.isDeleted),
     isImmutable: Boolean(v.isImmutable),
+    // Test/demo voucher (or one under a dummy brand) — shown only on
+    // Dummy Vouchers, kept out of every other voucher page.
+    isDummy: Boolean(v.isDummy ?? voucher.isDummy ?? brand?.isDummy),
+    // Seed batch, e.g. "CHENNAI-DUMMY-1" — from the voucher or its brand.
+    dummyBatch: v.dummyBatch || voucher.dummyBatch || brand?.dummyBatch || null,
     rejectionReason: v.rejectionReason || null,
     history: buildTimeline(v),
   };
@@ -436,7 +451,7 @@ function apiVoucherDetailToRow(payload) {
     images: (cv.images || [])
       .slice()
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .map((img) => ({ url: img.media?.url || null, sortOrder: img.sortOrder, provider: img.media?.provider || null })),
+      .map((img) => ({ id: img._id || null, url: img.media?.url || null, sortOrder: img.sortOrder, provider: img.media?.provider || null })),
     offers: cv.offers || [],
     banner: voucher.banner
       ? {
@@ -569,14 +584,43 @@ function KpiTile({ icon: Icon, label, value, hint, tint, active, onClick }) {
   );
 }
 
+// Purple "Dummy" pill for test/demo vouchers (isDummy) — same look as the
+// Brand page's dummy badge.
+export function DummyBadge({ size = "md" }) {
+  const sm = size === "sm";
+  return (
+    <span
+      className={`flex shrink-0 items-center gap-1 rounded-full font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400 ${
+        sm ? "bg-violet-500/10 px-1.5 py-0.5 text-[9.5px]" : "bg-white px-2.5 py-1 text-[10.5px] shadow-sm dark:bg-neutral-900"
+      }`}
+    >
+      <FlaskConical size={sm ? 9 : 11} />
+      Dummy
+    </span>
+  );
+}
+
 // Coupon-style card: image header, offer on a perforated "ticket" strip,
 // validity + actions in the footer.
-function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, busy }) {
+function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, busy }) {
   const cover = voucher.images?.[0]?.url;
   const validity = validityOf(voucher);
+  const step = getVoucherStep(voucher);
 
   return (
     <div className={`group relative flex flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 ${cardClass}`}>
+      {/* Status pill = workflow button. Sits outside the cover <button>
+          (a button can't contain another button). */}
+      <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-1.5 pr-12">
+        <StatusStepButton
+          label={STATUS_LABELS[voucher.approvalStatus] || voucher.approvalStatus}
+          tone={VOUCHER_TONES[voucher.approvalStatus]}
+          stepLabel={onStep ? step?.label : null}
+          disabled={busy}
+          onClick={() => onStep(voucher, step)}
+        />
+        {voucher.isDummy && <DummyBadge />}
+      </div>
       <button onClick={() => onOpen(voucher)} className="relative block h-36 w-full overflow-hidden text-left">
         {cover ? (
           <img src={cover} alt={voucher.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
@@ -586,9 +630,6 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, busy }) {
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0" />
-        <div className="absolute left-3 top-3">
-          <VoucherStatusBadge status={voucher.approvalStatus} />
-        </div>
         {voucher.images?.length > 1 && (
           <span className="absolute bottom-2.5 right-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
             +{voucher.images.length - 1} photos
@@ -730,17 +771,352 @@ function TrendTooltip({ active, payload, label }) {
   );
 }
 
+/* Sidebar pages built on this one listing — each shows a slice of the
+   vouchers. "all" is the original full listing (sidebar: Live Vouchers). */
+const SCOPES = {
+  all: {
+    title: "Live Vouchers",
+    subtitle: "Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.",
+    match: null,
+    defaultView: "table",
+  },
+  waiting: {
+    title: "Voucher Waiting",
+    subtitle: "Vendor-submitted vouchers waiting for your approval — approve or reject them right from the table.",
+    match: (v) => v.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW,
+    defaultView: "table",
+  },
+  expired: {
+    title: "Expired Vouchers",
+    subtitle: "Vouchers whose validity has ended — no longer available to customers.",
+    match: (v) => v.approvalStatus === VOUCHER_STATUSES.EXPIRED,
+    defaultView: "table",
+  },
+  draft: {
+    title: "Draft Vouchers",
+    subtitle: "Vouchers vendors are still editing and haven't submitted for review yet.",
+    match: (v) => v.approvalStatus === VOUCHER_STATUSES.DRAFT,
+  },
+  // The banner is a separate approval gate on the parent voucher — a
+  // voucher has one waiting whenever `banner.pending` is set, whatever the
+  // voucher's own status.
+  banner: {
+    title: "Banner Approval",
+    subtitle: "Voucher banners vendors uploaded that are waiting for your approval.",
+    match: (v) => Boolean(v.banner?.pending),
+    defaultView: "table",
+  },
+  dummy: {
+    title: "Dummy Vouchers",
+    subtitle: "Test / demo vouchers (isDummy) — kept separate from Live Vouchers.",
+    match: (v) => v.isDummy,
+    defaultView: "table",
+  },
+};
+
+/* Small modal asking for the (mandatory) rejection reason — used by the
+   table's Reject buttons on Voucher Waiting and Banner Approval. */
+function RejectReasonDialog({ title, subject, busy, onCancel, onConfirm }) {
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+
+  const submit = () => {
+    if (!reason.trim()) {
+      setError("Please enter a reason — the vendor will see it.");
+      return;
+    }
+    onConfirm(reason.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={busy ? undefined : onCancel}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-neutral-900"
+      >
+        <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{title}</h2>
+        <p className="mt-1 text-[12.5px] text-neutral-500">
+          Tell the vendor why <span className="font-medium text-neutral-700 dark:text-neutral-300">{subject}</span> is being rejected.
+        </p>
+        <textarea
+          autoFocus
+          rows={3}
+          value={reason}
+          disabled={busy}
+          onChange={(e) => {
+            setReason(e.target.value);
+            if (error) setError("");
+          }}
+          placeholder="Rejection reason…"
+          className={`mt-3 w-full resize-none rounded-xl bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 ${
+            error ? "ring-1 ring-red-500/60" : "focus:ring-red-400/60"
+          }`}
+        />
+        {error && (
+          <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={11} /> {error}
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl border border-neutral-200 px-3.5 py-2 text-[12.5px] font-medium text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={busy}
+            className="flex items-center gap-1.5 rounded-xl bg-red-500 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-60"
+          >
+            {busy && <Loader2 size={13} className="animate-spin" />}
+            Reject
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Voucher workflow from the table's status pill:
+     Under Review → Approve → Approved → Publish → Published.
+   The banner has its own gate: Banner Pending → Approve Banner. */
+const VOUCHER_TONES = {
+  [VOUCHER_STATUSES.DRAFT]: "neutral",
+  [VOUCHER_STATUSES.UNDER_REVIEW]: "amber",
+  [VOUCHER_STATUSES.APPROVED]: "sky",
+  [VOUCHER_STATUSES.PUBLISHED]: "emerald",
+  [VOUCHER_STATUSES.REJECTED]: "red",
+  [VOUCHER_STATUSES.EXPIRED]: "neutral",
+  [VOUCHER_STATUSES.PAUSED]: "orange",
+  [VOUCHER_STATUSES.ARCHIVED]: "neutral",
+};
+
+// The status pill's next step. Live vouchers can be paused (API doc #57a)
+// and paused ones resumed (#57b) — both act on the version.
+function getVoucherStep(v) {
+  if (v.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW) return { kind: "approve", label: "Approve" };
+  if (v.approvalStatus === VOUCHER_STATUSES.APPROVED) return { kind: "publish", label: "Publish" };
+  if (v.approvalStatus === VOUCHER_STATUSES.PUBLISHED) return { kind: "pause", label: "Pause" };
+  if (v.approvalStatus === VOUCHER_STATUSES.PAUSED) return { kind: "resume", label: "Resume" };
+  return null;
+}
+
+// Copy + look for each confirm. `points` spell out what will happen;
+// `reason` adds an optional note field (pause → internal note, max 1000;
+// delete → shown in the admin deleted-list, max 500); `tone` colours the
+// icon and confirm button.
+const VOUCHER_STEP_COPY = {
+  approve: {
+    title: "Approve voucher?",
+    icon: CheckCircle2,
+    tone: "emerald",
+    points: ["It moves to Approved.", "You can publish it after this."],
+    action: "Approve",
+  },
+  publish: {
+    title: "Publish voucher?",
+    icon: Rocket,
+    tone: "emerald",
+    points: ["It goes live in the app for customers right away."],
+    action: "Publish",
+  },
+  banner: {
+    title: "Approve banner?",
+    icon: CheckCircle2,
+    tone: "emerald",
+    points: ["The pending banner replaces the current one in the app."],
+    action: "Approve Banner",
+  },
+  pause: {
+    title: "Pause this voucher?",
+    icon: PauseCircle,
+    tone: "orange",
+    points: [
+      "It disappears from the customer app straight away.",
+      "Dates, offers and images stay exactly as they are.",
+      "You can resume it any time — unless its end date passes first.",
+    ],
+    action: "Yes, pause",
+    reason: { label: "Note (optional — customers never see it)", max: 1000, placeholder: "e.g. Stock khatam, Monday tak" },
+  },
+  resume: {
+    title: "Resume this voucher?",
+    icon: PlayCircle,
+    tone: "emerald",
+    points: ["It goes back into the customer app exactly as it was before the pause."],
+    action: "Yes, resume",
+  },
+  delete: {
+    title: "Delete this voucher?",
+    icon: Trash2,
+    tone: "red",
+    points: [
+      "The voucher and all its versions are removed.",
+      "The brand gets its voucher slot back.",
+      "This can't be undone — to hide it for now, pause it instead.",
+    ],
+    action: "Yes, delete",
+    reason: { label: "Reason (optional)", max: 500, placeholder: "e.g. Created by mistake" },
+  },
+};
+
+const CONFIRM_TONES = {
+  emerald: { badge: "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400", button: "bg-emerald-400 text-neutral-950 hover:bg-emerald-300" },
+  orange: { badge: "bg-orange-400/15 text-orange-600 dark:text-orange-400", button: "bg-orange-500 text-white hover:bg-orange-600" },
+  red: { badge: "bg-red-500/15 text-red-600 dark:text-red-400", button: "bg-red-500 text-white hover:bg-red-600" },
+};
+
+/* Confirmation modal before a status step runs (table pill, card, row
+   action or the details page). onConfirm(reason) may throw — the error is
+   shown here and the modal stays open (e.g. delete blocked by live customer
+   claims, with the backend's "pause it instead" hint). Esc / Cancel close it. */
+function ConfirmStepDialog({ kind, subject, busy, onCancel, onConfirm }) {
+  const copy = VOUCHER_STEP_COPY[kind];
+  const tone = CONFIRM_TONES[copy.tone] || CONFIRM_TONES.emerald;
+  const Icon = copy.icon;
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [running, setRunning] = useState(false);
+  const working = busy || running;
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && !working && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [working, onCancel]);
+
+  const confirm = async () => {
+    setError("");
+    setRunning(true);
+    try {
+      await onConfirm(reason.trim() || undefined);
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm" onClick={working ? undefined : onCancel}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-step-title" onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
+        <div className="flex items-start gap-3.5">
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${tone.badge}`}>
+            <Icon size={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 id="confirm-step-title" className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
+              {copy.title}
+            </h2>
+            <p className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-lg bg-neutral-100 px-2 py-1 text-[12px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
+              <Ticket size={12} className="shrink-0 text-neutral-400" />
+              <span className="truncate">{subject}</span>
+            </p>
+          </div>
+          <button onClick={onCancel} disabled={working} aria-label="Close" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-40 dark:hover:bg-neutral-800">
+            <X size={15} />
+          </button>
+        </div>
+
+        <ul className="mt-4 space-y-1.5">
+          {copy.points.map((p) => (
+            <li key={p} className="flex items-start gap-2 text-[12.5px] text-neutral-600 dark:text-neutral-300">
+              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-neutral-400" />
+              {p}
+            </li>
+          ))}
+        </ul>
+
+        {copy.reason && (
+          <label className="mt-4 block">
+            <span className="mb-1 block text-[12px] font-medium text-neutral-600 dark:text-neutral-300">{copy.reason.label}</span>
+            <textarea
+              rows={2}
+              value={reason}
+              maxLength={copy.reason.max}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={working}
+              placeholder={copy.reason.placeholder}
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/60 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+            />
+            <span className="mt-0.5 block text-right text-[10.5px] text-neutral-400">
+              {reason.length}/{copy.reason.max}
+            </span>
+          </label>
+        )}
+
+        {error && (
+          <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-red-500/5 px-3 py-2.5 text-[12px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {error}
+          </p>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={working}
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={confirm}
+            disabled={working}
+            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 ${tone.button}`}
+          >
+            {working ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
+            {copy.action}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Reject icon button for table rows (opens the reason dialog). */
+function RejectIconButton({ busy, onClick, label }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      aria-label={label}
+      title={label}
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
+    >
+      <XCircle size={13} />
+    </button>
+  );
+}
+
 /* -------------------------------------------------------------------------
  * Main page — list <-> details (master/detail, no router required)
  * ---------------------------------------------------------------------- */
-export default function VoucherListing() {
-  const [vouchers, setVouchers] = useState([]);
+export default function VoucherListing({ scope = "all" }) {
+  const scopeConfig = SCOPES[scope] || SCOPES.all;
+  const isScoped = Boolean(scopeConfig.match);
+  // Full list from the API; `vouchers` below is this page's slice of it.
+  const [allVouchers, setVouchers] = useState([]);
+  // Dummy vouchers only ever show on the Dummy Vouchers page.
+  const vouchers = useMemo(() => {
+    const pool = scope === "dummy" ? allVouchers : allVouchers.filter((v) => !v.isDummy);
+    if (isScoped) return pool.filter(scopeConfig.match);
+    // Live Vouchers: drafts aren't submitted yet — they show only on Draft Vouchers.
+    return pool.filter((v) => v.approvalStatus !== VOUCHER_STATUSES.DRAFT);
+  }, [allVouchers, isScoped, scopeConfig, scope]);
+  // Row whose Reject button was clicked — { row, kind: "voucher" | "banner" }.
+  const [rejecting, setRejecting] = useState(null);
+  // Row whose status pill was clicked — { row, kind: "approve" | "publish" | "banner" }.
+  const [stepping, setStepping] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [view, setView] = useState("grid");
+  const [view, setView] = useState(scopeConfig.defaultView || "grid");
   const [selectedId, setSelectedId] = useState(null);
   const [page, setPage] = useState(1);
   const pageSize = view === "grid" ? 9 : 10;
@@ -753,13 +1129,15 @@ export default function VoucherListing() {
   // overlaid with whatever this returns once it resolves.
   const [voucherDetail, setVoucherDetail] = useState(null);
 
-  const fetchList = useCallback(async () => {
-    setLoading(true);
+  // `silent` = background refresh after an action — keeps the list on
+  // screen instead of swapping it for the loading state.
+  const fetchList = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setLoadError("");
     try {
-      const res = await getVouchers({ page: 1, limit: 100 });
-      const rows = (res?.data?.data ?? []).map(apiVersionToRow);
-      setVouchers(rows);
+      // Every page — one call caps at 100 versions.
+      const raw = await getAllVoucherVersions();
+      setVouchers(raw.map(apiVersionToRow));
     } catch (err) {
       if (isNotFoundMessage(err.message)) {
         setVouchers([]);
@@ -790,7 +1168,10 @@ export default function VoucherListing() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pagedRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const selectedListRow = vouchers.find((v) => v.id === selectedId) || null;
+  // Looked up in the full list so the details page stays open after an
+  // action moves the voucher out of this page's scope (e.g. approve on
+  // Voucher Waiting).
+  const selectedListRow = allVouchers.find((v) => v.id === selectedId) || null;
 
   // GET /vouchers/get/:voucherId — fetches the fresher single-voucher
   // detail once a row is opened. Ids that drive approve/reject/publish/
@@ -828,7 +1209,7 @@ export default function VoucherListing() {
   // trigger a detail refetch.
   const refreshAfterAction = async () => {
     setVoucherDetail(null);
-    await fetchList();
+    await fetchList({ silent: true });
     setDetailReloadKey((k) => k + 1);
   };
 
@@ -880,20 +1261,30 @@ export default function VoucherListing() {
     ], filtered);
   };
 
-  const handleDelete = async (voucher) => {
-    const ok = window.confirm(`Delete "${voucher.title}"? This cannot be undone.`);
-    if (!ok) return;
-    setActionError("");
-    setActionBusy(true);
-    try {
-      await deleteVoucher(voucher.voucherId);
-      if (selectedId === voucher.id) setSelectedId(null);
-      await fetchList();
-    } catch (err) {
-      setActionError(err.message);
-    } finally {
-      setActionBusy(false);
+  // Delete opens the confirm dialog (optional reason); runStep does the call.
+  const handleDelete = (voucher) => setStepping({ row: voucher, kind: "delete" });
+
+  /* Runs one confirmed step from ConfirmStepDialog (table, cards or the
+     details page). approve / publish / banner keep their own error banner;
+     pause / resume / delete throw so the dialog shows the error inline. */
+  const runStep = async (kind, row, reason) => {
+    if (kind === "approve") return handleApprove(row);
+    if (kind === "publish") return handlePublish(row);
+    if (kind === "banner") return handleApproveBanner(row);
+    if (kind === "delete") {
+      await deleteVoucher(row.voucherId, reason); // parent voucher id
+      if (selectedId === row.id) setSelectedId(null);
+      await fetchList({ silent: true });
+      return;
     }
+    if (kind === "pause") await pauseVoucher(row.id, reason); // version id
+    else if (kind === "resume") await resumeVoucher(row.id); // version id
+    await refreshAfterAction();
+  };
+  const confirmStep = async (reason) => {
+    const { row, kind } = stepping;
+    await runStep(kind, row, reason);
+    setStepping(null);
   };
 
   /* ---- Approval workflow (Super Admin) ------------------------------ */
@@ -964,6 +1355,19 @@ export default function VoucherListing() {
     }
   };
 
+  /* ---- Images + banner from the details page. These throw on failure so
+     the gallery / uploader can show the error inline. ------------------- */
+  // Images belong to the version, so this takes the version id (voucher.id).
+  const handleReorderImages = async (voucher, imageIds) => {
+    await reorderVoucherImages(voucher.id, imageIds);
+    await refreshAfterAction();
+  };
+  // Banner lives on the parent voucher (voucherId); video needs a poster.
+  const handleUploadBanner = async (voucher, media, poster) => {
+    await uploadVoucherBanner(voucher.voucherId, media, poster);
+    await refreshAfterAction();
+  };
+
   /* ---- Admin curation — feature/un-feature on the "Suggested" rail --- */
   const handleToggleSuggested = async (voucher) => {
     setActionError("");
@@ -973,7 +1377,7 @@ export default function VoucherListing() {
         isSuggested: !voucher.isSuggested,
         suggestionOrder: 1,
       });
-      await fetchList();
+      await fetchList({ silent: true });
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -984,6 +1388,7 @@ export default function VoucherListing() {
   /* ---- Detail view --------------------------------------------------- */
   if (selectedVoucher) {
     return (
+      <>
       <VoucherDetails
         voucher={selectedVoucher}
         onBack={() => setSelectedId(null)}
@@ -992,9 +1397,22 @@ export default function VoucherListing() {
         onPublish={() => handlePublish(selectedVoucher)}
         onApproveBanner={() => handleApproveBanner(selectedVoucher)}
         onRejectBanner={(reason) => handleRejectBanner(selectedVoucher, reason)}
+        onReorderImages={(ids) => handleReorderImages(selectedVoucher, ids)}
+        onUploadBanner={(media, poster) => handleUploadBanner(selectedVoucher, media, poster)}
         busy={actionBusy}
         actionError={actionError}
+        onRequestStep={(kind) => setStepping({ row: selectedVoucher, kind })}
       />
+      {stepping && (
+        <ConfirmStepDialog
+          kind={stepping.kind}
+          subject={stepping.row.title}
+          busy={actionBusy}
+          onCancel={() => setStepping(null)}
+          onConfirm={confirmStep}
+        />
+      )}
+      </>
     );
   }
 
@@ -1025,7 +1443,7 @@ export default function VoucherListing() {
   const filtersActive = Boolean(search) || statusFilter !== "All";
 
   /* ---- Table columns -------------------------------------------------- */
-  const columns = [
+  const baseColumns = [
     {
       key: "sno",
       label: "S.No",
@@ -1049,10 +1467,16 @@ export default function VoucherListing() {
             <p className="flex items-center gap-1.5 font-semibold text-neutral-900 group-hover:text-emerald-600 dark:text-neutral-50 dark:group-hover:text-emerald-400">
               <span className="line-clamp-1">{row.title}</span>
               {row.isSuggested && <Star size={11} className="shrink-0 text-amber-500" fill="currentColor" />}
+              {row.isDummy && <DummyBadge size="sm" />}
             </p>
             <p className="mt-0.5 flex items-center gap-1 whitespace-nowrap font-mono text-[10.5px] text-neutral-400">
               <Tag size={10} className="shrink-0" /> {row.versionCode}
             </p>
+            {row.isDummy && row.dummyBatch && (
+              <p className="mt-0.5 whitespace-nowrap font-mono text-[10.5px] text-violet-600 dark:text-violet-400">
+                {row.dummyBatch}
+              </p>
+            )}
           </div>
         </button>
       ),
@@ -1148,6 +1572,121 @@ export default function VoucherListing() {
     },
   ];
 
+  const viewButton = (row) => (
+    <button
+      onClick={() => setSelectedId(row.id)}
+      aria-label={`View ${row.title}`}
+      title="View details"
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-sky-400/40 hover:text-sky-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-sky-400"
+    >
+      <Eye size={13} />
+    </button>
+  );
+
+  // Status pill doubles as the workflow button (Approve → Publish), on
+  // every voucher page's table.
+  const statusStepColumn = {
+    key: "status",
+    label: "Status",
+    render: (row) => {
+      const step = getVoucherStep(row);
+      return (
+        <StatusStepButton
+          label={STATUS_LABELS[row.approvalStatus] || row.approvalStatus}
+          tone={VOUCHER_TONES[row.approvalStatus]}
+          stepLabel={step?.label}
+          disabled={actionBusy}
+          onClick={() => setStepping({ row, kind: step.kind })}
+        />
+      );
+    },
+  };
+
+  // Voucher Waiting — reject sits next to the pill's Approve.
+  const waitingActionColumn = {
+    key: "action",
+    label: "Action",
+    align: "right",
+    render: (row) => (
+      <div className="flex items-center justify-end gap-1.5">
+        <RejectIconButton busy={actionBusy} label={`Reject ${row.title}`} onClick={() => setRejecting({ row, kind: "voucher" })} />
+        {viewButton(row)}
+      </div>
+    ),
+  };
+
+  // Banner Approval — the pending banner next to the live one, plus
+  // approve / reject for the banner (not the voucher itself).
+  const bannerColumn = {
+    key: "banner",
+    label: "Banner",
+    render: (row) => (
+      <div className="flex items-center gap-2">
+        {[
+          ["Current", row.banner?.current?.url],
+          ["Pending", row.banner?.pending?.url],
+        ].map(([label, url]) => (
+          <div key={label} className="text-center">
+            <div className="flex h-12 w-24 items-center justify-center overflow-hidden rounded-lg bg-neutral-100 text-[10px] text-neutral-400 dark:bg-neutral-800">
+              {url ? (
+                <a href={url} target="_blank" rel="noreferrer" className="h-full w-full">
+                  <img src={url} alt={`${label} banner`} className="h-full w-full object-cover" />
+                </a>
+              ) : (
+                "None"
+              )}
+            </div>
+            <p className={`mt-1 text-[10px] font-medium ${label === "Pending" ? "text-amber-600 dark:text-amber-400" : "text-neutral-400"}`}>{label}</p>
+          </div>
+        ))}
+      </div>
+    ),
+  };
+  // Banner Approval — the pill is the banner's own status, not the voucher's.
+  const bannerStatusColumn = {
+    key: "bannerStatus",
+    label: "Banner Status",
+    render: (row) => (
+      <StatusStepButton
+        label="Banner Pending"
+        tone="amber"
+        stepLabel="Approve Banner"
+        disabled={actionBusy}
+        onClick={() => setStepping({ row, kind: "banner" })}
+      />
+    ),
+  };
+  const bannerActionColumn = {
+    key: "action",
+    label: "Action",
+    align: "right",
+    render: (row) => (
+      <div className="flex items-center justify-end gap-1.5">
+        <RejectIconButton busy={actionBusy} label={`Reject banner for ${row.title}`} onClick={() => setRejecting({ row, kind: "banner" })} />
+        {viewButton(row)}
+      </div>
+    ),
+  };
+
+  const withStepPill = baseColumns.map((c) => (c.key === "status" ? statusStepColumn : c));
+  const columns =
+    scope === "waiting"
+      ? withStepPill.map((c) => (c.key === "action" ? waitingActionColumn : c))
+      : scope === "banner"
+      ? [
+          ...baseColumns.filter((c) => ["sno", "title", "brand"].includes(c.key)),
+          bannerColumn,
+          bannerStatusColumn,
+          bannerActionColumn,
+        ]
+      : withStepPill;
+
+  const confirmReject = async (reason) => {
+    const { row, kind } = rejecting;
+    await (kind === "banner" ? handleRejectBanner(row, reason) : handleReject(row, reason));
+    setRejecting(null);
+  };
+
   const donutData = statusMix.length ? statusMix : [{ status: "none", count: 1, color: "#E5E5E5" }];
 
   return (
@@ -1156,10 +1695,8 @@ export default function VoucherListing() {
         {/* Header */}
         <div className="no-print mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-neutral-900 sm:text-2xl dark:text-neutral-50">Vouchers</h1>
-            <p className="mt-1 text-[13px] text-neutral-500 dark:text-neutral-400">
-              Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.
-            </p>
+            <h1 className="text-xl font-semibold tracking-tight text-neutral-900 sm:text-2xl dark:text-neutral-50">{scopeConfig.title}</h1>
+            <p className="mt-1 text-[13px] text-neutral-500 dark:text-neutral-400">{scopeConfig.subtitle}</p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <button
@@ -1188,7 +1725,9 @@ export default function VoucherListing() {
           </div>
         </div>
 
-        {/* KPI tiles — clicking one filters the list to that status */}
+        {/* KPI tiles — clicking one filters the list to that status. Only on
+            the full listing; a scoped page is already a single status. */}
+        {!isScoped && (
         <div className="no-print mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
           <KpiTile
             icon={Ticket}
@@ -1236,9 +1775,12 @@ export default function VoucherListing() {
             onClick={() => applyStatusFilter(VOUCHER_STATUSES.REJECTED)}
           />
         </div>
+        )}
 
-        {/* Overview charts — real data, independent of the filters below */}
-        <div className="no-print mb-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.4fr]">
+        {/* Overview charts — real data, independent of the filters below.
+            Status Mix is skipped on scoped pages (it'd be one 100% slice). */}
+        <div className={`no-print mb-5 grid grid-cols-1 gap-4 ${isScoped ? "" : "lg:grid-cols-[1fr_1.4fr]"}`}>
+          {!isScoped && (
           <div className={`p-5 ${cardClass}`}>
             <div className="flex items-center gap-1.5 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">
               <PieChartIcon size={14} className="text-emerald-500" /> Status Mix
@@ -1298,6 +1840,7 @@ export default function VoucherListing() {
               </div>
             </div>
           </div>
+          )}
 
           <div className={`p-5 ${cardClass}`}>
             <div className="mb-3 flex items-start justify-between gap-3">
@@ -1340,7 +1883,7 @@ export default function VoucherListing() {
         {/* Status tabs + search + view toggle */}
         <div className="no-print mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 lg:pb-0">
-            {visibleStatusTabs.map((s) => {
+            {!isScoped && visibleStatusTabs.map((s) => {
               const isActive = statusFilter === s;
               const count = s === "All" ? vouchers.length : countOf(s);
               return (
@@ -1440,6 +1983,7 @@ export default function VoucherListing() {
                         busy={actionBusy}
                         onOpen={(row) => setSelectedId(row.id)}
                         onToggleSuggested={handleToggleSuggested}
+                        onStep={(row, step) => setStepping({ row, kind: step.kind })}
                         onDelete={handleDelete}
                       />
                     ))}
@@ -1454,7 +1998,11 @@ export default function VoucherListing() {
                   <div>
                     <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">No vouchers found</p>
                     <p className="mt-0.5 text-[12.5px] text-neutral-500">
-                      {filtersActive ? "Try a different search or status." : "Vendor-submitted vouchers will appear here."}
+                      {filtersActive
+                        ? "Try a different search or status."
+                        : isScoped
+                        ? `No ${scopeConfig.title.toLowerCase()} right now.`
+                        : "Vendor-submitted vouchers will appear here."}
                     </p>
                   </div>
                   {filtersActive && (
@@ -1482,6 +2030,26 @@ export default function VoucherListing() {
           </div>
         )}
       </div>
+
+      {stepping && (
+        <ConfirmStepDialog
+          kind={stepping.kind}
+          subject={stepping.row.title}
+          busy={actionBusy}
+          onCancel={() => setStepping(null)}
+          onConfirm={confirmStep}
+        />
+      )}
+
+      {rejecting && (
+        <RejectReasonDialog
+          title={rejecting.kind === "banner" ? "Reject banner" : "Reject voucher"}
+          subject={rejecting.kind === "banner" ? `the banner for "${rejecting.row.title}"` : `"${rejecting.row.title}"`}
+          busy={actionBusy}
+          onCancel={() => setRejecting(null)}
+          onConfirm={confirmReject}
+        />
+      )}
     </div>
   );
 }

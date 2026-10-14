@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Bell,
   BellOff,
@@ -21,18 +21,36 @@ import {
   BatteryFull,
 } from "lucide-react";
 import { broadcastNotification } from "./services/NotificationApi";
+import { getAllCustomers } from "../customer/services/CustomerApi";
+import { isNotFoundMessage } from "../../utils/helpers";
 import { registerDeviceToken, unregisterDeviceToken } from "./services/DeviceTokenApi";
 import { getPushToken, getBrowserDeviceId, FCM_TOKEN_STORAGE_KEY } from "../../config/firebaseMessaging";
 
-// Placeholder audience — swap for a real GET /users?search= call once that
-// endpoint exists. Same shape as the mock rows in features/customer/Customer.jsx.
-const MOCK_USERS = [
-  { id: "cus_1001", name: "Rohit Sharma", email: "rohit.sharma@example.com" },
-  { id: "cus_1002", name: "Ananya Verma", email: "ananya.verma@example.com" },
-  { id: "cus_1003", name: "Karan Mehta", email: "karan.mehta@example.com" },
-  { id: "cus_1004", name: "Priya Nair", email: "priya.nair@example.com" },
-  { id: "cus_1005", name: "Devansh Gupta", email: "devansh.gupta@example.com" },
+// Roles the broadcast endpoint targets. A fixed list instead of free text,
+// so a typo ("VENDORS") can't silently resolve to zero recipients.
+const ROLE_OPTIONS = [
+  { value: "CUSTOMER", label: "Customers" },
+  { value: "VENDOR", label: "Vendors" },
+  { value: "ADMIN", label: "Admins" },
 ];
+
+// "All users" = every customer and vendor. Sent as explicit roles because
+// the API only documents `target: { roles }` / `target: { userIds }`.
+const ALL_USER_ROLES = ["CUSTOMER", "VENDOR"];
+
+// GET /customers/admin/get-all row → picker option. `userIds` on the
+// broadcast must be the login User id, so prefer the linked account's id
+// over the customer-profile id when the payload carries it.
+function toUserOption(raw) {
+  const account = raw.account || {};
+  const phone = raw.whatsappNumber || account.whatsappNumber || raw.mobile || "";
+  return {
+    id: raw.userId || account._id || raw._id,
+    name: String(raw.fullName || raw.name || account.name || raw.uniqueId || raw._id || "Customer"),
+    // Email + number + id in one line — also what the local search matches on.
+    detail: [raw.email || account.email, phone, raw.uniqueId].filter(Boolean).join(" · "),
+  };
+}
 
 const inputClass =
   "w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none transition-colors focus:border-emerald-500/50";
@@ -226,59 +244,112 @@ function AudienceOption({ active, icon: Icon, title, description, onClick }) {
   );
 }
 
-/* Chip input for free-typed role names — Enter or comma commits a chip. */
-function RoleChipInput({ roles, onChange }) {
-  const [draft, setDraft] = useState("");
-
-  const commit = () => {
-    const v = draft.trim().toUpperCase();
-    if (v && !roles.includes(v)) onChange([...roles, v]);
-    setDraft("");
-  };
+/* Toggle chips over the fixed role list — pick one or more. */
+function RolePicker({ roles, onChange }) {
+  const toggle = (value) =>
+    onChange(roles.includes(value) ? roles.filter((r) => r !== value) : [...roles, value]);
 
   return (
-    <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 p-2.5 focus-within:border-emerald-500/50">
-      <div className="flex flex-wrap gap-1.5">
-        {roles.map((r) => (
-          <span key={r} className="flex items-center gap-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800 px-2.5 py-1 text-[11.5px] font-medium text-neutral-700 dark:text-neutral-300">
-            {r}
-            <button type="button" onClick={() => onChange(roles.filter((x) => x !== r))} aria-label={`Remove ${r}`} className="text-neutral-500 hover:text-red-600 dark:hover:text-red-400">
-              <X size={11} />
-            </button>
-          </span>
-        ))}
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value.replace(",", ""))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              commit();
-            } else if (e.key === "Backspace" && !draft && roles.length) {
-              onChange(roles.slice(0, -1));
-            }
-          }}
-          onBlur={commit}
-          placeholder={roles.length ? "" : "e.g. VENDOR, then Enter"}
-          className="min-w-30 flex-1 bg-transparent px-1 py-1 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
-        />
-      </div>
+    <div className="flex flex-wrap gap-1.5">
+      {ROLE_OPTIONS.map((r) => {
+        const active = roles.includes(r.value);
+        return (
+          <button
+            key={r.value}
+            type="button"
+            onClick={() => toggle(r.value)}
+            aria-pressed={active}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
+              active
+                ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                : "border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+            }`}
+          >
+            {active && <CheckCircle2 size={12} />}
+            {r.label}
+            <span className="text-[10.5px] opacity-60">{r.value}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-/* Searchable multi-select over the (placeholder) user list — search, pick
- * from the dropdown, selected users render as removable chips. */
+/* Searchable multi-select over real customers (GET /customers/admin/get-all,
+ * debounced server-side search) — selected users render as removable chips. */
 function UserPicker({ selected, onChange }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  // Base list — the same call the Customers page makes (first 100, no
+  // search), loaded once and filtered locally as the admin types.
+  const [baseList, setBaseList] = useState([]);
+  // Extra matches from the server-side search, for customers past the first 100.
+  const [searchHits, setSearchHits] = useState([]);
+  const [loadingBase, setLoadingBase] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  const rowsOf = (res) => {
+    const list = res?.data?.data ?? res?.data?.customers ?? res?.data ?? [];
+    return Array.isArray(list) ? list.map(toUserOption).filter((u) => u.id) : [];
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    getAllCustomers({ page: 1, limit: 100 })
+      .then((res) => {
+        if (cancelled) return;
+        const rows = rowsOf(res);
+        console.log(`[Notifications] customers loaded for picker: ${rows.length}`, res);
+        setBaseList(rows);
+      })
+      .catch((err) => {
+        if (!cancelled && !isNotFoundMessage(err.message)) setSearchError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBase(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const q = query.trim();
+    // Empty query → `results` ignores searchHits, so nothing to fetch.
+    if (!q) return undefined;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await getAllCustomers({ page: 1, limit: 20, search: q });
+        if (!cancelled) setSearchHits(rowsOf(res));
+      } catch {
+        // A miss here ("No customers found" 404, unsupported search, …) is
+        // fine — the locally filtered base list still shows.
+        if (!cancelled) setSearchHits([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [query]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return MOCK_USERS.filter((u) => !selected.some((s) => s.id === u.id))
-      .filter((u) => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
-      .slice(0, 6);
-  }, [query, selected]);
+    const local = baseList.filter(
+      (u) => !q || u.name.toLowerCase().includes(q) || u.detail.toLowerCase().includes(q)
+    );
+    const merged = new Map();
+    [...local, ...(q ? searchHits : [])].forEach((u) => merged.set(u.id, u));
+    return Array.from(merged.values())
+      .filter((u) => !selected.some((s) => s.id === u.id))
+      .slice(0, 8);
+  }, [baseList, searchHits, query, selected]);
+  const busy = loadingBase || searching;
 
   const pick = (user) => {
     onChange([...selected, user]);
@@ -308,9 +379,10 @@ function UserPicker({ selected, onChange }) {
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 120)}
-            placeholder="Search users by name or email…"
+            placeholder="Search customers by name, email or number…"
             className="w-full bg-transparent text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
           />
+          {busy && <Loader2 size={13} className="shrink-0 animate-spin text-neutral-400" />}
         </div>
 
         {open && results.length > 0 && (
@@ -324,13 +396,32 @@ function UserPicker({ selected, onChange }) {
                 className="flex w-full flex-col items-start px-3.5 py-2.5 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
               >
                 <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{u.name}</span>
-                <span className="text-[11px] text-neutral-500">{u.email}</span>
+                {u.detail && <span className="text-[11px] text-neutral-500">{u.detail}</span>}
               </button>
             ))}
           </div>
         )}
+        {open && results.length === 0 && (
+          <div className="absolute z-10 mt-1.5 flex w-full items-center gap-2 rounded-xl bg-white px-3.5 py-2.5 text-[12px] text-neutral-500 shadow-xl dark:bg-neutral-900 dark:shadow-black/40">
+            {busy ? (
+              <>
+                <Loader2 size={12} className="animate-spin" /> Loading customers…
+              </>
+            ) : searchError ? (
+              "Couldn't load customers."
+            ) : query.trim() ? (
+              `No customer matches "${query.trim()}".`
+            ) : (
+              "No customers on the platform yet."
+            )}
+          </div>
+        )}
       </div>
-      <p className="mt-1.5 text-[11px] text-neutral-400 dark:text-neutral-600">Placeholder list — will switch to live user search once that API exists.</p>
+      {searchError && (
+        <p className="mt-1.5 flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400">
+          <AlertTriangle size={11} /> {searchError}
+        </p>
+      )}
     </div>
   );
 }
@@ -371,33 +462,45 @@ function BroadcastSection() {
         ? { roles }
         : audienceMode === "users"
         ? { userIds: selectedUsers.map((u) => u.id) }
-        : null; // "all users" — omit target entirely
+        : { roles: ALL_USER_ROLES };
 
     const payload = {
       title: title.trim(),
       body: body.trim(),
-      ...(target ? { target } : {}),
+      target,
       severity,
       ...(deepLink.trim() ? { deepLink: deepLink.trim() } : {}),
       ...(mode === "dryRun" ? { dryRun: true } : { push, dryRun: false }),
     };
 
     try {
-      const data = await broadcastNotification(payload);
+      const res = await broadcastNotification(payload);
+      // Like every other endpoint, the numbers sit under `data` — check
+      // the top level too in case this one returns them flat.
+      const info = res?.data ?? {};
+      const pick = (...keys) => {
+        for (const k of keys) {
+          const v = info[k] ?? res?.[k];
+          if (v != null) return v;
+        }
+        return null;
+      };
+      const count = pick("audienceCount", "recipientCount", "totalRecipients", "count", "total");
+      const sent = pick("sentCount", "pushSent", "successCount", "delivered");
+      const countText = count != null ? ` ${count} recipient(s).` : "";
+
       if (mode === "dryRun") {
-        const count = data?.audienceCount ?? data?.count ?? data?.totalRecipients;
         setResult({
           tone: "success",
-          message:
-            data?.message ||
-            (count != null ? `Audience resolved — ${count} recipient(s). Nothing was sent.` : "Audience resolved. Nothing was sent."),
+          message: `${res?.message || "Audience resolved."}${countText} Nothing was sent.`,
         });
       } else {
         setResult({
           tone: "success",
-          message: data?.message || "Broadcast sent.",
+          message: `${res?.message || "Broadcast sent."}${countText}${sent != null ? ` Push sent: ${sent}.` : ""}`,
         });
       }
+      console.log(`[Notifications] broadcast ${mode} response:`, res);
     } catch (err) {
       setResult({ tone: "error", message: err.message });
     } finally {
@@ -415,7 +518,7 @@ function BroadcastSection() {
   // derived from the same state the payload itself is built from.
   const audienceSummary =
     audienceMode === "all"
-      ? "All users on the platform"
+      ? "All customers and vendors"
       : audienceMode === "roles"
       ? roles.length
         ? `Everyone with role: ${roles.join(", ")}`
@@ -484,16 +587,21 @@ function BroadcastSection() {
                 active={audienceMode === "all"}
                 icon={Globe}
                 title="All Users"
-                description="Every user on the platform."
+                description="Every customer and vendor on the platform."
                 onClick={() => setAudienceMode("all")}
               />
             </div>
 
             <div className="mt-3">
               {audienceMode === "roles" && (
-                <Field label="Roles" required>
-                  <RoleChipInput roles={roles} onChange={setRoles} />
-                </Field>
+                // Not <Field> — it's a <label>, and a stray click inside one
+                // would toggle the first role button.
+                <div>
+                  <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                    Roles<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
+                  </span>
+                  <RolePicker roles={roles} onChange={setRoles} />
+                </div>
               )}
               {audienceMode === "users" && (
                 <Field label="Users" required>

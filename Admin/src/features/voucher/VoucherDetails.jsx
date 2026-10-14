@@ -24,10 +24,25 @@ import {
   Globe,
   Users,
   X,
+  Plus,
+  RefreshCw,
+  PauseCircle,
+  PlayCircle,
 } from "lucide-react";
-import { computeStatus, VoucherStatusBadge } from "./VoucherList";
+import { computeStatus, VoucherStatusBadge, DummyBadge } from "./VoucherList";
 import { VOUCHER_STATUSES } from "./services/VoucherApi";
 import { RingStat } from "../brand/BrandShared";
+import VoucherImageGallery, { BannerAddModal, BannerThumb, BannerReviewModal } from "./VoucherImageGallery";
+import StatusStepButton from "../../components/common/StatusStepButton";
+
+// Banner review status (bannerStatus) → pill label / colour.
+const BANNER_STATUS_TONES = { PENDING: "amber", APPROVED: "emerald", REJECTED: "red" };
+function bannerStatusLabel(banner) {
+  if (banner?.status === "PENDING") return "Pending review";
+  if (banner?.status === "APPROVED") return "Approved";
+  if (banner?.status === "REJECTED") return "Rejected";
+  return banner?.current?.url ? "Live" : "No banner";
+}
 
 /* -------------------------------------------------------------------------
  * VoucherDetails
@@ -109,6 +124,9 @@ export default function VoucherDetails({
   onPublish,
   onApproveBanner,
   onRejectBanner,
+  onReorderImages,
+  onUploadBanner,
+  onRequestStep,
   busy,
   actionError,
 }) {
@@ -122,6 +140,10 @@ export default function VoucherDetails({
   const [bannerRejectReason, setBannerRejectReason] = useState("");
   const [showBannerRejectBox, setShowBannerRejectBox] = useState(false);
   const [bannerRejectError, setBannerRejectError] = useState("");
+  // Banner upload modal: null (closed) | "add" | "replace-current" | "replace-pending"
+  const [bannerModal, setBannerModal] = useState(null);
+  // Banner viewer / review: null (closed) | "current" | "pending"
+  const [bannerView, setBannerView] = useState(null);
 
   const status = computeStatus(voucher);
 
@@ -166,6 +188,12 @@ export default function VoucherDetails({
               <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">{voucher.title}</h1>
                 <VoucherStatusBadge status={status} />
+                {voucher.isDummy && <DummyBadge size="sm" />}
+                {voucher.isDummy && voucher.dummyBatch && (
+                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[10.5px] text-violet-600 dark:bg-neutral-800 dark:text-violet-400">
+                    {voucher.dummyBatch}
+                  </span>
+                )}
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-neutral-500">
                 <Tag size={11} /> {voucher.versionCode} · {voucher.brandName}
@@ -174,6 +202,26 @@ export default function VoucherDetails({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Pause a live voucher / resume a paused one (API doc #57a/#57b) —
+                opens the parent's confirm dialog. */}
+            {onRequestStep && status === VOUCHER_STATUSES.PUBLISHED && (
+              <button
+                onClick={() => onRequestStep("pause")}
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-orange-50 px-3.5 py-2 text-[12.5px] font-semibold text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-60 dark:border-orange-400/30 dark:bg-orange-400/10 dark:text-orange-300"
+              >
+                <PauseCircle size={14} /> Pause voucher
+              </button>
+            )}
+            {onRequestStep && status === VOUCHER_STATUSES.PAUSED && (
+              <button
+                onClick={() => onRequestStep("resume")}
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 py-2 text-[12.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:opacity-60"
+              >
+                <PlayCircle size={14} /> Resume voucher
+              </button>
+            )}
             <RingStat
               pct={voucher.isActive ? 100 : 0}
               label="Status"
@@ -199,23 +247,27 @@ export default function VoucherDetails({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
           {/* Left: voucher info */}
           <div className="min-w-0 space-y-4">
-            {/* Images */}
-            {voucher.images?.length > 0 && (
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                {voucher.images.map((img, i) => (
-                  <div key={img?.url || img?.media?.url || i} className="relative aspect-video overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-                    <img src={img?.url || img?.media?.url} alt={`${voucher.title} ${i + 1}`} className="h-full w-full object-cover" />
-                    <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                      #{img.sortOrder ?? i + 1}
-                    </span>
-                    {/* {img.provider && (
-                      <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wide text-white">
-                        {img.provider}
-                      </span>
-                    )} */}
-                  </div>
-                ))}
+            {/* Images — click to view full size, drag to reorder */}
+            {!voucher.images?.length && (
+              <div className="flex items-center gap-2.5 rounded-2xl bg-neutral-50 px-4 py-6 text-[12px] text-neutral-500 dark:bg-neutral-950/60">
+                <ImageIcon size={16} className="shrink-0" />
+                No images uploaded for this voucher.
               </div>
+            )}
+            {voucher.images?.length > 0 && (
+              <VoucherImageGallery
+                key={voucher.images.map((img) => img.id || img.url).join("|")}
+                images={voucher.images}
+                title={voucher.title}
+                onReorder={onReorderImages}
+                // Backend only reorders DRAFT / REJECTED versions (API doc #57d) —
+                // a published/approved version's images are part of what was approved.
+                lockedReason={
+                  [VOUCHER_STATUSES.DRAFT, VOUCHER_STATUSES.REJECTED].includes(voucher.approvalStatus)
+                    ? null
+                    : "order can only be changed on a Draft or Rejected version (create a new version to reorder)"
+                }
+              />
             )}
 
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -330,62 +382,6 @@ export default function VoucherDetails({
               </div>
             )}
 
-            {/* Offers — one color per offer (fixed order, never cycled per
-                render) so it's easy to tell rows apart at a glance. */}
-            <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-              <p className="px-5 pt-5 pb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
-                Offers ({voucher.offers?.length ?? 0})
-              </p>
-              {voucher.offers?.length ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-140 text-left text-[12.5px]">
-                    <thead className="text-[10.5px] uppercase tracking-wide text-neutral-400">
-                      <tr>
-                        <th className="px-5 py-2 font-medium">Offer</th>
-                        <th className="px-3 py-2 font-medium">Discount</th>
-                        <th className="px-3 py-2 font-medium">Min Bill</th>
-                        <th className="px-3 py-2 font-medium">Max Discount</th>
-                        <th className="px-3 py-2 font-medium">Usage</th>
-                        <th className="px-3 py-2 font-medium">Applicable On</th>
-                        <th className="px-5 py-2 text-right font-medium">Active</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {voucher.offers.map((o, i) => {
-                        const accent = ACCENT_STYLES[i % ACCENT_STYLES.length];
-                        return (
-                          <tr key={o._id} className="border-t border-neutral-100 dark:border-neutral-800">
-                            <td className={`border-l-4 px-5 py-3 ${accent.left}`}>
-                              <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-100">
-                                <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
-                                {o.title}
-                              </span>
-                            </td>
-                            <td className="px-3 py-3 font-semibold text-emerald-600 dark:text-emerald-400">
-                              {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
-                            </td>
-                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.minBillAmount}</td>
-                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.maxDiscountAmount}</td>
-                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.usageType}</td>
-                            <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.discountApplicableOn}</td>
-                            <td className="px-5 py-3 text-right">
-                              {o.isActive ? (
-                                <CheckCircle2 size={14} className="ml-auto text-emerald-600 dark:text-emerald-400" />
-                              ) : (
-                                <XCircle size={14} className="ml-auto text-neutral-400 dark:text-neutral-600" />
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="px-5 pb-5 text-[12.5px] text-neutral-500">No offers on this version.</p>
-              )}
-            </div>
-
             {/* Claims & Revenue */}
             {voucher.stats && (
               <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -456,6 +452,9 @@ export default function VoucherDetails({
 
           {/* Right: Super Admin approval panel + brand + quick facts */}
           <div className="min-w-0 space-y-4">
+            {/* Hidden once the voucher is live (PUBLISHED) — there's nothing left
+                to approve; for every other status it holds the actions / info. */}
+            {status !== VOUCHER_STATUSES.PUBLISHED && (
             <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <div className="mb-4 flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
                 <ShieldCheck size={16} className="text-emerald-500 dark:text-emerald-400" /> Super Admin Approval
@@ -508,14 +507,6 @@ export default function VoucherDetails({
                 </div>
               )}
 
-              {/* ---- Published: live ---- */}
-              {status === VOUCHER_STATUSES.PUBLISHED && (
-                <div className="flex items-start gap-2.5 rounded-xl bg-emerald-400/10 p-3.5">
-                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  <p className="text-[12.5px] text-emerald-700 dark:text-emerald-300">This voucher is live in the app.</p>
-                </div>
-              )}
-
               {/* ---- Rejected: reason ---- */}
               {status === VOUCHER_STATUSES.REJECTED && (
                 <div className="flex items-start gap-2.5 rounded-xl bg-red-500/10 p-3.5">
@@ -539,8 +530,18 @@ export default function VoucherDetails({
                 </div>
               )}
 
-              {/* ---- Expired / Paused / Archived: terminal states ---- */}
-              {[VOUCHER_STATUSES.EXPIRED, VOUCHER_STATUSES.PAUSED, VOUCHER_STATUSES.ARCHIVED].includes(status) && (
+              {/* ---- Paused: hidden from customers, can be resumed ---- */}
+              {status === VOUCHER_STATUSES.PAUSED && (
+                <div className="flex items-start gap-2.5 rounded-xl bg-orange-400/10 p-3.5">
+                  <PauseCircle size={16} className="mt-0.5 shrink-0 text-orange-600 dark:text-orange-400" />
+                  <p className="text-[12.5px] text-orange-700 dark:text-orange-300">
+                    Paused — customers can't see this voucher. Resume it to put it back in the app as it was.
+                  </p>
+                </div>
+              )}
+
+              {/* ---- Expired / Archived: terminal states ---- */}
+              {[VOUCHER_STATUSES.EXPIRED, VOUCHER_STATUSES.ARCHIVED].includes(status) && (
                 <div className="flex items-start gap-2.5 rounded-xl bg-neutral-200 p-3.5 dark:bg-neutral-800/60">
                   <Clock size={16} className="mt-0.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
                   <p className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
@@ -549,14 +550,25 @@ export default function VoucherDetails({
                 </div>
               )}
             </div>
+            )}
 
             {/* Banner Approval — a separate gate from the version workflow
                 above: the banner lives on the parent voucher and can be
                 replaced independently of any version's own review cycle. */}
-            {voucher.banner && (
+            {/* Shown even with no banner yet, so the admin can add one. */}
               <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                <div className="mb-4 flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
-                  <ImageIcon size={16} className="text-emerald-500 dark:text-emerald-400" /> Banner Approval
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
+                    <ImageIcon size={16} className="text-emerald-500 dark:text-emerald-400" /> Banner
+                  </span>
+                  {onUploadBanner && (
+                    <button
+                      onClick={() => setBannerModal("add")}
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-400 px-3 py-1.5 text-[12px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
+                    >
+                      <Plus size={13} /> Add Banner
+                    </button>
+                  )}
                 </div>
 
                 <table className="w-full text-left text-[12.5px]">
@@ -564,9 +576,17 @@ export default function VoucherDetails({
                     <tr className="border-b border-neutral-100 dark:border-neutral-800">
                       <td className="w-28 py-2.5 align-top text-neutral-500">Current</td>
                       <td className="py-2.5">
-                        {voucher.banner.current?.url ? (
-                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
-                            <img src={voucher.banner.current.url} alt="Current banner" className="h-full w-full object-cover" />
+                        {voucher.banner?.current?.url ? (
+                          <div className="flex flex-wrap items-center gap-3">
+                            <BannerThumb media={voucher.banner?.current} label="Current" onClick={() => setBannerView("current")} />
+                            {onUploadBanner && (
+                              <button
+                                onClick={() => setBannerModal("replace-current")}
+                                className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-300 dark:hover:text-emerald-400"
+                              >
+                                <RefreshCw size={12} /> Replace
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <span className="text-neutral-400 dark:text-neutral-600">No live banner yet</span>
@@ -576,9 +596,17 @@ export default function VoucherDetails({
                     <tr className="border-b border-neutral-100 dark:border-neutral-800">
                       <td className="py-2.5 align-top text-neutral-500">Pending</td>
                       <td className="py-2.5">
-                        {voucher.banner.pending?.url ? (
-                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
-                            <img src={voucher.banner.pending.url} alt="Pending banner" className="h-full w-full object-cover" />
+                        {voucher.banner?.pending?.url ? (
+                          <div className="flex flex-wrap items-center gap-3">
+                            <BannerThumb media={voucher.banner?.pending} label="Pending" onClick={() => setBannerView("pending")} />
+                            {onUploadBanner && (
+                              <button
+                                onClick={() => setBannerModal("replace-pending")}
+                                className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-300 dark:hover:text-emerald-400"
+                              >
+                                <RefreshCw size={12} /> Replace
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <span className="text-neutral-400 dark:text-neutral-600">Nothing awaiting review</span>
@@ -587,28 +615,35 @@ export default function VoucherDetails({
                     </tr>
                     <tr className="border-b border-neutral-100 dark:border-neutral-800">
                       <td className="py-2.5 text-neutral-500">Status</td>
-                      <td className="py-2.5 font-semibold text-neutral-800 dark:text-neutral-200">
-                        {voucher.banner.status || "—"}
+                      <td className="py-2.5">
+                        {/* Same status-pill pattern as vouchers: a banner waiting
+                            for review offers "Review", which opens the viewer. */}
+                        <StatusStepButton
+                          label={bannerStatusLabel(voucher.banner)}
+                          tone={BANNER_STATUS_TONES[voucher.banner?.status] || (voucher.banner?.current?.url ? "emerald" : "neutral")}
+                          stepLabel={voucher.banner?.pending?.url ? "Review" : null}
+                          onClick={() => setBannerView("pending")}
+                        />
                       </td>
                     </tr>
-                    {voucher.banner.rejectionReason && (
+                    {voucher.banner?.rejectionReason && (
                       <tr className="border-b border-neutral-100 dark:border-neutral-800">
                         <td className="py-2.5 align-top text-neutral-500">Rejection Reason</td>
-                        <td className="py-2.5 text-red-600 dark:text-red-400">{voucher.banner.rejectionReason}</td>
+                        <td className="py-2.5 text-red-600 dark:text-red-400">{voucher.banner?.rejectionReason}</td>
                       </tr>
                     )}
-                    {(voucher.banner.reviewedBy || voucher.banner.reviewedAt) && (
+                    {(voucher.banner?.reviewedBy || voucher.banner?.reviewedAt) && (
                       <tr>
                         <td className="py-2.5 text-neutral-500">Reviewed</td>
                         <td className="py-2.5 text-neutral-700 dark:text-neutral-300">
-                          {[voucher.banner.reviewedBy, voucher.banner.reviewedAt].filter(Boolean).join(" · ")}
+                          {[voucher.banner?.reviewedBy, voucher.banner?.reviewedAt].filter(Boolean).join(" · ")}
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
 
-                {voucher.banner.pending && (
+                {voucher.banner?.pending && (
                   <div className="mt-4 flex gap-2.5">
                     <button
                       onClick={onApproveBanner}
@@ -627,8 +662,23 @@ export default function VoucherDetails({
                     </button>
                   </div>
                 )}
+
+                {bannerView && (
+                  <BannerReviewModal
+                    current={voucher.banner?.current}
+                    pending={voucher.banner?.pending}
+                    focus={bannerView}
+                    busy={busy}
+                    onApprove={onApproveBanner}
+                    onReject={onRejectBanner}
+                    onClose={() => setBannerView(null)}
+                  />
+                )}
+
+                {bannerModal && (
+                  <BannerAddModal mode={bannerModal} onUpload={onUploadBanner} onClose={() => setBannerModal(null)} />
+                )}
               </div>
-            )}
 
             {/* Brand */}
             {voucher.brand && (
@@ -713,49 +763,6 @@ export default function VoucherDetails({
               </div>
             )}
 
-            {/* Version History — one color per version, same fixed order
-                as the Offers table, so a specific version is recognizable
-                at a glance between the two tables. */}
-            {voucher.versions?.length > 0 && (
-              <div className="overflow-hidden rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
-                  Version History ({voucher.versionCount})
-                </p>
-                <table className="w-full text-left text-[12px]">
-                  <thead className="text-[10.5px] uppercase tracking-wide text-neutral-400">
-                    <tr>
-                      <th className="py-1.5 pr-2 font-medium">Version</th>
-                      <th className="py-1.5 pr-2 font-medium">Status</th>
-                      <th className="py-1.5 pr-2 font-medium">Validity</th>
-                      <th className="py-1.5 pr-2 text-right font-medium">Claims</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {voucher.versions.map((v, i) => {
-                      const accent = ACCENT_STYLES[i % ACCENT_STYLES.length];
-                      return (
-                        <tr key={v.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                          <td className={`border-l-4 py-2 pl-2.5 pr-2 ${accent.left}`}>
-                            <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-200">
-                              <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
-                              {v.versionCode}
-                            </span>
-                          </td>
-                          <td className="py-2 pr-2">
-                            <VoucherStatusBadge status={v.status} />
-                          </td>
-                          <td className="py-2 pr-2 text-neutral-500">
-                            {v.startDate} → {v.endDate}
-                          </td>
-                          <td className="py-2 pr-2 text-right text-neutral-700 dark:text-neutral-300">{v.claimCount}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
             {/* Parent voucher record */}
             {voucher.parentVoucher && (
               <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -816,13 +823,121 @@ export default function VoucherDetails({
               </div>
             </div>
 
-            {!voucher.images?.length && (
-              <div className="flex items-center gap-2.5 rounded-2xl bg-neutral-50 px-4 py-6 text-[12px] text-neutral-500 dark:bg-neutral-950/60">
-                <ImageIcon size={16} className="shrink-0" />
-                No images uploaded for this voucher.
-              </div>
-            )}
           </div>
+        </div>
+
+        {/* Full-width tables below the two columns: this version's offers,
+            then every version of the voucher. */}
+        <div className="mt-4 space-y-4">
+        {/* Offers — one color per offer (fixed order, never cycled per
+            render) so it's easy to tell rows apart at a glance. */}
+        <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <p className="px-5 pt-5 pb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+            Offers ({voucher.offers?.length ?? 0})
+          </p>
+          {voucher.offers?.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-140 text-left text-[12.5px]">
+                <thead className="text-[10.5px] uppercase tracking-wide text-neutral-400">
+                  <tr>
+                    <th className="px-5 py-2 font-medium">Offer</th>
+                    <th className="px-3 py-2 font-medium">Discount</th>
+                    <th className="px-3 py-2 font-medium">Min Bill</th>
+                    <th className="px-3 py-2 font-medium">Max Discount</th>
+                    <th className="px-3 py-2 font-medium">Usage</th>
+                    <th className="px-3 py-2 font-medium">Applicable On</th>
+                    <th className="px-5 py-2 text-right font-medium">Active</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {voucher.offers.map((o, i) => {
+                    const accent = ACCENT_STYLES[i % ACCENT_STYLES.length];
+                    return (
+                      <tr key={o._id} className="border-t border-neutral-100 dark:border-neutral-800">
+                        <td className={`border-l-4 px-5 py-3 ${accent.left}`}>
+                          <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-100">
+                            <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
+                            {o.title}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 font-semibold text-emerald-600 dark:text-emerald-400">
+                          {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
+                        </td>
+                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.minBillAmount}</td>
+                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.maxDiscountAmount}</td>
+                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.usageType}</td>
+                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.discountApplicableOn}</td>
+                        <td className="px-5 py-3 text-right">
+                          {o.isActive ? (
+                            <CheckCircle2 size={14} className="ml-auto text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <XCircle size={14} className="ml-auto text-neutral-400 dark:text-neutral-600" />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="px-5 pb-5 text-[12.5px] text-neutral-500">No offers on this version.</p>
+          )}
+        </div>
+
+        {/* Version History — one color per version, same fixed order
+            as the Offers table, so a specific version is recognizable
+            at a glance between the two tables. */}
+        {voucher.versions?.length > 0 && (
+          <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <p className="px-5 pt-5 pb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
+              Version History ({voucher.versionCount ?? voucher.versions.length})
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-140 text-left text-[12.5px]">
+                <thead className="text-[10.5px] uppercase tracking-wide text-neutral-400">
+                  <tr>
+                    <th className="px-5 py-2 font-medium">Version</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Validity</th>
+                    <th className="px-5 py-2 text-right font-medium">Claims</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {voucher.versions.map((v, i) => {
+                    const accent = ACCENT_STYLES[i % ACCENT_STYLES.length];
+                    const viewing = v.id === voucher.id;
+                    return (
+                      <tr
+                        key={v.id}
+                        className={`border-t border-neutral-100 dark:border-neutral-800 ${viewing ? "bg-emerald-400/[0.05]" : ""}`}
+                      >
+                        <td className={`border-l-4 px-5 py-3 ${accent.left}`}>
+                          <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-100">
+                            <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
+                            {v.versionCode}
+                            {viewing && (
+                              <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                Viewing
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <VoucherStatusBadge status={v.status} />
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3 text-neutral-600 dark:text-neutral-300">
+                          {v.startDate} → {v.endDate}
+                        </td>
+                        <td className="px-5 py-3 text-right font-semibold text-neutral-800 dark:text-neutral-200">{v.claimCount}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         </div>
       </div>
 

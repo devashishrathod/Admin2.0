@@ -23,6 +23,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip
 import { Field, inputClass, SectionCard, CollapsibleSectionCard, EmptyState, StatusBadge, DetailTile } from "./BrandShared";
 import { getPlans } from "../plan/services/planApi";
 import { grantSubscription, cancelSubscription } from "./services/subscriptionApi";
+import { useBrands } from "./BrandContext";
 
 /* -------------------------------------------------------------------------
  * SubscriptionCenter.jsx
@@ -463,6 +464,11 @@ export function SubscriptionTab({ brand, onUpdate }) {
       }));
   }, [brand.invoices]);
 
+  // The local patches below show the change instantly; this then pulls the
+  // server's real subscription (end date, pricing, remaining %) for the
+  // brand and refreshes the brand list.
+  const { syncAfterUpdate } = useBrands();
+
   const recordHistory = (entry) => {
     const history = [entry, ...(brand.invoices || [])];
     onUpdate(brand.id, { invoices: history });
@@ -480,6 +486,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
     if (plan) {
       onUpdate(brand.id, { subscriptionPlan: plan.name, planPrice: `₹${Number(plan.price).toLocaleString("en-IN")}` });
     }
+    syncAfterUpdate(brand.id);
     setModalAction(null);
     setSuccessMsg(`${actionLabel} applied successfully.`);
   };
@@ -493,6 +500,7 @@ export function SubscriptionTab({ brand, onUpdate }) {
       note: `Subscription cancelled — ${reason}`,
     });
     onUpdate(brand.id, { subscriptionPlan: "Cancelled", expiredInDays: 0, remainderPercent: 0 });
+    syncAfterUpdate(brand.id);
     setShowCancelModal(false);
     setSuccessMsg("Subscription cancelled.");
   };

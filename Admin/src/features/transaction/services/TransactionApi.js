@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{base_url}}
@@ -8,6 +9,9 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const api = axios.create({
     baseURL: BASE_URL,
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as VoucherApi.js / subscriptionApi.js)
 api.interceptors.request.use(async (config) => {
@@ -59,10 +63,13 @@ export async function getVoucherClaims({
 
 // ── Get All Voucher Claim Payments ────────────────────────────────
 // GET {{base_url}}/voucher-claims/payments?page=&limit=&outletId=
-export async function getVoucherClaimPayments({ page = 1, limit = 20, outletId } = {}) {
+// `brandId` is used by a brand's detail page — not confirmed that the
+// backend filters on it, so callers also filter rows by brand themselves.
+export async function getVoucherClaimPayments({ page = 1, limit = 20, outletId, brandId } = {}) {
     try {
         const params = { page, limit };
         if (outletId) params.outletId = outletId;
+        if (brandId) params.brandId = brandId;
         const { data } = await api.get('/voucher-claims/payments', { params });
         return data;
     } catch (error) {

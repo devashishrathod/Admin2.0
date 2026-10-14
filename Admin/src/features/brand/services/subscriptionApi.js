@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{base_url}}
@@ -11,6 +12,9 @@ const api = axios.create({
         'Content-Type': 'application/json',
     },
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as planApi.js)
 api.interceptors.request.use(async (config) => {

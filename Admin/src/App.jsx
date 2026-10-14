@@ -9,6 +9,7 @@ import Voucher from './features/voucher/Voucher'
 import Plan from './features/plan/Plan'
 import SubCategory from './features/subcategory/SubCategory'
 import NewOnboarding from './features/newOnboarding/NewOnboarding'
+import BrandWaiting from './features/newOnboarding/BrandWaiting'
 import AnalyticsReport from './features/dashboard/Analyticsreport'
 import CustomerPlan from './features/plan/Customerplan'
 import VendorPlanAnalytics from './features/plan/Vendorplananalytics'
@@ -23,6 +24,8 @@ import RefundDetails from './features/refund/RefundDetails'
 import VoucherDetails from './features/voucher/VoucherDetails'
 import VoucherListing from './features/voucher/VoucherList'
 import BrandDetailsPage from './features/brand/BrandDetailsPage'
+import AddBrand from './features/brand/add/AddBrand'
+import AdminOnboarding from './features/onboarding/AdminOnboarding'
 import { BrandProvider } from './features/brand/BrandContext'
 import FeatureCampaign from './features/featurecampaign/page/FeatureCampaign'
 import CouponCode from './features/coupon/Couponcode'
@@ -92,7 +95,59 @@ function App() {
           }
         />
 
-        
+        <Route
+          path="/brand/expired"
+          element={
+            <Layout>
+              <Brand key="expired" scope="expired" />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/brand/dummy"
+          element={
+            <Layout>
+              <Brand key="dummy" scope="dummy" />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/brand/add"
+          element={
+            <Layout>
+              <AddBrand />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/brand/onboard"
+          element={
+            <Layout>
+              <AdminOnboarding />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/brand/onboard/:brandId"
+          element={
+            <Layout>
+              <AdminOnboarding />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/brand-waiting"
+          element={
+            <Layout>
+              <BrandWaiting />
+            </Layout>
+          }
+        />
 
         <Route
           path="/new-onboarding"
@@ -161,7 +216,16 @@ function App() {
           path="/subscriptions"
           element={
             <Layout>
-              <Subscriptions />
+              <Subscriptions key="all" />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/subscriptions/dummy"
+          element={
+            <Layout>
+              <Subscriptions key="dummy" scope="dummy" />
             </Layout>
           }
         />
@@ -279,7 +343,52 @@ function App() {
                 path="/vendor-listing"
                 element={
                   <Layout>
-                    <VoucherListing />
+                    <VoucherListing key="all" />
+                  </Layout>
+                }
+              />
+
+                  <Route
+                path="/voucher-expired"
+                element={
+                  <Layout>
+                    <VoucherListing key="expired" scope="expired" />
+                  </Layout>
+                }
+              />
+
+                  <Route
+                path="/voucher-waiting"
+                element={
+                  <Layout>
+                    <VoucherListing key="waiting" scope="waiting" />
+                  </Layout>
+                }
+              />
+
+                  <Route
+                path="/voucher-drafts"
+                element={
+                  <Layout>
+                    <VoucherListing key="draft" scope="draft" />
+                  </Layout>
+                }
+              />
+
+                  <Route
+                path="/voucher-banners"
+                element={
+                  <Layout>
+                    <VoucherListing key="banner" scope="banner" />
+                  </Layout>
+                }
+              />
+
+                  <Route
+                path="/voucher-dummy"
+                element={
+                  <Layout>
+                    <VoucherListing key="dummy" scope="dummy" />
                   </Layout>
                 }
               />

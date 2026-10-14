@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{base_url}}
@@ -11,6 +12,9 @@ const api = axios.create({
         'Content-Type': 'application/json',
     },
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as subscriptionApi.js)
 api.interceptors.request.use(async (config) => {
@@ -67,7 +71,47 @@ export async function broadcastNotification(payload) {
     }
 }
 
+/* -------------------------------------------------------------------------
+ * Admin's own in-app notification feed (header bell).
+ * GET {{base_url}}/notifications/get-all?page=&limit=&isRead=&type=
+ * ⚠️ No `brandId` on purpose — for an admin, omitting it returns the
+ * admin-audience feed (WEBHOOK_FAILED, PAYMENT_DISPUTED,
+ * BRAND_SUBSCRIPTION_LAPSED, PROMO_LIMIT_EXCEEDED, SUBSCRIPTION_CREDIT_REUSED…).
+ * response.data: { total, unreadCount, page, limit, data: [...] }
+ * (super_admin_panel_api_doc #20)
+ * ---------------------------------------------------------------------- */
+export async function getAdminNotifications({ page = 1, limit = 20, isRead, type } = {}) {
+    try {
+        const params = { page, limit };
+        if (isRead !== undefined) params.isRead = isRead;
+        if (type) params.type = type;
+        const { data } = await api.get('/notifications/get-all', { params });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * Mark notifications read.
+ * PUT {{base_url}}/notifications/mark-read
+ * body: { notificationIds: [...] }  or  { markAll: true }
+ * response.data: { modified, unreadCount } — fresh count for the badge.
+ * (super_admin_panel_api_doc #21)
+ * ---------------------------------------------------------------------- */
+export async function markNotificationsRead({ notificationIds, markAll = false } = {}) {
+    try {
+        const body = markAll ? { markAll: true } : { notificationIds };
+        const { data } = await api.put('/notifications/mark-read', body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
     sendTestPush,
     broadcastNotification,
+    getAdminNotifications,
+    markNotificationsRead,
 };

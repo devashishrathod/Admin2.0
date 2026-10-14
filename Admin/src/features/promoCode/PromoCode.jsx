@@ -49,7 +49,7 @@ import {
   COST_BEARING_LABELS,
   APPLICABLE_ACTION_LABELS,
 } from "./promoCodeEnums";
-import { getVouchers } from "../voucher/services/VoucherApi";
+import { getAllVoucherVersions } from "../voucher/services/VoucherApi";
 import { getAllBrands } from "../brand/services/BrandApi";
 import { getCategories } from "../category/services/CategoryApi";
 import { getPlans } from "../plan/services/planApi";
@@ -72,7 +72,7 @@ function formatDate(iso) {
 
 // Effective display status, folded from the two real flags the API gives us
 // (isExpired, isActive) into one badge — same idea as deriveStatus() in
-// features/newOnboarding/NewOnboarding.jsx.
+// features/newOnboarding/BrandWaiting.jsx.
 function deriveDisplayStatus(row) {
   if (row.isExpired) return { label: "Expired", className: "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400" };
   if (!row.isActive) return { label: "Inactive", className: "bg-amber-400/10 text-amber-600 dark:text-amber-400" };
@@ -958,16 +958,20 @@ export default function PromoCode() {
     // 100 is the real backend cap on these two list endpoints (a limit of
     // 200 gets rejected outright with "must be less than or equal to
     // 100") — capped here for all three for consistency.
-    getVouchers({ page: 1, limit: 100 })
-      .then((res) => {
+    // Every page — the newest 100 versions can all be dummy ones, which
+    // left this picker empty when only page 1 was loaded.
+    getAllVoucherVersions()
+      .then((allRows) => {
         // /vouchers/versions/get-all returns one row per VERSION — v._id is
         // that version's own id, not the parent voucher's. The backend's
         // voucherIds field checks against the parent Voucher collection, so
         // sending a version id there always comes back "does not exist".
         // Dedupe on the parent id too, since a voucher with multiple
         // versions would otherwise show up more than once in the picker.
+        // Dummy vouchers (or ones under a dummy brand) are left out.
         const seen = new Map();
-        (res?.data?.data ?? []).forEach((v) => {
+        allRows.forEach((v) => {
+          if (v.isDummy ?? v.voucher?.isDummy ?? v.brand?.isDummy) return;
           const voucherId = v.voucherId || v.voucher?._id;
           if (voucherId && !seen.has(voucherId)) {
             seen.set(voucherId, { id: voucherId, label: v.name || voucherId });
@@ -981,7 +985,10 @@ export default function PromoCode() {
       });
     getAllBrands({ page: 1, limit: 100 })
       .then((res) => {
-        const rows = (res?.data?.data ?? res?.data ?? []).map((b) => ({ id: b._id, label: b.brandName || b._id }));
+        // Real brands only — isDummy ones never show in the picker.
+        const rows = (res?.data?.data ?? res?.data ?? [])
+          .filter((b) => !b.isDummy)
+          .map((b) => ({ id: b._id, label: b.brandName || b._id }));
         setBrands(rows);
       })
       .catch((err) => {

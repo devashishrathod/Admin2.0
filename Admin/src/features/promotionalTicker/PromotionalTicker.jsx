@@ -601,7 +601,10 @@ export default function PromotionalTicker() {
     // Brands power the picker when redirect type is BRAND.
     getAllBrands({ page: 1, limit: 100 })
       .then((res) => {
-        const rows = (res?.data?.data ?? res?.data ?? []).map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.name || b._id }));
+        // Real brands only — isDummy ones never show in the picker.
+        const rows = (res?.data?.data ?? res?.data ?? [])
+          .filter((b) => !b.isDummy)
+          .map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.name || b._id }));
         setBrands(rows);
       })
       .catch(() => {});

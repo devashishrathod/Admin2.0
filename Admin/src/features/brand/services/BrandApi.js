@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -10,6 +11,9 @@ const api = axios.create({
         'Content-Type': 'application/json',
     },
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically
 api.interceptors.request.use(async (config) => {
@@ -122,7 +126,26 @@ export async function updateTopBrand(brandId, { isTopBrand, topOrder }) {
     }
 }
 
+/* -------------------------------------------------------------------------
+ * POST {{base_url}}/brands/admin/create
+ * multipart/form-data: `data` (full brand body as a JSON string) + files
+ * (logo, listingFeatures[i].icon, showcase[i].files) — see
+ * buildBrandFormData in features/brand/add/brandFormConfig.js.
+ * NOTE: path and file keys not confirmed yet — match them to the backend.
+ * ---------------------------------------------------------------------- */
+export async function createBrand(formData) {
+    try {
+        const { data } = await api.post('/brands/admin/create', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
+    createBrand,
     getBrandDetails,
     getBrands,
     getAllBrands,

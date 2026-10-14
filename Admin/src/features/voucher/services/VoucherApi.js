@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachSessionHandling } from '../../auth/session';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{TryDood2.0BaseUrl}}
@@ -8,6 +9,9 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const api = axios.create({
     baseURL: BASE_URL,
 });
+
+// 401 (session expired) → log out and go to the login screen.
+attachSessionHandling(api);
 
 // Attach auth token automatically (same pattern as authApi.js / planApi.js /
 // CategoryApi.js / showcaseApi.js). NOTE: adjust this relative path to
@@ -180,6 +184,24 @@ export async function getVouchers({
     } catch (error) {
         handleError(error);
     }
+}
+
+// ── Get EVERY voucher version (all pages) ──────────────────────────
+// The list endpoint caps `limit` at 100, so a single call silently drops
+// everything past the first 100 versions. Fetches page 1, then the rest in
+// parallel, and returns the flat array of raw version rows.
+export async function getAllVoucherVersions(params = {}) {
+    const limit = 100;
+    const first = await getVouchers({ ...params, page: 1, limit });
+    const rows = [...(first?.data?.data ?? [])];
+    const totalPages = first?.data?.totalPages ?? 1;
+    if (totalPages > 1) {
+        const rest = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) => getVouchers({ ...params, page: i + 2, limit }))
+        );
+        rest.forEach((r) => rows.push(...(r?.data?.data ?? [])));
+    }
+    return rows;
 }
 
 // ── Get Single Voucher (for the details page) ────────────────────
@@ -401,12 +423,54 @@ export async function rejectVoucherBanner(voucherId, reason) {
 // ══════════════════════════════════════════════════════════════
 
 // ── Delete Voucher ───────────────────────────────────────────────
-// DELETE {{TryDood2.0BaseUrl}}/vouchers/:id/delete
-// NOTE: adjust path if the real endpoint differs.
-export async function deleteVoucher(voucherId) {
+// DELETE {{TryDood2.0BaseUrl}}/vouchers/:voucherId
+// Confirmed from the vendor panel API doc (#57c). VENDOR+ADMIN.
+// ⚠️ Takes the parent VOUCHER id (deletes every version). Soft delete.
+// body (optional): { reason } — max 500, shown in the admin deleted-list.
+// 409 when customers hold live claims (PAID / PENDING) — blocked for admins
+// too; the response's details.suggestedAction ("Pause it instead…") is
+// added to the error message so the admin knows what to do.
+export async function deleteVoucher(voucherId, reason) {
     try {
         if (!voucherId) throw new Error('voucherId is required');
-        const { data } = await api.delete(`/vouchers/${voucherId}/delete`);
+        const config = reason ? { data: { reason } } : undefined;
+        const { data } = await api.delete(`/vouchers/${voucherId}`, config);
+        return data;
+    } catch (error) {
+        const suggested = error?.response?.data?.details?.suggestedAction;
+        if (suggested) {
+            throw new Error(`${error.response.data.message || 'Voucher cannot be deleted.'} ${suggested}`, { cause: error });
+        }
+        handleError(error);
+    }
+}
+
+// ── Pause a live voucher ─────────────────────────────────────────
+// POST {{TryDood2.0BaseUrl}}/vouchers/pause/:versionId
+// Confirmed from the vendor panel API doc (#57a). VENDOR+ADMIN.
+// ⚠️ Takes the VERSION id. Only a PUBLISHED version can be paused — it
+// leaves the customer feed until resumed (dates, offers, images unchanged).
+// body (optional): { reason } — max 1000, internal note, never shown to customers.
+export async function pauseVoucher(versionId, reason) {
+    try {
+        if (!versionId) throw new Error('versionId is required');
+        const body = reason ? { reason } : {};
+        const { data } = await api.post(`/vouchers/pause/${versionId}`, body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Resume a paused voucher ──────────────────────────────────────
+// POST {{TryDood2.0BaseUrl}}/vouchers/resume/:versionId   (no body)
+// Confirmed from the vendor panel API doc (#57b). VENDOR+ADMIN.
+// Only a PAUSED version. 409 if another version went live meanwhile, or the
+// validity ran out while paused (then a new version is needed).
+export async function resumeVoucher(versionId) {
+    try {
+        if (!versionId) throw new Error('versionId is required');
+        const { data } = await api.post(`/vouchers/resume/${versionId}`);
         return data;
     } catch (error) {
         handleError(error);
@@ -423,6 +487,52 @@ export async function updateVoucherSuggestion(voucherId, { isSuggested, suggesti
         const body = { isSuggested: Boolean(isSuggested) };
         if (isSuggested && suggestionOrder != null) body.suggestionOrder = suggestionOrder;
         const { data } = await api.put(`/vouchers/admin/suggestions/${voucherId}`, body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Reorder a voucher version's images (drag & drop) ─────────────────
+// PUT {{TryDood2.0BaseUrl}}/vouchers/versions/:versionId/images/reorder
+// Confirmed from the vendor panel API doc (#57d). VENDOR+ADMIN.
+// body: { images: [{ id, sortOrder }] } — the COMPLETE list; sortOrder only
+// sets the order (server renumbers 1..n).
+// ⚠️ Takes the VERSION id — images belong to a version, not the voucher.
+// ⚠️ Only DRAFT / REJECTED versions: PUBLISHED or APPROVED → 409 (their
+//    images are part of what was approved; create a new version first).
+// The first image is the customer-facing fallback when there's no
+// approved banner.
+export async function reorderVoucherImages(versionId, imageIds = []) {
+    try {
+        if (!versionId) throw new Error('versionId is required');
+        if (!imageIds.length) throw new Error('Image list is required.');
+        const images = imageIds.map((id, i) => ({ id, sortOrder: i + 1 }));
+        const { data } = await api.put(`/vouchers/versions/${versionId}/images/reorder`, { images });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Send a voucher banner for review ────────────────────────────────
+// POST {{TryDood2.0BaseUrl}}/vouchers/:voucherId/banner   (multipart)
+// Confirmed from the vendor panel API doc (#59). VENDOR+ADMIN.
+//   media  — the banner file (image, GIF or video — one field for all; the
+//            server works out the kind from the file itself, no `bannerType`)
+//   poster — still image, REQUIRED when `media` is a video
+// The banner goes to `pending` (bannerStatus PENDING) and only goes live
+// once approved (approveVoucherBanner); the current banner stays live
+// meanwhile. Size caps (defaults): image 10 MB, GIF 15 MB, video 50 MB.
+export async function uploadVoucherBanner(voucherId, media, poster) {
+    try {
+        if (!voucherId) throw new Error('voucherId is required');
+        if (!media) throw new Error('Choose a banner file first');
+        const formData = new FormData();
+        formData.append('media', media);
+        if (poster) formData.append('poster', poster);
+        // No explicit Content-Type — the browser must add the multipart boundary.
+        const { data } = await api.post(`/vouchers/${voucherId}/banner`, formData);
         return data;
     } catch (error) {
         handleError(error);

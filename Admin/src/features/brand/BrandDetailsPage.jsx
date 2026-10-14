@@ -9,7 +9,7 @@ export default function BrandDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const {
-    brands,
+    allBrands: brands,
     refreshBrandDetail,
     toggleActive,
     handleApprovalDecision,

@@ -21,6 +21,7 @@ import {
   Star,
   Loader2,
   AlertTriangle,
+  Lock,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
 import { getVouchers } from "./services/VoucherApi";
@@ -725,7 +726,7 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
         </button>
 
         {/* Pending approval banner */}
-        {item.approvalStatus === "Pending" && (
+        {item.approvalStatus === "Pending" && !item.isDummy && (
           <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[13.5px] font-semibold text-amber-600 dark:text-amber-300">Awaiting your approval</p>
@@ -776,7 +777,7 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
 
           {/* Top Suggestion toggle — same control across Voucher / Deal Pack / Membership */}
           <div className="mt-4">
-            <TopSuggestionToggle item={item} type={type} onToggle={onToggleTopSuggestion} size="lg" />
+            {!item.isDummy && <TopSuggestionToggle item={item} type={type} onToggle={onToggleTopSuggestion} size="lg" />}
           </div>
 
           {/* Tabs */}
@@ -910,6 +911,8 @@ function normalizeRealVoucher(v) {
     approvalStatus: mapVoucherApproval(v.status),
     status: String(v.status || "").toUpperCase() === "PUBLISHED" ? "Active" : "Inactive",
     topSuggestion: Boolean(voucher.isSuggested ?? v.isSuggested),
+    // Test/demo voucher (or under a dummy brand) — view-only everywhere.
+    isDummy: Boolean(v.isDummy ?? voucher.isDummy ?? brand?.isDummy),
     time: fmtTimeFromISO(publishedIso),
     code: voucher.voucherCode || "—",
     category: v.category?.name || "—",
@@ -1000,7 +1003,8 @@ export default function Voucher() {
   const updateItem = (id, updates) => {
     setDataByType((prev) => ({
       ...prev,
-      [activeType]: prev[activeType].map((i) => (i.id === id ? { ...i, ...updates } : i)),
+      // Dummy vouchers are view-only — never updated.
+      [activeType]: prev[activeType].map((i) => (i.id === id && !i.isDummy ? { ...i, ...updates } : i)),
     }));
   };
 
@@ -1014,7 +1018,7 @@ export default function Voucher() {
   const handleDelete = (item) => {
     setDataByType((prev) => ({
       ...prev,
-      [activeType]: prev[activeType].filter((i) => i.id !== item.id),
+      [activeType]: prev[activeType].filter((i) => i.id !== item.id || i.isDummy),
     }));
   };
 
@@ -1087,7 +1091,7 @@ export default function Voucher() {
       key: "topSuggestion",
       label: topSuggestionLabel(activeType),
       render: (row) => (
-        <TopSuggestionToggle item={row} type={activeType} onToggle={handleToggleTopSuggestion} />
+        row.isDummy ? <span className="text-[11px] text-neutral-400">—</span> : <TopSuggestionToggle item={row} type={activeType} onToggle={handleToggleTopSuggestion} />
       ),
     },
     {
@@ -1096,7 +1100,7 @@ export default function Voucher() {
       align: "right",
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
-          {row.approvalStatus === "Pending" && (
+          {row.approvalStatus === "Pending" && !row.isDummy && (
             <>
               <button
                 onClick={() => handleApprove(row)}
@@ -1121,20 +1125,33 @@ export default function Voucher() {
           >
             <Eye size={15} />
           </button>
-          <button
-            onClick={() => setEditingItem(row)}
-            aria-label={`Edit ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
-          >
-            <Pencil size={15} />
-          </button>
-          <button
-            onClick={() => handleDelete(row)}
-            aria-label={`Delete ${row.title}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
-          >
-            <Trash2 size={15} />
-          </button>
+          {row.isDummy ? (
+            // Dummy vouchers are view-only — no Edit / Delete.
+            <span
+              title="Dummy voucher — view only"
+              aria-label="View only"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-violet-600 dark:text-violet-400"
+            >
+              <Lock size={15} />
+            </span>
+          ) : (
+            <>
+              <button
+                onClick={() => setEditingItem(row)}
+                aria-label={`Edit ${row.title}`}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+              >
+                <Pencil size={15} />
+              </button>
+              <button
+                onClick={() => handleDelete(row)}
+                aria-label={`Delete ${row.title}`}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
+              >
+                <Trash2 size={15} />
+              </button>
+            </>
+          )}
         </div>
       ),
     },

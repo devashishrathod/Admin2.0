@@ -142,23 +142,51 @@ export function BrandProvider({ children }) {
     [refreshBrandDetail, fetchBrands]
   );
 
-  const toggleActive = useCallback(async (brand) => {
+  /* `hideFromCustomers` comes from the confirm modal (its "Also hide from
+     customers" checkbox on deactivate; always false on activate). */
+  const toggleActive = useCallback(async (brand, hideFromCustomers = false) => {
+    // Allowed on dummy brands too — Active/Inactive is one of their two actions.
     const nextActive = !brand.active;
     const nextStatus = nextActive ? "ACTIVE" : "INACTIVE";
+    const nextHidden = Boolean(hideFromCustomers);
 
     // optimistic update — `status` too, so the status badge flips at once
     setBrands((prev) =>
       prev.map((b) =>
-        b.id === brand.id ? { ...b, active: nextActive, status: nextActive ? "Active" : "Deactive" } : b
+        b.id === brand.id
+          ? { ...b, active: nextActive, status: nextActive ? "Active" : "Deactive", hiddenFromCustomers: nextHidden }
+          : b
       )
     );
     try {
-      await updateBrandStatus(brand.id, nextStatus, "", nextActive, false);
+      await updateBrandStatus(brand.id, nextStatus, "", nextActive, nextHidden);
       syncAfterUpdate(brand.id);
     } catch (err) {
       // roll back on failure
       setBrands((prev) =>
-        prev.map((b) => (b.id === brand.id ? { ...b, active: brand.active, status: brand.status } : b))
+        prev.map((b) =>
+          b.id === brand.id
+            ? { ...b, active: brand.active, status: brand.status, hiddenFromCustomers: brand.hiddenFromCustomers }
+            : b
+        )
+      );
+      setError(err.message);
+    }
+  }, [syncAfterUpdate]);
+
+  /* "Hide from customers" switch — independent of active/inactive (API doc
+     §13): PUT /brands/admin/:brandId/status with the brand's current
+     isActive + the new hideFromCustomers. */
+  const setHiddenFromCustomers = useCallback(async (brand, hide) => {
+    // Allowed on dummy brands too — Hide from customers is their other action.
+    const isActive = Boolean(brand.active);
+    setBrands((prev) => prev.map((b) => (b.id === brand.id ? { ...b, hiddenFromCustomers: hide } : b)));
+    try {
+      await updateBrandStatus(brand.id, isActive ? "ACTIVE" : "INACTIVE", "", isActive, hide);
+      syncAfterUpdate(brand.id);
+    } catch (err) {
+      setBrands((prev) =>
+        prev.map((b) => (b.id === brand.id ? { ...b, hiddenFromCustomers: brand.hiddenFromCustomers } : b))
       );
       setError(err.message);
     }
@@ -169,6 +197,7 @@ export function BrandProvider({ children }) {
      Untouched — updateBrandStatus derives `isActive` from `apiStatus`
      internally and always sends `hideFromCustomers: false` by default. */
   const handleApprovalDecision = useCallback(async (brand, newStatus, reason = "") => {
+    if (brand?.isDummy) return; // dummy brands are view-only
     const apiStatus = newStatus === "Active" ? "APPROVED" : "REJECTED";
     setBrands((prev) =>
       prev.map((b) =>
@@ -202,11 +231,13 @@ export function BrandProvider({ children }) {
      local-only until one exists. */
   const updateBrandDetails = useCallback((brandIdToUpdate, updates) => {
     setBrands((prev) =>
-      prev.map((b) => (b.id === brandIdToUpdate ? { ...b, ...updates } : b))
+      // Dummy brands are view-only — their details never change here.
+      prev.map((b) => (b.id === brandIdToUpdate && !b.isDummy ? { ...b, ...updates } : b))
     );
   }, []);
 
   const setTopBrand = useCallback(async (brand, { isTopBrand, topOrder }) => {
+    if (brand?.isDummy) throw new Error("Dummy brands are view-only.");
     setBrands((prev) =>
       prev.map((b) => (b.id === brand.id ? { ...b, isTopBrand, topOrder } : b))
     );
@@ -227,6 +258,7 @@ export function BrandProvider({ children }) {
 
   /* No delete endpoint has been provided yet — local-only for now. */
   const deleteBrandById = useCallback((brand) => {
+    if (brand?.isDummy) return; // dummy brands are view-only
     setBrands((prev) => prev.filter((b) => b.id !== brand.id));
   }, []);
 
@@ -244,6 +276,7 @@ export function BrandProvider({ children }) {
     refreshBrandDetail,
     syncAfterUpdate,
     toggleActive,
+    setHiddenFromCustomers,
     handleApprovalDecision,
     updateBrandDetails,
     setTopBrand,

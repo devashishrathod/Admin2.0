@@ -20,6 +20,17 @@ export default function BrandDetailsPage() {
 
   const brand = brands.find((b) => String(b.id) === String(id));
 
+  // Back returns to wherever the admin came from (Live / Expired / Dummy
+  // Brands, Dashboard…). Only when the page was opened directly (no in-app
+  // history) does it fall back to the list this brand belongs to.
+  const goBack = () => {
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate(brand?.isDummy ? "/brand/dummy" : brand?.status === "Expired" ? "/brand/expired" : "/brand");
+  };
+
   // List rows are lightweight — pull the fully-populated brand (pan/gst/
   // bank/outlet) once the detail page opens.
   useEffect(() => {
@@ -39,7 +50,7 @@ export default function BrandDetailsPage() {
           It may have been deleted, or the link is no longer valid.
         </p>
         <button
-          onClick={() => navigate("/brand")}
+          onClick={goBack}
           className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
         >
           <ArrowLeft size={13} />
@@ -52,7 +63,7 @@ export default function BrandDetailsPage() {
   return (
     <BrandDetails
       brand={brand}
-      onBack={() => navigate("/brand")}
+      onBack={goBack}
       onToggleActive={toggleActive}
       onDelete={deleteBrand}
       onUpdate={updateBrandDetails}

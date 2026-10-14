@@ -35,6 +35,7 @@ import {
   ArrowLeftRight,
   Undo2,
   FlaskConical,
+  Lock,
 } from "lucide-react";
 import {
   BUSINESS_STATUSES,
@@ -652,8 +653,8 @@ function BrandInfoTab({ brand }) {
    so the media gallery has room to breathe. The actual staged-upload /
    click-to-preview / drag-and-drop-reorder logic lives in ShowcaseAlbums.jsx
    (ported from the VenderPanel Showcase Details flow). */
-function AmbienceTab({ brand }) {
-  return <ShowcaseAlbums brand={brand} />;
+function AmbienceTab({ brand, readOnly }) {
+  return <ShowcaseAlbums brand={brand} readOnly={readOnly} />;
 }
 
 function SubBrandTab({ brand }) {
@@ -1634,21 +1635,24 @@ export default function BrandDetails({
   const [tab, setTab] = useState("Overview");
   // The Brand list's logo-hover "Edit" opens this page with { openEdit: true }.
   const location = useLocation();
-  const [showEditModal, setShowEditModal] = useState(Boolean(location.state?.openEdit));
+  // Dummy (isDummy) brands are view-only: no edit, delete, top-brand,
+  // approve/reject, activate/deactivate, subscription or showcase changes.
+  const readOnly = Boolean(brand.isDummy);
+  const [showEditModal, setShowEditModal] = useState(!readOnly && Boolean(location.state?.openEdit));
   const [showToggleConfirm, setShowToggleConfirm] = useState(false);
   const [showTopBrandModal, setShowTopBrandModal] = useState(false);
 
   const tabContent = {
     Overview: <OverviewTab brand={brand} />,
     "Brand Info": <BrandInfoTab brand={brand} />,
-    "Showcase Media": <AmbienceTab brand={brand} />,
+    "Showcase Media": <AmbienceTab brand={brand} readOnly={readOnly} />,
     "Sub-Brand": <SubBrandTab brand={brand} />,
     Listings: <ListingsTab brand={brand} />,
     Settlements: <SettlementsTab brand={brand} />,
     Transactions: <TransactionsTab brand={brand} />,
     Refunds: <RefundsTab brand={brand} />,
     Voucher: <VoucherTab brand={brand} />,
-    Subscription: <SubscriptionTab brand={brand} onUpdate={onUpdate} />,
+    Subscription: <SubscriptionTab brand={brand} onUpdate={onUpdate} readOnly={readOnly} />,
     "System Verification": <SystemVerificationTab brand={brand} />,
     "Account Details": <AccountDetailsTab brand={brand} />,
   };
@@ -1678,6 +1682,15 @@ export default function BrandDetails({
             Back to Brands
           </button>
 
+          {readOnly ? (
+            <span
+              title="Dummy brands can't be edited or deleted"
+              className="flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3.5 py-1.5 text-[12.5px] font-medium text-violet-600 dark:text-violet-400"
+            >
+              <Lock size={13} />
+              View only · Dummy brand
+            </span>
+          ) : (
           <div className="flex flex-wrap items-center gap-2">
             {onSetTopBrand && (
               <button
@@ -1708,6 +1721,7 @@ export default function BrandDetails({
               <span className="hidden sm:inline">Delete Brand</span>
             </button>
           </div>
+          )}
         </div>
 
         {/* Header card */}
@@ -1743,7 +1757,7 @@ export default function BrandDetails({
                   )}
                   {incomplete ? (
                     <OnboardingBadge brand={brand} />
-                  ) : brand.status === "Pending" && onDecision ? (
+                  ) : brand.status === "Pending" && onDecision && !readOnly ? (
                     <ApprovalDropdown brand={brand} onDecision={onDecision} size="sm" />
                   ) : (
                     <StatusBadge status={brand.status} activeLabel="Active" />
@@ -1785,6 +1799,7 @@ export default function BrandDetails({
                   />
                 </>
               )}
+              {/* Active/Inactive works on dummy brands too (one of their two actions). */}
               <ToggleSwitch
                 checked={brand.active}
                 onChange={() => setShowToggleConfirm(true)}
@@ -1834,7 +1849,7 @@ export default function BrandDetails({
         {tabContent[tab]}
       </div>
 
-      {showEditModal && (
+      {showEditModal && !readOnly && (
         <EditBrandModal
           brand={brand}
           onClose={() => setShowEditModal(false)}
@@ -1847,14 +1862,15 @@ export default function BrandDetails({
           brand={brand}
           willActivate={!brand.active}
           onClose={() => setShowToggleConfirm(false)}
-          onConfirm={() => {
-            onToggleActive(brand);
+          onConfirm={(hideFromCustomers) => {
+            // Pass the modal's "Also hide from customers" choice through.
+            onToggleActive(brand, hideFromCustomers);
             setShowToggleConfirm(false);
           }}
         />
       )}
 
-      {showTopBrandModal && (
+      {showTopBrandModal && !readOnly && (
         <TopBrandModal
           brand={brand}
           onClose={() => setShowTopBrandModal(false)}

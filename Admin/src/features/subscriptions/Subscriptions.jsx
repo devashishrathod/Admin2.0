@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -17,6 +17,7 @@ import {
   Hash,
   Calendar,
   Tag,
+  FlaskConical,
 } from "lucide-react";
 import {
   AreaChart,
@@ -29,7 +30,7 @@ import {
   Tooltip,
 } from "recharts";
 import Table from "../../components/common/Table";
-import { getAllSubscriptions } from "./services/SubscriptionsApi";
+import { getAllSubscriptionPages } from "./services/SubscriptionsApi";
 
 const PRICING_COLORS = { list: "#22c55e", discount: "#f59e0b", gst: "#38bdf8", payable: "#a78bfa" };
 
@@ -400,11 +401,17 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
   );
 }
 
-export default function Subscriptions() {
-  const navigate = useNavigate();
+// Test/demo subscription — its own flag, or one under a dummy brand.
+const isDummySubscription = (r) => Boolean(r.isDummy ?? r.brand?.isDummy);
 
-  const [rows, setRows] = useState([]);
-  const [total, setTotal] = useState(0);
+/* scope "all" (sidebar: Subscriptions) = real ones only;
+   scope "dummy" (sidebar: Dummy Subscriptions) = isDummy ones only. */
+export default function Subscriptions({ scope = "all" }) {
+  const navigate = useNavigate();
+  const isDummyScope = scope === "dummy";
+
+  // Every row matching the server-side filters, both real and dummy.
+  const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -413,30 +420,35 @@ export default function Subscriptions() {
   const [source, setSource] = useState("All");
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [selected, setSelected] = useState(null);
 
+  // The API can't filter on isDummy, so every page is loaded and split
+  // here — paging is then done client-side over this scope's rows.
   const fetchSubscriptions = useCallback(async () => {
     setLoading(true);
     setLoadError("");
     try {
-      const res = await getAllSubscriptions({
-        page,
-        limit,
+      const list = await getAllSubscriptionPages({
         search,
         status: status === "All" ? undefined : status,
         source: source === "All" ? undefined : source,
       });
-      setRows(res?.data?.data ?? []);
-      setTotal(res?.data?.total ?? 0);
-      setTotalPages(res?.data?.totalPages ?? 1);
+      setAllRows(list);
     } catch (err) {
       setLoadError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, status, source]);
+  }, [search, status, source]);
+
+  const scopedRows = useMemo(
+    () => allRows.filter((r) => isDummySubscription(r) === isDummyScope),
+    [allRows, isDummyScope]
+  );
+  const total = scopedRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const rows = scopedRows.slice((page - 1) * limit, page * limit);
 
   // Debounce search
   useEffect(() => {
@@ -448,11 +460,11 @@ export default function Subscriptions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Refetch on filter / page change
+  // Refetch on filter change (paging is local now — no refetch needed)
   useEffect(() => {
     fetchSubscriptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, source, page]);
+  }, [status, source]);
 
   const columns = [
     {
@@ -464,6 +476,17 @@ export default function Subscriptions() {
             {row.brand?.brandName || "—"}
           </p>
           <p className="text-[11.5px] text-neutral-500">{row.brand?.merchantId || "—"}</p>
+          {isDummySubscription(row) && (
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
+              <FlaskConical size={9} />
+              Dummy
+            </span>
+          )}
+          {isDummySubscription(row) && (row.dummyBatch || row.brand?.dummyBatch) && (
+            <p className="mt-0.5 font-mono text-[10.5px] text-violet-600 dark:text-violet-400">
+              {row.dummyBatch || row.brand?.dummyBatch}
+            </p>
+          )}
         </button>
       ),
     },
@@ -601,9 +624,13 @@ export default function Subscriptions() {
             <CreditCard size={19} />
           </span>
           <div>
-            <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Subscriptions</h1>
+            <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
+              {isDummyScope ? "Dummy Subscriptions" : "Subscriptions"}
+            </h1>
             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
-              Every brand's plan, across the whole platform — {total} total.
+              {isDummyScope
+                ? `Test / demo subscriptions (isDummy) — kept separate from real ones. ${total} total.`
+                : `Every brand's plan, across the whole platform — ${total} total.`}
             </p>
           </div>
         </div>

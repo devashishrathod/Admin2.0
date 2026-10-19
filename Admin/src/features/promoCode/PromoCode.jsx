@@ -53,6 +53,7 @@ import { getAllVoucherVersions } from "../voucher/services/VoucherApi";
 import { getAllBrands } from "../brand/services/BrandApi";
 import { getCategories } from "../category/services/CategoryApi";
 import { getPlans } from "../plan/services/planApi";
+import Loader from "../../components/common/Loader";
 
 const STATUS_FILTERS = ["All", PROMO_STATUSES.LIVE, PROMO_STATUSES.SCHEDULED, PROMO_STATUSES.EXPIRED];
 const STATUS_LABELS = { All: "All", LIVE: "Live", SCHEDULED: "Scheduled", EXPIRED: "Expired" };
@@ -1391,10 +1392,7 @@ export default function PromoCode() {
 
             {/* Load state */}
             {loading && (
-              <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-                <Loader2 size={16} className="animate-spin" />
-                Loading promo codes…
-              </div>
+              <Loader label="Loading promo codes…" />
             )}
 
             {!loading && loadError && (
@@ -1408,7 +1406,7 @@ export default function PromoCode() {
                 <Table
                   columns={columns}
                   data={promoCodes}
-                  emptyMessage="No promo codes yet. Add one to get started."
+                  emptyTitle="No promo codes yet" emptyDescription="Promo codes give customers or vendors a discount on vouchers and plans. Create one to get started." emptyIcon="promo" emptyAction={{ label: "Add Promo Code", onClick: handleAddClick }}
                   minWidth={0}
                   dense
                 />

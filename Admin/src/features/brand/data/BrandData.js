@@ -450,6 +450,7 @@ export const DETAIL_TABS = [
   "Overview",
   "Brand Info",
   "Showcase Media",
+  "Listing Features",
   "Sub-Brand",
   // "Listings",
   "Settlements",

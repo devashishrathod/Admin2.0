@@ -19,12 +19,13 @@ import {
   Phone,
   Mail,
   Star,
-  Loader2,
   AlertTriangle,
   Lock,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
 import { getVouchers } from "./services/VoucherApi";
+import CommonEmptyState from "../../components/common/EmptyState";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Type configuration — Voucher / Deal Pack / Membership share the same
@@ -243,10 +244,11 @@ function SectionCard({ title, children, className = "" }) {
   );
 }
 
+// Shared EmptyState design (compact) for this page's empty sections.
 function EmptyState({ label }) {
   return (
-    <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
-      {label}
+    <div className="rounded-3xl border border-dashed border-emerald-200/70 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
+      <CommonEmptyState variant="compact" icon="voucher" title={String(label || "Nothing here yet").replace(/\.$/, "")} />
     </div>
   );
 }
@@ -1128,7 +1130,7 @@ export default function Voucher() {
           {row.isDummy ? (
             // Dummy vouchers are view-only — no Edit / Delete.
             <span
-              title="Dummy voucher — view only"
+              title="D voucher — view only"
               aria-label="View only"
               className="flex h-8 w-8 items-center justify-center rounded-lg text-violet-600 dark:text-violet-400"
             >
@@ -1221,10 +1223,7 @@ export default function Voucher() {
 
         {/* Table */}
         {activeType === "Voucher" && voucherLoading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading vouchers…
-          </div>
+          <Loader label="Loading vouchers…" />
         ) : activeType === "Voucher" && voucherError ? (
           <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />
@@ -1234,7 +1233,9 @@ export default function Voucher() {
           <Table
             columns={columns}
             data={filtered}
-            emptyMessage={`No ${activeType.toLowerCase()}s found.`}
+            emptyTitle={`No ${activeType.toLowerCase()}s found`}
+            emptyDescription="Nothing matches this search or filter. Try a different one."
+            emptyIcon="voucher"
             dense
           />
         )}

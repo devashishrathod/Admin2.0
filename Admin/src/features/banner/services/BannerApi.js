@@ -84,6 +84,9 @@ export function buildRedirectPayload({ type = REDIRECT_TYPES.NONE, targetId, url
 // mime type. `mediaUploadId`/`posterUploadId` are the presigned-road
 // alternative — create-only, see presignUploadAndConfirm below.
 function buildFormData({ title, description, redirect, startDate, endDate, isActive, mediaFile, posterFile, mediaUploadId, posterUploadId }) {
+    if (title != null && String(title).trim().length > 25) {
+        throw new Error('Banner title must be 25 characters or fewer');
+    }
     const fd = new FormData();
     if (title !== undefined) fd.append('title', title ?? '');
     if (description !== undefined) fd.append('description', description ?? '');
@@ -246,6 +249,21 @@ export async function getBanners({ page = 1, limit = 10, search = '' } = {}) {
         if (error?.response?.status === 404) {
             return { success: true, data: { total: 0, totalPages: 1, page, limit, data: [] } };
         }
+        handleError(error);
+    }
+}
+
+// ── Get one Banner (details page) ────────────────────────────
+// GET {{TryDood2.0BaseUrl}}/banners/get/:id  — super_admin_panel_api_doc #49.
+// Returns the banner object, or null when the API says it doesn't exist
+// (404 "Banner not found." / 422 invalid id) so the page can show "not found".
+export async function getBannerById(id) {
+    try {
+        const { data } = await api.get(`/banners/get/${id}`);
+        return data?.data ?? null;
+    } catch (error) {
+        const status = error?.response?.status;
+        if (status === 404 || status === 422) return null;
         handleError(error);
     }
 }

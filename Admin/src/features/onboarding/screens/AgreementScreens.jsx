@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Upload, FileText, Loader2, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, CheckCircle2 } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { recordOfflineDeed, getBillingAddress, saveBillingAddress, grantPlan } from "../services/onboardingApi";
 import { INDIAN_STATES, PIN_RE, errorText } from "../onboardingFlow";
 import { getPlans } from "../../plan/services/planApi";
+import Loader from "../../../components/common/Loader";
 
 const payload = (res) => res?.data ?? res ?? {};
 
@@ -173,7 +174,7 @@ export function SubscribePlanScreen({ brandId, eyebrow, onAdvance, onBack }) {
   if (loading) {
     return (
       <ScreenShell eyebrow={eyebrow} title="Plan & billing">
-        <p className="flex items-center gap-2 text-[14px] text-[#5B616E]"><Loader2 size={15} className="animate-spin" /> Loading billing address and plans…</p>
+        <Loader variant="inline" label="Loading billing address and plans…" />
       </ScreenShell>
     );
   }

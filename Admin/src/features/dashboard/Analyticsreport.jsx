@@ -49,6 +49,7 @@ import {
 import { useBrands } from "../brand/BrandContext";
 import { getPlans } from "../plan/services/planApi";
 import { getVouchers } from "../voucher/services/VoucherApi";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Mock data
@@ -443,15 +444,17 @@ const KPI_TINT_HEX = { emerald: "#2FDE8C", amber: "#FBBF24", sky: "#38BDF8", pin
 
 function KpiCard({ icon: Icon, label, value, delta, tint = "emerald", trend, dataKey }) {
   const tints = {
-    emerald: "bg-emerald-400/10 text-emerald-400",
-    amber: "bg-amber-400/10 text-amber-400",
-    sky: "bg-sky-400/10 text-sky-400",
-    pink: "bg-pink-400/10 text-pink-400",
+    emerald: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
+    amber: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
+    sky: "bg-sky-400/10 text-sky-600 dark:text-sky-400",
+    pink: "bg-pink-400/10 text-pink-600 dark:text-pink-400",
   };
   const positive = delta === undefined || delta >= 0;
   const sparkColor = KPI_TINT_HEX[tint] || KPI_TINT_HEX.emerald;
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+    // Dashboard-style tile: full height of its grid row, sparkline pinned to
+    // the bottom so tiles side by side line up.
+    <div className="flex h-full flex-col rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <div className="mb-2.5 flex items-center justify-between">
         <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tints[tint]}`}>
           <Icon size={16} />
@@ -467,10 +470,10 @@ function KpiCard({ icon: Icon, label, value, delta, tint = "emerald", trend, dat
           </span>
         )}
       </div>
-      <p className="text-[20px] font-bold tracking-tight text-neutral-900 dark:text-neutral-50">{value}</p>
-      <p className="mt-0.5 text-[11.5px] text-neutral-500">{label}</p>
+      <p className="text-[11.5px] font-medium text-neutral-500">{label}</p>
+      <p className="mt-0.5 truncate text-[22px] font-bold leading-tight tracking-tight text-neutral-900 dark:text-neutral-50">{value}</p>
       {trend && trend.length > 1 && (
-        <div className="mt-2 h-9">
+        <div className="mt-auto h-9 pt-2">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={trend} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
               <defs>
@@ -562,7 +565,7 @@ function DropdownFilter({ label, value, options, onChange }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
+          <div className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-3xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
             {options.map((opt) => (
               <button
                 key={opt}
@@ -746,9 +749,9 @@ function OverviewTab() {
             ))}
           </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <div className="flex h-full flex-col rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <p className="mb-1 text-[13px] font-bold text-neutral-900 dark:text-neutral-50">Brand Status</p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-1 items-center gap-3">
               <div className="relative h-23 w-23 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -813,16 +816,18 @@ function OverviewTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      {/* The two trend charts side by side, same height. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="flex h-full flex-col rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Receipt size={15} className="text-emerald-600 dark:text-emerald-400" /> Bill Amount, Discount &amp; Fees Trend
           </div>
           <span className="text-[12px] text-neutral-500">Last 6 months · all brands</span>
         </div>
-        <ResponsiveContainer width="100%" height={240}>
+        <ResponsiveContainer width="100%" height={260}>
           <BarChart data={BILLING_OVERVIEW} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
             <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip currency />} />
@@ -835,7 +840,7 @@ function OverviewTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="flex h-full flex-col rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <BarChart3 size={15} className="text-emerald-600 dark:text-emerald-400" /> Revenue &amp; Transactions Trend
@@ -854,7 +859,7 @@ function OverviewTab() {
                 <stop offset="100%" stopColor="#38BDF8" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
             <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis yAxisId="left" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis yAxisId="right" orientation="right" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -881,20 +886,21 @@ function OverviewTab() {
           </AreaChart>
         </ResponsiveContainer>
       </div>
+      </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="h-full rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-3.5 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Store size={15} className="text-emerald-600 dark:text-emerald-400" /> Top Brands
           </div>
           <span className="text-[12px] text-neutral-500">By followers</span>
         </div>
-        <div className="space-y-2.5">
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
           {topBrands.length ? (
             topBrands.map((b, i) => (
               <div
                 key={b.id}
-                className="flex items-center justify-between rounded-xl bg-neutral-50/60 px-3.5 py-2.5 dark:bg-neutral-950/60"
+                className="flex items-center justify-between rounded-2xl bg-white/70 px-3.5 py-2.5 dark:bg-neutral-950/50"
               >
                 <div className="flex items-center gap-3">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-200 text-[11.5px] font-bold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
@@ -918,7 +924,7 @@ function OverviewTab() {
               </div>
             ))
           ) : (
-            <p className="py-6 text-center text-[12.5px] text-neutral-500">No brands yet.</p>
+            <p className="py-6 text-center text-[12.5px] text-neutral-500 md:col-span-2">No brands yet.</p>
           )}
         </div>
       </div>
@@ -1067,7 +1073,7 @@ function BrandTrendPanel({ brand }) {
   }));
 
   return (
-    <div className="grid grid-cols-1 gap-4 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:grid-cols-2">
       <div>
         <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
           Customers &amp; Transactions
@@ -1132,7 +1138,7 @@ function BrandFactsPanel({ brand }) {
     <div className="space-y-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Real Brand Data</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className="h-full rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Renewal Window</p>
           {renewalData.length ? (
             <div className="relative flex h-27.5 items-center justify-center">
@@ -1155,7 +1161,7 @@ function BrandFactsPanel({ brand }) {
           )}
         </div>
 
-        <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className="h-full rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Reach</p>
           <div className="h-27.5">
             <ResponsiveContainer width="100%" height="100%">
@@ -1171,7 +1177,7 @@ function BrandFactsPanel({ brand }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:grid-cols-4">
         <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
           <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
             <CreditCard size={11} /> Plan Price
@@ -1286,7 +1292,7 @@ function DealPackTab() {
         </div>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
             <XAxis
               dataKey={xKey}
               tick={{ fill: "#8C9A91", fontSize: 10.5 }}
@@ -1414,7 +1420,7 @@ function MembershipTab() {
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={plans} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
               <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip content={<ChartTooltip />} />
@@ -1503,6 +1509,7 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 function VouchersTab() {
   const [period, setPeriod] = useState("Month");
   const [vouchers, setVouchers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -1512,6 +1519,8 @@ function VouchersTab() {
         if (!cancelled) setVouchers(res?.data?.data ?? []);
       } catch {
         if (!cancelled) setVouchers([]);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -1606,6 +1615,9 @@ function VouchersTab() {
   const data = period === "Month" ? monthly : yearly;
   const xKey = period === "Month" ? "label" : "year";
 
+  // Don't flash all-zero charts before the real vouchers arrive.
+  if (loading) return <Loader label="Loading voucher analytics…" />;
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1625,7 +1637,7 @@ function VouchersTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="h-full rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Tag size={15} className="text-emerald-400" /> Voucher Amount by {period}
@@ -1640,7 +1652,7 @@ function VouchersTab() {
                 <stop offset="100%" stopColor="#FBBF24" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
             <XAxis
               dataKey={xKey}
               tick={{ fill: "#8C9A91", fontSize: 10.5 }}
@@ -1655,7 +1667,7 @@ function VouchersTab() {
         </ResponsiveContainer>
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="h-full rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Receipt size={15} className="text-emerald-400" /> Bill Amount, Platform Fee &amp; Trydood Discount by {period}
@@ -1664,7 +1676,7 @@ function VouchersTab() {
         </div>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
             <XAxis
               dataKey={xKey}
               tick={{ fill: "#8C9A91", fontSize: 10.5 }}
@@ -1769,7 +1781,7 @@ function TransactionTab() {
         ))}
       </div>
 
-      <div className="rounded-2xl bg-white p-4 text-[12.5px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:text-neutral-400 dark:shadow-black/20">
+      <div className="h-full rounded-3xl bg-white p-4 text-[12.5px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:text-neutral-400 dark:shadow-black/20">
         <span className="font-semibold text-neutral-800 dark:text-neutral-200">Avg. ticket size (Jul):</span> {formatCurrency(avgTicketSize)}{" "}
         <span
           className={`ml-1 font-semibold ${
@@ -1782,7 +1794,7 @@ function TransactionTab() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="min-w-0 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
               <Repeat size={15} className="text-emerald-400" /> Success vs Failed Transactions
@@ -1791,7 +1803,7 @@ function TransactionTab() {
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={TRANSACTION_HISTORY} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
               <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip content={<ChartTooltip />} />
@@ -1802,7 +1814,7 @@ function TransactionTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="min-w-0 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+        <div className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <Smartphone size={15} className="text-emerald-400" /> Payment Method Split
           </div>
@@ -1839,7 +1851,7 @@ function TransactionTab() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="h-full rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
           <BarChart3 size={15} className="text-emerald-400" /> Transaction Value Trend
         </div>
@@ -1851,7 +1863,7 @@ function TransactionTab() {
                 <stop offset="100%" stopColor="#38BDF8" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
             <XAxis dataKey="month" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip currency />} />
@@ -1939,7 +1951,7 @@ function SettlementAnalyticsTab() {
         <KpiCard icon={FileText} label="Total Settlement Records" value={formatNumber(totals.count)} tint="sky" />
       </div>
 
-      <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="h-full rounded-3xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[14.5px] font-bold text-neutral-900 dark:text-neutral-50">
             <BarChart3 size={15} className="text-emerald-400" /> Settlement Amount by {period}
@@ -1948,7 +1960,7 @@ function SettlementAnalyticsTab() {
         </div>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={buckets} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#232B26" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#8C9A91" strokeOpacity={0.18} vertical={false} />
             <XAxis dataKey="label" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip currency />} />
@@ -2007,29 +2019,35 @@ export default function AnalyticsReport() {
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="w-full">
-        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Header — same style as the Dashboard */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-              <BarChart3 size={20} className="text-emerald-400" />
-              Analytics Report
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-neutral-900 sm:text-[30px] dark:text-neutral-50">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-400 text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.6)]">
+                <BarChart3 size={19} />
+              </span>
+              Analytics <span className="text-emerald-600 dark:text-emerald-400">Report</span>
             </h1>
-            <p className="mt-1 text-[13px] text-neutral-500">
+            <p className="mt-1.5 text-[13px] text-neutral-500">
               Customer activity, billing breakdown, and settlement performance across brands.
             </p>
           </div>
-          <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11.5px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-            <ArrowUpRight size={12} className="text-emerald-400" />
+          <span className="flex w-fit items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-3.5 py-2 text-[12.5px] font-medium text-emerald-700 shadow-sm backdrop-blur-xl dark:border-white/5 dark:bg-neutral-900/60 dark:text-emerald-300">
+            <ArrowUpRight size={14} />
             Data through Jul 2026
           </span>
         </div>
 
-        <div className="mb-5 flex flex-wrap items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
+        {/* Tabs — glass pill bar, active tab in the green gradient */}
+        <div className="mb-5 flex w-full flex-wrap items-center gap-1 rounded-full border border-white/80 bg-white/60 p-1.5 shadow-[0_8px_30px_rgba(16,185,129,0.07)] backdrop-blur-xl sm:w-fit dark:border-white/5 dark:bg-neutral-900/60">
           {REPORT_TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`rounded-lg px-4 py-2 text-[12.5px] font-semibold transition-colors ${
-                tab === t ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+              className={`rounded-full px-4 py-2 text-[12.5px] font-semibold transition-all ${
+                tab === t
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-[0_6px_16px_-6px_rgba(16,185,129,0.7)]"
+                  : "text-neutral-500 hover:bg-white/70 hover:text-emerald-700 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-emerald-300"
               }`}
             >
               {t}

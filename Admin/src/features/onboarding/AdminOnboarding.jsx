@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, RefreshCw } from "lucide-react";
 import { createOnboardingBrand, getOnboardingStatus, getOnboardingBrand } from "./services/onboardingApi";
 import { normalizeStatus, buildStepper, screenMeta, laneScreens, AFTER_SUBMIT, errorText, WHATSAPP_RE } from "./onboardingFlow";
 import { ScreenShell, Field, Note, PrimaryButton, inputCls } from "./ui";
@@ -9,6 +9,7 @@ import { KycDocumentsScreen, PanScreen, GstScreen, BankScreen } from "./screens/
 import { DeedScreen, SubscribePlanScreen } from "./screens/AgreementScreens";
 import { BrandBasicsScreen, ProfessionalScreen, OutletsScreen } from "./screens/BrandSetupScreens";
 import { ReviewScreen, UnderReviewScreen } from "./screens/ReviewScreens";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Admin · Add brand (Onboarding v2)
@@ -208,9 +209,7 @@ function OnboardingWizard({ brandId }) {
 
   if (loading) {
     return (
-      <p className="flex items-center gap-2 p-6 text-[14px] text-[#5B616E]">
-        <Loader2 size={16} className="animate-spin" /> Loading onboarding…
-      </p>
+      <Loader variant="page" label="Loading onboarding…" />
     );
   }
   if (!status) {

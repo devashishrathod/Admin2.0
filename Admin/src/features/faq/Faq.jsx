@@ -27,6 +27,7 @@ import ToggleSwitch from "../../components/common/ToggleSwitch";
 import ConfirmActionModal from "../../components/common/ConfirmActionModal";
 import SelectDropdown from "../../components/common/SelectDropdown";
 import { getFaqs, createFaq, updateFaq, deleteFaq } from "./services/FaqApi";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * FAQ types — the categories the user asked for (voucher, offer,
@@ -1065,10 +1066,7 @@ export default function Faq() {
 
         {/* List */}
         {loading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading FAQs…
-          </div>
+          <Loader label="Loading FAQs…" />
         ) : featured.length === 0 && grouped.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-neutral-200 px-5 py-14 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
             No FAQs match your filters.

@@ -24,6 +24,7 @@ import { Field, inputClass, SectionCard, CollapsibleSectionCard, EmptyState, Sta
 import { getPlans } from "../plan/services/planApi";
 import { grantSubscription, cancelSubscription } from "./services/subscriptionApi";
 import { useBrands } from "./BrandContext";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * SubscriptionCenter.jsx
@@ -175,10 +176,7 @@ export function GrantSubscriptionModal({ brand, action, onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <Field label={`Plan${action === "downgrade" ? " (target lower tier)" : ""}`} required>
             {plansLoading ? (
-              <div className="flex items-center gap-2 py-2 text-[12.5px] text-neutral-500">
-                <Loader2 size={13} className="animate-spin" />
-                Loading plans…
-              </div>
+              <Loader variant="inline" label="Loading plans…" />
             ) : plansError ? (
               <p className="text-[12.5px] text-red-600 dark:text-red-400">{plansError}</p>
             ) : (
@@ -558,7 +556,7 @@ export function SubscriptionTab({ brand, onUpdate, readOnly = false }) {
                     outerRadius={30}
                     stroke="none"
                   >
-                    <Cell fill="#34d399" />
+                    <Cell fill="var(--color-emerald-400)" />
                     <Cell fill="#e5e7eb" opacity={0.6} />
                   </Pie>
                 </PieChart>
@@ -767,7 +765,7 @@ export function SubscriptionTab({ brand, onUpdate, readOnly = false }) {
                         formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Amount"]}
                         contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
                       />
-                      <Bar dataKey="amount" fill="#34d399" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="amount" fill="var(--color-emerald-400)" radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

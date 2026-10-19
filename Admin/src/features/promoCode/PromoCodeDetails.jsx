@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   ArrowLeft,
   Tag,
-  Loader2,
   Receipt,
   Store,
   Hash,
@@ -15,6 +14,7 @@ import {
 import Table from "../../components/common/Table";
 import { getPromoCodeById } from "./services/PromoCodeApi";
 import { PROMO_DISCOUNT_TYPES as DISCOUNT_TYPES } from "./promoCodeEnums";
+import Loader from "../../components/common/Loader";
 
 function formatDateTime(iso) {
   if (!iso) return "—";
@@ -157,10 +157,7 @@ export default function PromoCodeDetails({ id, onBack }) {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading promo code details…
-          </div>
+          <Loader label="Loading promo code details…" />
         )}
 
         {!loading && loadError && (
@@ -213,7 +210,7 @@ export default function PromoCodeDetails({ id, onBack }) {
                 columns={usageColumns}
                 data={recentUsages}
                 rowKey="_id"
-                emptyMessage="No redemptions yet."
+                emptyTitle="No redemptions yet" emptyDescription="Redemptions appear here as soon as someone uses this code." emptyIcon="promo"
               />
             </div>
           </>

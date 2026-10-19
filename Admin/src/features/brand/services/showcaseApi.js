@@ -316,11 +316,21 @@ export async function createShowcaseSectionWithMedia(
     onUploadProgress
 ) {
     const sectionRes = await createShowcaseSection(sectionPayload);
-    const section = sectionRes?.data ?? sectionRes;
-    const sectionId = section?._id;
+    const section =
+        sectionRes?.data?.section ??
+        sectionRes?.section ??
+        sectionRes?.data ??
+        sectionRes;
+    const sectionId = section?._id ?? section?.id;
 
     if (!files.length) {
         return { section };
+    }
+    if (!sectionId) {
+        return {
+            section,
+            mediaError: new Error('The section was created, but the response did not include its ID, so files could not be uploaded.'),
+        };
     }
 
     try {

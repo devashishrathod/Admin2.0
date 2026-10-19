@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ImagePlus, Loader2, Plus, MapPin, Clock, Store, CheckCircle2 } from "lucide-react";
+import { ImagePlus, Plus, MapPin, Clock, Store, CheckCircle2 } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Field, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../services/onboardingApi";
 import { INDIAN_STATES, WEEK_DAYS, WHATSAPP_RE, PIN_RE, errorText } from "../onboardingFlow";
 import ShowcaseAlbums from "../../brand/ShowcaseAlbums";
+import Loader from "../../../components/common/Loader";
 
 const payload = (res) => res?.data ?? res ?? {};
 const listOf = (res) => {
@@ -357,7 +358,7 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
       footer={<StepFooter onBack={onBack} primary={<PrimaryButton busy={busy === "continue"} disabled={!outlets.length} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue to review</PrimaryButton>} />}
     >
       {loading ? (
-        <p className="flex items-center gap-2 text-[14px] text-[#5B616E]"><Loader2 size={15} className="animate-spin" /> Loading outlets…</p>
+        <Loader variant="inline" label="Loading outlets…" />
       ) : (
         outlets.map((o, i) => {
           const complete = hasAddress(o) && hasHours(o);

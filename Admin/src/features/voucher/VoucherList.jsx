@@ -28,6 +28,7 @@ import {
   PlayCircle,
   FlaskConical,
   Lock,
+  Archive,
 } from "lucide-react";
 import {
   AreaChart,
@@ -43,9 +44,11 @@ import {
 } from "recharts";
 import Table from "../../components/common/Table";
 import StatusStepButton from "../../components/common/StatusStepButton";
+import EmptyState from "../../components/common/EmptyState";
+import StatTile from "../../components/common/StatTile";
 import VoucherDetails from "./VoucherDetails";
 import { downloadCsv, printAsPdf } from "../../utils/exportTable";
-import { isNotFoundMessage } from "../../utils/helpers";
+import { isNotFoundMessage, formatBatch } from "../../utils/helpers";
 import {
   getAllVoucherVersions,
   getVoucherById,
@@ -62,6 +65,7 @@ import {
   uploadVoucherBanner,
   VOUCHER_STATUSES,
 } from "./services/VoucherApi";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Voucher lifecycle (per the backend's VOUCHER_STATUSES enum)
@@ -596,14 +600,14 @@ export function DummyBadge({ size = "md" }) {
       }`}
     >
       <FlaskConical size={sm ? 9 : 11} />
-      Dummy
+      D
     </span>
   );
 }
 
 // Coupon-style card: image header, offer on a perforated "ticket" strip,
 // validity + actions in the footer.
-function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, busy }) {
+function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, onApprove, onReject, showReviewActions, busy }) {
   const cover = voucher.images?.[0]?.url;
   const validity = validityOf(voucher);
   const step = getVoucherStep(voucher);
@@ -614,7 +618,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, bus
           (a button can't contain another button). */}
       <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-1.5 pr-12">
         {/* Dummy vouchers are view-only — plain status, no workflow step. */}
-        {voucher.isDummy ? (
+        {voucher.isDummy || showReviewActions ? (
           <VoucherStatusBadge status={voucher.approvalStatus} />
         ) : (
           <StatusStepButton
@@ -648,7 +652,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, bus
 
       {voucher.isDummy ? (
         <span
-          title="Dummy voucher — view only"
+          title="D voucher — view only"
           aria-label="View only"
           className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-violet-600 backdrop-blur dark:bg-neutral-900/80 dark:text-violet-400"
         >
@@ -730,20 +734,55 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, bus
             {voucher.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW ? "Review" : "View"} <ChevronRight size={12} />
           </button>
         </div>
+        {showReviewActions && !voucher.isDummy && voucher.approvalStatus === VOUCHER_STATUSES.APPROVED && (
+          <div className="mt-3 flex gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+            <button
+              onClick={() => onStep(voucher, step)}
+              disabled={busy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-3 py-2 text-[12px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:opacity-50"
+            >
+              <Rocket size={14} />
+              Publish
+            </button>
+          </div>
+        )}
+        {showReviewActions && !voucher.isDummy && voucher.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW && (
+          <div className="mt-3 flex gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+            <button
+              onClick={() => onApprove(voucher)}
+              disabled={busy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-3 py-2 text-[12px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:opacity-50"
+            >
+              <CheckCircle2 size={14} />
+              Approve
+            </button>
+            <button
+              onClick={() => onReject(voucher)}
+              disabled={busy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-[12px] font-semibold text-red-600 transition-colors hover:bg-red-500/5 disabled:opacity-50 dark:text-red-400"
+            >
+              <XCircle size={14} />
+              Reject
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function GridPager({ page, totalPages, total, pageSize, onPageChange }) {
-  if (totalPages <= 1) return null;
+// "Showing X to Y of Z" is always shown (even on a single page) so the
+// total is visible; the page buttons only appear for 2+ pages.
+function ListPager({ page, totalPages, total, pageSize, onPageChange }) {
+  if (total === 0) return null;
   const rangeStart = (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(page * pageSize, total);
   return (
     <div className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row">
       <p className="text-[12.5px] text-neutral-500">
-        Showing {rangeStart} to {rangeEnd} of {total} vouchers
+        Showing {rangeStart} to {rangeEnd} of {total} voucher{total === 1 ? "" : "s"}
       </p>
+      {totalPages > 1 && (
       <div className="flex items-center gap-1.5">
         <button
           onClick={() => onPageChange(Math.max(1, page - 1))}
@@ -775,6 +814,7 @@ function GridPager({ page, totalPages, total, pageSize, onPageChange }) {
           <ChevronRight size={14} />
         </button>
       </div>
+      )}
     </div>
   );
 }
@@ -794,14 +834,15 @@ function TrendTooltip({ active, payload, label }) {
 const SCOPES = {
   all: {
     title: "Live Vouchers",
-    subtitle: "Review vendor-submitted vouchers — approve, reject (with a reason) or publish them.",
+    subtitle: "Vouchers published and currently available in the app.",
     match: null,
     defaultView: "table",
   },
   waiting: {
     title: "Voucher Waiting",
-    subtitle: "Vendor-submitted vouchers waiting for your approval — approve or reject them right from the table.",
-    match: (v) => v.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW,
+    subtitle: "Review submitted vouchers, then publish approved vouchers from this page.",
+    match: (v) =>
+      [VOUCHER_STATUSES.UNDER_REVIEW, VOUCHER_STATUSES.APPROVED].includes(v.approvalStatus),
     defaultView: "table",
   },
   expired: {
@@ -825,12 +866,21 @@ const SCOPES = {
     defaultView: "table",
   },
   dummy: {
-    title: "Dummy Vouchers",
-    subtitle: "Test / demo vouchers (isDummy) — kept separate from Live Vouchers.",
+    title: "D Vouchers",
+    subtitle: "Test / demo vouchers — kept separate from Live Vouchers.",
     match: (v) => v.isDummy,
     defaultView: "table",
   },
 };
+
+// Statuses that have their own sidebar page (Voucher Waiting / Expired /
+// Draft) — kept off Live Vouchers so nothing is listed in two places.
+const OWN_PAGE_STATUSES = [
+  VOUCHER_STATUSES.UNDER_REVIEW,
+  VOUCHER_STATUSES.APPROVED,
+  VOUCHER_STATUSES.EXPIRED,
+  VOUCHER_STATUSES.DRAFT,
+];
 
 /* Small modal asking for the (mandatory) rejection reason — used by the
    table's Reject buttons on Voucher Waiting and Banner Approval. */
@@ -1118,13 +1168,15 @@ export default function VoucherListing({ scope = "all" }) {
   const isScoped = Boolean(scopeConfig.match);
   // Full list from the API; `vouchers` below is this page's slice of it.
   const [allVouchers, setVouchers] = useState([]);
-  // Dummy vouchers only ever show on the Dummy Vouchers page.
+  // Dummy vouchers only ever show on the Dummy Vouchers page. Live Vouchers
+  // keeps every non-dummy version that has no page of its own (Live, Paused,
+  // Rejected, Archived) and opens filtered to Live — see `defaultStatusFilter`.
   const vouchers = useMemo(() => {
     const pool = scope === "dummy" ? allVouchers : allVouchers.filter((v) => !v.isDummy);
     if (isScoped) return pool.filter(scopeConfig.match);
-    // Live Vouchers: drafts aren't submitted yet — they show only on Draft Vouchers.
-    return pool.filter((v) => v.approvalStatus !== VOUCHER_STATUSES.DRAFT);
+    return pool.filter((v) => !OWN_PAGE_STATUSES.includes(v.approvalStatus));
   }, [allVouchers, isScoped, scopeConfig, scope]);
+  const defaultStatusFilter = scope === "all" ? VOUCHER_STATUSES.PUBLISHED : "All";
   // Row whose Reject button was clicked — { row, kind: "voucher" | "banner" }.
   const [rejecting, setRejecting] = useState(null);
   // Row whose status pill was clicked — { row, kind: "approve" | "publish" | "banner" }.
@@ -1133,7 +1185,10 @@ export default function VoucherListing({ scope = "all" }) {
   const [loadError, setLoadError] = useState("");
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  // "Now" captured once when the page opens, for the KPI tiles' age counts
+  // (render must stay pure — no Date.now() during render).
+  const [openedAt] = useState(() => Date.now());
+  const [statusFilter, setStatusFilter] = useState(defaultStatusFilter);
   const [view, setView] = useState(scopeConfig.defaultView || "grid");
   const [selectedId, setSelectedId] = useState(null);
   const [page, setPage] = useState(1);
@@ -1184,7 +1239,10 @@ export default function VoucherListing({ scope = "all" }) {
   }, [vouchers, search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pagedRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  // Clamped: an approve/delete/refresh can shrink the list while you're on
+  // its last page — without this that page rendered empty.
+  const safePage = Math.min(page, totalPages);
+  const pagedRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   // Looked up in the full list so the details page stays open after an
   // action moves the voucher out of this page's scope (e.g. approve on
@@ -1432,6 +1490,7 @@ export default function VoucherListing({ scope = "all" }) {
         onRejectBanner={(reason) => handleRejectBanner(selectedVoucher, reason)}
         onReorderImages={(ids) => handleReorderImages(selectedVoucher, ids)}
         onUploadBanner={(media, poster) => handleUploadBanner(selectedVoucher, media, poster)}
+        canReviewBanner={scope === "banner"}
         busy={actionBusy}
         actionError={actionError}
         onRequestStep={(kind) => setStepping({ row: selectedVoucher, kind })}
@@ -1473,7 +1532,65 @@ export default function VoucherListing({ scope = "all" }) {
     setView(next);
     setPage(1);
   };
-  const filtersActive = Boolean(search) || statusFilter !== "All";
+  const filtersActive = Boolean(search) || statusFilter !== defaultStatusFilter;
+
+  // Empty state (grid + table) — wording per page, or "no match" when filtered.
+  const VOUCHER_EMPTY = {
+    all: ["No live vouchers yet", "Vouchers that vendors submit show up here — drafts stay on Draft Vouchers."],
+    waiting: ["Nothing waiting for action", "New submissions and approved vouchers ready to publish will appear here."],
+    expired: ["No expired vouchers", "Vouchers move here once their validity period ends."],
+    draft: ["No draft vouchers", "Vouchers vendors are still editing (not yet submitted) will show up here."],
+    banner: ["No banners waiting for approval", "When a vendor uploads a new voucher banner, it appears here for review."],
+    dummy: ["No D vouchers", "Test / demo vouchers (or ones under a D brand) will show up here."],
+  };
+  const [emptyTitle, emptyDescription] = VOUCHER_EMPTY[scope] || VOUCHER_EMPTY.all;
+
+  // KPI tiles for Draft Vouchers / Voucher Waiting (same tile as Live Vouchers),
+  // all computed from this page's vouchers.
+  const DAY = 24 * 60 * 60 * 1000;
+  const ageDays = (v) => (v.createdAt ? (openedAt - new Date(v.createdAt).getTime()) / DAY : 0);
+  const brandCount = new Set(vouchers.map((v) => v.brandName).filter((n) => n && n !== "—")).size;
+  const newThisWeek = vouchers.filter((v) => v.createdAt && ageDays(v) <= 7).length;
+  const scopeTiles =
+    scope === "draft"
+      ? [
+          { icon: "draft", label: "Total Drafts", value: vouchers.length, hint: "Not submitted yet", tint: "emerald" },
+          { icon: "brand", label: "Brands", value: brandCount, hint: "With a draft in progress", tint: "sky" },
+          { icon: "clock", label: "New This Week", value: newThisWeek, hint: "Started in the last 7 days", tint: "violet" },
+          { icon: "alert", label: "Older Than 7 Days", value: vouchers.filter((v) => ageDays(v) > 7).length, hint: "May need a nudge", tint: "amber" },
+          { icon: "imageOff", label: "No Photos", value: vouchers.filter((v) => !v.images?.length).length, hint: "Missing voucher images", tint: "neutral" },
+        ]
+      : scope === "waiting"
+      ? [
+          { icon: "shield", label: "Needs Review", value: countOf(VOUCHER_STATUSES.UNDER_REVIEW), hint: "Awaiting approval", tint: "amber" },
+          { icon: "brand", label: "Ready to Publish", value: countOf(VOUCHER_STATUSES.APPROVED), hint: "Approved vouchers", tint: "sky" },
+          { icon: "clock", label: "Submitted This Week", value: newThisWeek, hint: "In the last 7 days", tint: "emerald" },
+          { icon: "hourglass", label: "Waiting > 3 Days", value: vouchers.filter((v) => ageDays(v) > 3).length, hint: "Oldest first", tint: "red" },
+          { icon: "brand", label: "Brands", value: brandCount, hint: "With vouchers needing action", tint: "sky" },
+        ]
+      : scope === "banner"
+      ? [
+          { icon: "banner", label: "Pending Banners", value: vouchers.length, hint: "Awaiting your review", tint: "amber" },
+          { icon: "brand", label: "Brands", value: brandCount, hint: "With banners to review", tint: "sky" },
+          { icon: "repeat", label: "Replacing Live", value: vouchers.filter((v) => v.banner?.current?.url).length, hint: "Live banner will be replaced", tint: "violet" },
+          { icon: "imageOff", label: "First Banners", value: vouchers.filter((v) => !v.banner?.current?.url).length, hint: "No live banner yet", tint: "emerald" },
+          { icon: "check", label: "Voucher Approved", value: vouchers.filter((v) => v.approvalStatus === VOUCHER_STATUSES.APPROVED).length, hint: "Voucher already approved", tint: "sky" },
+        ]
+      : null;
+  const voucherEmpty = filtersActive
+    ? {
+        icon: "search",
+        title: "No vouchers match your filters",
+        description: "Try a different search or status — or clear the filters to see every voucher.",
+        action: {
+          label: "Clear filters",
+          onClick: () => {
+            setSearch("");
+            applyStatusFilter(defaultStatusFilter);
+          },
+        },
+      }
+    : { icon: scope === "banner" ? "banner" : "voucher", title: emptyTitle, description: emptyDescription };
 
   /* ---- Table columns -------------------------------------------------- */
   const baseColumns = [
@@ -1481,7 +1598,7 @@ export default function VoucherListing({ scope = "all" }) {
       key: "sno",
       label: "S.No",
       width: "w-14",
-      render: (_row, index) => <span className="text-neutral-500">{(page - 1) * pageSize + index + 1}</span>,
+      render: (_row, index) => <span className="text-neutral-500">{(safePage - 1) * pageSize + index + 1}</span>,
     },
     {
       key: "title",
@@ -1507,7 +1624,7 @@ export default function VoucherListing({ scope = "all" }) {
             </p>
             {row.isDummy && row.dummyBatch && (
               <p className="mt-0.5 whitespace-nowrap font-mono text-[10.5px] text-violet-600 dark:text-violet-400">
-                {row.dummyBatch}
+                {formatBatch(row.dummyBatch)}
               </p>
             )}
           </div>
@@ -1621,7 +1738,7 @@ export default function VoucherListing({ scope = "all" }) {
     return (
       <div className="flex items-center justify-end gap-1.5">
         <span
-          title="Dummy voucher — view only"
+          title="D voucher — view only"
           aria-label="View only"
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-400/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
         >
@@ -1652,14 +1769,39 @@ export default function VoucherListing({ scope = "all" }) {
     },
   };
 
-  // Voucher Waiting — reject sits next to the pill's Approve.
+  // Voucher Waiting — review submissions, or publish approved vouchers.
   const waitingActionColumn = {
     key: "action",
     label: "Action",
     align: "right",
     render: (row) => row.isDummy ? dummyActions(row) : (
       <div className="flex items-center justify-end gap-1.5">
-        <RejectIconButton busy={actionBusy} label={`Reject ${row.title}`} onClick={() => setRejecting({ row, kind: "voucher" })} />
+        {row.approvalStatus === VOUCHER_STATUSES.APPROVED ? (
+          <button
+            onClick={() => setStepping({ row, kind: "publish" })}
+            disabled={actionBusy}
+            aria-label={`Publish ${row.title}`}
+            title="Publish voucher"
+            className="flex h-8 items-center gap-1 rounded-lg bg-emerald-400 px-2.5 text-[11.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:opacity-50"
+          >
+            <Rocket size={13} />
+            Publish
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={() => setStepping({ row, kind: "approve" })}
+              disabled={actionBusy}
+              aria-label={`Approve ${row.title}`}
+              title="Approve voucher"
+              className="flex h-8 items-center gap-1 rounded-lg bg-emerald-400 px-2.5 text-[11.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:opacity-50"
+            >
+              <CheckCircle2 size={13} />
+              Approve
+            </button>
+            <RejectIconButton busy={actionBusy} label={`Reject ${row.title}`} onClick={() => setRejecting({ row, kind: "voucher" })} />
+          </>
+        )}
         {viewButton(row)}
       </div>
     ),
@@ -1718,10 +1860,9 @@ export default function VoucherListing({ scope = "all" }) {
     ),
   };
 
-  const withStepPill = baseColumns.map((c) => (c.key === "status" ? statusStepColumn : c));
   const columns =
     scope === "waiting"
-      ? withStepPill.map((c) => (c.key === "action" ? waitingActionColumn : c))
+      ? baseColumns.map((c) => (c.key === "action" ? waitingActionColumn : c))
       : scope === "banner"
       ? [
           ...baseColumns.filter((c) => ["sno", "title", "brand"].includes(c.key)),
@@ -1729,7 +1870,7 @@ export default function VoucherListing({ scope = "all" }) {
           bannerStatusColumn,
           bannerActionColumn,
         ]
-      : withStepPill;
+      : baseColumns.map((c) => (c.key === "status" ? statusStepColumn : c));
 
   const confirmReject = async (reason) => {
     const { row, kind } = rejecting;
@@ -1775,37 +1916,75 @@ export default function VoucherListing({ scope = "all" }) {
           </div>
         </div>
 
+        {/* Draft / Waiting pages — their own row of the same KPI tiles. */}
+        {scopeTiles && (
+          <div className="no-print mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {scopeTiles.map((t) => (
+              <StatTile key={t.label} {...t} />
+            ))}
+          </div>
+        )}
+
         {/* KPI tiles — clicking one filters the list to that status. Only on
-            the full listing; a scoped page is already a single status. */}
-        {!isScoped && (
+            the full listing and D Vouchers (which mixes every status); other
+            scoped pages are already a single status. */}
+        {(!isScoped || scope === "dummy") && (
         <div className="no-print mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
           <KpiTile
             icon={Ticket}
             label="Total Vouchers"
             value={vouchers.length}
-            hint={`${suggestedCount} suggested`}
+            hint={
+              scope === "all"
+                ? `of ${allVouchers.length} in all · rest on Waiting / Expired / Draft / D`
+                : `${suggestedCount} suggested`
+            }
             tint="emerald"
             active={statusFilter === "All"}
             onClick={() => applyStatusFilter("All")}
           />
-          <KpiTile
-            icon={ShieldCheck}
-            label="Under Review"
-            value={countOf(VOUCHER_STATUSES.UNDER_REVIEW)}
-            hint="Needs your action"
-            tint="amber"
-            active={statusFilter === VOUCHER_STATUSES.UNDER_REVIEW}
-            onClick={() => applyStatusFilter(VOUCHER_STATUSES.UNDER_REVIEW)}
-          />
-          <KpiTile
-            icon={CheckCircle2}
-            label="Approved"
-            value={countOf(VOUCHER_STATUSES.APPROVED)}
-            hint="Ready to publish"
-            tint="sky"
-            active={statusFilter === VOUCHER_STATUSES.APPROVED}
-            onClick={() => applyStatusFilter(VOUCHER_STATUSES.APPROVED)}
-          />
+          {scope === "all" ? (
+            <KpiTile
+              icon={PauseCircle}
+              label="Paused"
+              value={countOf(VOUCHER_STATUSES.PAUSED)}
+              hint="Off the app for now"
+              tint="amber"
+              active={statusFilter === VOUCHER_STATUSES.PAUSED}
+              onClick={() => applyStatusFilter(VOUCHER_STATUSES.PAUSED)}
+            />
+          ) : (
+            <KpiTile
+              icon={ShieldCheck}
+              label="Under Review"
+              value={countOf(VOUCHER_STATUSES.UNDER_REVIEW)}
+              hint="Needs your action"
+              tint="amber"
+              active={statusFilter === VOUCHER_STATUSES.UNDER_REVIEW}
+              onClick={() => applyStatusFilter(VOUCHER_STATUSES.UNDER_REVIEW)}
+            />
+          )}
+          {scope === "all" ? (
+            <KpiTile
+              icon={Archive}
+              label="Archived"
+              value={countOf(VOUCHER_STATUSES.ARCHIVED)}
+              hint="No longer in use"
+              tint="sky"
+              active={statusFilter === VOUCHER_STATUSES.ARCHIVED}
+              onClick={() => applyStatusFilter(VOUCHER_STATUSES.ARCHIVED)}
+            />
+          ) : (
+            <KpiTile
+              icon={CheckCircle2}
+              label="Approved"
+              value={countOf(VOUCHER_STATUSES.APPROVED)}
+              hint="Ready to publish"
+              tint="sky"
+              active={statusFilter === VOUCHER_STATUSES.APPROVED}
+              onClick={() => applyStatusFilter(VOUCHER_STATUSES.APPROVED)}
+            />
+          )}
           <KpiTile
             icon={Rocket}
             label="Live"
@@ -2006,10 +2185,7 @@ export default function VoucherListing({ scope = "all" }) {
 
         {/* Load state */}
         {loading && (
-          <div className={`flex items-center justify-center gap-2 py-14 text-[13px] text-neutral-500 ${cardClass}`}>
-            <Loader2 size={16} className="animate-spin" />
-            Loading vouchers…
-          </div>
+          <Loader label="Loading vouchers…" />
         )}
 
         {!loading && loadError && (
@@ -2031,51 +2207,43 @@ export default function VoucherListing({ scope = "all" }) {
                         key={v.id}
                         voucher={v}
                         busy={actionBusy}
+                        showReviewActions={scope === "waiting"}
                         onOpen={(row) => setSelectedId(row.id)}
                         onToggleSuggested={handleToggleSuggested}
                         onStep={(row, step) => setStepping({ row, kind: step.kind })}
+                        onApprove={(row) => setStepping({ row, kind: "approve" })}
+                        onReject={(row) => setRejecting({ row, kind: "voucher" })}
                         onDelete={handleDelete}
                       />
                     ))}
                   </div>
-                  <GridPager page={page} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPageChange={setPage} />
+                  <ListPager page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPageChange={setPage} />
                 </>
               ) : (
-                <div className={`flex flex-col items-center gap-3 py-16 text-center ${cardClass}`}>
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-500">
-                    <Ticket size={22} />
-                  </span>
-                  <div>
-                    <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">No vouchers found</p>
-                    <p className="mt-0.5 text-[12.5px] text-neutral-500">
-                      {filtersActive
-                        ? "Try a different search or status."
-                        : isScoped
-                        ? `No ${scopeConfig.title.toLowerCase()} right now.`
-                        : "Vendor-submitted vouchers will appear here."}
-                    </p>
-                  </div>
-                  {filtersActive && (
-                    <button
-                      onClick={() => { setSearch(""); applyStatusFilter("All"); }}
-                      className="rounded-xl border border-neutral-200 px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300"
-                    >
-                      Clear filters
-                    </button>
-                  )}
+                <div className={cardClass}>
+                  <EmptyState {...voucherEmpty} />
                 </div>
               )
             ) : (
-              <Table
-                columns={columns}
-                data={pagedRows}
-                emptyMessage="No vouchers match your filters."
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                total={filtered.length}
-                pageSize={pageSize}
-              />
+              <>
+                <Table
+                  columns={columns}
+                  data={pagedRows}
+                  emptyTitle={voucherEmpty.title}
+                  emptyDescription={voucherEmpty.description}
+                  emptyIcon={voucherEmpty.icon}
+                  emptyAction={voucherEmpty.action}
+                  page={safePage}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                  total={filtered.length}
+                  pageSize={pageSize}
+                />
+                {/* Table only renders its own footer for 2+ pages. */}
+                {totalPages <= 1 && (
+                  <ListPager page={safePage} totalPages={totalPages} total={filtered.length} pageSize={pageSize} onPageChange={setPage} />
+                )}
+              </>
             )}
           </div>
         )}

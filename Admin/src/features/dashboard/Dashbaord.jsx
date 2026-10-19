@@ -9,7 +9,6 @@ import {
   Tag,
   Package,
   ShieldCheck,
-  Loader2,
   CheckCircle2,
   Image as ImageIcon,
   Ticket,
@@ -43,6 +42,8 @@ import { getTopBrands } from "../brand/services/BrandApi";
 import { mapBrandListItem } from "../brand/brandMapper";
 import { getBrandVerifications } from "../newOnboarding/services/NewOnboardingApi";
 import { useAuthStore } from "../auth/store/authStore";
+import CommonEmptyState from "../../components/common/EmptyState";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Mock data — revenue/transactions/activity have no real endpoint yet, so
@@ -159,7 +160,9 @@ const QUICK_ACTIONS = [
 // green gradient (bento look): translucent white, blur, hairline white edge.
 const glassClass =
   "rounded-3xl border border-white/80 bg-white/65 shadow-[0_8px_30px_rgba(16,185,129,0.07)] backdrop-blur-xl dark:border-white/5 dark:bg-neutral-900/60 dark:shadow-black/30";
-const cardClass = `${glassClass} p-5`;
+// flex column + h-full: every card fills its grid row, so cards side by side
+// share one height and empty / loading states can centre in the space.
+const cardClass = `${glassClass} flex h-full flex-col p-5`;
 // Inner tiles inside a glass card.
 const innerTile = "bg-white/70 dark:bg-neutral-950/50";
 
@@ -274,7 +277,7 @@ function StatCard({ icon: Icon, label, value, sub, tint = "emerald", highlight =
   return (
     <Wrapper
       onClick={onClick}
-      className={`group relative flex flex-col overflow-hidden p-4 text-left transition-all ${
+      className={`group relative flex h-full flex-col overflow-hidden p-4 text-left transition-all ${
         highlight
           ? "rounded-3xl border border-white/80 bg-gradient-to-br from-emerald-200/80 via-emerald-100/70 to-white/60 text-neutral-950 shadow-[0_8px_30px_rgba(16,185,129,0.15)] backdrop-blur-xl dark:border-emerald-400/10 dark:from-emerald-500/30 dark:via-emerald-600/10 dark:to-neutral-900/60 dark:text-neutral-50"
           : glassClass
@@ -296,7 +299,8 @@ function StatCard({ icon: Icon, label, value, sub, tint = "emerald", highlight =
         {value}
       </p>
       {sub && <p className={`relative mt-0.5 truncate text-[11px] ${highlight ? "text-neutral-900/70 dark:text-neutral-300" : "text-neutral-500"}`}>{sub}</p>}
-      {children && <div className="relative mt-3">{children}</div>}
+      {/* Pinned to the bottom so tiles in a row line up. */}
+      {children && <div className="relative mt-auto pt-3">{children}</div>}
     </Wrapper>
   );
 }
@@ -387,22 +391,15 @@ function Dropdown({ open, onToggle, onClose, icon: Icon, label, options, selecte
   );
 }
 
-function EmptyState({ icon: Icon = LayoutGrid, text, className = "py-10" }) {
-  return (
-    <div className={`flex flex-col items-center gap-2 text-center ${className}`}>
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 text-neutral-400 dark:bg-neutral-800">
-        <Icon size={16} />
-      </span>
-      <p className="text-[12px] text-neutral-500">{text}</p>
-    </div>
-  );
+// Thin wrapper over the shared EmptyState (compact) so every dashboard card's
+// "nothing here" looks the same as the rest of the panel.
+function EmptyState({ icon = LayoutGrid, text, className = "flex-1" }) {
+  return <CommonEmptyState variant="compact" icon={icon} title={text} className={className} />;
 }
 
-function LoadingState({ className = "py-10" }) {
+function LoadingState({ className = "flex-1 py-8" }) {
   return (
-    <div className={`flex items-center justify-center gap-2 text-[12.5px] text-neutral-500 ${className}`}>
-      <Loader2 size={14} className="animate-spin" /> Loading…
-    </div>
+    <Loader variant="inline" center className={className} />
   );
 }
 
@@ -523,7 +520,7 @@ export default function Dashboard() {
   const todayLabel = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   return (
-    // The green gradient + glow background now comes from Layout (app-wide).
+    // The green gradient + glow background comes from Layout (app-wide).
     <div className="relative min-h-full">
       <div className="relative mx-auto w-full max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
         {/* Header */}
@@ -560,13 +557,16 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Bento grid — 12 columns on wide screens. Row 1: KPI stack · Brand
-            status · Needs review · (hero + quick actions, spans 2 rows).
-            Row 2: Vendor growth · Top brands. Then category / KPIs / health,
-            and recently joined + activity. */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
-          {/* KPI stack */}
-          <div className="flex flex-col gap-4 xl:col-span-3">
+        {/* Structured bento — every row is one height (cards stretch to the
+            row), 12 columns on wide screens:
+              1. four KPI tiles
+              2. Vendor Growth (6) · Brand Status (3) · Growth hero (3)
+              3. Needs Your Review (4) · Top Brands (4) · Quick Actions (4)
+              4. Category Mix (4) · Platform Health (8)
+              5. Recently Joined Brands (8) · Recent Activity (4) */}
+        <div className="space-y-4">
+          {/* Row 1 — KPI tiles */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               highlight
               icon={Store}
@@ -576,7 +576,7 @@ export default function Dashboard() {
               onClick={() => navigate("/brand")}
             >
               <div className="h-10">
-                <Sparkline data={vendorGrowth} dataKey="vendors" id="spark-total" color="#059669" />
+                <Sparkline data={vendorGrowth} dataKey="vendors" id="spark-total" color="var(--color-emerald-600)" />
               </div>
             </StatCard>
 
@@ -594,250 +594,7 @@ export default function Dashboard() {
                 />
               </div>
             </StatCard>
-          </div>
 
-          {/* Brand status donut */}
-          <div className={`xl:col-span-3 ${cardClass}`}>
-            <CardHeader icon={LayoutGrid} title="Brand Status" subtitle="Approved brands by current state" />
-            <div className="relative mx-auto h-40 w-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={donutData.length ? donutData : [{ key: "none", value: 1, color: "#E5E5E5" }]}
-                    dataKey="value"
-                    nameKey="label"
-                    innerRadius={52}
-                    outerRadius={74}
-                    paddingAngle={donutData.length > 1 ? 3 : 0}
-                    cornerRadius={6}
-                    isAnimationActive={false}
-                  >
-                    {(donutData.length ? donutData : [{ key: "none", color: "#E5E5E5" }]).map((d) => (
-                      <Cell key={d.key} fill={d.color} stroke="none" />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">{totalVendors}</span>
-                <span className="text-[10.5px] text-neutral-500">Total Brands</span>
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {statusData.map((d) => (
-                <div key={d.key} className={`rounded-2xl px-2 py-2 text-center ${innerTile}`}>
-                  <div className="flex items-center justify-center gap-1.5 text-[10.5px] text-neutral-500">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: d.color }} />
-                    {d.label}
-                  </div>
-                  <p className="mt-0.5 text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{d.value}</p>
-                  <p className="text-[10px] text-neutral-400">
-                    {totalVendors ? Math.round((d.value / totalVendors) * 100) : 0}%
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Needs Your Review — real pending onboarding approvals */}
-          <div className={`xl:col-span-3 ${cardClass}`}>
-            <CardHeader
-              icon={ShieldCheck}
-              iconClass="text-amber-500 dark:text-amber-400"
-              title="Needs Your Review"
-              subtitle={pending.length ? `${pending.length} brand${pending.length === 1 ? "" : "s"} awaiting approval` : "Onboarding queue"}
-              action={<ViewAllButton onClick={() => navigate("/brand-waiting")} />}
-            />
-            {pendingLoading ? (
-              <LoadingState />
-            ) : pending.length ? (
-              <div className="space-y-1.5">
-                {pending.slice(0, 5).map((v) => {
-                  const score = Number(v.score) || 0;
-                  const scoreClass =
-                    score >= 70
-                      ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : score >= 40
-                      ? "bg-amber-400/10 text-amber-600 dark:text-amber-400"
-                      : "bg-red-500/10 text-red-600 dark:text-red-400";
-                  return (
-                    <button
-                      key={v._id}
-                      onClick={() => navigate("/brand-waiting")}
-                      className={`group flex w-full items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition-colors hover:bg-white dark:hover:bg-neutral-800/60 ${innerTile}`}
-                    >
-                      <BrandAvatar brand={{ brandName: v.brand?.brandName, logo: v.brand?.logo }} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">
-                          {v.brand?.brandName || "Untitled Brand"}
-                        </p>
-                        <p className="text-[11px] text-neutral-500">Attempt #{v.attemptNumber}</p>
-                      </div>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${scoreClass}`}>
-                        {score}/100
-                      </span>
-                      <ArrowRight size={13} className="shrink-0 text-neutral-300 transition-colors group-hover:text-emerald-500" />
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState icon={CheckCircle2} text="All caught up — nothing pending review." />
-            )}
-          </div>
-
-          {/* Right rail (spans 2 rows): growth hero + quick actions */}
-          <div className="flex flex-col gap-4 md:col-span-2 xl:col-span-3 xl:row-span-2">
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-400 p-5 text-white shadow-[0_12px_36px_rgba(16,185,129,0.35)]">
-              <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/25 blur-2xl" />
-              <div className="pointer-events-none absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-teal-200/40 blur-2xl" />
-              <div className="relative">
-                <p className="flex items-center gap-1.5 text-[17px] font-semibold leading-snug">
-                  <TrendingUp size={17} />
-                  {newInRange > 0 ? "Brands are growing" : "Holding steady"}
-                </p>
-                <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
-                  {newInRange > 0
-                    ? `+${newInRange} brand${newInRange === 1 ? "" : "s"} joined in the ${dateRange.label.toLowerCase()}, and ${Math.round(activeRatio)}% of all brands are live.`
-                    : `No new brands in the ${dateRange.label.toLowerCase()} — ${Math.round(activeRatio)}% of all brands are live.`}
-                </p>
-                <button
-                  onClick={() => navigate("/brand")}
-                  className="mt-4 flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[12px] font-semibold text-emerald-700 shadow-sm transition-transform hover:scale-[1.03]"
-                >
-                  Overview <ArrowRight size={13} />
-                </button>
-              </div>
-            </div>
-
-            <div className={`flex-1 ${cardClass}`}>
-              <CardHeader icon={LayoutGrid} title="Quick Actions" subtitle="Jump straight to a section" />
-              <div className="grid grid-cols-3 gap-2.5">
-                {QUICK_ACTIONS.map((a) => {
-                  const Icon = a.icon;
-                  return (
-                    <button
-                      key={a.label}
-                      onClick={() => navigate(a.path)}
-                      className={`group flex flex-col items-center gap-2 rounded-2xl px-2 py-3.5 text-center transition-all hover:-translate-y-0.5 hover:bg-white dark:hover:bg-neutral-800/60 ${innerTile}`}
-                    >
-                      <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition-transform group-hover:scale-110 ${tints[a.tint]}`}>
-                        <Icon size={16} />
-                      </span>
-                      <span className="text-[11px] font-medium text-neutral-700 dark:text-neutral-300">{a.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Vendor Growth */}
-          <div className={`md:col-span-2 xl:col-span-6 ${cardClass}`}>
-            <CardHeader
-              icon={TrendingUp}
-              title="Vendor Growth"
-              subtitle={`${totalVendors} approved brands · +${newInRange} in the ${dateRange.label.toLowerCase()}`}
-              action={
-                <div className="flex items-center gap-1 rounded-full border border-white/80 bg-white/70 p-1 dark:border-white/5 dark:bg-neutral-900/60">
-                  {DATE_RANGE_OPTIONS.map((o) => (
-                    <button
-                      key={o.key}
-                      onClick={() => setDateRangeKey(o.key)}
-                      className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${
-                        o.key === dateRangeKey
-                          ? "bg-emerald-500 text-white"
-                          : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-                      }`}
-                    >
-                      {o.key}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
-            <ResponsiveContainer width="100%" height={230}>
-              <AreaChart data={vendorGrowth} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="fillVendors" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10B981" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#8C9A91" strokeOpacity={0.18} />
-                <XAxis dataKey="d" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<MetricTooltip unit="brands" />} cursor={{ stroke: "#10B981", strokeOpacity: 0.4 }} />
-                <Area
-                  type="natural"
-                  dataKey="vendors"
-                  stroke="#10B981"
-                  strokeWidth={2.6}
-                  fill="url(#fillVendors)"
-                  activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff" }}
-                  animationDuration={1200}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Top Brands — real curated list, GET /brands/admin/top-brands.
-              Progress bar shows each brand's followers relative to the
-              strongest brand in the list (no revenue endpoint exists to
-              drive a real revenue-goal bar). */}
-          <div className={`xl:col-span-3 ${cardClass}`}>
-            <CardHeader
-              icon={Sparkles}
-              iconClass="text-amber-500 dark:text-amber-400"
-              title="Top Brands"
-              subtitle="Ranked by followers"
-              action={<ViewAllButton onClick={() => navigate("/brand")} />}
-            />
-            {topBrandsLoading ? (
-              <LoadingState />
-            ) : topBrands.length ? (
-              <div className="space-y-3">
-                {topBrands.map((b, i) => {
-                  const progress = Math.min(100, Math.round(((b.followers || 0) / maxTopFollowers) * 100));
-                  return (
-                    <button
-                      key={b.id}
-                      onClick={() => navigate(`/brands/${b.id}`)}
-                      className="flex w-full items-center gap-2.5 text-left"
-                    >
-                      <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold ${
-                          i === 0 ? "bg-amber-400/90 text-neutral-950" : "bg-white/80 text-neutral-500 dark:bg-neutral-800"
-                        }`}
-                      >
-                        {i + 1}
-                      </span>
-                      <BrandAvatar brand={b} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between text-[12px]">
-                          <span className="truncate font-semibold text-neutral-800 dark:text-neutral-200">{b.brandName}</span>
-                          <span className="shrink-0 pl-2 text-[11px] font-semibold text-neutral-500">
-                            {b.followers} <span className="font-normal">followers</span>
-                          </span>
-                        </div>
-                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-emerald-100/80 dark:bg-neutral-800">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-1000"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <EmptyState icon={Sparkles} text="No brands marked as Top Brand yet." />
-            )}
-          </div>
-
-          {/* Pending + revenue KPIs */}
-          <div className="flex flex-col gap-4 xl:col-span-3">
             <StatCard
               icon={ShieldCheck}
               label="Pending Reviews"
@@ -846,18 +603,24 @@ export default function Dashboard() {
               tint="amber"
               onClick={() => navigate("/brand-waiting")}
             >
-              <div className="flex -space-x-2">
-                {pending.slice(0, 5).map((v) => (
-                  <div key={v._id} className="rounded-lg ring-2 ring-white dark:ring-neutral-900">
-                    <BrandAvatar brand={{ brandName: v.brand?.brandName, logo: v.brand?.logo }} size="sm" />
-                  </div>
-                ))}
-                {pending.length > 5 && (
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[11px] font-semibold text-neutral-500 ring-2 ring-white dark:bg-neutral-800 dark:ring-neutral-900">
-                    +{pending.length - 5}
-                  </span>
-                )}
-              </div>
+              {pending.length ? (
+                <div className="flex -space-x-2">
+                  {pending.slice(0, 5).map((v) => (
+                    <div key={v._id} className="rounded-lg ring-2 ring-white dark:ring-neutral-900">
+                      <BrandAvatar brand={{ brandName: v.brand?.brandName, logo: v.brand?.logo }} size="sm" />
+                    </div>
+                  ))}
+                  {pending.length > 5 && (
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[11px] font-semibold text-neutral-500 ring-2 ring-white dark:bg-neutral-800 dark:ring-neutral-900">
+                      +{pending.length - 5}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-100 dark:bg-neutral-800">
+                  <div className="h-full w-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" />
+                </div>
+              )}
             </StatCard>
 
             <StatCard
@@ -874,133 +637,394 @@ export default function Dashboard() {
             </StatCard>
           </div>
 
-          {/* Category mix — real, from each onboarded brand's category */}
-          <div className={`xl:col-span-3 ${cardClass}`}>
-            <CardHeader icon={Tag} title="Category Mix" subtitle="Top categories by brand count" />
-            {categoryMix.length ? (
-              <div className="space-y-3.5">
-                {categoryMix.map((c, i) => {
-                  const color = CATEGORY_BAR_COLORS[i % CATEGORY_BAR_COLORS.length];
+          {/* Row 2 — growth chart · status donut · growth hero */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
+            <div className={`md:col-span-2 xl:col-span-6 ${cardClass}`}>
+              <CardHeader
+                icon={TrendingUp}
+                title="Vendor Growth"
+                subtitle={`${totalVendors} approved brands · +${newInRange} in the ${dateRange.label.toLowerCase()}`}
+                action={
+                  <div className="flex items-center gap-1 rounded-full border border-white/80 bg-white/70 p-1 dark:border-white/5 dark:bg-neutral-900/60">
+                    {DATE_RANGE_OPTIONS.map((o) => (
+                      <button
+                        key={o.key}
+                        onClick={() => setDateRangeKey(o.key)}
+                        className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${
+                          o.key === dateRangeKey
+                            ? "bg-emerald-500 text-white"
+                            : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                        }`}
+                      >
+                        {o.key}
+                      </button>
+                    ))}
+                  </div>
+                }
+              />
+              <div className="min-h-[220px] flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={vendorGrowth} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="fillVendors" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--color-emerald-500)" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="var(--color-emerald-500)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#8C9A91" strokeOpacity={0.18} />
+                    <XAxis dataKey="d" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<MetricTooltip unit="brands" />} cursor={{ stroke: "var(--color-emerald-500)", strokeOpacity: 0.4 }} />
+                    <Area
+                      type="natural"
+                      dataKey="vendors"
+                      stroke="var(--color-emerald-500)"
+                      strokeWidth={2.6}
+                      fill="url(#fillVendors)"
+                      activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff" }}
+                      animationDuration={1200}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className={`xl:col-span-3 ${cardClass}`}>
+              <CardHeader icon={LayoutGrid} title="Brand Status" subtitle="Approved brands by current state" />
+              <div className="flex flex-1 items-center justify-center">
+                <div className="relative h-36 w-36">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={donutData.length ? donutData : [{ key: "none", value: 1, color: "#E5E5E5" }]}
+                        dataKey="value"
+                        nameKey="label"
+                        innerRadius={48}
+                        outerRadius={68}
+                        paddingAngle={donutData.length > 1 ? 3 : 0}
+                        cornerRadius={6}
+                        isAnimationActive={false}
+                      >
+                        {(donutData.length ? donutData : [{ key: "none", color: "#E5E5E5" }]).map((d) => (
+                          <Cell key={d.key} fill={d.color} stroke="none" />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-[22px] font-bold text-neutral-900 dark:text-neutral-50">{totalVendors}</span>
+                    <span className="text-[10px] text-neutral-500">Total Brands</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {statusData.map((d) => (
+                  <div key={d.key} className={`rounded-2xl px-2 py-2 text-center ${innerTile}`}>
+                    <div className="flex items-center justify-center gap-1.5 text-[10.5px] text-neutral-500">
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: d.color }} />
+                      {d.label}
+                    </div>
+                    <p className="mt-0.5 text-[15px] font-bold text-neutral-900 dark:text-neutral-50">{d.value}</p>
+                    <p className="text-[10px] text-neutral-400">
+                      {totalVendors ? Math.round((d.value / totalVendors) * 100) : 0}%
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Growth hero — headline + three real numbers, button pinned to the bottom */}
+            <div className="relative flex h-full flex-col overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-400 p-5 text-white shadow-[0_12px_36px_rgba(16,185,129,0.35)] xl:col-span-3">
+              <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/25 blur-2xl" />
+              <div className="pointer-events-none absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-teal-200/40 blur-2xl" />
+              <div className="relative flex flex-1 flex-col">
+                <p className="flex items-center gap-1.5 text-[17px] font-semibold leading-snug">
+                  <TrendingUp size={17} />
+                  {newInRange > 0 ? "Brands are growing" : "Holding steady"}
+                </p>
+                <p className="mt-2 text-[12.5px] leading-relaxed text-white/85">
+                  {newInRange > 0
+                    ? `+${newInRange} brand${newInRange === 1 ? "" : "s"} joined in the ${dateRange.label.toLowerCase()}.`
+                    : `No new brands in the ${dateRange.label.toLowerCase()}.`}
+                </p>
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {[
+                    ["Joined", `+${newInRange}`],
+                    ["Live", `${Math.round(activeRatio)}%`],
+                    ["Pending", pendingLoading ? "…" : pending.length],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-2xl bg-white/20 px-2 py-2.5 text-center backdrop-blur-sm">
+                      <p className="text-[17px] font-bold leading-none">{value}</p>
+                      <p className="mt-1 text-[10.5px] text-white/80">{label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => navigate("/brand")}
+                  className="mt-auto flex w-fit items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[12px] font-semibold text-emerald-700 shadow-sm transition-transform hover:scale-[1.03]"
+                >
+                  Overview <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3 — review queue · top brands · quick actions */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {/* Needs Your Review — real pending onboarding approvals */}
+            <div className={cardClass}>
+              <CardHeader
+                icon={ShieldCheck}
+                iconClass="text-amber-500 dark:text-amber-400"
+                title="Needs Your Review"
+                subtitle={pending.length ? `${pending.length} brand${pending.length === 1 ? "" : "s"} awaiting approval` : "Onboarding queue"}
+                action={<ViewAllButton onClick={() => navigate("/brand-waiting")} />}
+              />
+              {pendingLoading ? (
+                <LoadingState />
+              ) : pending.length ? (
+                <div className="space-y-1.5">
+                  {pending.slice(0, 5).map((v) => {
+                    const score = Number(v.score) || 0;
+                    const scoreClass =
+                      score >= 70
+                        ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                        : score >= 40
+                        ? "bg-amber-400/10 text-amber-600 dark:text-amber-400"
+                        : "bg-red-500/10 text-red-600 dark:text-red-400";
+                    return (
+                      <button
+                        key={v._id}
+                        onClick={() => navigate("/brand-waiting")}
+                        className={`group flex w-full items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition-colors hover:bg-white dark:hover:bg-neutral-800/60 ${innerTile}`}
+                      >
+                        <BrandAvatar brand={{ brandName: v.brand?.brandName, logo: v.brand?.logo }} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">
+                            {v.brand?.brandName || "Untitled Brand"}
+                          </p>
+                          <p className="text-[11px] text-neutral-500">Attempt #{v.attemptNumber}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${scoreClass}`}>
+                          {score}/100
+                        </span>
+                        <ArrowRight size={13} className="shrink-0 text-neutral-300 transition-colors group-hover:text-emerald-500" />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState icon={CheckCircle2} text="All caught up — nothing pending review." />
+              )}
+            </div>
+
+            {/* Top Brands — real curated list, GET /brands/admin/top-brands.
+                Progress bar shows each brand's followers relative to the
+                strongest brand in the list. */}
+            <div className={cardClass}>
+              <CardHeader
+                icon={Sparkles}
+                iconClass="text-amber-500 dark:text-amber-400"
+                title="Top Brands"
+                subtitle="Ranked by followers"
+                action={<ViewAllButton onClick={() => navigate("/brand")} />}
+              />
+              {topBrandsLoading ? (
+                <LoadingState />
+              ) : topBrands.length ? (
+                <div className="space-y-3">
+                  {topBrands.map((b, i) => {
+                    const progress = Math.min(100, Math.round(((b.followers || 0) / maxTopFollowers) * 100));
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => navigate(`/brands/${b.id}`)}
+                        className="flex w-full items-center gap-2.5 text-left"
+                      >
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold ${
+                            i === 0 ? "bg-amber-400/90 text-neutral-950" : "bg-white/80 text-neutral-500 dark:bg-neutral-800"
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        <BrandAvatar brand={b} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between text-[12px]">
+                            <span className="truncate font-semibold text-neutral-800 dark:text-neutral-200">{b.brandName}</span>
+                            <span className="shrink-0 pl-2 text-[11px] font-semibold text-neutral-500">
+                              {b.followers} <span className="font-normal">followers</span>
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-emerald-100/80 dark:bg-neutral-800">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-1000"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState icon={Sparkles} text="No brands marked as Top Brand yet." />
+              )}
+            </div>
+
+            <div className={`md:col-span-2 xl:col-span-1 ${cardClass}`}>
+              <CardHeader icon={LayoutGrid} title="Quick Actions" subtitle="Jump straight to a section" />
+              <div className="grid flex-1 grid-cols-3 content-center gap-2.5 sm:grid-cols-4 xl:grid-cols-3">
+                {QUICK_ACTIONS.map((a) => {
+                  const Icon = a.icon;
                   return (
-                    <div key={c.name}>
-                      <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                          <span className="truncate font-medium text-neutral-700 dark:text-neutral-300">{c.name}</span>
-                        </span>
-                        <span className="shrink-0 font-semibold text-neutral-900 dark:text-neutral-50">
-                          {c.count}
-                          <span className="ml-1 text-[10.5px] font-normal text-neutral-400">
-                            ({totalVendors ? Math.round((c.count / totalVendors) * 100) : 0}%)
+                    <button
+                      key={a.label}
+                      onClick={() => navigate(a.path)}
+                      className={`group flex flex-col items-center gap-2 rounded-2xl px-2 py-3 text-center transition-all hover:-translate-y-0.5 hover:bg-white dark:hover:bg-neutral-800/60 ${innerTile}`}
+                    >
+                      <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition-transform group-hover:scale-110 ${tints[a.tint]}`}>
+                        <Icon size={16} />
+                      </span>
+                      <span className="text-[11px] font-medium text-neutral-700 dark:text-neutral-300">{a.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 4 — category mix · platform health */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className={cardClass}>
+              <CardHeader icon={Tag} title="Category Mix" subtitle="Top categories by brand count" />
+              {categoryMix.length ? (
+                <div className="flex flex-1 flex-col justify-center space-y-3.5">
+                  {categoryMix.map((c, i) => {
+                    const color = CATEGORY_BAR_COLORS[i % CATEGORY_BAR_COLORS.length];
+                    return (
+                      <div key={c.name}>
+                        <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px]">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                            <span className="truncate font-medium text-neutral-700 dark:text-neutral-300">{c.name}</span>
                           </span>
-                        </span>
+                          <span className="shrink-0 font-semibold text-neutral-900 dark:text-neutral-50">
+                            {c.count}
+                            <span className="ml-1 text-[10.5px] font-normal text-neutral-400">
+                              ({totalVendors ? Math.round((c.count / totalVendors) * 100) : 0}%)
+                            </span>
+                          </span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/80 dark:bg-neutral-800">
+                          <div
+                            className="h-full rounded-full transition-[width] duration-1000"
+                            style={{ width: `${(c.count / maxCategory) * 100}%`, backgroundColor: color }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-white/80 dark:bg-neutral-800">
-                        <div
-                          className="h-full rounded-full transition-[width] duration-1000"
-                          style={{ width: `${(c.count / maxCategory) * 100}%`, backgroundColor: color }}
-                        />
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState icon={Tag} text="No category data yet." />
+              )}
+            </div>
+
+            <div className={`xl:col-span-2 ${cardClass}`}>
+              <CardHeader icon={ShieldCheck} title="Platform Health" subtitle="Key ratios at a glance" />
+              <div className="grid flex-1 grid-cols-2 content-center gap-3 sm:grid-cols-4">
+                <HealthRing label="Vendor Activity" pct={activeRatio} tint="emerald" />
+                <HealthRing label="Approval Clearance" pct={clearancePct} tint="amber" />
+                <HealthRing label="Revenue Goal" pct={revenueGoalPct} tint="sky" sample />
+                <HealthRing label="Brand Targets" pct={avgGoalProgress} tint="violet" />
+              </div>
+            </div>
+          </div>
+
+          {/* Row 5 — recently joined · recent activity */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className={`xl:col-span-2 ${cardClass}`}>
+              <CardHeader
+                icon={Store}
+                title="Recently Joined Brands"
+                subtitle="Newest approved brands on the platform"
+                action={<ViewAllButton onClick={() => navigate("/brand")} />}
+              />
+              <div className="-mx-2 flex flex-1 flex-col overflow-x-auto">
+                <table className="w-full min-w-120 text-left text-[12.5px]">
+                  <thead>
+                    <tr className="text-[10.5px] uppercase tracking-wide text-emerald-700/70 dark:text-emerald-400/70">
+                      <th className="px-2 pb-2.5 font-semibold">Brand</th>
+                      <th className="px-2 pb-2.5 font-semibold">Category</th>
+                      <th className="px-2 pb-2.5 font-semibold">Plan</th>
+                      <th className="px-2 pb-2.5 text-right font-semibold">Followers</th>
+                      <th className="px-2 pb-2.5 text-right font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-100/70 dark:divide-neutral-800/70">
+                    {recentBrands.map((b) => (
+                      <tr
+                        key={b.id}
+                        onClick={() => navigate(`/brands/${b.id}`)}
+                        className="cursor-pointer transition-colors hover:bg-white/70 dark:hover:bg-neutral-800/40"
+                      >
+                        <td className="px-2 py-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <BrandAvatar brand={b} size="sm" />
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-neutral-800 dark:text-neutral-200">{b.brandName}</p>
+                              <p className="truncate text-[10.5px] text-neutral-400">{b.location}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2.5 text-neutral-500">{b.category}</td>
+                        <td className="px-2 py-2.5 text-neutral-500">{b.subscriptionPlan}</td>
+                        <td className="px-2 py-2.5 text-right font-medium text-neutral-700 dark:text-neutral-300">{b.followers}</td>
+                        <td className="px-2 py-2.5 text-right">
+                          <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${STATUS_PILLS[b.status] || STATUS_PILLS.Deactive}`}>
+                            {b.status === "Deactive" ? "Inactive" : b.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {brandsLoading ? (
+                  <LoadingState />
+                ) : (
+                  !brands.length && <EmptyState icon={Store} text="No brands yet." />
+                )}
+              </div>
+            </div>
+
+            <div className={cardClass}>
+              <CardHeader icon={Activity} title="Recent Activity" subtitle="Latest platform events" action={<SampleTag />} />
+              <div className="space-y-1.5">
+                {ACTIVITY_FEED.map((a) => {
+                  const Icon = a.icon;
+                  const amountMatch = a.what.match(/₹[\d,]+/);
+                  return (
+                    <div key={a.id} className={`flex items-center gap-3 rounded-2xl px-2.5 py-2 ${innerTile}`}>
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tints[a.tint]}`}>
+                        <Icon size={14} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">{a.who}</p>
+                        <p className="truncate text-[11px] text-neutral-500">{a.what}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        {amountMatch && (
+                          <p className="font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">+{amountMatch[0]}</p>
+                        )}
+                        <p className="text-[10.5px] text-neutral-400">{a.when}</p>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            ) : (
-              <EmptyState icon={Tag} text="No category data yet." />
-            )}
-          </div>
-
-          {/* Platform Health */}
-          <div className={`md:col-span-2 xl:col-span-6 ${cardClass}`}>
-            <CardHeader icon={ShieldCheck} title="Platform Health" subtitle="Key ratios at a glance" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <HealthRing label="Vendor Activity" pct={activeRatio} tint="emerald" />
-              <HealthRing label="Approval Clearance" pct={clearancePct} tint="amber" />
-              <HealthRing label="Revenue Goal" pct={revenueGoalPct} tint="sky" sample />
-              <HealthRing label="Brand Targets" pct={avgGoalProgress} tint="violet" />
-            </div>
-          </div>
-
-          {/* Recently joined brands */}
-          <div className={`md:col-span-2 xl:col-span-8 ${cardClass}`}>
-            <CardHeader
-              icon={Store}
-              title="Recently Joined Brands"
-              subtitle="Newest approved brands on the platform"
-              action={<ViewAllButton onClick={() => navigate("/brand")} />}
-            />
-            <div className="-mx-2 overflow-x-auto">
-              <table className="w-full min-w-120 text-left text-[12.5px]">
-                <thead>
-                  <tr className="text-[10.5px] uppercase tracking-wide text-emerald-700/70 dark:text-emerald-400/70">
-                    <th className="px-2 pb-2.5 font-semibold">Brand</th>
-                    <th className="px-2 pb-2.5 font-semibold">Category</th>
-                    <th className="px-2 pb-2.5 font-semibold">Plan</th>
-                    <th className="px-2 pb-2.5 text-right font-semibold">Followers</th>
-                    <th className="px-2 pb-2.5 text-right font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-emerald-100/70 dark:divide-neutral-800/70">
-                  {recentBrands.map((b) => (
-                    <tr
-                      key={b.id}
-                      onClick={() => navigate(`/brands/${b.id}`)}
-                      className="cursor-pointer transition-colors hover:bg-white/70 dark:hover:bg-neutral-800/40"
-                    >
-                      <td className="px-2 py-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <BrandAvatar brand={b} size="sm" />
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-neutral-800 dark:text-neutral-200">{b.brandName}</p>
-                            <p className="truncate text-[10.5px] text-neutral-400">{b.location}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5 text-neutral-500">{b.category}</td>
-                      <td className="px-2 py-2.5 text-neutral-500">{b.subscriptionPlan}</td>
-                      <td className="px-2 py-2.5 text-right font-medium text-neutral-700 dark:text-neutral-300">{b.followers}</td>
-                      <td className="px-2 py-2.5 text-right">
-                        <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${STATUS_PILLS[b.status] || STATUS_PILLS.Deactive}`}>
-                          {b.status === "Deactive" ? "Inactive" : b.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {brandsLoading ? (
-                <LoadingState className="py-8" />
-              ) : (
-                !brands.length && <EmptyState icon={Store} text="No brands yet." className="py-8" />
-              )}
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className={`md:col-span-2 xl:col-span-4 ${cardClass}`}>
-            <CardHeader icon={Activity} title="Recent Activity" subtitle="Latest platform events" action={<SampleTag />} />
-            <div className="space-y-1.5">
-              {ACTIVITY_FEED.map((a) => {
-                const Icon = a.icon;
-                const amountMatch = a.what.match(/₹[\d,]+/);
-                return (
-                  <div key={a.id} className={`flex items-center gap-3 rounded-2xl px-2.5 py-2 ${innerTile}`}>
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tints[a.tint]}`}>
-                      <Icon size={14} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">{a.who}</p>
-                      <p className="truncate text-[11px] text-neutral-500">{a.what}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      {amountMatch && (
-                        <p className="font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">+{amountMatch[0]}</p>
-                      )}
-                      <p className="text-[10.5px] text-neutral-400">{a.when}</p>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>

@@ -127,8 +127,8 @@ export function DailyBarsCard({
           <BarChart data={data} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#34D399" />
-                <stop offset="100%" stopColor="#059669" />
+                <stop offset="0%" stopColor="var(--color-emerald-400)" />
+                <stop offset="100%" stopColor="var(--color-emerald-600)" />
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} stroke="#E5E5E5" strokeOpacity={0.6} strokeDasharray="3 3" />

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import EmptyState from "../../components/common/EmptyState";
 import {
   Search,
   X,
@@ -27,7 +28,6 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   History,
-  Lock,
   Sparkles,
   Loader2,
   AlertTriangle,
@@ -39,6 +39,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { getAllCustomers, getCustomerById } from "./services/CustomerApi";
 import ConfirmActionModal from "../../components/common/ConfirmActionModal";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
+import StatTile from "../../components/common/StatTile";
+import Loader from "../../components/common/Loader";
 
 /* ------------------------------------------------------------------ */
 /*  Static reference data                                              */
@@ -259,7 +261,7 @@ function StarRating({ rating }) {
 
 /* ------------------------------------------------------------------ */
 /*  Customer edit modal (name / contact / platform only —              */
-/*  status changes are Super Admin only, handled in detail view)       */
+/*  status changes go through the Active switch + confirm dialog)      */
 /* ------------------------------------------------------------------ */
 
 function CustomerFormModal({ open, initialData, onClose, onSave }) {
@@ -574,7 +576,7 @@ function StatChip({ icon: Icon, value, label }) {
   );
 }
 
-function UserCard({ customer, plan, isSuperAdmin, onOpen, onEdit, onDelete, onRequestToggleStatus }) {
+function UserCard({ customer, plan, onOpen, onEdit, onDelete, onRequestToggleStatus }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const accent = CUSTOMER_PLATFORM_ACCENTS[customer.platform] || "from-neutral-400/20 via-neutral-400/0";
   const avatarBg = CUSTOMER_AVATAR_BG[customer.platform] || "bg-neutral-200 dark:bg-neutral-800";
@@ -659,11 +661,9 @@ function UserCard({ customer, plan, isSuperAdmin, onOpen, onEdit, onDelete, onRe
             <StatusPill status={customer.status} />
             <ToggleSwitch
               checked={customer.status === "Active"}
-              disabled={!isSuperAdmin}
               onChange={() => onRequestToggleStatus(customer)}
-              title={isSuperAdmin ? "Click to activate/deactivate" : "Only Super Admin can change status"}
+              title="Click to activate/deactivate"
             />
-            {!isSuperAdmin && <Lock size={11} className="text-neutral-400 dark:text-neutral-600" />}
           </span>
           <PlatformBadge platform={customer.platform} />
           {plan && (
@@ -706,7 +706,6 @@ const TABS = [
 function CustomerDetail({
   customer,
   plans,
-  isSuperAdmin,
   detailLoading,
   onBack,
   onEditPlan,
@@ -813,11 +812,9 @@ function CustomerDetail({
             <StatusPill status={customer.status} />
             <ToggleSwitch
               checked={customer.status === "Active"}
-              disabled={!isSuperAdmin}
               onChange={() => onRequestToggleStatus(customer)}
-              title={isSuperAdmin ? "Click to activate/deactivate" : "Only Super Admin can change status"}
+              title="Click to activate/deactivate"
             />
-            {!isSuperAdmin && <Lock size={12} className="text-neutral-400 dark:text-neutral-600" />}
           </div>
         </div>
       </div>
@@ -970,7 +967,7 @@ function CustomerDetail({
                           <XAxis type="number" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
                           <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10.5, fill: "#737373" }} axisLine={false} tickLine={false} />
                           <Tooltip formatter={(v) => [money(v), "Amount"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
-                          <Bar dataKey="value" fill="#34d399" radius={[0, 6, 6, 0]} barSize={14} />
+                          <Bar dataKey="value" fill="var(--color-emerald-400)" radius={[0, 6, 6, 0]} barSize={14} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -1321,7 +1318,6 @@ export default function Customer() {
   const [platformFilter, setPlatformFilter] = useState("All");
 
   const [selectedId, setSelectedId] = useState(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   // Holds the customer pending an activate/deactivate confirmation — the
   // switch never flips the status itself, it just opens this dialog.
   const [statusConfirmTarget, setStatusConfirmTarget] = useState(null);
@@ -1395,6 +1391,11 @@ export default function Customer() {
       inactive: customers.filter((c) => c.status === "Inactive").length,
       android: customers.filter((c) => c.platform === "Android").length,
       ios: customers.filter((c) => c.platform === "iOS").length,
+      newThisMonth: customers.filter((c) => {
+        const d = c.raw?.createdAt ? new Date(c.raw.createdAt) : null;
+        const now = new Date();
+        return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }).length,
     }),
     [customers]
   );
@@ -1424,7 +1425,6 @@ export default function Customer() {
   };
 
   const handleToggleStatus = (c) => {
-    if (!isSuperAdmin) return; // guarded again here in case of stray calls
     setCustomers((prev) =>
       prev.map((x) =>
         x.id === c.id ? { ...x, status: x.status === "Active" ? "Inactive" : "Active" } : x
@@ -1473,7 +1473,6 @@ export default function Customer() {
           <CustomerDetail
             customer={selectedCustomer}
             plans={plans}
-            isSuperAdmin={isSuperAdmin}
             detailLoading={detailLoading}
             onBack={() => setSelectedId(null)}
             onEditPlan={handleEditPlan}
@@ -1491,29 +1490,56 @@ export default function Customer() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2.5 self-start rounded-xl bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                <ShieldCheck size={15} className={isSuperAdmin ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-600"} />
-                <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Super Admin Mode</span>
-                <ToggleSwitch
-                  checked={isSuperAdmin}
-                  onChange={() => setIsSuperAdmin((v) => !v)}
-                  title={isSuperAdmin ? "Turn off Super Admin Mode" : "Turn on Super Admin Mode"}
-                />
-              </div>
             </div>
 
-            {!isSuperAdmin ? (
-              <div className="mb-5 flex items-center gap-2 rounded-xl bg-neutral-50/60 px-4 py-2.5 text-[12px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900/60 dark:shadow-black/20">
-                <Lock size={13} />
-                Only Super Admin can activate or deactivate a customer account. Turn on Super Admin
-                Mode above to enable this control.
-              </div>
-            ) : (
-              <div className="mb-5 flex items-center gap-2 rounded-xl bg-emerald-400/10 px-4 py-2.5 text-[12px] font-medium text-emerald-700 dark:text-emerald-400">
-                <ShieldCheck size={13} />
-                Super Admin Mode is on — you can activate or deactivate any customer account below.
-              </div>
-            )}
+            {/* KPI tiles — clicking one filters the list (same tiles as Live Vouchers). */}
+            <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <StatTile
+                icon={Users}
+                label="Total Customers"
+                value={counts.all}
+                hint={`${counts.newThisMonth} joined this month`}
+                tint="emerald"
+                active={statusFilter === "All" && platformFilter === "All"}
+                onClick={() => { setStatusFilter("All"); setPlatformFilter("All"); setPage(1); }}
+              />
+              <StatTile
+                icon={CheckCircle2}
+                label="Active"
+                value={counts.active}
+                hint="Can use the app"
+                tint="sky"
+                active={statusFilter === "Active"}
+                onClick={() => { setStatusFilter(statusFilter === "Active" ? "All" : "Active"); setPage(1); }}
+              />
+              <StatTile
+                icon={XCircle}
+                label="Inactive"
+                value={counts.inactive}
+                hint="Account switched off"
+                tint="neutral"
+                active={statusFilter === "Inactive"}
+                onClick={() => { setStatusFilter(statusFilter === "Inactive" ? "All" : "Inactive"); setPage(1); }}
+              />
+              <StatTile
+                icon={Smartphone}
+                label="Android"
+                value={counts.android}
+                hint="Android app users"
+                tint="violet"
+                active={platformFilter === "Android"}
+                onClick={() => { setPlatformFilter(platformFilter === "Android" ? "All" : "Android"); setPage(1); }}
+              />
+              <StatTile
+                icon={Apple}
+                label="iOS"
+                value={counts.ios}
+                hint="iPhone app users"
+                tint="amber"
+                active={platformFilter === "iOS"}
+                onClick={() => { setPlatformFilter(platformFilter === "iOS" ? "All" : "iOS"); setPage(1); }}
+              />
+            </div>
 
             {/* Search + filters */}
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1541,18 +1567,23 @@ export default function Customer() {
 
             {/* Cards grid */}
             {loading ? (
-              <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-16 text-[13px] text-neutral-500 dark:border-neutral-800">
-                <Loader2 size={16} className="animate-spin" />
-                Loading customers…
-              </div>
+              <Loader label="Loading customers…" />
             ) : loadError ? (
               <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
                 <AlertTriangle size={14} className="shrink-0" />
                 Failed to load customers: {loadError}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-neutral-200 py-16 text-center dark:border-neutral-800">
-                <p className="text-[13.5px] text-neutral-500">No customers match these filters.</p>
+              <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <EmptyState
+                  icon={customers.length ? "search" : "customer"}
+                  title={customers.length ? "No customers match these filters" : "No customers yet"}
+                  description={
+                    customers.length
+                      ? "Try a different search, plan or status filter."
+                      : "Customers appear here as soon as people sign up in the Trydood app."
+                  }
+                />
               </div>
             ) : (
               <>
@@ -1562,7 +1593,6 @@ export default function Customer() {
                       key={c.id}
                       customer={c}
                       plan={plans.find((p) => p.id === c.planId)}
-                      isSuperAdmin={isSuperAdmin}
                       onOpen={handleOpenCustomer}
                       onEdit={handleEditCustomer}
                       onDelete={handleDeleteCustomer}

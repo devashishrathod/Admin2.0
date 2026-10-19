@@ -4,6 +4,7 @@ import Table, { StatusBadge } from "../../components/common/Table";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
 import ConfirmActionModal from "../../components/common/ConfirmActionModal";
 import { termsAndConditionsApi, privacyPoliciesApi } from "./services/LegalApi";
+import Loader from "../../components/common/Loader";
 
 const TYPE_OPTIONS = ["CUSTOMER", "VENDOR"];
 const PAGE_SIZE = 10;
@@ -432,10 +433,7 @@ export default function LegalDocsPanel({ kind }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-          <Loader2 size={16} className="animate-spin" />
-          Loading {label.toLowerCase()}…
-        </div>
+        <Loader label={`Loading ${label.toLowerCase()}…`} />
       ) : loadError ? (
         <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
           <AlertTriangle size={14} className="shrink-0" />
@@ -445,7 +443,9 @@ export default function LegalDocsPanel({ kind }) {
         <Table
           columns={columns}
           data={pageRows}
-          emptyMessage={`No ${label.toLowerCase()} documents yet.`}
+          emptyTitle={`No ${label.toLowerCase()} documents yet`}
+          emptyDescription="Documents you add here are shown to users in the app's legal section."
+          emptyIcon="document"
           page={page}
           totalPages={totalPages}
           onPageChange={setPage}

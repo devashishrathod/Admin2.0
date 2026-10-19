@@ -29,13 +29,25 @@ import DateRangeFilter from "../../components/common/DateRangeFilter";
 import { downloadCsv } from "../../utils/exportTable";
 import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
 import { pctChange, weekOverWeek } from "../../utils/overviewStats";
+import EmptyState from "../../components/common/EmptyState";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Shared Table — mirrors Transaction.jsx's local table so this page keeps
  * the exact same look and feel.
  * ---------------------------------------------------------------------- */
 
-function Table({ columns = [], data = [], emptyMessage = "No records found.", rowKey = "id" }) {
+function Table({
+  columns = [],
+  data = [],
+  emptyMessage = "No records found.",
+  // Shared EmptyState props (see components/common/EmptyState.jsx).
+  emptyTitle,
+  emptyDescription,
+  emptyIcon = "search",
+  emptyAction,
+  rowKey = "id",
+}) {
   const alignClass = (align) =>
     align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left";
 
@@ -60,8 +72,13 @@ function Table({ columns = [], data = [], emptyMessage = "No records found.", ro
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-5 py-10 text-center text-neutral-500">
-                  {emptyMessage}
+                <td colSpan={columns.length} className="p-0">
+                  <EmptyState
+                    icon={emptyIcon}
+                    title={emptyTitle || String(emptyMessage).replace(/\.$/, "")}
+                    description={emptyDescription}
+                    action={emptyAction}
+                  />
                 </td>
               </tr>
             ) : (
@@ -965,14 +982,16 @@ export default function Refund() {
 
         {/* Table */}
         {loading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading refunds…
-          </div>
+          <Loader label="Loading refunds…" />
         ) : loadError ? (
-          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load refunds: {loadError}
+          <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load refunds"
+              description={`${loadError} — check your connection and try again.`}
+              action={{ label: "Try again", onClick: () => fetchRefunds() }}
+            />
           </div>
         ) : (
           <>
@@ -995,7 +1014,7 @@ export default function Refund() {
             }))}
             onClear={clearSelection}
           />
-          <Table columns={columns} data={pageRows} emptyMessage="No refunds match your filters." />
+          <Table columns={columns} data={pageRows} emptyIcon={refunds.length ? "search" : "refund"} emptyTitle={refunds.length ? "No refunds match your filters" : "No refund requests yet"} emptyDescription={refunds.length ? "No refund requests match this status or search. Try a different filter." : "Refund requests from customers show up here for review."} />
           </>
         )}
 

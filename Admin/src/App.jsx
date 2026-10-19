@@ -30,7 +30,9 @@ import { BrandProvider } from './features/brand/BrandContext'
 import FeatureCampaign from './features/featurecampaign/page/FeatureCampaign'
 import CouponCode from './features/coupon/Couponcode'
 import Banner from './features/banner/Banner'
+import BannerDetailsPage from './features/banner/BannerDetailsPage'
 import PromotionalTicker from './features/promotionalTicker/PromotionalTicker'
+import PromotionalTickerDetailsPage from './features/promotionalTicker/PromotionalTickerDetailsPage'
 import Settings from './features/settings/Settings'
 import PromoCode from './features/promoCode/PromoCode'
 import PromoCodeReports from './features/promoCode/PromoCodeReports'
@@ -186,10 +188,28 @@ function App() {
         />
 
         <Route
+          path="/banner/:id"
+          element={
+            <Layout>
+              <BannerDetailsPage />
+            </Layout>
+          }
+        />
+
+        <Route
           path="/promotional-ticker"
           element={
             <Layout>
               <PromotionalTicker />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/promotional-ticker/:id"
+          element={
+            <Layout>
+              <PromotionalTickerDetailsPage />
             </Layout>
           }
         />

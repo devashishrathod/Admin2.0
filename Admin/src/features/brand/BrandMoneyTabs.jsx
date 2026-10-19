@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, AlertTriangle, ArrowLeftRight, Undo2, ChevronRight } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Undo2, ChevronRight } from "lucide-react";
 import { EmptyState, SectionCard } from "./BrandShared";
 import StatusStepButton from "../../components/common/StatusStepButton";
 import { getVoucherClaimPayments } from "../transaction/services/TransactionApi";
 import { getRefundWorklist } from "../refund/services/RefundApi";
 import { normalizeClaimStatus, formatPaymentMethod, fmtTime, inr } from "../transaction/transactionUtils";
 import { isNotFoundMessage } from "../../utils/helpers";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Transactions + Refunds tabs on a brand's detail page — this brand's own
@@ -68,9 +69,7 @@ function useBrandRecords(brand, fetcher, belongsToBrand, map) {
 function TabState({ loading, error, label }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white py-12 text-[13px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900">
-        <Loader2 size={15} className="animate-spin" /> Loading {label}…
-      </div>
+      <Loader label={`Loading ${label}…`} />
     );
   }
   return (

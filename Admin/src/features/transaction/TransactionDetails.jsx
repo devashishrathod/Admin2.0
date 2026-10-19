@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import EmptyState from "../../components/common/EmptyState";
 import {
   ArrowLeft,
-  Loader2,
-  AlertTriangle,
   ShieldCheck,
   ShieldAlert,
   FileDown,
@@ -49,6 +48,7 @@ import {
   formatPaymentMethod,
   normalizeClaimStatus,
 } from "./transactionUtils";
+import Loader from "../../components/common/Loader";
 
 // "8839999017" -> "+91 88399 99017" — the real Customer API returns a bare
 // 10-digit WhatsApp number with no country code (see Customer.jsx).
@@ -244,29 +244,25 @@ export default function TransactionDetails() {
 
   if (loading) {
     return (
-      <div className="flex min-h-96 items-center justify-center gap-2 px-4 py-6 text-[13px] text-neutral-500">
-        <Loader2 size={16} className="animate-spin" />
-        Loading claim details…
-      </div>
+      <Loader variant="page" label="Loading claim details…" />
     );
   }
 
   if (error || !details?.payment) {
     return (
-      <div className="flex min-h-96 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
-        <p className="flex items-center gap-2 text-[15px] font-semibold text-neutral-800 dark:text-neutral-200">
-          <AlertTriangle size={16} className="text-red-500" />
-          {error ? "Failed to load claim" : "Claim not found"}
-        </p>
-        {error && <p className="text-[13px] text-neutral-500">{error}</p>}
-        <button
-          onClick={() => navigate("/transaction")}
-          className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
-        >
-          <ArrowLeft size={13} />
-          Back to Transactions
-        </button>
-      </div>
+      <EmptyState
+        variant="page"
+        tone={error ? "error" : "default"}
+        icon={error ? "error" : "transaction"}
+        title={error ? "Couldn't load this claim" : "Claim not found"}
+        description={
+          error
+            ? `${error} — check your connection and try again.`
+            : "We couldn't find a voucher claim with this link. It may have been removed, or the link is no longer valid."
+        }
+        action={{ label: "Back to Transactions", icon: ArrowLeft, onClick: () => navigate("/transaction") }}
+        secondaryAction={error ? { label: "Try again", onClick: fetchDetails } : undefined}
+      />
     );
   }
 
@@ -651,7 +647,7 @@ export default function TransactionDetails() {
                       formatter={(v) => [inr(v), "Amount"]}
                       contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }}
                     />
-                    <Bar dataKey="value" fill="#34d399" radius={[0, 6, 6, 0]} barSize={18} />
+                    <Bar dataKey="value" fill="var(--color-emerald-400)" radius={[0, 6, 6, 0]} barSize={18} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

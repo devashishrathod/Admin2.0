@@ -1,5 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Serif+Display:ital@0;1&display=swap");
-
+/* Fonts are loaded by a <link> in index.html (faster than a CSS @import,
+   which can't start downloading until this file has loaded). */
 @import "tailwindcss";
 
 /* Class-based dark mode — Tailwind v4 defaults `dark:` to the OS
@@ -155,4 +155,77 @@ main .bg-white.shadow-\[0_1px_3px_rgba\(15\,23\,42\,0\.06\)\]:not(.no-glass):not
   .no-print {
     display: none !important;
   }
+}
+
+/* ── Theme colour presets (Settings → Appearance → Theme Color) ──────────
+   ThemeContext sets `data-bg` + --accent-h/--accent-c/--shell-top/
+   --shell-mid on <html> from constants/backgroundThemes.js. The default
+   green preset sets none of them, so the original look (Layout.jsx's own
+   Tailwind gradient) applies untouched. Same system as the Vendor Panel.
+
+   Accent: Tailwind v4 utilities read var(--color-emerald-*) /
+   var(--color-teal-*), so redefining those palettes here recolours every
+   button, badge, ring and icon app-wide. Each shade keeps Tailwind's own
+   emerald/teal lightness + chroma curve, rotated to the preset's hue and
+   scaled by its chroma factor (0 = neutral gray). Unlayered, so it wins
+   over Tailwind's @layer theme definitions on :root. */
+html[data-bg] {
+  --color-emerald-50: oklch(97.9% calc(0.021 * var(--accent-c)) var(--accent-h));
+  --color-emerald-100: oklch(95% calc(0.052 * var(--accent-c)) var(--accent-h));
+  --color-emerald-200: oklch(90.5% calc(0.093 * var(--accent-c)) var(--accent-h));
+  --color-emerald-300: oklch(84.5% calc(0.143 * var(--accent-c)) var(--accent-h));
+  --color-emerald-400: oklch(76.5% calc(0.177 * var(--accent-c)) var(--accent-h));
+  --color-emerald-500: oklch(69.6% calc(0.17 * var(--accent-c)) var(--accent-h));
+  --color-emerald-600: oklch(59.6% calc(0.145 * var(--accent-c)) var(--accent-h));
+  --color-emerald-700: oklch(50.8% calc(0.118 * var(--accent-c)) var(--accent-h));
+  --color-emerald-800: oklch(43.2% calc(0.095 * var(--accent-c)) var(--accent-h));
+  --color-emerald-900: oklch(37.8% calc(0.077 * var(--accent-c)) var(--accent-h));
+  --color-emerald-950: oklch(26.2% calc(0.051 * var(--accent-c)) var(--accent-h));
+
+  /* teal = secondary accent, kept a little hue-shifted like emerald→teal */
+  --color-teal-50: oklch(98.4% calc(0.014 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-100: oklch(95.3% calc(0.051 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-200: oklch(91% calc(0.096 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-300: oklch(85.5% calc(0.138 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-400: oklch(77.7% calc(0.152 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-500: oklch(70.4% calc(0.14 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-600: oklch(60% calc(0.118 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-700: oklch(51.1% calc(0.096 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-800: oklch(43.7% calc(0.078 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-900: oklch(38.6% calc(0.063 * var(--accent-c)) calc(var(--accent-h) + 18));
+  --color-teal-950: oklch(27.7% calc(0.046 * var(--accent-c)) calc(var(--accent-h) + 18));
+}
+
+/* Light mode: one colour at the top, fading to white. Glows follow the
+   accent automatically (they use bg-emerald-300/40, bg-teal-200/50). */
+html:not(.dark)[data-bg] .app-shell-bg {
+  background-image: linear-gradient(to bottom, var(--shell-top) 0%, var(--shell-mid) 32%, #ffffff 72%);
+}
+html:not(.dark)[data-bg] .app-glow-3 {
+  background-color: transparent;
+}
+
+/* Dark mode: a deep tint of the hue at the top fading to near-black. */
+html.dark[data-bg] .app-shell-bg {
+  background-image: linear-gradient(to bottom, oklch(26% calc(0.06 * var(--accent-c)) var(--accent-h)) 0%, #030712 55%, #030712 100%);
+}
+
+/* Plain Background (`data-bg-solid`): one flat colour, no gradient, no
+   glows. Independent of Theme Color — it only replaces the page
+   background, so the chosen accent (green, violet, …) still colours
+   buttons/text/badges. Kept AFTER the Theme Color rules at equal
+   specificity (html + :not(.dark)/.dark + attribute + class) so it wins
+   when both are set. */
+html:not(.dark)[data-bg-solid] .app-shell-bg {
+  background-image: none;
+  background-color: var(--shell-solid);
+}
+html.dark[data-bg-solid] .app-shell-bg {
+  background-image: none;
+  background-color: var(--shell-dark-solid);
+}
+html[data-bg-solid] .app-glow-1,
+html[data-bg-solid] .app-glow-2,
+html[data-bg-solid] .app-glow-3 {
+  display: none;
 }

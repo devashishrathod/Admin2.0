@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "../../components/common/Table";
 import { REJECTION_REASONS } from "./data/BrandData";
+import CommonEmptyState from "../../components/common/EmptyState";
 
 /* -------------------------------------------------------------------------
  * BrandShared.jsx
@@ -168,10 +169,30 @@ export function CollapsibleSectionCard({ title, children, defaultOpen = false, c
   );
 }
 
-export function EmptyState({ label }) {
+// Brand-page tabs' "nothing here" (vouchers, settlements, outlets…) — now the
+// shared EmptyState design, with an icon picked from what the label is about.
+const EMPTY_ICON_BY_KEYWORD = [
+  ["voucher", "voucher"],
+  ["settlement", "settlement"],
+  ["transaction", "transaction"],
+  ["refund", "refund"],
+  ["invoice", "subscription"],
+  ["grant", "subscription"],
+  ["subscription", "subscription"],
+  ["album", "banner"],
+  ["media", "banner"],
+  ["showcase", "banner"],
+  ["outlet", "brand"],
+  ["verification", "onboarding"],
+  ["timeline", "document"],
+];
+
+export function EmptyState({ label, icon }) {
+  const lower = String(label || "").toLowerCase();
+  const preset = icon || EMPTY_ICON_BY_KEYWORD.find(([k]) => lower.includes(k))?.[1] || "default";
   return (
-    <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
-      {label}
+    <div className="rounded-3xl border border-dashed border-emerald-200/70 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
+      <CommonEmptyState variant="compact" icon={preset} title={String(label || "Nothing here yet").replace(/\.$/, "")} />
     </div>
   );
 }

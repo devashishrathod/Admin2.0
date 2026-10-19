@@ -31,6 +31,8 @@ import {
   updateCategory,
   deleteCategory,
 } from "../../features/category/services/CategoryApi";
+import Loader from "../../components/common/Loader";
+import ToggleSwitch from "../../components/common/ToggleSwitch";
 
 const EMPTY_FORM = {
   id: null,
@@ -452,6 +454,9 @@ export default function Category() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [togglingId, setTogglingId] = useState(null);
+  const [toggleError, setToggleError] = useState("");
+
   // A broader, unpaginated snapshot used only for the overview charts —
   // the paginated `categories` list above only ever holds one page, which
   // would make a status/count chart misleading.
@@ -563,6 +568,27 @@ export default function Category() {
     }
   };
 
+  // Status toggle in the table row. Sends the row's current name/description
+  // with the flipped flag; no image, so the existing one is kept.
+  const handleToggleActive = async (row) => {
+    const isActive = !row.isActive;
+    const patchRow = (r) => (r.id === row.id ? { ...r, isActive, status: isActive ? "Active" : "Inactive" } : r);
+    setTogglingId(row.id);
+    setToggleError("");
+    setCategories((prev) => prev.map(patchRow));
+    setAllCategories((prev) => prev.map(patchRow));
+    try {
+      await updateCategory(row.id, { name: row.name, description: row.description ?? "", isActive });
+    } catch (err) {
+      const revert = (r) => (r.id === row.id ? row : r);
+      setCategories((prev) => prev.map(revert));
+      setAllCategories((prev) => prev.map(revert));
+      setToggleError(`Couldn't update "${row.name}": ${err.message}`);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const confirmDelete = async () => {
     setDeleting(true);
     try {
@@ -663,7 +689,17 @@ export default function Category() {
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <ToggleSwitch
+            checked={Boolean(row.isActive)}
+            disabled={togglingId === row.id}
+            title={row.isActive ? "Click to make Inactive" : "Click to make Active"}
+            onChange={() => handleToggleActive(row)}
+          />
+          <StatusBadge status={row.status} />
+        </div>
+      ),
     },
     {
       key: "action",
@@ -822,15 +858,19 @@ export default function Category() {
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading categories…
-          </div>
+          <Loader label="Loading categories…" />
         )}
 
         {!loading && loadError && (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load categories: {loadError}
+          </div>
+        )}
+
+        {toggleError && (
+          <div className="mb-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            {toggleError}
           </div>
         )}
 
@@ -840,7 +880,7 @@ export default function Category() {
             <Table
               columns={columns}
               data={categories}
-              emptyMessage="No categories yet. Add one to get started."
+              emptyTitle="No categories yet" emptyDescription="Categories group brands in the customer app. Add the first one to get started." emptyIcon="category" emptyAction={{ label: "Add Category", onClick: handleAddClick }}
               dense
               minWidth={920}
             />

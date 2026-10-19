@@ -16,6 +16,7 @@ import {
   saveBank,
 } from "../services/onboardingApi";
 import { DOC_SLOTS, PAN_RE, GST_RE, IFSC_RE, ACCOUNT_RE, errorText } from "../onboardingFlow";
+import Loader from "../../../components/common/Loader";
 
 const payload = (res) => res?.data ?? res ?? {};
 
@@ -177,7 +178,7 @@ export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack 
       }
     >
       {loading ? (
-        <p className="flex items-center gap-2 text-[14px] text-[#5B616E]"><Loader2 size={15} className="animate-spin" /> Loading documents…</p>
+        <Loader variant="inline" label="Loading documents…" />
       ) : (
         DOC_SLOTS.map((s) => (
           <DocSlot key={s.slot} brandId={brandId} slotDef={s} doc={bySlot(s.slot)} hint={s.slot === "BUSINESS_LICENSE" ? licenceHint : null} onChanged={load} />

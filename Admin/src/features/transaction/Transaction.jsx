@@ -9,8 +9,6 @@ import {
   Clock3,
   XCircle,
   Wallet,
-  Loader2,
-  AlertTriangle,
   Eye,
   ArrowLeftRight,
   Receipt,
@@ -31,6 +29,8 @@ import {
 import DateRangeFilter from "../../components/common/DateRangeFilter";
 import SelectDropdown from "../../components/common/SelectDropdown";
 import { downloadCsv } from "../../utils/exportTable";
+import EmptyState from "../../components/common/EmptyState";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Shared Table component (same as provided) — kept in this file so the
@@ -63,6 +63,11 @@ export function Table({
   columns = [],
   data = [],
   emptyMessage = "No records found.",
+  // Shared EmptyState props (see components/common/EmptyState.jsx).
+  emptyTitle,
+  emptyDescription,
+  emptyIcon = "search",
+  emptyAction,
   rowKey = "id",
 }) {
   const alignClass = (align) =>
@@ -93,11 +98,13 @@ export function Table({
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-5 py-10 text-center text-neutral-500"
-                >
-                  {emptyMessage}
+                <td colSpan={columns.length} className="p-0">
+                  <EmptyState
+                    icon={emptyIcon}
+                    title={emptyTitle || String(emptyMessage).replace(/\.$/, "")}
+                    description={emptyDescription}
+                    action={emptyAction}
+                  />
                 </td>
               </tr>
             ) : (
@@ -550,20 +557,28 @@ export default function Transaction() {
 
         {/* Table */}
         {loading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading transactions…
-          </div>
+          <Loader label="Loading transactions…" />
         ) : loadError ? (
-          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load transactions: {loadError}
+          <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load transactions"
+              description={`${loadError} — check your connection and try again.`}
+              action={{ label: "Try again", onClick: fetchTransactions }}
+            />
           </div>
         ) : (
           <Table
             columns={columns}
             data={pageRows}
-            emptyMessage="No transactions match your filters."
+            emptyIcon={transactions.length ? "search" : "transaction"}
+            emptyTitle={transactions.length ? "No transactions match your filters" : "No transactions yet"}
+            emptyDescription={
+              transactions.length
+                ? "No voucher claims match this tab, date range, payment method or search. Try widening the filters."
+                : "Voucher claims show up here as soon as customers start paying at outlets."
+            }
           />
         )}
 

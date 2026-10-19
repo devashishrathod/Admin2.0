@@ -55,6 +55,7 @@ import { downloadCsv } from "../../utils/exportTable";
 import { todayStr } from "../transaction/transactionUtils";
 import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
 import { pctChange, weekOverWeek } from "../../utils/overviewStats";
+import Loader from "../../components/common/Loader";
 
 
 /* -------------------------------------------------------------------------
@@ -1856,10 +1857,7 @@ export default function Settlement() {
 
         {/* Table */}
         {loading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading settlements…
-          </div>
+          <Loader label="Loading settlements…" />
         ) : loadError ? (
           <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />

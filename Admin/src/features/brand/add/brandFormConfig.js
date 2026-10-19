@@ -204,6 +204,8 @@ function validateFeatures({ listingFeatures }) {
   const e = {};
   listingFeatures.forEach((f, i) => {
     check(e, `listingFeatures.${i}.title`, f.title);
+    if (f.title.length > 20) e[`listingFeatures.${i}.title`] = "Title must be 20 characters or fewer";
+    if (f.description.length > 300) e[`listingFeatures.${i}.description`] = "Description must be 300 characters or fewer";
     if (!f.icon) e[`listingFeatures.${i}.icon`] = "Icon required";
   });
   return e;
@@ -213,6 +215,7 @@ function validateShowcase({ showcase }) {
   const e = {};
   showcase.forEach((s, i) => {
     check(e, `showcase.${i}.title`, s.title);
+    if (s.title.length > 20) e[`showcase.${i}.title`] = "Title must be 20 characters or fewer";
     if (!s.files.length) e[`showcase.${i}.files`] = "Add at least one photo or video";
   });
   return e;

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Check, Loader2, Lock, X } from "lucide-react";
+import { Check, Lock, X } from "lucide-react";
 import { getPlanComparison } from "./services/planApi";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Plan comparison (#75e) — the same grid vendors see. `columns[]` are the
@@ -90,10 +91,7 @@ export default function PlanCompare() {
       </div>
 
       {loading && (
-        <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-          <Loader2 size={16} className="animate-spin" />
-          Loading comparison…
-        </div>
+        <Loader label="Loading comparison…" />
       )}
 
       {!loading && error && (

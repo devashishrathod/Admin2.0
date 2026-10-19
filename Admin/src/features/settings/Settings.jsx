@@ -15,9 +15,12 @@ import {
   ChevronDown,
   Scale,
   HardDrive,
+  Palette,
 } from "lucide-react";
 import { getSettings, updateSettings } from "./services/SettingsApi";
 import LegalDocsPanel from "../legal/LegalDocsPanel";
+import AppearanceThemePicker from "./components/AppearanceThemePicker";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Sidebar tree — confirmed against the real GET /settings/get response.
@@ -26,6 +29,9 @@ import LegalDocsPanel from "../legal/LegalDocsPanel";
  * ---------------------------------------------------------------------- */
 const SECTIONS = [
   { id: "general", label: "General Setting", icon: SlidersHorizontal },
+  // Per-device look (ThemeContext + localStorage), not a field on the
+  // settings document — no Save button; see isLocalOnlySection below.
+  { id: "appearance", label: "Appearance", icon: Palette },
   {
     id: "vendor",
     label: "Vendor Setting",
@@ -655,6 +661,10 @@ export default function Settings() {
   const activeChild = activeGroup?.children?.find((c) => c.id === activeSection);
   const headerLabel = activeChild ? `${activeGroup.label} — ${activeChild.label}` : activeGroup?.label || "";
   const isLegalSection = activeSection === "legal.terms" || activeSection === "legal.privacy";
+  // Sections that don't go through the page-level Save / updateSettings:
+  // Legal (own create/update modal) and Appearance (applies instantly,
+  // saved per device).
+  const isLocalOnlySection = isLegalSection || activeSection === "appearance";
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -668,10 +678,7 @@ export default function Settings() {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading settings…
-          </div>
+          <Loader label="Loading settings…" />
         )}
 
         {!loading && loadError && (
@@ -753,7 +760,7 @@ export default function Settings() {
                     document is its own create/update call), not the
                     single settings-document PUT every other leaf here
                     shares — so this page-level Save button doesn't apply. */}
-                {!isLegalSection && (
+                {!isLocalOnlySection && (
                   <button
                     onClick={handleSave}
                     disabled={saving}
@@ -765,18 +772,21 @@ export default function Settings() {
                 )}
               </div>
 
-              {!isLegalSection && saveError && (
+              {!isLocalOnlySection && saveError && (
                 <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
                   <AlertTriangle size={14} className="shrink-0" />
                   {saveError}
                 </div>
               )}
-              {!isLegalSection && savedSection === activeSection && !saving && (
+              {!isLocalOnlySection && savedSection === activeSection && !saving && (
                 <div className="flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-[12.5px] text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 size={14} className="shrink-0" />
                   {headerLabel} saved.
                 </div>
               )}
+
+              {/* ---------------- Appearance ---------------- */}
+              {activeSection === "appearance" && <AppearanceThemePicker />}
 
               {/* ---------------- Legal ---------------- */}
               {activeSection === "legal.terms" && <LegalDocsPanel kind="terms" />}

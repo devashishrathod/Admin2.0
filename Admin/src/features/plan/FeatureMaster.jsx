@@ -8,6 +8,7 @@ import {
   updatePlanFeature,
 } from "./services/planApi";
 import { ImpactConfirmModal } from "./PlanModals";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Feature master (#75f–#75j) — one common list of plan features. Every plan
@@ -578,10 +579,7 @@ export default function FeatureMaster({ onChanged }) {
       )}
 
       {loading && (
-        <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-          <Loader2 size={16} className="animate-spin" />
-          Loading features…
-        </div>
+        <Loader label="Loading features…" />
       )}
 
       {!loading && error && (

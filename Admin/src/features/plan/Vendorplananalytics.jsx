@@ -337,7 +337,7 @@ export default function VendorPlanAnalytics() {
                   <YAxis stroke="#737373" fontSize={11.5} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: 11.5, color: "#a3a3a3" }} />
-                  <Bar dataKey="newThisMonth" name="New" fill="#34d399" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="newThisMonth" name="New" fill="var(--color-emerald-400)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="churned" name="Churned" fill="#f87171" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -349,8 +349,8 @@ export default function VendorPlanAnalytics() {
               <AreaChart data={TREND_DATA}>
                 <defs>
                   <linearGradient id="fill-vendors" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#34d399" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
+                    <stop offset="5%" stopColor="var(--color-emerald-400)" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="var(--color-emerald-400)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="#262626" strokeDasharray="3 3" vertical={false} />
@@ -360,7 +360,7 @@ export default function VendorPlanAnalytics() {
                 <Area
                   type="monotone"
                   dataKey="vendors"
-                  stroke="#34d399"
+                  stroke="var(--color-emerald-400)"
                   fill="url(#fill-vendors)"
                   strokeWidth={2.5}
                 />

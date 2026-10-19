@@ -36,6 +36,7 @@ import {
   REPORT_GROUP_BY,
   REPORT_GROUP_BY_LABELS,
 } from "./promoCodeEnums";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Promo Code Campaign Report — GET /promoCodes/reports
@@ -309,10 +310,7 @@ export default function PromoCodeReports() {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading report…
-          </div>
+          <Loader label="Loading report…" />
         )}
 
         {!loading && loadError && (
@@ -428,18 +426,18 @@ export default function PromoCodeReports() {
             {/* By Code */}
             <div className="mb-4">
               <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">By Code ({byCode.length})</p>
-              <Table columns={byCodeColumns} data={byCode} rowKey={byCodeColumns[0]?.key || "code"} emptyMessage="No per-code breakdown for this period." dense />
+              <Table columns={byCodeColumns} data={byCode} rowKey={byCodeColumns[0]?.key || "code"} emptyTitle="No code usage in this period" emptyDescription="Try a longer date range to see how each code performed." emptyIcon="report" dense />
             </div>
 
             {/* By Plan (vendor) + Top Brands (customer) */}
             <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div>
                 <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">By Plan ({byPlan.length})</p>
-                <Table columns={byPlanColumns} data={byPlan} rowKey={byPlanColumns[0]?.key || "plan"} emptyMessage="No plan breakdown for this period." dense />
+                <Table columns={byPlanColumns} data={byPlan} rowKey={byPlanColumns[0]?.key || "plan"} emptyTitle="No plan usage in this period" emptyDescription="Try a longer date range to see redemptions by plan." emptyIcon="report" dense />
               </div>
               <div>
                 <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">Top Brands ({topBrands.length})</p>
-                <Table columns={topBrandsColumns} data={topBrands} rowKey={topBrandsColumns[0]?.key || "brand"} emptyMessage="No brand usage for this period." dense />
+                <Table columns={topBrandsColumns} data={topBrands} rowKey={topBrandsColumns[0]?.key || "brand"} emptyTitle="No brand usage in this period" emptyDescription="Try a longer date range to see which brands used promo codes." emptyIcon="report" dense />
               </div>
             </div>
           </>

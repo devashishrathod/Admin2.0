@@ -14,7 +14,6 @@ import {
   Check,
   MoreVertical,
   ChevronLeft,
-  Loader2,
   Sparkles,
   PieChart as PieChartIcon,
   BarChart3,
@@ -54,13 +53,17 @@ import {
 import Table from "../../components/common/Table";
 import { useBrands } from "./BrandContext";
 import { ToggleActiveConfirmModal } from "./BrandShared";
+import EmptyState from "../../components/common/EmptyState";
+import StatTile from "../../components/common/StatTile";
+import { formatBatch } from "../../utils/helpers";
+import Loader from "../../components/common/Loader";
 
-const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Expired Brand", "Top Brand"];
+const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Hidden Brand", "Top Brand"];
 const STATUS_TAB_LABELS = {
   All: "All",
   "Active Brand": "Verified",
   "Deactive Brand": "Inactive",
-  "Expired Brand": "Expired",
+  "Hidden Brand": "Hidden",
   "Top Brand": "Top Brand",
 };
 
@@ -392,65 +395,95 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
 
   return (
     <div className="group relative flex flex-col rounded-[22px] border border-neutral-200/80 bg-white p-2.5 text-left shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(15,23,42,0.10)] dark:border-neutral-800 dark:bg-neutral-900 dark:hover:shadow-black/30">
-      {/* Top-right: Active/Inactive + Hide-from-customers toggles, then the
-          ⋮ menu (Delete). Dummy brands get the two toggles too, but a lock
-          instead of the menu — they can't be deleted or edited. */}
-      <div className="absolute right-5 top-5 z-10 flex items-center gap-1.5">
-        <div className="flex items-center gap-2 rounded-full bg-white/90 px-2 py-1.5 shadow-sm backdrop-blur dark:bg-neutral-900/80">
-          <MiniToggle
-            icon={Power}
-            checked={Boolean(brand.active)}
-            tone="emerald"
-            label={brand.active ? "Active — click to deactivate" : "Inactive — click to activate"}
-            onClick={() => setShowActiveConfirm(true)}
-          />
-          <span className="h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
-          <MiniToggle
-            icon={brand.hiddenFromCustomers ? EyeOff : Eye}
-            checked={Boolean(brand.hiddenFromCustomers)}
-            tone="amber"
-            label={
-              brand.hiddenFromCustomers
-                ? "Hidden from customers — click to show"
-                : "Visible to customers — click to hide"
-            }
-            onClick={() => onToggleHidden?.(brand, !brand.hiddenFromCustomers)}
-          />
-        </div>
-
+      {/* Keep the existing compact three-dot control; place brand actions in
+          its menu instead of taking up space above the cover. */}
+      <div className="absolute right-5 top-5 z-20">
         {readOnly ? (
           <span
-            title="Dummy brand — view only"
+            title="D brand — view only"
             aria-label="View only"
             className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-violet-600 shadow-sm backdrop-blur dark:bg-neutral-900/80 dark:text-violet-400"
           >
             <Lock size={14} />
           </span>
         ) : (
-        <div className="relative">
-          <button
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
-            aria-label={`More actions for ${brand.brandName}`}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-600 shadow-sm backdrop-blur transition-colors hover:bg-white hover:text-neutral-900 dark:bg-neutral-900/80 dark:text-neutral-300 dark:hover:bg-neutral-900"
-          >
-            <MoreVertical size={15} />
-          </button>
-
-          {menuOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((open) => !open);
+              }}
+              aria-label={`More actions for ${brand.brandName}`}
+              aria-expanded={menuOpen}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-neutral-600 shadow-sm backdrop-blur transition-colors hover:bg-white hover:text-neutral-900 dark:bg-neutral-900/80 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              <MoreVertical size={15} />
+            </button>
+            {menuOpen && (
+              <>
                 <button
-                  onClick={() => { setMenuOpen(false); onDelete(brand); }}
-                  className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
-                >
-                  <Trash2 size={13} />
-                  Delete Brand
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+                  type="button"
+                  aria-label="Close brand actions"
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                  }}
+                />
+                <div className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-xl border border-neutral-200 bg-white p-2 shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
+                  <div className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/70">
+                    <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+                      <Power size={14} className="shrink-0 text-neutral-500" />
+                      {brand.active ? "Active" : "Inactive"}
+                    </span>
+                    <MiniToggle
+                      icon={Power}
+                      checked={Boolean(brand.active)}
+                      label={brand.active ? "Deactivate brand" : "Activate brand"}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setShowActiveConfirm(true);
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/70">
+                    <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+                      {brand.hiddenFromCustomers ? (
+                        <EyeOff size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                      ) : (
+                        <Eye size={14} className="shrink-0 text-neutral-500" />
+                      )}
+                      {brand.hiddenFromCustomers ? "Hidden from customers" : "Visible to customers"}
+                    </span>
+                    <MiniToggle
+                      icon={brand.hiddenFromCustomers ? EyeOff : Eye}
+                      checked={Boolean(brand.hiddenFromCustomers)}
+                      tone="amber"
+                      label={brand.hiddenFromCustomers ? "Show to customers" : "Hide from customers"}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onToggleHidden?.(brand, !brand.hiddenFromCustomers);
+                      }}
+                    />
+                  </div>
+                  <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen(false);
+                      onDelete(brand);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[12px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                  >
+                    <Trash2 size={14} />
+                    Delete Brand
+                  </button>
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -511,7 +544,7 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
             {brand.isDummy && (
               <span className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wide text-violet-600 shadow-sm dark:bg-neutral-900 dark:text-violet-400">
                 <FlaskConical size={12} />
-                Dummy
+                D
               </span>
             )}
             {statusLabel !== "Active" && (
@@ -559,7 +592,7 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
           </p>
           {brand.isDummy && brand.dummyBatch && (
             <p className="mt-1 flex items-center gap-1 truncate font-mono text-[11px] text-violet-600 dark:text-violet-400">
-              <Layers size={11} className="shrink-0" /> {brand.dummyBatch}
+              <Layers size={11} className="shrink-0" /> {formatBatch(brand.dummyBatch)}
             </p>
           )}
           <p className="mt-2.5 line-clamp-1 text-[13px] font-medium text-neutral-800 dark:text-neutral-100">
@@ -763,7 +796,15 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
  * BrandDetailsPage.jsx (a separate route) renders. This page never renders
  * <BrandDetails> itself anymore.
  * ---------------------------------------------------------------------- */
-const PAGE_SIZE = 6;
+// Multiples of 3 so the 3-column grid always fills complete rows; 9 is the default.
+const PAGE_SIZE_OPTIONS = [9, 18, 36];
+
+function paginationItems(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, "end-gap", total];
+  if (current >= total - 3) return [1, "start-gap", ...Array.from({ length: 5 }, (_, index) => total - 4 + index)];
+  return [1, "start-gap", current - 1, current, current + 1, "end-gap", total];
+}
 
 // sessionStorage can throw (private mode / blocked storage) — never let that
 // break the page.
@@ -813,10 +854,15 @@ export default function Brand({ scope = "live" }) {
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [page, setPage] = useState(() => Number(readSession(`brands:${scope}:page`)) || 1);
+  const [pageSize, setPageSize] = useState(() => {
+    const savedPageSize = Number(readSession(`brands:${scope}:pageSize`));
+    return PAGE_SIZE_OPTIONS.includes(savedPageSize) ? savedPageSize : PAGE_SIZE_OPTIONS[0];
+  });
   useEffect(() => {
     writeSession(`brands:${scope}:view`, view);
     writeSession(`brands:${scope}:page`, String(page));
-  }, [scope, view, page]);
+    writeSession(`brands:${scope}:pageSize`, String(pageSize));
+  }, [scope, view, page, pageSize]);
 
   const hasValue = (v) => Boolean(v) && v !== "—";
   const categories = [...new Set(brands.map((b) => b.category).filter(hasValue))].sort();
@@ -839,8 +885,8 @@ export default function Brand({ scope = "live" }) {
         ? b.active && !isExpiredBrand(b)
         : statusTab === "Deactive Brand"
         ? !b.active && !isExpiredBrand(b)
-        : statusTab === "Expired Brand"
-        ? isExpiredBrand(b)
+        : statusTab === "Hidden Brand"
+        ? Boolean(b.hiddenFromCustomers)
         : statusTab === "Top Brand"
         ? Boolean(b.isTopBrand)
         : true;
@@ -857,11 +903,12 @@ export default function Brand({ scope = "live" }) {
       return rank(a) - rank(b) || 0;
     });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
+  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(safePage * pageSize, filtered.length);
+  const pageItems = paginationItems(safePage, totalPages);
 
   const applyFilter = (setter) => (value) => { setter(value); setPage(1); };
   const setStatusTabAndReset = applyFilter(setStatusTab);
@@ -879,11 +926,39 @@ export default function Brand({ scope = "live" }) {
   const filtersActive =
     Boolean(search) || statusTab !== "All" || planFilter !== "All Plans" || categoryFilter !== "All Categories";
 
+  // Empty state for both views — wording follows the list and the filters.
+  const brandEmpty = filtersActive
+    ? {
+        icon: "search",
+        title: "No brands match your filters",
+        description: "Try a different search, status, plan or category — or clear the filters to see every brand.",
+        action: { label: "Clear filters", onClick: resetFilters },
+      }
+    : isDummyScope
+    ? {
+        icon: "brand",
+        title: "No D brands",
+        description: "Test / demo brands will show up here once they're added.",
+      }
+    : isExpiredScope
+    ? {
+        icon: "brand",
+        title: "No expired brands",
+        description: "Every approved brand has an active plan right now — nothing needs a renewal.",
+      }
+    : {
+        icon: "brand",
+        title: "No live brands yet",
+        description: "Brands appear here once they finish onboarding and you approve them.",
+        action: { label: "Go to Brand Waiting", onClick: () => navigate("/brand-waiting") },
+      };
+
   // Overview charts — real, derived from the full brand list (not the
   // current page/filter), so they always reflect the true totals.
   const activeCount = brands.filter((b) => b.active && !isExpiredBrand(b)).length;
   const deactiveCount = brands.filter((b) => !b.active && !isExpiredBrand(b)).length;
   const expiredCount = brands.filter(isExpiredBrand).length;
+  const hiddenFromCustomersCount = brands.filter((b) => b.hiddenFromCustomers).length;
   const statusMix = [
     { name: "Verified", value: activeCount, color: "#2FDE8C" },
     { name: "Deactive", value: deactiveCount, color: "#A3A3A3" },
@@ -895,7 +970,7 @@ export default function Brand({ scope = "live" }) {
     .slice(0, 5)
     .map((b) => ({ name: b.brandName, followers: Number(b.followers) || 0 }));
 
-  const planMix = Object.entries(
+  const sortedPlanMix = Object.entries(
     brands.reduce((acc, b) => {
       const plan = b.subscriptionPlan || "—";
       acc[plan] = (acc[plan] || 0) + 1;
@@ -903,8 +978,13 @@ export default function Brand({ scope = "live" }) {
     }, {})
   )
     .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6);
+    .sort((a, b) => b.count - a.count);
+  const planMix = sortedPlanMix.length > 6
+    ? [
+        ...sortedPlanMix.slice(0, 5),
+        { name: "Other plans", count: sortedPlanMix.slice(5).reduce((sum, plan) => sum + plan.count, 0) },
+      ]
+    : sortedPlanMix;
 
   const deleteBrand = useConfirmDelete((brand) => {
     deleteBrandById(brand);
@@ -930,7 +1010,7 @@ export default function Brand({ scope = "live" }) {
     {
       key: "sno", label: "#", width: "w-12",
       render: (_row, index) => (
-        <span className="font-mono text-[12px] text-neutral-400">{String((safePage - 1) * PAGE_SIZE + index + 1).padStart(2, "0")}</span>
+        <span className="font-mono text-[12px] text-neutral-400">{String((safePage - 1) * pageSize + index + 1).padStart(2, "0")}</span>
       ),
     },
     {
@@ -966,7 +1046,7 @@ export default function Brand({ scope = "live" }) {
               )}
               {row.isDummy && (
                 <span className="flex items-center gap-0.5 rounded-md bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
-                  <FlaskConical size={9} />{row.dummyBatch || "Dummy"}
+                  <FlaskConical size={9} />{formatBatch(row.dummyBatch) || "D"}
                 </span>
               )}
             </div>
@@ -1086,7 +1166,7 @@ export default function Brand({ scope = "live" }) {
           {row.isDummy ? (
             // Dummy brands are view-only — no Delete.
             <span
-              title="Dummy brand — view only"
+              title="D brand — view only"
               aria-label="View only"
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-400/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
             >
@@ -1113,10 +1193,10 @@ export default function Brand({ scope = "live" }) {
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">{isDummyScope ? "Dummy Brands" : isExpiredScope ? "Expired Brands" : "Live Brands"}</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">{isDummyScope ? "D Brands" : isExpiredScope ? "Expired Brands" : "Live Brands"}</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               {isDummyScope
-                ? "Test / demo brands (isDummy) — kept separate from Live Brands."
+                ? "Test / demo brands — kept separate from Live Brands."
                 : isExpiredScope
                 ? "Approved brands whose plan has expired — they need a renewal to go live again."
                 : "Approved brands that are live on the platform — open one to see its full profile."}
@@ -1132,32 +1212,60 @@ export default function Brand({ scope = "live" }) {
               <FileDown size={14} />
               Export
             </button>
-
-            <div className="flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
-              <button
-                onClick={() => setView("grid")}
-                aria-label="Grid view"
-                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-                  view === "grid" ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-                }`}
-              >
-                <LayoutGrid size={15} />
-              </button>
-              <button
-                onClick={() => setView("table")}
-                aria-label="Table view"
-                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-                  view === "table" ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-                }`}
-              >
-                <List size={15} />
-              </button>
-            </div>
           </div>
         </div>
 
+        {/* D Brands — KPI tiles like Live Vouchers; clicking one filters the list. */}
+        {isDummyScope && (
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <StatTile
+              icon={Store}
+              label="Total D Brands"
+              value={brands.length}
+              hint="Test / demo brands"
+              tint="emerald"
+              active={statusTab === "All"}
+              onClick={() => setStatusTabAndReset("All")}
+            />
+            <StatTile
+              icon={ShieldCheck}
+              label="Verified"
+              value={brands.filter((b) => b.active && !isExpiredBrand(b)).length}
+              hint="Active right now"
+              tint="sky"
+              active={statusTab === "Active Brand"}
+              onClick={() => setStatusTabAndReset("Active Brand")}
+            />
+            <StatTile
+              icon={Power}
+              label="Inactive"
+              value={brands.filter((b) => !b.active && !isExpiredBrand(b)).length}
+              hint="Switched off"
+              tint="neutral"
+              active={statusTab === "Deactive Brand"}
+              onClick={() => setStatusTabAndReset("Deactive Brand")}
+            />
+            <StatTile
+              icon={Sparkles}
+              label="Top Brands"
+              value={brands.filter((b) => b.isTopBrand).length}
+              hint="Marked as top"
+              tint="amber"
+              active={statusTab === "Top Brand"}
+              onClick={() => setStatusTabAndReset("Top Brand")}
+            />
+            <StatTile
+              icon={Layers}
+              label="Batches"
+              value={new Set(brands.map((b) => b.dummyBatch).filter(Boolean)).size}
+              hint="Seed batches"
+              tint="violet"
+            />
+          </div>
+        )}
+
         {/* Overview charts — real data, independent of filters; kept small */}
-        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className={`mb-5 grid grid-cols-1 gap-3 ${isDummyScope || isExpiredScope ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
           <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
               <PieChartIcon size={13} className="text-emerald-500" /> Status Mix
@@ -1236,6 +1344,23 @@ export default function Brand({ scope = "live" }) {
               <div className="flex h-22.5 items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
             )}
           </div>
+
+          {!isDummyScope && !isExpiredScope && (
+            <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
+                <EyeOff size={13} className="text-amber-500" /> Hidden from Customers
+              </div>
+              <p className="text-[10px] text-neutral-500">Brands hidden using the customer visibility toggle</p>
+              <div className="mt-3 flex items-end gap-2">
+                <span className="text-3xl font-bold leading-none text-neutral-900 dark:text-neutral-50">
+                  {hiddenFromCustomersCount}
+                </span>
+                <span className="pb-0.5 text-[11px] text-neutral-500">
+                  {hiddenFromCustomersCount === 1 ? "brand" : "brands"}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -1251,7 +1376,7 @@ export default function Brand({ scope = "live" }) {
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-1.5">
             {/* Status tabs only on Live Brands — every row here is already expired */}
-            {!isExpiredScope && STATUS_TABS.map((tab) => {
+            {!isExpiredScope && STATUS_TABS.filter((tab) => !isDummyScope || tab !== "Hidden Brand").map((tab) => {
               const count =
                 tab === "All"
                   ? brands.length
@@ -1259,8 +1384,8 @@ export default function Brand({ scope = "live" }) {
                   ? brands.filter((b) => b.active && !isExpiredBrand(b)).length
                   : tab === "Deactive Brand"
                   ? brands.filter((b) => !b.active && !isExpiredBrand(b)).length
-                  : tab === "Expired Brand"
-                  ? brands.filter((b) => isExpiredBrand(b)).length
+                  : tab === "Hidden Brand"
+                  ? brands.filter((b) => b.hiddenFromCustomers).length
                   : brands.filter((b) => b.isTopBrand).length;
               return (
                 <button
@@ -1274,7 +1399,7 @@ export default function Brand({ scope = "live" }) {
                       : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
                   }`}
                 >
-                  {tab === "Top Brand" && <Sparkles size={12} />}
+                  {tab === "Top Brand" ? <Sparkles size={12} /> : tab === "Hidden Brand" ? <EyeOff size={12} /> : null}
                   {STATUS_TAB_LABELS[tab]}
                   <span
                     className={`rounded-full px-1.5 text-[10.5px] ${
@@ -1397,38 +1522,66 @@ export default function Brand({ scope = "live" }) {
           </div>
         </div>
 
+        {/* List controls — keep the result count, page size and view switch
+            together above the list. */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[12.5px] text-neutral-500">
+            {loading
+              ? "Loading brands…"
+              : filtered.length
+              ? `Showing ${rangeStart}–${rangeEnd} of ${filtered.length} brand${filtered.length === 1 ? "" : "s"}`
+              : "No brands to show"}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-[12px] text-neutral-500">
+              Per page
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="h-9 rounded-xl border border-neutral-200 bg-white px-2.5 text-[12px] font-medium text-neutral-700 outline-none focus:border-emerald-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </label>
+            <div className="flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
+              <button
+                onClick={() => setView("grid")}
+                aria-label="Grid view"
+                aria-pressed={view === "grid"}
+                title="Grid view"
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-colors ${
+                  view === "grid" ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                }`}
+              >
+                <LayoutGrid size={15} />
+                <span className="hidden sm:inline">Grid</span>
+              </button>
+              <button
+                onClick={() => setView("table")}
+                aria-label="Table view"
+                aria-pressed={view === "table"}
+                title="Table view"
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-colors ${
+                  view === "table" ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                }`}
+              >
+                <List size={15} />
+                <span className="hidden sm:inline">Table</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Loading state */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white px-4 py-16 text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            <Loader2 size={20} className="animate-spin" />
-            Loading brands…
-          </div>
+          <Loader label="Loading brands…" />
         ) : view === "grid" ? (
           paged.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-2xl bg-white px-4 py-16 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-500">
-                <BadgeCheck size={22} />
-              </span>
-              <div>
-                <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">No brands found</p>
-                <p className="mt-0.5 text-[12.5px] text-neutral-500">
-                  {filtersActive
-                    ? "Try a different search or filter."
-                    : isDummyScope
-                    ? "No dummy brands right now."
-                    : isExpiredScope
-                    ? "No brands with an expired plan right now."
-                    : "Approved brands will appear here."}
-                </p>
-              </div>
-              {filtersActive && (
-                <button
-                  onClick={resetFilters}
-                  className="rounded-xl border border-neutral-200 px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Clear filters
-                </button>
-              )}
+            <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+              <EmptyState {...brandEmpty} />
             </div>
           ) : (
             // items-start: each card keeps its own height, so expanding Plan
@@ -1448,7 +1601,7 @@ export default function Brand({ scope = "live" }) {
             </div>
           )
         ) : (
-          <Table columns={columns} data={paged} emptyMessage="No brands found." minWidth={1180} />
+          <Table columns={columns} data={paged} emptyTitle={brandEmpty.title} emptyDescription={brandEmpty.description} emptyIcon={brandEmpty.icon} emptyAction={brandEmpty.action} minWidth={1180} />
         )}
 
         {!loading && filtered.length > 0 && (
@@ -1466,16 +1619,20 @@ export default function Brand({ scope = "live" }) {
                 >
                   <ChevronLeft size={14} />
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                {pageItems.map((item) => typeof item === "number" ? (
                   <button
-                    key={n}
-                    onClick={() => setPage(n)}
+                    key={item}
+                    onClick={() => setPage(item)}
+                    aria-label={`Go to page ${item}`}
+                    aria-current={item === safePage ? "page" : undefined}
                     className={`flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-medium transition-colors ${
-                      n === safePage ? "bg-emerald-400 text-neutral-950" : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+                      item === safePage ? "bg-emerald-400 text-neutral-950" : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
                     }`}
                   >
-                    {n}
+                    {item}
                   </button>
+                ) : (
+                  <span key={item} aria-hidden="true" className="px-1 text-neutral-400">…</span>
                 ))}
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
-  Loader2,
   CreditCard,
   Gift,
   X,
@@ -31,6 +30,8 @@ import {
 } from "recharts";
 import Table from "../../components/common/Table";
 import { getAllSubscriptionPages } from "./services/SubscriptionsApi";
+import { formatBatch } from "../../utils/helpers";
+import Loader from "../../components/common/Loader";
 
 const PRICING_COLORS = { list: "#22c55e", discount: "#f59e0b", gst: "#38bdf8", payable: "#a78bfa" };
 
@@ -479,12 +480,12 @@ export default function Subscriptions({ scope = "all" }) {
           {isDummySubscription(row) && (
             <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
               <FlaskConical size={9} />
-              Dummy
+              D
             </span>
           )}
           {isDummySubscription(row) && (row.dummyBatch || row.brand?.dummyBatch) && (
             <p className="mt-0.5 font-mono text-[10.5px] text-violet-600 dark:text-violet-400">
-              {row.dummyBatch || row.brand?.dummyBatch}
+              {formatBatch(row.dummyBatch || row.brand?.dummyBatch)}
             </p>
           )}
         </button>
@@ -625,11 +626,11 @@ export default function Subscriptions({ scope = "all" }) {
           </span>
           <div>
             <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-              {isDummyScope ? "Dummy Subscriptions" : "Subscriptions"}
+              {isDummyScope ? "D Subscriptions" : "Subscriptions"}
             </h1>
             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
               {isDummyScope
-                ? `Test / demo subscriptions (isDummy) — kept separate from real ones. ${total} total.`
+                ? `Test / demo subscriptions — kept separate from real ones. ${total} total.`
                 : `Every brand's plan, across the whole platform — ${total} total.`}
             </p>
           </div>
@@ -784,10 +785,7 @@ export default function Subscriptions({ scope = "all" }) {
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 dark:border-neutral-800 py-14 text-[13px] text-neutral-500">
-            <Loader2 size={16} className="animate-spin" />
-            Loading subscriptions…
-          </div>
+          <Loader label="Loading subscriptions…" />
         )}
 
         {!loading && loadError && (
@@ -801,7 +799,7 @@ export default function Subscriptions({ scope = "all" }) {
             <Table
               columns={columns}
               data={tableRows}
-              emptyMessage="No subscriptions match these filters."
+              emptyTitle={isDummyScope ? "No D subscriptions" : "No subscriptions found"} emptyDescription={isDummyScope ? "Test / demo subscriptions will show up here." : "No subscriptions match this status, source or search. Try a different filter."} emptyIcon="subscription"
             />
 
             {totalPages > 1 && (

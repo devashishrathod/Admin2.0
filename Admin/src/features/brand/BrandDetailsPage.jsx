@@ -4,12 +4,15 @@ import { ArrowLeft } from "lucide-react";
 import { useBrands } from "./BrandContext";
 import { useConfirmDelete } from "./BrandShared";
 import BrandDetails from "./BrandDetails";
+import EmptyState from "../../components/common/EmptyState";
+import Loader from "../../components/common/Loader";
 
 export default function BrandDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const {
     allBrands: brands,
+    loading,
     refreshBrandDetail,
     toggleActive,
     handleApprovalDecision,
@@ -42,21 +45,23 @@ export default function BrandDetailsPage() {
     navigate("/brand");
   });
 
+  // Still loading the brand list — don't flash "not found" before it arrives.
+  if (!brand && loading) {
+    return (
+      <Loader variant="page" label="Loading brand…" />
+    );
+  }
+
   if (!brand) {
     return (
-      <div className="flex min-h-96 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
-        <p className="text-[15px] font-semibold text-neutral-800 dark:text-neutral-200">Brand not found</p>
-        <p className="text-[13px] text-neutral-500">
-          It may have been deleted, or the link is no longer valid.
-        </p>
-        <button
-          onClick={goBack}
-          className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
-        >
-          <ArrowLeft size={13} />
-          Back to Brands
-        </button>
-      </div>
+      <EmptyState
+        variant="page"
+        icon="brand"
+        title="Brand not found"
+        description="We couldn't find a brand with this link. It may have been deleted, or the link is no longer valid."
+        action={{ label: "Back to Brands", icon: ArrowLeft, onClick: goBack }}
+        secondaryAction={{ label: "Brand Waiting", onClick: () => navigate("/brand-waiting") }}
+      />
     );
   }
 

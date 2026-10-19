@@ -1,212 +1,9 @@
-import React, { useEffect } from "react";
-import {
-  LayoutDashboard,
-  BarChart3,
-  Users,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Tags,
-  Layers,
-  BadgeCheck,
-  UserPlus,
-  Hourglass,
-  Clock,
-  PencilLine,
-  ImageUp,
-  CalendarX,
-  TimerOff,
-  CreditCard,
-  Repeat,
-  Gift,
-  Ticket,
-  ArrowLeftRight,
-  Undo2,
-  HandCoins,
-  Megaphone,
-  Image,
-  MonitorPlay,
-  X,
-  Percent,
-  Bell,
-  HelpCircle,
-  TrendingUp,
-  FlaskConical,
-} from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
-
-// Grouped nav — each group renders with an uppercase label (hidden when
-// collapsed). Ordered the way an admin works through the platform: the big
-// picture and the money first, the catalog structure, then brands and
-// vouchers (each in lifecycle order: new → waiting for approval → live),
-// plans, customers, marketing, reports, and system config last.
-const NAV_GROUPS = [
-  {
-    label: "Overview",
-    items: [
-      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-      { id: "analysis-all", label: "Analytics", icon: BarChart3, path: "/analytics" },
-    ],
-  },
-  {
-    label: "Payments",
-    items: [
-      { id: "transaction", label: "Transactions", icon: ArrowLeftRight, path: "/transaction" },
-      { id: "refund", label: "Refunds", icon: Undo2, path: "/refund" },
-      { id: "settlements", label: "Settlements", icon: HandCoins, path: "/settlements" },
-    ],
-  },  {
-    label: "Catalog",
-    items: [
-      { id: "main-category", label: "Main Category", icon: Tags, path: "/main-category" },
-      { id: "sub-category", label: "Sub Category", icon: Layers, path: "/sub-category" },
-    ],
-  },
-  {
-    label: "Brands",
-    items: [
-      { id: "new-onboarding", label: "New Onboarding", icon: UserPlus, path: "/new-onboarding" },
-      { id: "brand-waiting", label: "Brand Waiting", icon: Hourglass, path: "/brand-waiting" },
-      { id: "brand", label: "Live Brands", icon: BadgeCheck, path: "/brand" },
-      { id: "brand-expired", label: "Expired Brands", icon: CalendarX, path: "/brand/expired" },
-      { id: "brand-dummy", label: "Dummy Brands", icon: FlaskConical, path: "/brand/dummy" },
-    ],
-  },
-  {
-    label: "Vouchers",
-    items: [
-      { id: "voucher-drafts", label: "Draft Vouchers", icon: PencilLine, path: "/voucher-drafts" },
-      { id: "voucher-waiting", label: "Voucher Waiting", icon: Clock, path: "/voucher-waiting" },
-      { id: "voucher-banners", label: "Banner Approval", icon: ImageUp, path: "/voucher-banners" },
-      { id: "voucher-listing", label: "Live Vouchers", icon: Gift, path: "/vendor-listing" },
-      { id: "voucher-expired", label: "Expired Vouchers", icon: TimerOff, path: "/voucher-expired" },
-      { id: "voucher-dummy", label: "Dummy Vouchers", icon: FlaskConical, path: "/voucher-dummy" },
-    ],
-  },
-  {
-    label: "Plans",
-    items: [
-      { id: "vendor-plan", label: "Vendor Plans", icon: CreditCard, path: "/vendor-plan" },
-      { id: "subscriptions", label: "Subscriptions", icon: Repeat, path: "/subscriptions" },
-      { id: "subscriptions-dummy", label: "Dummy Subscriptions", icon: FlaskConical, path: "/subscriptions/dummy" },
-      // Hidden from the sidebar for now — page and route still exist.
-      // (Re-add the Wallet icon import when un-commenting.)
-      // { id: "user-plan", label: "Customer Plans", icon: Wallet, path: "/user-plan" },
-    ],
-  },
-  {
-    label: "Customers",
-    items: [
-      { id: "customer", label: "Customers", icon: Users, path: "/customer" },
-    ],
-  },
-  {
-    label: "Marketing",
-    items: [
-      { id: "banner", label: "Banners", icon: Image, path: "/banner" },
-      { id: "promotional-ticker", label: "Promotional Ticker", icon: MonitorPlay, path: "/promotional-ticker" },
-      { id: "settings", label: "Feature Campaign", icon: Megaphone, path: "/feature_campaign" },
-      { id: "promo-code", label: "Promo Codes", icon: Percent, path: "/promo-code" },
-    ],
-  },
-  {
-    label: "Reports",
-    items: [
-      // Hidden from the sidebar for now — pages and routes still exist.
-      // (Re-add the ClipboardList / PieChart icon imports when un-commenting.)
-      // { id: "analysis-report-catalog", label: "Vendor Report", icon: ClipboardList, path: "/analysis-report-vendor" },
-      // { id: "analysis-report-customer", label: "Customer Report", icon: PieChart, path: "/analysis-report-customer" },
-      { id: "promo-code-reports", label: "Promo Code Report", icon: TrendingUp, path: "/promo-code/reports" },
-    ],
-  },
-  {
-    label: "System",
-    items: [
-      { id: "notifications", label: "Notifications", icon: Bell, path: "/notifications" },
-      { id: "faq", label: "FAQ", icon: HelpCircle, path: "/faq" },
-      { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
-      { id: "app-settings", label: "Settings", icon: Settings, path: "/settings" },
-    ],
-  },
-];
-
-function GrowthMark() {
-  // Concentric "growth ring" mark — the signature brand glyph.
-  return (
-    <div className="relative h-8.5 w-8.5 shrink-0">
-      <svg viewBox="0 0 40 40" width={34} height={34}>
-        <circle
-          className="animate-pulse fill-none stroke-emerald-400"
-          cx="20"
-          cy="20"
-          r="6"
-          strokeWidth="1.4"
-        />
-        <circle
-          className="animate-pulse fill-none stroke-emerald-400 opacity-50"
-          cx="20"
-          cy="20"
-          r="11"
-          strokeWidth="1.4"
-          style={{ animationDelay: "150ms" }}
-        />
-        <circle
-          className="animate-pulse fill-none stroke-emerald-400 opacity-30"
-          cx="20"
-          cy="20"
-          r="16"
-          strokeWidth="1.4"
-          style={{ animationDelay: "300ms" }}
-        />
-        <circle cx="20" cy="20" r="3.4" className="fill-emerald-400" />
-      </svg>
-    </div>
-  );
-}
-
-function NavButton({ item, isActive, collapsed, onClick }) {
-  const Icon = item.icon;
-  return (
-    <Link
-      to={item.path}
-      onClick={onClick}
-      title={collapsed ? item.label : undefined}
-      className={`group relative flex h-10.5 w-full items-center gap-3 rounded-2xl px-3 text-left text-[13px] font-medium no-underline transition-all duration-200
-        ${isActive
-          ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.6)]"
-          : "text-neutral-600 hover:bg-white/75 hover:text-emerald-700 hover:shadow-sm dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-emerald-300"
-        }`}
-    >
-      <span
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl transition-colors ${
-          isActive
-            ? "bg-white/20"
-            : "bg-white/60 text-neutral-500 group-hover:bg-emerald-50 group-hover:text-emerald-600 dark:bg-white/5 dark:text-neutral-400 dark:group-hover:bg-emerald-500/10 dark:group-hover:text-emerald-300"
-        }`}
-      >
-        <Icon size={15} />
-      </span>
-      <span
-        className={`overflow-hidden whitespace-nowrap transition-opacity duration-150 ${collapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-          }`}
-      >
-        {item.label}
-      </span>
-      {item.badge != null && !collapsed && !isActive && (
-        <span className="ml-auto rounded-full bg-emerald-400 px-1.5 py-0.5 text-[10px] font-bold text-neutral-950">
-          {item.badge}
-        </span>
-      )}
-      {/* collapsed badge dot */}
-      {item.badge != null && collapsed && (
-        <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
-      )}
-      {isActive && !collapsed && (
-        <ChevronRight size={15} className="ml-auto shrink-0 text-white/80" />
-      )}
-    </Link>
-  );
-}
+import  { useEffect } from "react";
+import { ChevronLeft, X } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { NAV_GROUPS } from "@/constants/navGroups";
+import NavButton from "../common/NavButton";
+import logo from "@/assets/Logo1.png";
 
 export default function Sidebar({
   collapsed,
@@ -237,7 +34,15 @@ export default function Sidebar({
       >
         {/* Head */}
         <div className="flex min-h-18 items-center gap-2.5 border-b border-white/70 px-4.5 py-4 dark:border-white/5">
-          <GrowthMark />
+          {/* Logo1.png is the full logo (mark + wordmark); this crops it to
+              just the shop mark — same crop as VenderPanel's DashboardHeader. */}
+          <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-2 ring-white/40">
+            <img
+              src={logo}
+              alt="Trydood"
+              className="absolute -left-[34px] -top-[2.25px] h-[75px] w-[105px] max-w-none"
+            />
+          </div>
           <div
             className={`overflow-hidden whitespace-nowrap transition-opacity duration-150 ${collapsed ? "w-0 opacity-0" : "w-auto opacity-100"}`}
           >

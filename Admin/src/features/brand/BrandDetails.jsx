@@ -69,8 +69,10 @@ import { getSettlements } from "../settlement/services/SettlementApi";
 import { TransactionsTab, RefundsTab } from "./BrandMoneyTabs";
 import { mapSettlementStatus, SETTLEMENT_TONES } from "../settlement/settlementUtils";
 import StatusStepButton from "../../components/common/StatusStepButton";
-import { isNotFoundMessage } from "../../utils/helpers";
+import { isNotFoundMessage, formatBatch } from "../../utils/helpers";
 import ShowcaseAlbums from "./ShowcaseAlbums";
+import ListingFeaturesTab from "./ListingFeaturesTab";
+import Loader from "../../components/common/Loader";
 
 const STATUS_ACCENTS = {
   Active: "from-emerald-400/25 via-emerald-400/0",
@@ -869,10 +871,7 @@ function ListingsTab({ brand }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-        <Loader2 size={16} className="animate-spin" />
-        Loading vouchers…
-      </div>
+      <Loader label="Loading vouchers…" />
     );
   }
 
@@ -985,9 +984,7 @@ function SettlementsTab({ brand }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white py-12 text-[13px] text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900">
-        <Loader2 size={15} className="animate-spin" /> Loading settlements…
-      </div>
+      <Loader label="Loading settlements…" />
     );
   }
   if (error) {
@@ -1149,10 +1146,7 @@ function VoucherTab({ brand }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-        <Loader2 size={16} className="animate-spin" />
-        Loading vouchers…
-      </div>
+      <Loader label="Loading vouchers…" />
     );
   }
 
@@ -1396,7 +1390,7 @@ function SystemVerificationTab({ brand }) {
                 >
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
                   <Tooltip formatter={(v) => [`${v}%`, "Score"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
-                  <Bar dataKey="value" fill="#34d399" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="value" fill="var(--color-emerald-400)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1538,7 +1532,7 @@ function SystemVerificationTab({ brand }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={flagsChartData} dataKey="value" innerRadius={32} outerRadius={48} paddingAngle={3} stroke="none">
-                      <Cell fill="#34d399" />
+                      <Cell fill="var(--color-emerald-400)" />
                       <Cell fill="#e5e7eb" opacity={0.6} />
                     </Pie>
                   </PieChart>
@@ -1595,6 +1589,7 @@ const TAB_ICONS = {
   Overview: Home,
   "Brand Info": IdCard,
   "Showcase Media": ImageIcon,
+  "Listing Features": Sparkles,
   "Sub-Brand": Store,
   Listings: Ticket,
   Settlements: HandCoins,
@@ -1646,6 +1641,7 @@ export default function BrandDetails({
     Overview: <OverviewTab brand={brand} />,
     "Brand Info": <BrandInfoTab brand={brand} />,
     "Showcase Media": <AmbienceTab brand={brand} readOnly={readOnly} />,
+    "Listing Features": <ListingFeaturesTab brand={brand} readOnly={readOnly} />,
     "Sub-Brand": <SubBrandTab brand={brand} />,
     Listings: <ListingsTab brand={brand} />,
     Settlements: <SettlementsTab brand={brand} />,
@@ -1684,11 +1680,11 @@ export default function BrandDetails({
 
           {readOnly ? (
             <span
-              title="Dummy brands can't be edited or deleted"
+              title="D brands can't be edited or deleted"
               className="flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-3.5 py-1.5 text-[12.5px] font-medium text-violet-600 dark:text-violet-400"
             >
               <Lock size={13} />
-              View only · Dummy brand
+              View only · D brand
             </span>
           ) : (
           <div className="flex flex-wrap items-center gap-2">
@@ -1747,12 +1743,12 @@ export default function BrandDetails({
                   {brand.isDummy && (
                     <span className="flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10.5px] font-semibold text-violet-600 dark:text-violet-400">
                       <FlaskConical size={10} />
-                      Dummy
+                      D
                     </span>
                   )}
                   {brand.isDummy && brand.dummyBatch && (
                     <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[10.5px] text-violet-600 dark:bg-neutral-800 dark:text-violet-400">
-                      {brand.dummyBatch}
+                      {formatBatch(brand.dummyBatch)}
                     </span>
                   )}
                   {incomplete ? (
@@ -1820,11 +1816,12 @@ export default function BrandDetails({
 
           {/* Segmented pill tabs — fades on both edges hint that the strip
               scrolls instead of the last tab looking cut off against the
-              card border. */}
+              card border. On overflow the slim scrollbar shows under the
+              tabs (same as the tables), so it's clear the strip scrolls. */}
           <div className="relative border-t border-neutral-200/80 px-4 py-2.5 dark:border-neutral-800/80">
             <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-white to-transparent dark:from-neutral-900" />
             <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-white to-transparent dark:from-neutral-900" />
-            <div className="no-scrollbar flex gap-1 overflow-x-auto">
+            <div className="flex gap-1 overflow-x-auto pb-1.5">
               {DETAIL_TABS.map((t) => {
                 const TabIcon = TAB_ICONS[t];
                 return (

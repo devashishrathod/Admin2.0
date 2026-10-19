@@ -1104,7 +1104,7 @@ export default function FeatureCampaign() {
         </div>
 
         {/* Table */}
-        <Table columns={columns} data={filtered} emptyMessage="No campaigns match your filters." />
+        <Table columns={columns} data={filtered} emptyTitle="No campaigns found" emptyDescription="Nothing matches the current search or filters — try changing or clearing them." emptyIcon="campaign" />
       </div>
 
       {/* Add / Edit modal */}

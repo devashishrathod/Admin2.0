@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, Users, X } from "lucide-react";
 import { applyTerms, previewApplyTerms } from "./services/planApi";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Shared dialogs for the plan screens:
@@ -239,10 +240,7 @@ export function ApplyTermsModal({ plan, labels = ENTITLEMENT_LABELS, onClose }) 
       </div>
 
       {loading && (
-        <div className="mt-6 flex items-center justify-center gap-2 py-8 text-[13px] text-neutral-500">
-          <Loader2 size={15} className="animate-spin" />
-          Checking who this affects…
-        </div>
+        <Loader variant="inline" center className="mt-6 py-8" label="Checking who this affects…" />
       )}
 
       {result && (

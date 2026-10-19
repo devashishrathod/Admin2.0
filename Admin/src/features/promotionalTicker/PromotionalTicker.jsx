@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -11,18 +12,30 @@ import {
   Loader2,
   Clock3,
   Link as LinkIcon,
+  Tag,
+  Store,
+  CalendarDays,
+  LayoutGrid,
+  List,
+  Megaphone,
+  Hash,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
   createPromotionalTicker,
   getPromotionalTickers,
+  getPromotionalTickerById,
   updatePromotionalTicker,
   deletePromotionalTicker,
   REDIRECT_TYPES,
 } from "./services/PromotionalTickerApi";
 import { getCategories } from "../category/services/CategoryApi";
 import { getAllBrands } from "../brand/services/BrandApi";
+import DeleteConfirmModal from "./TickerDeleteConfirmModal";
+import EmptyState from "../../components/common/EmptyState";
+import { apiToRow, formatDateTime, redirectSummary } from "./tickerUtils";
+import Loader from "../../components/common/Loader";
 
 const EMPTY_FORM = {
   id: null,
@@ -37,6 +50,7 @@ const EMPTY_FORM = {
   targetId: "",
   url: "",
 };
+const TITLE_MAX_LENGTH = 25;
 
 const REDIRECT_OPTIONS = [
   { value: REDIRECT_TYPES.NONE, label: "None" },
@@ -77,13 +91,6 @@ function localInputToIso(local) {
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString();
 }
-function formatDateTime(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 /* -------------------------------------------------------------------------
  * Add / Edit modal — icon upload + title + redirect target + display order
  * ---------------------------------------------------------------------- */
@@ -116,6 +123,9 @@ function TickerFormModal({ open, initialData, categories = [], brands = [], savi
     e.preventDefault();
     const nextErrors = {};
     if (!form.title.trim()) nextErrors.title = "Ticker title is required";
+    else if (form.title.trim().length > TITLE_MAX_LENGTH) {
+      nextErrors.title = `Ticker title must be ${TITLE_MAX_LENGTH} characters or fewer`;
+    }
     if (!isEdit && !form.icon) nextErrors.icon = "An icon is required";
     if (!form.startDateLocal) nextErrors.startDateLocal = "Start date is required";
     if (!form.endDateLocal) nextErrors.endDateLocal = "End date is required";
@@ -194,7 +204,8 @@ function TickerFormModal({ open, initialData, categories = [], brands = [], savi
             <input
               id="ticker-title"
               value={form.title}
-              onChange={handleChange("title")}
+              maxLength={TITLE_MAX_LENGTH}
+              onChange={(e) => setField("title", e.target.value.slice(0, TITLE_MAX_LENGTH))}
               placeholder="e.g. Free Shipping This Month"
               className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.title
@@ -202,6 +213,7 @@ function TickerFormModal({ open, initialData, categories = [], brands = [], savi
                   : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
+            <p className="mt-1 text-right text-[11px] text-neutral-400">{form.title.length}/{TITLE_MAX_LENGTH}</p>
             {errors.title && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.title}</p>}
           </div>
 
@@ -382,164 +394,149 @@ function TickerFormModal({ open, initialData, categories = [], brands = [], savi
  * View modal — read-only details for a ticker
  * ---------------------------------------------------------------------- */
 
-function TickerViewModal({ open, ticker, categories, brands, onClose }) {
-  if (!open || !ticker) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
-      >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Ticker Details</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="px-5 py-5">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-              {ticker.icon ? (
-                <img src={ticker.icon} alt={ticker.title} className="h-full w-full object-cover" />
-              ) : (
-                <ImageIcon size={20} className="text-neutral-400 dark:text-neutral-600" />
-              )}
-            </div>
-            <div>
-              <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.title}</p>
-              <StatusBadge status={ticker.isActive ? "Active" : "Inactive"} />
-            </div>
-          </div>
-
-          <p className="mt-3 text-[12.5px] text-sky-600 dark:text-sky-400">{redirectSummary(ticker.redirect, categories, brands)}</p>
-
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">Display Order</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.displayOrder ?? 0}</p>
-            </div>
-            <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">Status</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{ticker.isActive ? "Active" : "Inactive"}</p>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">Validity</p>
-            <p className="mt-1 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">
-              {formatDateTime(ticker.startDate)} → {formatDateTime(ticker.endDate)}
-            </p>
-          </div>
-
-          {ticker.createdAt && (
-            <p className="mt-4 text-[11.5px] text-neutral-400 dark:text-neutral-600">Created {formatDateTime(ticker.createdAt)}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* -------------------------------------------------------------------------
  * Delete confirmation modal
  * ---------------------------------------------------------------------- */
-
-function DeleteConfirmModal({ ticker, deleting, onCancel, onConfirm }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
-            <AlertTriangle size={18} />
-          </div>
-          <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete ticker?</h3>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500">
-              This removes "{ticker.title}" and it will stop showing in the app.
-            </p>
-          </div>
-        </div>
-        <div className="mt-5 flex items-center justify-end gap-2.5">
-          <button
-            onClick={onCancel}
-            disabled={deleting}
-            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:opacity-60"
-          >
-            {deleting && <Loader2 size={14} className="animate-spin" />}
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* -------------------------------------------------------------------------
  * Helpers to map between API shape and the form's shape
  * ---------------------------------------------------------------------- */
 
-function parseRedirect(ticker) {
-  let r = ticker.redirect;
-  if (typeof r === "string") {
-    try {
-      r = JSON.parse(r);
-    } catch {
-      r = { type: REDIRECT_TYPES.NONE };
-    }
+// "x days left" / "Starts in x days" / "Expired" chip — table and cards.
+function scheduleChip(row) {
+  if (!row.isActive) return { label: "Inactive", tone: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800" };
+  if (row.startsInDays != null && row.startsInDays > 0) {
+    const d = Math.ceil(row.startsInDays);
+    return { label: d <= 1 ? "Starts tomorrow" : `Starts in ${d} days`, tone: "bg-sky-400/10 text-sky-600 dark:text-sky-400" };
   }
-  return r || { type: REDIRECT_TYPES.NONE };
-}
-
-function redirectSummary(redirect, categories, brands = []) {
-  if (!redirect || redirect.type === REDIRECT_TYPES.NONE) return "No redirect";
-  if (redirect.type === REDIRECT_TYPES.EXTERNAL_URL) return redirect.url || "External URL";
-  if (redirect.type === REDIRECT_TYPES.CATEGORY) {
-    const cat = categories.find((c) => c.id === redirect.targetId);
-    return `Category: ${cat?.name || redirect.targetId}`;
-  }
-  if (redirect.type === REDIRECT_TYPES.BRAND) {
-    const brand = brands.find((b) => b.id === redirect.targetId);
-    return `Brand: ${brand?.name || redirect.targetId}`;
-  }
-  return `${redirect.type}: ${redirect.targetId}`;
-}
-
-function apiToRow(ticker) {
-  // `icon` comes back nested as { url, storage }, not a plain string —
-  // fall back to a plain string too in case some record is shaped that way.
-  const iconUrl = ticker.icon?.url ?? (typeof ticker.icon === "string" ? ticker.icon : "");
+  if (row.daysLeft == null) return { label: "No end date", tone: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800" };
+  if (row.daysLeft < 0) return { label: "Expired", tone: "bg-red-500/10 text-red-600 dark:text-red-400" };
+  const d = Math.ceil(row.daysLeft);
   return {
-    id: ticker._id ?? ticker.id,
-    title: ticker.title || "Untitled ticker",
-    icon: iconUrl,
-    redirect: parseRedirect(ticker),
-    displayOrder: ticker.displayOrder ?? 0,
-    startDate: ticker.startDate,
-    endDate: ticker.endDate,
-    // Computed once at fetch time (not during render) so the "expiring
-    // soon" chart never calls Date.now() from inside the component body.
-    daysLeft: ticker.endDate ? (new Date(ticker.endDate).getTime() - Date.now()) / 86400000 : null,
-    isActive: Boolean(ticker.isActive),
-    status: ticker.isActive ? "Active" : "Inactive",
-    createdAt: ticker.createdAt,
+    label: d <= 1 ? "Ends today" : `${d} days left`,
+    tone: d <= 7 ? "bg-amber-400/10 text-amber-600 dark:text-amber-400" : "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
   };
 }
+
+// Redirect target as a small chip — shared by the table and the grid cards.
+function RedirectChip({ redirect: r, categories, brands }) {
+  if (!r || r.type === REDIRECT_TYPES.NONE) return <span className="text-[12px] text-neutral-400">No redirect</span>;
+  if (r.type === REDIRECT_TYPES.EXTERNAL_URL) {
+    let host = r.url || "External URL";
+    try {
+      host = new URL(r.url).hostname.replace(/^www./, "");
+    } catch {
+      // keep the raw text if it isn't a full URL
+    }
+    return (
+      <a
+        href={r.url}
+        target="_blank"
+        rel="noreferrer"
+        title={r.url}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-sky-400/10 px-2 py-1 text-[11.5px] font-medium text-sky-700 hover:underline dark:text-sky-400"
+      >
+        <LinkIcon size={11} className="shrink-0" /> <span className="truncate normal-case">{host}</span>
+      </a>
+    );
+  }
+  const summary = redirectSummary(r, categories, brands);
+  const Icon = r.type === REDIRECT_TYPES.BRAND ? Store : Tag;
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-violet-400/10 px-2 py-1 text-[11.5px] font-medium text-violet-700 dark:text-violet-400">
+      <Icon size={11} className="shrink-0" />
+      {/* The icon already says category / brand, so drop that prefix */}
+      <span className="truncate" title={summary}>{summary.replace(/^(Category|Brand):\s*/, "")}</span>
+    </span>
+  );
+}
+
+// Ticker icon (or a placeholder), lazy-loaded.
+function TickerIcon({ row, className = "h-9 w-9 rounded-lg" }) {
+  return (
+    <div className={`flex shrink-0 items-center justify-center overflow-hidden bg-neutral-200 dark:bg-neutral-800 ${className}`}>
+      {row.icon ? (
+        <img src={row.icon} alt={row.title} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+      ) : (
+        <ImageIcon size={15} className="text-neutral-400 dark:text-neutral-600" />
+      )}
+    </div>
+  );
+}
+
+const CARD_BTN =
+  "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 text-[12px] font-medium text-neutral-600 transition-colors dark:border-neutral-800 dark:text-neutral-300";
+
+// Grid card: a strip previewing the ticker as it scrolls in the app, then
+// order + status, redirect, schedule, and View / Edit / Delete.
+function TickerCard({ row, categories, brands, onView, onEdit, onDelete }) {
+  const chip = scheduleChip(row);
+  return (
+    <div className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20">
+      <button
+        onClick={() => onView(row)}
+        aria-label={`View ${row.title}`}
+        className="flex items-center gap-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 text-left text-white"
+      >
+        <TickerIcon row={row} className="h-8 w-8 rounded-full bg-white/20 ring-2 ring-white/30 dark:bg-white/20" />
+        <span className="line-clamp-1 flex-1 text-[13.5px] font-semibold">{row.title}</span>
+        <Megaphone size={14} className="shrink-0 opacity-70" />
+      </button>
+
+      <div className="flex flex-1 flex-col gap-2.5 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300" title="Display order">
+            <Hash size={10} /> {row.displayOrder}
+          </span>
+          <StatusBadge status={row.status} />
+        </div>
+
+        <div className="min-w-0">
+          <RedirectChip redirect={row.redirect} categories={categories} brands={brands} />
+        </div>
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-2.5 dark:border-neutral-800">
+          <p className="flex items-center gap-1 whitespace-nowrap text-[11px] text-neutral-500">
+            <CalendarDays size={11} /> {shortDate(row.startDate)} – {shortDate(row.endDate)}
+          </p>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
+            <Clock3 size={10} /> {chip.label}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => onView(row)} className={`${CARD_BTN} hover:border-sky-400/40 hover:text-sky-600 dark:hover:text-sky-400`}>
+            <Eye size={13} /> View
+          </button>
+          <button onClick={() => onEdit(row)} className={`${CARD_BTN} hover:border-emerald-400/40 hover:text-emerald-600 dark:hover:text-emerald-400`}>
+            <Pencil size={13} /> Edit
+          </button>
+          <button
+            onClick={() => onDelete(row)}
+            aria-label={`Delete ${row.title}`}
+            title="Delete"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const shortDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+// Remembered grid/table choice for this tab (storage can be blocked).
+const VIEW_KEY = "tickers:view";
+const readView = () => {
+  try {
+    return sessionStorage.getItem(VIEW_KEY) === "table" ? "table" : "grid";
+  } catch {
+    return "grid";
+  }
+};
 
 function rowToFormDraft(row) {
   return {
@@ -562,6 +559,8 @@ function rowToFormDraft(row) {
  * ---------------------------------------------------------------------- */
 
 export default function PromotionalTicker() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [tickers, setTickers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -575,16 +574,27 @@ export default function PromotionalTicker() {
   const [brands, setBrands] = useState([]);
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [view, setViewState] = useState(readView);
+  // Grid fills 3 / 4 columns evenly; the table keeps its 10 rows.
+  const limit = view === "grid" ? 12 : 10;
+  const setView = (next) => {
+    setViewState(next);
+    setPage(1);
+    try {
+      sessionStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // not remembered — fine
+    }
+  };
+  const openDetails = (row) => navigate(`/promotional-ticker/${row.id}`);
   const [totalPages, setTotalPages] = useState(1);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTicker, setEditingTicker] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-
-  const [viewTarget, setViewTarget] = useState(null);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -614,7 +624,7 @@ export default function PromotionalTicker() {
     setLoading(true);
     setLoadError("");
     try {
-      const res = await getPromotionalTickers({ page, limit, search });
+      const res = await getPromotionalTickers({ page, limit, search: debouncedSearch });
       const rows = (res?.data?.data ?? []).map(apiToRow);
       setTickers(rows);
       setTotalPages(res?.data?.totalPages ?? 1);
@@ -623,7 +633,7 @@ export default function PromotionalTicker() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search]);
+  }, [page, limit, debouncedSearch]);
 
   const fetchAllTickers = useCallback(async () => {
     setChartsError("");
@@ -641,21 +651,21 @@ export default function PromotionalTicker() {
     fetchAllTickers();
   }, [fetchAllTickers]);
 
-  // Debounce search so we don't hit the API on every keystroke
+  // Debounce search so we don't hit the API on every keystroke; a new
+  // search goes back to page 1.
   useEffect(() => {
     const t = setTimeout(() => {
+      if (search === debouncedSearch) return;
+      setDebouncedSearch(search);
       setPage(1);
-      fetchTickers();
     }, 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, debouncedSearch]);
 
-  // Refetch on page change (search effect already handles search changes)
+  // One fetch per page / page size / search change.
   useEffect(() => {
     fetchTickers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [fetchTickers]);
 
   const handleAddClick = () => {
     setEditingTicker(null);
@@ -668,6 +678,21 @@ export default function PromotionalTicker() {
     setSaveError("");
     setModalOpen(true);
   };
+
+  const editIdFromDetails = location.state?.editId;
+  useEffect(() => {
+    if (!editIdFromDetails) return;
+    navigate(location.pathname, { replace: true, state: null });
+    getPromotionalTickerById(editIdFromDetails)
+      .then((ticker) => {
+        if (ticker) handleEdit(apiToRow(ticker));
+        else setSaveError("This promotional ticker could not be found.");
+      })
+      .catch((err) => setSaveError(err.message));
+    // The navigation state is consumed once; the form is opened from the
+    // asynchronously loaded record.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editIdFromDetails]);
 
   const handleSave = async (form) => {
     setSaving(true);
@@ -712,25 +737,37 @@ export default function PromotionalTicker() {
     }
   };
 
-  // Chart data — derived from the unpaginated `allTickers` snapshot.
-  const statusMix = [
-    { name: "Active", value: allTickers.filter((t) => t.isActive).length },
-    { name: "Inactive", value: allTickers.filter((t) => !t.isActive).length },
-  ].filter((d) => d.value > 0);
-
-  const redirectMix = Object.values(REDIRECT_TYPES).map((type) => ({
-    name: type === "NONE" ? "No redirect" : type.replace(/_/g, " "),
-    count: allTickers.filter((t) => (t.redirect?.type || REDIRECT_TYPES.NONE) === type).length,
-  }));
-
-  const expiringCount = allTickers.filter(
-    (t) => t.isActive && t.daysLeft != null && t.daysLeft >= 0 && t.daysLeft <= 7
-  ).length;
-  const expiringMix = [
-    { name: "Expiring ≤ 7 days", value: expiringCount },
-    { name: "Others", value: allTickers.length - expiringCount },
-  ];
-  const expiringData = expiringMix.filter((d) => d.value > 0);
+  // Chart data — derived from the unpaginated `allTickers` snapshot, in
+  // one pass, and only when that snapshot changes (not on every keystroke).
+  const { statusMix, redirectMix, expiringMix, expiringData } = useMemo(() => {
+    let active = 0;
+    let expiring = 0;
+    const byRedirect = {};
+    for (const t of allTickers) {
+      if (t.isActive) {
+        active += 1;
+        if (t.daysLeft != null && t.daysLeft >= 0 && t.daysLeft <= 7) expiring += 1;
+      }
+      const type = t.redirect?.type || REDIRECT_TYPES.NONE;
+      byRedirect[type] = (byRedirect[type] || 0) + 1;
+    }
+    const expiringMix = [
+      { name: "Expiring ≤ 7 days", value: expiring },
+      { name: "Others", value: allTickers.length - expiring },
+    ];
+    return {
+      statusMix: [
+        { name: "Active", value: active },
+        { name: "Inactive", value: allTickers.length - active },
+      ].filter((d) => d.value > 0),
+      redirectMix: Object.values(REDIRECT_TYPES).map((type) => ({
+        name: type === "NONE" ? "No redirect" : type.replace(/_/g, " "),
+        count: byRedirect[type] || 0,
+      })),
+      expiringMix,
+      expiringData: expiringMix.filter((d) => d.value > 0),
+    };
+  }, [allTickers]);
 
   // Column config for the shared Table component.
   const columns = [
@@ -743,15 +780,7 @@ export default function PromotionalTicker() {
     {
       key: "icon",
       label: "Icon",
-      render: (row) => (
-        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
-          {row.icon ? (
-            <img src={row.icon} alt={row.title} className="h-full w-full object-cover" />
-          ) : (
-            <ImageIcon size={15} className="text-neutral-400 dark:text-neutral-600" />
-          )}
-        </div>
-      ),
+      render: (row) => <TickerIcon row={row} />,
     },
     {
       key: "title",
@@ -761,9 +790,8 @@ export default function PromotionalTicker() {
     {
       key: "redirect",
       label: "Redirect",
-      render: (row) => (
-        <span className="max-w-50 truncate text-neutral-500 dark:text-neutral-400">{redirectSummary(row.redirect, categories, brands)}</span>
-      ),
+      cellClass: "max-w-56 whitespace-normal",
+      render: (row) => <RedirectChip redirect={row.redirect} categories={categories} brands={brands} />,
     },
     {
       key: "displayOrder",
@@ -773,11 +801,19 @@ export default function PromotionalTicker() {
     {
       key: "validity",
       label: "Validity",
-      render: (row) => (
-        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">
-          {formatDateTime(row.startDate)} → {formatDateTime(row.endDate)}
-        </span>
-      ),
+      render: (row) => {
+        const chip = scheduleChip(row);
+        return (
+          <div>
+            <p className="whitespace-nowrap text-[12px] text-neutral-500 dark:text-neutral-400">
+              {formatDateTime(row.startDate)} → {formatDateTime(row.endDate)}
+            </p>
+            <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
+              <Clock3 size={10} /> {chip.label}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "status",
@@ -791,7 +827,7 @@ export default function PromotionalTicker() {
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
           <button
-            onClick={() => setViewTarget(row)}
+            onClick={() => openDetails(row)}
             aria-label={`View ${row.title}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-sky-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-sky-400"
           >
@@ -852,7 +888,7 @@ export default function PromotionalTicker() {
                   <PieChart>
                     <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
                       {statusMix.map((entry) => (
-                        <Cell key={entry.name} fill={entry.name === "Active" ? "#34d399" : "#d4d4d4"} />
+                        <Cell key={entry.name} fill={entry.name === "Active" ? "var(--color-emerald-400)" : "#d4d4d4"} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
@@ -904,23 +940,42 @@ export default function PromotionalTicker() {
           </div>
         )}
 
-        {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs dark:border-neutral-800 dark:bg-neutral-900">
-          <Search size={16} className="shrink-0 text-neutral-500" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search ticker..."
-            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
-          />
+        {/* Search + Grid / Table toggle */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:w-full sm:max-w-xs">
+            <Search size={16} className="shrink-0 text-neutral-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search ticker..."
+              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+            />
+          </div>
+          <div className="flex items-center gap-1 self-start rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900 sm:self-auto">
+            {[
+              { key: "grid", label: "Grid", icon: LayoutGrid },
+              { key: "table", label: "Table", icon: List },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                aria-label={`${label} view`}
+                aria-pressed={view === key}
+                title={`${label} view`}
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-colors ${
+                  view === key ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                }`}
+              >
+                <Icon size={15} />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading tickers…
-          </div>
+          <Loader label="Loading tickers…" />
         )}
 
         {!loading && loadError && (
@@ -931,8 +986,32 @@ export default function PromotionalTicker() {
 
         {!loading && !loadError && (
           <>
-            {/* Table */}
-            <Table columns={columns} data={tickers} emptyMessage="No promotional tickers yet. Add one to get started." />
+            {view === "grid" ? (
+              tickers.length ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {tickers.map((row) => (
+                    <TickerCard
+                      key={row.id}
+                      row={row}
+                      categories={categories}
+                      brands={brands}
+                      onView={openDetails}
+                      onEdit={handleEdit}
+                      onDelete={setDeleteTarget}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon="ticker"
+                  title={debouncedSearch ? "No tickers match your search" : "No promotional tickers yet"}
+                  description={debouncedSearch ? "Try a different title or clear the search." : "Tickers scroll across the top of the customer app. Add one to start promoting."}
+                  action={debouncedSearch ? { label: "Clear search", onClick: () => setSearch("") } : { label: "Add Ticker", onClick: handleAddClick }}
+                />
+              )
+            ) : (
+              <Table columns={columns} data={tickers} emptyTitle="No promotional tickers yet" emptyDescription="Tickers scroll across the top of the customer app. Add one to start promoting." emptyIcon="ticker" emptyAction={{ label: "Add Ticker", onClick: handleAddClick }} />
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (
@@ -940,7 +1019,7 @@ export default function PromotionalTicker() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Prev
                 </button>
@@ -950,7 +1029,7 @@ export default function PromotionalTicker() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-800 px-3 py-1.5 text-[12.5px] text-neutral-300 disabled:opacity-40"
+                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
                 >
                   Next
                 </button>
@@ -975,19 +1054,10 @@ export default function PromotionalTicker() {
         onSave={handleSave}
       />
       {modalOpen && saveError && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-neutral-900 px-4 py-2.5 text-[12.5px] text-red-400 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-red-500/30 bg-white px-4 py-2.5 text-[12.5px] text-red-600 shadow-lg dark:bg-neutral-900 dark:text-red-400">
           {saveError}
         </div>
       )}
-
-      {/* View Ticker modal */}
-      <TickerViewModal
-        open={Boolean(viewTarget)}
-        ticker={viewTarget}
-        categories={categories}
-        brands={brands}
-        onClose={() => setViewTarget(null)}
-      />
 
       {/* Delete confirmation modal */}
       {deleteTarget && (

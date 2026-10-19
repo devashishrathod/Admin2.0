@@ -1,5 +1,6 @@
 import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import EmptyState from "./EmptyState";
 
 export function StatusBadge({ status, activeLabel = "Active" }) {
   const isActive = status === activeLabel;
@@ -39,7 +40,10 @@ export function StatusBadge({ status, activeLabel = "Active" }) {
  *     sideways (use on the last "Action" column so it's never cut off)
  *
  * data: array of row objects, each should have a unique `id`
- * emptyMessage: text shown when data is empty
+ * emptyMessage: title shown when data is empty (kept for existing callers)
+ * emptyTitle / emptyDescription / emptyIcon / emptyAction: optional richer
+ *   empty state (see EmptyState.jsx) — emptyIcon takes a preset key like
+ *   "brand" or a lucide icon; emptyAction is { label, onClick, icon }.
  * rowKey: field to use as the React key (default "id")
  *
  * Pagination (all optional — the footer only renders when `onPageChange`
@@ -50,6 +54,10 @@ export default function Table({
   columns = [],
   data = [],
   emptyMessage = "No records found.",
+  emptyTitle,
+  emptyDescription,
+  emptyIcon = "search",
+  emptyAction,
   rowKey = "id",
   minWidth = 760,
   page,
@@ -102,9 +110,15 @@ export default function Table({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-5 py-10 text-center text-neutral-500"
+                  className="p-0"
                 >
-                  {emptyMessage}
+                  <EmptyState
+                    variant="compact"
+                    icon={emptyIcon}
+                    title={emptyTitle || String(emptyMessage).replace(/\.$/, "")}
+                    description={emptyDescription}
+                    action={emptyAction}
+                  />
                 </td>
               </tr>
             ) : (

@@ -70,6 +70,9 @@ export function buildRedirectPayload({ type = REDIRECT_TYPES.NONE, targetId, url
 // Builds multipart/form-data. `icon` is only appended when a new File was
 // actually selected, so updates can omit it to keep the existing icon.
 function buildFormData({ title, redirect, displayOrder, startDate, endDate, isActive, icon }) {
+    if (title != null && String(title).trim().length > 25) {
+        throw new Error('Ticker title must be 25 characters or fewer');
+    }
     const fd = new FormData();
     fd.append('title', title ?? '');
     if (redirect) fd.append('redirect', typeof redirect === 'string' ? redirect : JSON.stringify(redirect));
@@ -118,6 +121,21 @@ export async function getPromotionalTickers({ page = 1, limit = 10, search = '' 
         const { data } = await api.get('/promotionalTickers/get-all', { params });
         return data;
     } catch (error) {
+        handleError(error);
+    }
+}
+
+// ── Get one Promotional Ticker (details page) ───────────────────────────
+// GET {{TryDood2.0BaseUrl}}/promotionalTickers/get/:id — super_admin_panel_api_doc #54.
+// Returns the ticker, or null when it doesn't exist (404 / invalid id 422)
+// so the page can show "not found".
+export async function getPromotionalTickerById(id) {
+    try {
+        const { data } = await api.get(`/promotionalTickers/get/${id}`);
+        return data?.data ?? null;
+    } catch (error) {
+        const status = error?.response?.status;
+        if (status === 404 || status === 422) return null;
         handleError(error);
     }
 }

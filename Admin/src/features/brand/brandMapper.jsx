@@ -214,21 +214,29 @@ function computeRemainderPercentFromDates(startDate, endDate) {
 /* Single source of truth for the brand-level status pill, built from
    whichever fields are present on either the list or detail payload. */
 function deriveBrandStatus(raw) {
-  if (raw.isRejected || raw.status === 'REJECTED') return 'Rejected';
-  if (raw.isRevoked || raw.status === 'REVOKED') return 'Revoked';
-  // `isApproved` stays false even on revoked/rejected/deactivated brands —
-  // it only means "has an admin ever approved this", not "still pending" —
-  // so PENDING must be judged from `status` alone, not `isApproved`.
-  // MANUAL_REVIEW is also "not yet approved" (same as New Onboarding's
-  // PENDING_STATUSES) — without this it fell through to Active/Deactive.
-  if (raw.status === 'PENDING' || raw.status === 'MANUAL_REVIEW') return 'Pending';
+  const status = String(raw.status || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (raw.isRejected || status === 'REJECTED') return 'Rejected';
+  if (raw.isRevoked || status === 'REVOKED') return 'Revoked';
+  // MANUAL_REVIEW and the other review states are not approved yet.
+  if ([
+    'PENDING',
+    'PENDING_APPROVAL',
+    'WAITING',
+    'UNDER_REVIEW',
+    'IN_REVIEW',
+    'MANUAL_REVIEW',
+  ].includes(status)) return 'Pending';
 
   const endsInDays =
     raw.subscription?.endsInDays ??
     (raw.subscribed?.endDate ? daysUntil(raw.subscribed.endDate) : null);
   if (endsInDays != null && endsInDays <= 0) return 'Expired';
 
-  if (raw.isAccountActive === false || raw.isActive === false) return 'Deactive';
+  if (
+    ['INACTIVE', 'DEACTIVE', 'DEACTIVATED'].includes(status) ||
+    raw.isAccountActive === false ||
+    raw.isActive === false
+  ) return 'Deactive';
   return 'Active';
 }
 
@@ -270,15 +278,16 @@ export function mapBrandListItem(raw) {
     active: status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
-    // `false` = the vendor hasn't finished onboarding yet (New Onboarding
-    // page). The list payload carries this as vendor.isOnBoardingCompleted;
-    // left undefined when the vendor block is missing.
-    isOnboarding: raw.isOnboarding ?? raw.vendor?.isOnBoardingCompleted,
+    // The API field reports whether onboarding is completed. New Onboarding
+    // shows only brands where this flag is explicitly false.
+    isOnboarding:
+      raw.isOnboarding ??
+      raw.vendor?.isOnBoardingCompleted,
     // Per-step checklist (hasPan, hasGst, hasBank, hasLocation, ...) —
     // New Onboarding shows which steps are still missing.
     onboardingFlags: raw.onboarding || {},
     // Screen the vendor is on in the onboarding flow, e.g. "PAN_VERIFICATION".
-    onboardingScreen: raw.vendor?.currentScreen || '',
+    onboardingScreen: raw.currentScreen || raw.vendor?.currentScreen || '',
     // Extra list fields for the Live Brand table.
     subCategory: raw.subCategory?.name || '',
     // Plan usage: { subBrands, franchises, vouchers, showcase } → { used, limit, isUnlimited }.

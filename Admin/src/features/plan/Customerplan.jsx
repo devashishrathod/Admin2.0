@@ -738,7 +738,7 @@ export default function CustomerPlan() {
                   <PieChart>
                     <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
                       {statusMix.map((entry) => (
-                        <Cell key={entry.name} fill={entry.name === "Active" ? "#34d399" : "#d4d4d4"} />
+                        <Cell key={entry.name} fill={entry.name === "Active" ? "var(--color-emerald-400)" : "#d4d4d4"} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
@@ -757,7 +757,7 @@ export default function CustomerPlan() {
                   <BarChart data={priceCompare} barCategoryGap="30%">
                     <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#a3a3a3" }} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Price"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
-                    <Bar dataKey="price" fill="#34d399" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="price" fill="var(--color-emerald-400)" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

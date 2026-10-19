@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import EmptyState from "../../components/common/EmptyState";
 import { ArrowLeft, Loader2, AlertTriangle, Check, Ban, History, Wallet, Landmark, CheckCircle2, XCircle } from "lucide-react";
 import {
   getRefundById,
@@ -13,6 +14,7 @@ import {
 } from "./services/RefundApi";
 import { canAdminDecide } from "./refundUtils";
 import { inr, formatDate, fmtTime } from "../transaction/transactionUtils";
+import Loader from "../../components/common/Loader";
 
 function Field({ label, value, mono }) {
   return (
@@ -432,29 +434,25 @@ export default function RefundDetails() {
 
   if (loading) {
     return (
-      <div className="flex min-h-96 items-center justify-center gap-2 px-4 py-6 text-[13px] text-neutral-500">
-        <Loader2 size={16} className="animate-spin" />
-        Loading refund details…
-      </div>
+      <Loader variant="page" label="Loading refund details…" />
     );
   }
 
   if (error || !details?.refund) {
     return (
-      <div className="flex min-h-96 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
-        <p className="flex items-center gap-2 text-[15px] font-semibold text-neutral-800 dark:text-neutral-200">
-          <AlertTriangle size={16} className="text-red-500" />
-          {error ? "Failed to load refund" : "Refund not found"}
-        </p>
-        {error && <p className="text-[13px] text-neutral-500">{error}</p>}
-        <button
-          onClick={() => navigate("/refund")}
-          className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
-        >
-          <ArrowLeft size={13} />
-          Back to Refunds
-        </button>
-      </div>
+      <EmptyState
+        variant="page"
+        tone={error ? "error" : "default"}
+        icon={error ? "error" : "refund"}
+        title={error ? "Couldn't load this refund" : "Refund not found"}
+        description={
+          error
+            ? `${error} — check your connection and try again.`
+            : "We couldn't find a refund request with this link. It may have been removed, or the link is no longer valid."
+        }
+        action={{ label: "Back to Refunds", icon: ArrowLeft, onClick: () => navigate("/refund") }}
+        secondaryAction={error ? { label: "Try again", onClick: fetchDetails } : undefined}
+      />
     );
   }
 

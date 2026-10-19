@@ -17,9 +17,15 @@ import {
   ImagePlus,
   Layers,
   Gift,
+  Search,
+  LayoutGrid,
+  List,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, LabelList } from "recharts";
 import PlanDetails from "./PlanDetails";
+import Table, { StatusBadge } from "../../components/common/Table";
 import FeatureMaster, {
   FEATURE_KINDS,
   FeatureValueInput,
@@ -38,6 +44,7 @@ import {
   uploadPlanImage,
   removePlanImage,
 } from "../plan/services/planApi";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Data shape (subscription redesign, Phases 1–8)
@@ -1073,6 +1080,10 @@ function extractPlan(res) {
 
 export default function Plan() {
   const [tab, setTab] = useState("plans");
+  const [planView, setPlanView] = useState("grid");
+  const [planSearch, setPlanSearch] = useState("");
+  const [planStatusFilter, setPlanStatusFilter] = useState("All");
+  const [planPage, setPlanPage] = useState(1);
 
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1183,6 +1194,31 @@ export default function Plan() {
       ),
     [plans]
   );
+  const filteredPlans = useMemo(() => {
+    const query = planSearch.trim().toLowerCase();
+    return sortedPlans.filter((plan) => {
+      const matchesSearch =
+        !query ||
+        [plan.name, plan.description, plan.typeLabel, plan.durationLabel, plan.tier, plan.price]
+          .some((value) => String(value || "").toLowerCase().includes(query));
+      const matchesStatus = planStatusFilter === "All" || plan.status === planStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [sortedPlans, planSearch, planStatusFilter]);
+  const planPageSize = planView === "grid" ? 9 : 10;
+  const planTotalPages = Math.max(1, Math.ceil(filteredPlans.length / planPageSize));
+  const currentPlanPage = Math.min(planPage, planTotalPages);
+  const visiblePlans = filteredPlans.slice((currentPlanPage - 1) * planPageSize, currentPlanPage * planPageSize);
+
+  const changePlanView = (nextView) => {
+    setPlanView(nextView);
+    setPlanPage(1);
+  };
+  const clearPlanFilters = () => {
+    setPlanSearch("");
+    setPlanStatusFilter("All");
+    setPlanPage(1);
+  };
 
   const openAdd = () => {
     // A new plan starts from each active feature's default value.
@@ -1416,6 +1452,149 @@ export default function Plan() {
     return { name: p.name, available: enforced + display };
   });
 
+  const planColumns = [
+    {
+      key: "plan",
+      label: "Plan",
+      cellClass: "min-w-56 max-w-80 whitespace-normal",
+      render: (plan) => (
+        <div className="flex items-center gap-3">
+          {plan.image ? (
+            <img src={plan.image} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+          ) : (
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-400 dark:bg-neutral-800">
+              <Layers size={16} />
+            </span>
+          )}
+          <div className="min-w-0">
+            <button
+              onClick={() => setViewingPlanId(plan.id)}
+              className="block max-w-full truncate text-left font-semibold text-neutral-900 hover:text-emerald-600 dark:text-neutral-50 dark:hover:text-emerald-400"
+            >
+              {plan.name}
+            </button>
+            <p className="mt-0.5 max-w-64 truncate text-[11.5px] text-neutral-500">{plan.description || "No description"}</p>
+          </div>
+          {plan.popular && <Star size={13} className="shrink-0 text-amber-500" fill="currentColor" />}
+        </div>
+      ),
+    },
+    {
+      key: "tier",
+      label: "Tier",
+      align: "center",
+      render: (plan) => (
+        <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+          plan.tier != null
+            ? "bg-violet-400/10 text-violet-600 dark:text-violet-400"
+            : "bg-amber-400/10 text-amber-700 dark:text-amber-400"
+        }`}>
+          {plan.tier != null ? `Tier ${plan.tier}` : "No tier"}
+        </span>
+      ),
+    },
+    {
+      key: "duration",
+      label: "Duration",
+      render: (plan) => (
+        <div>
+          <span>{plan.durationLabel || "—"}</span>
+          {plan.isTrial && <span className="ml-2 rounded-md bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400">Free trial</span>}
+        </div>
+      ),
+    },
+    {
+      key: "price",
+      label: "Price",
+      align: "right",
+      render: (plan) => {
+        const discountedPrice = plan.discountedPrice != null ? Number(plan.discountedPrice) : null;
+        const hasDiscount = discountedPrice != null && discountedPrice < Number(plan.price || 0);
+        return (
+          <div>
+            <span className="font-semibold text-neutral-900 dark:text-neutral-50">
+              ₹{Number(hasDiscount ? discountedPrice : plan.price || 0).toLocaleString("en-IN")}
+            </span>
+            {hasDiscount && (
+              <span className="ml-2 text-[11px] text-neutral-400 line-through">
+                ₹{Number(plan.price).toLocaleString("en-IN")}
+              </span>
+            )}
+            {plan.typeLabel && <p className="text-[10.5px] text-neutral-500">/ {plan.typeLabel}</p>}
+          </div>
+        );
+      },
+    },
+    {
+      key: "features",
+      label: "Features",
+      cellClass: "min-w-48 max-w-64 whitespace-normal",
+      render: (plan) => {
+        const offered = planFeatureList(plan, featureMeta);
+        return offered.length ? (
+          <div className="flex flex-wrap gap-1">
+            {offered.slice(0, 3).map((feature) => (
+              <span key={feature.key} className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10.5px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                {feature.label}: {feature.text}
+              </span>
+            ))}
+            {offered.length > 3 && <span className="text-[10.5px] text-neutral-400">+{offered.length - 3} more</span>}
+          </div>
+        ) : <span className="text-neutral-400">—</span>;
+      },
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (plan) => <StatusBadge status={plan.status} />,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      align: "right",
+      sticky: true,
+      render: (plan) => (
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={() => setViewingPlanId(plan.id)}
+            aria-label={`View ${plan.name}`}
+            title="View plan"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-sky-400/10 hover:text-sky-600 dark:hover:text-sky-400"
+          >
+            <Eye size={14} />
+          </button>
+          <button
+            onClick={() => openEdit(plan)}
+            aria-label={`Edit ${plan.name}`}
+            title="Edit plan"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-emerald-400/10 hover:text-emerald-600 dark:hover:text-emerald-400"
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            onClick={() => {
+              setDeleteError("");
+              setDeleteState({ plan });
+            }}
+            aria-label={`Delete ${plan.name}`}
+            title="Delete plan"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+          >
+            <Trash2 size={14} />
+          </button>
+          <button
+            onClick={() => setApplyTarget(plan)}
+            aria-label={`Apply ${plan.name} limits to current subscribers`}
+            title="Apply limits to current subscribers"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-sky-400/10 hover:text-sky-600 dark:hover:text-sky-400"
+          >
+            <Users size={14} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="w-full">
@@ -1459,10 +1638,7 @@ export default function Plan() {
           <>
             {/* Load state */}
             {loading && (
-              <div className="mb-8 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-                <Loader2 size={16} className="animate-spin" />
-                Loading plans…
-              </div>
+              <Loader label="Loading plans…" className="mb-8" />
             )}
 
             {!loading && loadError && (
@@ -1532,7 +1708,7 @@ export default function Plan() {
                           <BarChart data={priceCompare} barCategoryGap="30%" margin={{ top: 18, left: 0, right: 0, bottom: 0 }}>
                             <XAxis dataKey="name" tick={{ fontSize: 9.5, fill: "#a3a3a3" }} axisLine={false} tickLine={false} interval={0} />
                             <Tooltip formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, "Price"]} contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
-                            <Bar dataKey="price" fill="#34d399" radius={[6, 6, 0, 0]}>
+                            <Bar dataKey="price" fill="var(--color-emerald-400)" radius={[6, 6, 0, 0]}>
                               <LabelList
                                 dataKey="price"
                                 position="top"
@@ -1562,29 +1738,172 @@ export default function Plan() {
                   </div>
                 )}
 
-                {plans.length === 0 && (
-                  <div className="mb-8 rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
-                    No plans yet — add your first plan.
+                <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {["All", "Active", "Inactive"].map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => {
+                          setPlanStatusFilter(status);
+                          setPlanPage(1);
+                        }}
+                        className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+                          planStatusFilter === status
+                            ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                            : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                        }`}
+                      >
+                        {status}
+                        <span className={`rounded-full px-1.5 text-[10.5px] ${
+                          planStatusFilter === status ? "bg-emerald-400/20" : "bg-neutral-200 dark:bg-neutral-800"
+                        }`}>
+                          {status === "All" ? plans.length : plans.filter((plan) => plan.status === status).length}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 lg:w-80 lg:flex-none">
+                      <Search size={15} className="shrink-0 text-neutral-500" />
+                      <input
+                        value={planSearch}
+                        onChange={(event) => {
+                          setPlanSearch(event.target.value);
+                          setPlanPage(1);
+                        }}
+                        placeholder="Search plans..."
+                        aria-label="Search subscription plans"
+                        className="w-full bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+                      />
+                      {planSearch && (
+                        <button
+                          onClick={() => {
+                            setPlanSearch("");
+                            setPlanPage(1);
+                          }}
+                          aria-label="Clear plan search"
+                          className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
+                      <button
+                        onClick={() => changePlanView("grid")}
+                        aria-label="Grid view"
+                        aria-pressed={planView === "grid"}
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                          planView === "grid" ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                        }`}
+                      >
+                        <LayoutGrid size={15} />
+                      </button>
+                      <button
+                        onClick={() => changePlanView("table")}
+                        aria-label="Table view"
+                        aria-pressed={planView === "table"}
+                        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                          planView === "table" ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                        }`}
+                      >
+                        <List size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {filteredPlans.length === 0 ? (
+                  <div className="mb-8 rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center dark:border-neutral-800">
+                    <p className="text-[13px] font-medium text-neutral-700 dark:text-neutral-300">
+                      {plans.length === 0 ? "No plans yet" : "No plans match your filters"}
+                    </p>
+                    <p className="mt-1 text-[12px] text-neutral-500">
+                      {plans.length === 0 ? "Add your first subscription plan." : "Try another search or status filter."}
+                    </p>
+                    {plans.length > 0 && (planSearch || planStatusFilter !== "All") && (
+                      <button onClick={clearPlanFilters} className="mt-3 text-[12px] font-semibold text-emerald-600 hover:underline dark:text-emerald-400">
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                ) : planView === "grid" ? (
+                  <>
+                    <div className="mb-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {visiblePlans.map((plan) => (
+                        <PlanCard
+                          key={plan.id}
+                          plan={plan}
+                          onView={(p) => setViewingPlanId(p.id)}
+                          onEdit={openEdit}
+                          onDelete={(p) => {
+                            setDeleteError("");
+                            setDeleteState({ plan: p });
+                          }}
+                          onApplyTerms={setApplyTarget}
+                          featureMeta={featureMeta}
+                        />
+                      ))}
+                    </div>
+                    {planTotalPages > 1 && (
+                      <div className="mb-8 flex flex-col items-center justify-between gap-3 sm:flex-row">
+                        <p className="text-[12.5px] text-neutral-500">
+                          Showing {(currentPlanPage - 1) * planPageSize + 1} to {Math.min(currentPlanPage * planPageSize, filteredPlans.length)} of {filteredPlans.length} plans
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setPlanPage(Math.max(1, currentPlanPage - 1))}
+                            disabled={currentPlanPage === 1}
+                            aria-label="Previous plans page"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-neutral-800"
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          {Array.from({ length: planTotalPages }, (_, index) => index + 1).map((pageNumber) => (
+                            <button
+                              key={pageNumber}
+                              onClick={() => setPlanPage(pageNumber)}
+                              aria-label={`Go to plans page ${pageNumber}`}
+                              aria-current={pageNumber === currentPlanPage ? "page" : undefined}
+                              className={`flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-medium transition-colors ${
+                                pageNumber === currentPlanPage
+                                  ? "bg-emerald-400 text-neutral-950"
+                                  : "bg-white text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-700"
+                              }`}
+                            >
+                              {pageNumber}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => setPlanPage(Math.min(planTotalPages, currentPlanPage + 1))}
+                            disabled={currentPlanPage === planTotalPages}
+                            aria-label="Next plans page"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-neutral-800"
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="mb-8">
+                    <Table
+                      columns={planColumns}
+                      data={visiblePlans}
+                      minWidth={1050}
+                      emptyTitle="No plans match your filters"
+                      emptyDescription="Try another search or status filter."
+                      page={currentPlanPage}
+                      totalPages={planTotalPages}
+                      onPageChange={setPlanPage}
+                      total={filteredPlans.length}
+                      pageSize={planPageSize}
+                      dense
+                    />
                   </div>
                 )}
-
-                {/* Plan cards — tier, then length, then price */}
-                <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {sortedPlans.map((plan) => (
-                    <PlanCard
-                      key={plan.id}
-                      plan={plan}
-                      onView={(p) => setViewingPlanId(p.id)}
-                      onEdit={openEdit}
-                      onDelete={(p) => {
-                        setDeleteError("");
-                        setDeleteState({ plan: p });
-                      }}
-                      onApplyTerms={setApplyTarget}
-                      featureMeta={featureMeta}
-                    />
-                  ))}
-                </div>
               </>
             )}
           </>

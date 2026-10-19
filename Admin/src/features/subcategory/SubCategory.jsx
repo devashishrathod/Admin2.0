@@ -34,6 +34,8 @@ import {
   deleteSubCategory,
 } from "../../features/subcategory/services/SubCategoryApi";
 import { getCategories } from "../../features/category/services/CategoryApi";
+import Loader from "../../components/common/Loader";
+import ToggleSwitch from "../../components/common/ToggleSwitch";
 const EMPTY_FORM = {
   id: null,
   name: "",
@@ -322,10 +324,7 @@ function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClos
 
         <div className="px-5 py-5">
           {loading || !subCategory ? (
-            <div className="flex items-center justify-center gap-2 py-14 text-[13px] text-neutral-500">
-              <Loader2 size={16} className="animate-spin" />
-              Loading…
-            </div>
+            <Loader variant="inline" center className="py-14" label="Loading sub-category…" />
           ) : (
             <>
               <div className="flex items-center gap-4">
@@ -506,7 +505,10 @@ export default function SubCategory() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const categoryName = (id) => categories.find((c) => c.id === id)?.name || "—";
+  const [togglingId, setTogglingId] = useState(null);
+  const [toggleError, setToggleError] = useState("");
+
+  const categoryName =(id) => categories.find((c) => c.id === id)?.name || "—";
 
   // A broader, unpaginated snapshot used only for the overview charts —
   // the paginated `subCategories` list only ever holds one page.
@@ -643,6 +645,27 @@ export default function SubCategory() {
     }
   };
 
+  // Status toggle in the table row. Sends the row's current name/description
+  // with the flipped flag; no image, so the existing one is kept.
+  const handleToggleActive = async (row) => {
+    const isActive = !row.isActive;
+    const patchRow = (r) => (r.id === row.id ? { ...r, isActive, status: isActive ? "Active" : "Inactive" } : r);
+    setTogglingId(row.id);
+    setToggleError("");
+    setSubCategories((prev) => prev.map(patchRow));
+    setAllSubCategories((prev) => prev.map(patchRow));
+    try {
+      await updateSubCategory(row.id, { name: row.name, description: row.description ?? "", isActive });
+    } catch (err) {
+      const revert = (r) => (r.id === row.id ? row : r);
+      setSubCategories((prev) => prev.map(revert));
+      setAllSubCategories((prev) => prev.map(revert));
+      setToggleError(`Couldn't update "${row.name}": ${err.message}`);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const confirmDelete = async () => {
     setDeleting(true);
     try {
@@ -733,7 +756,17 @@ export default function SubCategory() {
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <ToggleSwitch
+            checked={Boolean(row.isActive)}
+            disabled={togglingId === row.id}
+            title={row.isActive ? "Click to make Inactive" : "Click to make Active"}
+            onChange={() => handleToggleActive(row)}
+          />
+          <StatusBadge status={row.status} />
+        </div>
+      ),
     },
     {
       key: "action",
@@ -925,15 +958,19 @@ export default function SubCategory() {
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading sub-categories…
-          </div>
+          <Loader label="Loading sub-categories…" />
         )}
 
         {!loading && loadError && (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             Failed to load sub-categories: {loadError}
+          </div>
+        )}
+
+        {toggleError && (
+          <div className="mb-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={13} className="shrink-0" />
+            {toggleError}
           </div>
         )}
 
@@ -943,7 +980,7 @@ export default function SubCategory() {
             <Table
               columns={columns}
               data={subCategories}
-              emptyMessage="No sub-categories yet. Add one to get started."
+              emptyTitle="No sub-categories yet" emptyDescription="Sub-categories sit under a main category and help customers narrow down brands. Add one to get started." emptyIcon="subcategory" emptyAction={{ label: "Add Sub-Category", onClick: handleAddClick }}
               dense
               minWidth={860}
             />

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   ArrowLeft,
-  Loader2,
   AlertTriangle,
   Star,
   ThumbsUp,
@@ -25,6 +24,7 @@ import { normalizePlan } from "./Plan";
 import { extractFeatures } from "./FeatureMaster";
 import { formatEntitlementValue } from "./PlanModals";
 import { RingStat } from "../brand/BrandShared";
+import Loader from "../../components/common/Loader";
 
 const ENFORCED_KEYS = ["subBrands", "franchises", "vouchers", "showcase", "dealPack", "prioritySupport"];
 const ENFORCED_LABELS = {
@@ -234,10 +234,7 @@ export default function PlanDetails({ planId, onBack }) {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading plan…
-          </div>
+          <Loader label="Loading plan…" />
         )}
 
         {!loading && error && (
@@ -339,7 +336,7 @@ export default function PlanDetails({ planId, onBack }) {
                           stroke="none"
                         >
                           {featureCoverageData.map((entry) => (
-                            <Cell key={entry.name} fill={entry.name === "Available" ? "#34d399" : "#d4d4d4"} />
+                            <Cell key={entry.name} fill={entry.name === "Available" ? "var(--color-emerald-400)" : "#d4d4d4"} />
                           ))}
                         </Pie>
                         <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />

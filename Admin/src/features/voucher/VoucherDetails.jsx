@@ -34,6 +34,7 @@ import { VOUCHER_STATUSES } from "./services/VoucherApi";
 import { RingStat } from "../brand/BrandShared";
 import VoucherImageGallery, { BannerAddModal, BannerThumb, BannerReviewModal } from "./VoucherImageGallery";
 import StatusStepButton from "../../components/common/StatusStepButton";
+import { formatBatch } from "../../utils/helpers";
 
 // Banner review status (bannerStatus) → pill label / colour.
 const BANNER_STATUS_TONES = { PENDING: "amber", APPROVED: "emerald", REJECTED: "red" };
@@ -127,6 +128,7 @@ export default function VoucherDetails({
   onReorderImages,
   onUploadBanner,
   onRequestStep,
+  canReviewBanner = false,
   busy,
   actionError,
 }) {
@@ -194,7 +196,7 @@ export default function VoucherDetails({
                 {voucher.isDummy && <DummyBadge size="sm" />}
                 {voucher.isDummy && voucher.dummyBatch && (
                   <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[10.5px] text-violet-600 dark:bg-neutral-800 dark:text-violet-400">
-                    {voucher.dummyBatch}
+                    {formatBatch(voucher.dummyBatch)}
                   </span>
                 )}
               </div>
@@ -461,7 +463,7 @@ export default function VoucherDetails({
               <div className="flex items-start gap-2.5 rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
                 <Lock size={16} className="mt-0.5 shrink-0 text-violet-600 dark:text-violet-400" />
                 <div>
-                  <p className="text-[13px] font-semibold text-violet-700 dark:text-violet-300">View only · Dummy voucher</p>
+                  <p className="text-[13px] font-semibold text-violet-700 dark:text-violet-300">View only · D voucher</p>
                   <p className="mt-0.5 text-[12px] text-violet-700/80 dark:text-violet-300/80">
                     Test / demo data — it can't be approved, published, paused, edited or deleted.
                   </p>
@@ -635,7 +637,7 @@ export default function VoucherDetails({
                         <StatusStepButton
                           label={bannerStatusLabel(voucher.banner)}
                           tone={BANNER_STATUS_TONES[voucher.banner?.status] || (voucher.banner?.current?.url ? "emerald" : "neutral")}
-                          stepLabel={voucher.banner?.pending?.url ? "Review" : null}
+                          stepLabel={canReviewBanner && voucher.banner?.pending?.url ? "Review" : null}
                           onClick={() => setBannerView("pending")}
                         />
                       </td>
@@ -657,7 +659,7 @@ export default function VoucherDetails({
                   </tbody>
                 </table>
 
-                {voucher.banner?.pending && !readOnly && (
+                {voucher.banner?.pending && !readOnly && canReviewBanner && (
                   <div className="mt-4 flex gap-2.5">
                     <button
                       onClick={onApproveBanner}
@@ -683,8 +685,8 @@ export default function VoucherDetails({
                     pending={voucher.banner?.pending}
                     focus={bannerView}
                     busy={busy}
-                    onApprove={readOnly ? undefined : onApproveBanner}
-                    onReject={readOnly ? undefined : onRejectBanner}
+                    onApprove={readOnly || !canReviewBanner ? undefined : onApproveBanner}
+                    onReject={readOnly || !canReviewBanner ? undefined : onRejectBanner}
                     onClose={() => setBannerView(null)}
                   />
                 )}

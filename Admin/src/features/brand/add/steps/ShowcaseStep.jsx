@@ -31,8 +31,10 @@ function AlbumCard({ album, index, errors, onChange, onRemove }) {
             value={album.title}
             onChange={(e) => onChange({ title: e.target.value })}
             placeholder="Gallery"
+            maxLength={20}
             error={errors[`showcase.${index}.title`]}
           />
+          <span className="mt-1 block text-right text-[10.5px] text-neutral-400">{album.title.length}/20</span>
         </Field>
         <Field label="Section type">
           <SelectInput

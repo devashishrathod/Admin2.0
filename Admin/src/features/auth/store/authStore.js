@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { loginOrSignUpWithWhatsapp, verifyOtpWhatsapp } from '../services/authApi';
+import { broadcastLogout } from '../tabSession';
 
 // 10-digit Indian mobile number, same shape WhatsApp numbers take here.
 const WHATSAPP_RE = /^[6-9]\d{9}$/;
@@ -14,18 +15,30 @@ function maskValue(val) {
     return val.slice(0, 3) + '****' + val.slice(-3);
 }
 
-// Mirrors the access token into its own plain localStorage entry, outside
+// The login lives in sessionStorage, not localStorage: the browser wipes it
+// when the tab closes, so closing the admin tab means logging in again.
+// Other open admin tabs share it over a BroadcastChannel (see tabSession.js).
+const AUTH_STORAGE_KEY = 'trydood-auth';
+
+// Mirrors the access token into its own plain sessionStorage entry, outside
 // the zustand-persisted JSON blob — makes it directly visible/inspectable
-// in DevTools → Application → Local Storage, instead of buried inside the
+// in DevTools → Application → Session Storage, instead of buried inside the
 // 'trydood-auth' state object.
 const TOKEN_STORAGE_KEY = 'trydood-token';
 function syncTokenToStorage(token) {
     if (typeof window === 'undefined') return;
     if (token) {
-        window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+        window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
     } else {
-        window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+        window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     }
+}
+
+// Logins saved before the switch to sessionStorage sat in localStorage and
+// would survive a browser restart — drop them so those admins log in again.
+if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
 // ── Push device registration on login / logout ─────────────────
@@ -178,7 +191,15 @@ export const useAuthStore = create(
                 error: '',
             }),
 
-            logout: () => {
+            // A session borrowed from another open admin tab (tabSession.js).
+            restoreSession: ({ user, accessToken, refreshToken }) => {
+                set({ user: user ?? null, accessToken, refreshToken: refreshToken ?? null, isAuthenticated: true });
+                syncTokenToStorage(accessToken);
+            },
+
+            // `fromOtherTab`: this logout was broadcast by another tab — that
+            // tab already told the rest and unregistered this browser's push.
+            logout: ({ fromOtherTab = false } = {}) => {
                 set({
                     user: null,
                     accessToken: null,
@@ -190,11 +211,14 @@ export const useAuthStore = create(
                     modalOpen: false,
                 });
                 syncTokenToStorage(null);
+                if (fromOtherTab) return;
+                broadcastLogout();
                 unregisterDeviceForPush(); // fire-and-forget — never blocks logout
             },
         }),
         {
-            name: 'trydood-auth', // localStorage key
+            name: AUTH_STORAGE_KEY,
+            storage: createJSONStorage(() => sessionStorage),
             partialize: (state) => ({
                 user: state.user,
                 accessToken: state.accessToken,

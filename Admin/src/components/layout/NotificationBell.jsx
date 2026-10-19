@@ -15,6 +15,8 @@ import {
   getAdminNotifications,
   markNotificationsRead,
 } from "../../features/notification/services/NotificationApi";
+import EmptyState from "../common/EmptyState";
+import Loader from "../common/Loader";
 
 /* -------------------------------------------------------------------------
  * Header bell — the admin's own in-app notification feed.
@@ -28,25 +30,21 @@ const PAGE_SIZE = 15;
 const POLL_MS = 60 * 1000;
 
 const SEVERITY = {
-  CRITICAL: {
-    icon: AlertOctagon,
-    tile: "bg-red-500/10 text-red-600 dark:text-red-400",
-    chip: "bg-red-500/10 text-red-600 dark:text-red-400",
-    bar: "bg-red-500",
-  },
-  WARNING: {
-    icon: AlertTriangle,
-    tile: "bg-amber-400/15 text-amber-600 dark:text-amber-400",
-    chip: "bg-amber-400/15 text-amber-700 dark:text-amber-400",
-    bar: "bg-amber-400",
-  },
-  INFO: {
-    icon: Info,
-    tile: "bg-sky-400/15 text-sky-600 dark:text-sky-400",
-    chip: "bg-sky-400/15 text-sky-700 dark:text-sky-400",
-    bar: "bg-sky-400",
-  },
+  CRITICAL: { icon: AlertOctagon, tile: "bg-red-500/10 text-red-600 dark:text-red-400" },
+  WARNING: { icon: AlertTriangle, tile: "bg-amber-400/15 text-amber-600 dark:text-amber-400" },
+  INFO: { icon: Info, tile: "bg-sky-400/15 text-sky-600 dark:text-sky-400" },
 };
+
+// Each notification gets its own light background, cycling through these so
+// neighbouring items never share a color.
+const ITEM_TINTS = [
+  "bg-emerald-50 hover:bg-emerald-100/70 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/15",
+  "bg-sky-50 hover:bg-sky-100/70 dark:bg-sky-500/10 dark:hover:bg-sky-500/15",
+  "bg-violet-50 hover:bg-violet-100/70 dark:bg-violet-500/10 dark:hover:bg-violet-500/15",
+  "bg-amber-50 hover:bg-amber-100/70 dark:bg-amber-500/10 dark:hover:bg-amber-500/15",
+  "bg-rose-50 hover:bg-rose-100/70 dark:bg-rose-500/10 dark:hover:bg-rose-500/15",
+  "bg-teal-50 hover:bg-teal-100/70 dark:bg-teal-500/10 dark:hover:bg-teal-500/15",
+];
 
 // The API's `deepLink` values (e.g. "/admin/webhooks/…") aren't routes in
 // this panel, so each admin-audience type is sent to the page that handles
@@ -64,9 +62,6 @@ function routeFor(n) {
   const brandId = n.brandId || n.meta?.brandId;
   return brandId ? `/brands/${brandId}` : null;
 }
-
-// "WEBHOOK_FAILED" → "Webhook failed"
-const typeLabel = (t) => (t ? t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, " ") : "Notice");
 
 function timeAgo(iso) {
   if (!iso) return "";
@@ -275,34 +270,31 @@ export default function NotificationBell({ buttonClass }) {
           {/* List */}
           <div className="max-h-[min(28rem,65vh)] overflow-y-auto p-2">
             {loading ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-[12.5px] text-neutral-500">
-                <Loader2 size={15} className="animate-spin" /> Loading…
-              </div>
+              <Loader variant="inline" center className="py-12" label="Loading notifications…" />
             ) : error ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-                <p className="text-[12.5px] text-red-600 dark:text-red-400">{error}</p>
-                <button
-                  onClick={() => loadPage(1)}
-                  className="rounded-full bg-emerald-500 px-3.5 py-1.5 text-[11.5px] font-semibold text-white"
-                >
-                  Try again
-                </button>
-              </div>
+              <EmptyState
+                variant="compact"
+                tone="error"
+                icon="error"
+                title="Couldn't load notifications"
+                description={error}
+                action={{ label: "Try again", onClick: () => loadPage(1) }}
+              />
             ) : items.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-500">
-                  <BellOff size={20} />
-                </span>
-                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">
-                  {tab === "unread" ? "No unread notifications" : "No notifications yet"}
-                </p>
-                <p className="text-[11.5px] text-neutral-500">
-                  Webhook failures, disputes and lapsed plans will show up here.
-                </p>
-              </div>
+              <EmptyState
+                variant="compact"
+                icon={tab === "unread" ? "notification" : BellOff}
+                title={tab === "unread" ? "You're all caught up" : "No notifications yet"}
+                description={
+                  tab === "unread"
+                    ? "No unread notifications — new alerts will show up here."
+                    : "Webhook failures, disputes and lapsed plans will show up here."
+                }
+              />
             ) : (
               <div className="space-y-1">
-                {items.map((n) => {
+                {/* Only what the API returns — title, body, createdAt. */}
+                {items.map((n, i) => {
                   const sev = SEVERITY[n.severity] || SEVERITY.INFO;
                   const Icon = sev.icon;
                   const to = routeFor(n);
@@ -311,13 +303,9 @@ export default function NotificationBell({ buttonClass }) {
                       key={n._id}
                       onClick={() => handleItemClick(n)}
                       className={`group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl px-3 py-2.5 text-left transition-colors ${
-                        n.isRead
-                          ? "hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
-                          : "bg-emerald-50/70 hover:bg-emerald-50 dark:bg-emerald-500/5 dark:hover:bg-emerald-500/10"
+                        ITEM_TINTS[i % ITEM_TINTS.length]
                       }`}
                     >
-                      {/* Severity stripe for unread */}
-                      {!n.isRead && <span className={`absolute inset-y-2 left-0 w-1 rounded-r-full ${sev.bar}`} />}
                       <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${sev.tile}`}>
                         <Icon size={16} />
                       </span>
@@ -328,25 +316,26 @@ export default function NotificationBell({ buttonClass }) {
                               n.isRead ? "font-medium text-neutral-700 dark:text-neutral-300" : "font-bold text-neutral-900 dark:text-neutral-50"
                             }`}
                           >
-                            {n.title || typeLabel(n.type)}
+                            {n.title}
                           </span>
-                          <span className="shrink-0 text-[10.5px] text-neutral-400">{timeAgo(n.createdAt)}</span>
+                          <span className="flex shrink-0 items-center gap-1.5 text-[10.5px] text-neutral-400">
+                            {!n.isRead && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-label="Unread" />}
+                            {timeAgo(n.createdAt)}
+                          </span>
                         </span>
-                        {n.body && (
-                          <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-snug text-neutral-500">{n.body}</span>
+                        {(n.body || to) && (
+                          <span className="mt-0.5 flex items-end gap-2">
+                            {n.body && (
+                              <span className="line-clamp-2 block min-w-0 flex-1 text-[11.5px] leading-snug text-neutral-500">{n.body}</span>
+                            )}
+                            {to && (
+                              <ChevronRight
+                                size={13}
+                                className="ml-auto shrink-0 text-neutral-300 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-500"
+                              />
+                            )}
+                          </span>
                         )}
-                        <span className="mt-1.5 flex items-center gap-1.5">
-                          <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-semibold ${sev.chip}`}>
-                            {typeLabel(n.type)}
-                          </span>
-                          {!n.isRead && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-label="Unread" />}
-                          {to && (
-                            <ChevronRight
-                              size={13}
-                              className="ml-auto text-neutral-300 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-500"
-                            />
-                          )}
-                        </span>
                       </span>
                     </button>
                   );

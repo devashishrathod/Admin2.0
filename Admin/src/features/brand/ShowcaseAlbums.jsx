@@ -19,16 +19,17 @@ import {
 import { EmptyState, inputClass } from "./BrandShared";
 import {
   getBrandShowcase,
-  createShowcaseSection,
   deleteShowcaseSection,
   addShowcaseMedia,
   updateShowcaseMedia,
   deleteShowcaseMedia,
   replaceShowcaseMedia,
+  createShowcaseSectionWithMedia,
   reorderShowcaseSections,
   reorderShowcaseMedia,
 } from "./services/showcaseApi";
 import { mergeRefs, dragSensors, useClickWithoutDrag } from "./utils/dndHelpers";
+import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
  * Ported "as-is" from the VenderPanel Showcase Details flow: a staged
@@ -179,6 +180,147 @@ function UploadMediaModal({ files, uploading, progress, error, onClose, onConfir
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AddShowcaseSectionModal({ submitting, progress, error, onClose, onConfirm }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [files, setFiles] = useState([]);
+  const [isShowInVideoClips, setIsShowInVideoClips] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!title.trim() || submitting) return;
+    onConfirm({ title: title.trim(), description: description.trim(), files, isShowInVideoClips });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm"
+      onClick={submitting ? undefined : onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        onClick={(event) => event.stopPropagation()}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl dark:bg-neutral-900 sm:p-6"
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
+              <Plus size={18} />
+            </span>
+            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Add Showcase Section</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] font-medium text-neutral-700 dark:text-neutral-300">Section title</span>
+            <input
+              autoFocus
+              required
+              maxLength={20}
+              value={title}
+              onChange={(event) => setTitle(event.target.value.slice(0, 20))}
+              placeholder="e.g. Ambience photo"
+              className={`${inputClass} border-transparent bg-emerald-50/80 focus:border-emerald-300 dark:bg-emerald-950/20`}
+            />
+            <span className="mt-1 block text-right text-[10.5px] text-neutral-400">{title.length}/20</span>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] font-medium text-neutral-700 dark:text-neutral-300">Description (optional)</span>
+            <textarea
+              maxLength={300}
+              rows={3}
+              value={description}
+              onChange={(event) => setDescription(event.target.value.slice(0, 300))}
+              className={`${inputClass} resize-y border-transparent bg-emerald-50/80 focus:border-emerald-300 dark:bg-emerald-950/20`}
+            />
+            <span className="mt-1 block text-right text-[10.5px] text-neutral-400">{description.length}/300</span>
+          </label>
+
+          <div>
+            <span className="mb-1.5 block text-[12px] font-medium text-neutral-700 dark:text-neutral-300">Photos / Videos</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              disabled={submitting}
+              onChange={(event) => {
+                setFiles((current) => [...current, ...Array.from(event.target.files || [])]);
+                event.target.value = "";
+              }}
+              className="block w-full text-[12px] text-neutral-500 file:mr-3 file:rounded-xl file:border-0 file:bg-emerald-50 file:px-3.5 file:py-2 file:text-[12px] file:font-medium file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-950/40 dark:file:text-emerald-400"
+            />
+            {files.length > 0 && (
+              <div className="mt-2 flex items-start justify-between gap-3 text-[11.5px] text-neutral-500">
+                <span className="min-w-0 truncate">{files.map((file) => file.name).join(", ")}</span>
+                <button
+                  type="button"
+                  onClick={() => setFiles([])}
+                  disabled={submitting}
+                  className="shrink-0 font-medium text-red-500 hover:text-red-600"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+
+          <label className="flex items-center gap-2.5 text-[12.5px] text-neutral-700 dark:text-neutral-300">
+            <input
+              type="checkbox"
+              checked={isShowInVideoClips}
+              onChange={(event) => setIsShowInVideoClips(event.target.checked)}
+              className="h-4 w-4 rounded border-neutral-300 text-emerald-500 focus:ring-emerald-400 dark:border-neutral-700"
+            />
+            Show in video clips
+          </label>
+
+          {submitting && (
+            <div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <p className="mt-1 text-[11px] text-neutral-500">Creating section and uploading media… {progress}%</p>
+            </div>
+          )}
+          {error && <p role="alert" className="text-[12px] text-red-600 dark:text-red-400">{error}</p>}
+        </div>
+
+        <div className="mt-5 flex items-center justify-end gap-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-xl px-4 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!title.trim() || submitting}
+            className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
+            {submitting ? "Adding…" : "Add Section"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -870,9 +1012,10 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
   const [loadError, setLoadError] = useState("");
 
   const [addingSection, setAddingSection] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createProgress, setCreateProgress] = useState(0);
   const [createError, setCreateError] = useState("");
+  const [createNotice, setCreateNotice] = useState("");
 
   const fetchShowcase = useCallback(async () => {
     setLoading(true);
@@ -892,16 +1035,24 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
     fetchShowcase();
   }, [fetchShowcase]);
 
-  const handleCreateSection = async (e) => {
-    e.preventDefault();
-    if (!newTitle.trim() || creating) return;
+  const handleCreateSection = async ({ title, description, files, isShowInVideoClips }) => {
+    if (!title || creating) return;
     setCreating(true);
+    setCreateProgress(0);
     setCreateError("");
+    setCreateNotice("");
     try {
-      await createShowcaseSection({ brandId: brand.id, title: newTitle.trim(), sortOrder: sections.length + 1 });
-      setNewTitle("");
+      const result = await createShowcaseSectionWithMedia(
+        { brandId: brand.id, title, description, sortOrder: sections.length + 1 },
+        files,
+        { brandId: brand.id, isShowInVideoClips },
+        setCreateProgress
+      );
+      await fetchShowcase();
       setAddingSection(false);
-      fetchShowcase();
+      if (result.mediaError) {
+        setCreateNotice(`Showcase section was created, but media upload failed: ${result.mediaError.message}`);
+      }
     } catch (err) {
       setCreateError(err.message);
     } finally {
@@ -946,7 +1097,11 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
           {!readOnly && (
           <button
             type="button"
-            onClick={() => setAddingSection((v) => !v)}
+            onClick={() => {
+              setCreateError("");
+              setCreateNotice("");
+              setAddingSection(true);
+            }}
             className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-2 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
           >
             <Plus size={13} />
@@ -955,48 +1110,23 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
           )}
         </div>
 
-        {addingSection && (
-          <form
-            onSubmit={handleCreateSection}
-            className="mb-3 flex flex-col gap-2 rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:flex-row sm:items-center"
-          >
-            <input
-              autoFocus
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="Album title, e.g. Ambience Photos"
-              className={`${inputClass} sm:flex-1`}
-            />
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                disabled={!newTitle.trim() || creating}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-400 px-4 py-2.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {creating && <Loader2 size={13} className="animate-spin" />}
-                {creating ? "Creating…" : "Create"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddingSection(false);
-                  setNewTitle("");
-                  setCreateError("");
-                }}
-                className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:hover:text-neutral-200"
-              >
-                Cancel
-              </button>
-            </div>
-            {createError && <p className="text-[11.5px] text-red-600 dark:text-red-400 sm:basis-full">{createError}</p>}
-          </form>
+        {createNotice && (
+          <div className="mb-3 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3.5 py-2.5 text-[12px] text-amber-700 dark:text-amber-400">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>{createNotice}</span>
+            <button
+              type="button"
+              onClick={() => setCreateNotice("")}
+              aria-label="Dismiss message"
+              className="ml-auto shrink-0 text-current opacity-70 hover:opacity-100"
+            >
+              <X size={14} />
+            </button>
+          </div>
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-10 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading showcase…
-          </div>
+          <Loader label="Loading showcase…" />
         ) : loadError ? (
           <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={13} className="shrink-0" />
@@ -1014,6 +1144,19 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
           <EmptyState label="No showcase albums yet. Add one to upload photos or videos." />
         )}
       </div>
+      {addingSection && (
+        <AddShowcaseSectionModal
+          submitting={creating}
+          progress={createProgress}
+          error={createError}
+          onClose={() => {
+            if (creating) return;
+            setAddingSection(false);
+            setCreateError("");
+          }}
+          onConfirm={handleCreateSection}
+        />
+      )}
     </div>
   );
 }

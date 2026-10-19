@@ -59,16 +59,18 @@ export function BrandProvider({ children }) {
     try {
       const res = await getAllBrands({ page, limit, search, status });
       const rows = [...(res?.data?.data || res?.data || [])];
-      // The list is paginated (e.g. 52 brands → 2 pages of 50) — pull the
-      // remaining pages too, or every brand past the first page is missing.
+      // Load all pages for complete client-side filters and overview counts,
+      // but cap concurrent requests so large brand lists don't burst the API.
       const totalPages = res?.data?.totalPages ?? 1;
-      if (totalPages > page) {
-        const rest = await Promise.all(
-          Array.from({ length: totalPages - page }, (_, i) =>
-            getAllBrands({ page: page + i + 1, limit, search, status })
+      const maxConcurrentPages = 5;
+      for (let batchStart = page + 1; batchStart <= totalPages; batchStart += maxConcurrentPages) {
+        const batchEnd = Math.min(totalPages, batchStart + maxConcurrentPages - 1);
+        const batch = await Promise.all(
+          Array.from({ length: batchEnd - batchStart + 1 }, (_, i) =>
+            getAllBrands({ page: batchStart + i, limit, search, status })
           )
         );
-        rest.forEach((r) => rows.push(...(r?.data?.data || [])));
+        batch.forEach((r) => rows.push(...(r?.data?.data || [])));
       }
       const list = rows.map(mapBrandListItem);
       setBrands((prev) =>
@@ -211,9 +213,23 @@ export function BrandProvider({ children }) {
           : b
       )
     );
+    // "Already in the requested state" means the backend already has this
+    // decision — that's the outcome we wanted, so it counts as success
+    // whether it comes back as a 200 body or as an error response.
+    const alreadyDone = (message) => /already in the requested state/i.test(message || "");
     try {
-      await updateBrandStatus(brand.id, apiStatus, reason);
-      syncAfterUpdate(brand.id);
+      let response;
+      try {
+        response = await updateBrandStatus(brand.id, apiStatus, reason);
+      } catch (err) {
+        if (!alreadyDone(err.message)) throw err;
+      }
+      const result = response?.data ?? response;
+      if (result?.success === false && !alreadyDone(result.message)) {
+        throw new Error(result.message || "Unable to update brand approval status.");
+      }
+      await syncAfterUpdate(brand.id);
+      return true;
     } catch (err) {
       // roll back on failure
       setBrands((prev) =>
@@ -224,6 +240,7 @@ export function BrandProvider({ children }) {
         )
       );
       setError(err.message);
+      return false;
     }
   }, [syncAfterUpdate]);
 
@@ -237,7 +254,7 @@ export function BrandProvider({ children }) {
   }, []);
 
   const setTopBrand = useCallback(async (brand, { isTopBrand, topOrder }) => {
-    if (brand?.isDummy) throw new Error("Dummy brands are view-only.");
+    if (brand?.isDummy) throw new Error("D brands are view-only.");
     setBrands((prev) =>
       prev.map((b) => (b.id === brand.id ? { ...b, isTopBrand, topOrder } : b))
     );

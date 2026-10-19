@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -16,14 +17,17 @@ import {
   Play,
   Tag,
   CalendarDays,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
-import Table, { StatusBadge } from "../../components/common/Table";
+import Table from "../../components/common/Table";
 import {
   createBanner,
   getBanners,
   updateBanner,
   deleteBanner,
+  getBannerById,
   buildRedirectPayload,
   presignUploadAndConfirm,
   BANNER_TYPES,
@@ -33,6 +37,8 @@ import {
 import { getCategories } from "../category/services/CategoryApi";
 import { getAllBrands } from "../brand/services/BrandApi";
 import StatusStepButton from "../../components/common/StatusStepButton";
+import EmptyState from "../../components/common/EmptyState";
+import Loader from "../../components/common/Loader";
 
 const TYPE_OPTIONS = [
   { value: BANNER_TYPES.IMAGE, label: "Image", icon: ImageIcon, accept: "image/*" },
@@ -51,6 +57,46 @@ const REDIRECT_OPTIONS = [
 
 const TARGET_ID_TYPES = [REDIRECT_TYPES.DEAL, REDIRECT_TYPES.BRAND, REDIRECT_TYPES.OFFER];
 
+/* ---- Banner size --------------------------------------------------------
+ * The customer app's home banner is 1600 px wide and 1300–1332 px tall
+ * (1332 is the ideal). Anything outside that is rejected before upload. The
+ * server doesn't check this, so the panel does. Previews use the 1600 × 1332
+ * shape (BANNER_ASPECT) so they look like the app.
+ * ---------------------------------------------------------------------- */
+export const BANNER_SPEC = { width: 1600, minHeight: 1300, height: 1332 };
+export const BANNER_SPEC_LABEL = `${BANNER_SPEC.width} × ${BANNER_SPEC.minHeight}–${BANNER_SPEC.height} px`;
+export const BANNER_ASPECT = "aspect-[1600/1332]";
+
+// Real pixel size of a picked file — <img> for images/GIFs, <video>
+// metadata for videos.
+export function readMediaSize(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const done = (w, h) => {
+      URL.revokeObjectURL(url);
+      w && h ? resolve({ width: w, height: h }) : reject(new Error("Couldn't read this file's size."));
+    };
+    if (file.type.startsWith("video/")) {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight);
+      v.onerror = () => done(0, 0);
+      v.src = url;
+    } else {
+      const img = new Image();
+      img.onload = () => done(img.naturalWidth, img.naturalHeight);
+      img.onerror = () => done(0, 0);
+      img.src = url;
+    }
+  });
+}
+
+// null when the size is OK, otherwise the reason it's rejected.
+export function bannerSizeError({ width, height }, what = "image") {
+  if (width === BANNER_SPEC.width && height >= BANNER_SPEC.minHeight && height <= BANNER_SPEC.height) return null;
+  return `This ${what} is ${width} × ${height} px. Banners must be ${BANNER_SPEC.width} px wide and ${BANNER_SPEC.minHeight}–${BANNER_SPEC.height} px tall — resize it and try again.`;
+}
+
 const EMPTY_FORM = {
   id: null,
   title: "",
@@ -67,6 +113,7 @@ const EMPTY_FORM = {
   endDateLocal: "",
   isActive: true,
 };
+const TITLE_MAX_LENGTH = 25;
 
 /* ---- date helpers -------------------------------------------------------*/
 function isoToLocalInput(iso) {
@@ -82,7 +129,7 @@ function localInputToIso(local) {
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString();
 }
-function formatDateTime(iso) {
+export function formatDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
@@ -115,25 +162,66 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
   const handleTypeChange = (nextType) => {
     // A different type picks a different file to upload — drop whatever
     // was picked (media + poster) for the previous type.
-    setForm((prev) => ({ ...prev, type: nextType, file: null, filePreview: "", posterFile: null, posterPreview: "" }));
+    setForm((prev) => ({
+      ...prev,
+      type: nextType,
+      file: null,
+      filePreview: "",
+      fileSize: null,
+      posterFile: null,
+      posterPreview: "",
+      posterSize: null,
+    }));
+    setErrors((prev) => ({ ...prev, file: undefined, posterFile: undefined }));
   };
 
-  const handleFilePick = (e) => {
-    const file = e.target.files?.[0];
+  // Wrong-size files are rejected on pick (never reach the form / upload).
+  const handleFilePick = async (e) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    input.value = ""; // let the same file be re-picked after a rejection
     if (!file) return;
-    setForm((prev) => ({ ...prev, file, filePreview: URL.createObjectURL(file) }));
+    try {
+      const size = await readMediaSize(file);
+      const error = bannerSizeError(size, typeOption.label.toLowerCase());
+      if (error) {
+        setErrors((prev) => ({ ...prev, file: error }));
+        return;
+      }
+      setErrors((prev) => ({ ...prev, file: undefined }));
+      setForm((prev) => ({ ...prev, file, filePreview: URL.createObjectURL(file), fileSize: size }));
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, file: err.message }));
+    }
   };
 
-  const handlePosterPick = (e) => {
-    const file = e.target.files?.[0];
+  // The poster fills the same banner slot until the video plays — same size rule.
+  const handlePosterPick = async (e) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    input.value = "";
     if (!file) return;
-    setForm((prev) => ({ ...prev, posterFile: file, posterPreview: URL.createObjectURL(file) }));
+    try {
+      const size = await readMediaSize(file);
+      const error = bannerSizeError(size, "poster");
+      if (error) {
+        setErrors((prev) => ({ ...prev, posterFile: error }));
+        return;
+      }
+      setErrors((prev) => ({ ...prev, posterFile: undefined }));
+      setForm((prev) => ({ ...prev, posterFile: file, posterPreview: URL.createObjectURL(file), posterSize: size }));
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, posterFile: err.message }));
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const nextErrors = {};
     if (!form.title.trim()) nextErrors.title = "Banner title is required";
+    else if (form.title.trim().length > TITLE_MAX_LENGTH) {
+      nextErrors.title = `Banner title must be ${TITLE_MAX_LENGTH} characters or fewer`;
+    }
     if (!isEdit && !form.file) nextErrors.file = `A ${typeOption.label.toLowerCase()} file is required`;
     // A video banner needs its poster whenever a new video file is being
     // sent — the backend requires both together, it never reuses an old one.
@@ -211,18 +299,32 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
 
           {/* Media upload — wide banner preview */}
           <div className="mb-4">
-            <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Banner {typeOption.label}
-            </label>
-            <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <label className="block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
+                Banner {typeOption.label}
+              </label>
+              <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400">
+                {BANNER_SPEC_LABEL}
+              </span>
+            </div>
+            {/* Exactly the app's banner shape (2:1), so this is how it will look. */}
+            <div className="relative mx-auto flex aspect-[1600/1332] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
               {form.filePreview ? (
                 form.type === BANNER_TYPES.VIDEO ? (
-                  <video src={form.filePreview} className="h-full w-full object-cover" muted controls />
+                  <video src={form.filePreview} className="h-full w-full object-contain" muted controls />
                 ) : (
-                  <img src={form.filePreview} alt="preview" className="h-full w-full object-cover" />
+                  <img src={form.filePreview} alt="preview" className="h-full w-full object-contain" />
                 )
               ) : (
-                <typeOption.icon size={24} className="text-neutral-400 dark:text-neutral-600" />
+                <div className="flex flex-col items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
+                  <typeOption.icon size={24} />
+                  <span className="text-[11px] font-medium">{BANNER_SPEC_LABEL}</span>
+                </div>
+              )}
+              {form.fileSize && (
+                <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur">
+                  ✓ {form.fileSize.width} × {form.fileSize.height} px
+                </span>
               )}
             </div>
             <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
@@ -239,11 +341,19 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
               <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
                 Poster Image <span className="font-normal text-neutral-500">(shown before the video plays)</span>
               </label>
-              <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
+              <div className="relative mx-auto flex aspect-[1600/1332] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
                 {form.posterPreview ? (
-                  <img src={form.posterPreview} alt="poster preview" className="h-full w-full object-cover" />
+                  <img src={form.posterPreview} alt="poster preview" className="h-full w-full object-contain" />
                 ) : (
-                  <ImageIcon size={24} className="text-neutral-400 dark:text-neutral-600" />
+                  <div className="flex flex-col items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
+                    <ImageIcon size={24} />
+                    <span className="text-[11px] font-medium">{BANNER_SPEC_LABEL}</span>
+                  </div>
+                )}
+                {form.posterSize && (
+                  <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur">
+                    ✓ {form.posterSize.width} × {form.posterSize.height} px
+                  </span>
                 )}
               </div>
               <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
@@ -263,7 +373,8 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
             <input
               id="banner-title"
               value={form.title}
-              onChange={handleChange("title")}
+              maxLength={TITLE_MAX_LENGTH}
+              onChange={(e) => setField("title", e.target.value.slice(0, TITLE_MAX_LENGTH))}
               placeholder="e.g. Diwali Mega Sale"
               className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
                 errors.title
@@ -271,6 +382,7 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
                   : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
               }`}
             />
+            <p className="mt-1 text-right text-[11px] text-neutral-400">{form.title.length}/{TITLE_MAX_LENGTH}</p>
             {errors.title && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.title}</p>}
           </div>
 
@@ -468,91 +580,12 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
   );
 }
 
-/* -------------------------------------------------------------------------
- * View modal — read-only details for a banner
- * ---------------------------------------------------------------------- */
-
-function BannerViewModal({ open, banner, categories, onClose }) {
-  if (!open || !banner) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
-      >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Banner Details</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="px-5 py-5">
-          <div className="flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-            {banner.mediaUrl ? (
-              banner.type === BANNER_TYPES.VIDEO ? (
-                <video src={banner.mediaUrl} poster={banner.posterUrl || undefined} className="h-full w-full object-cover" muted controls />
-              ) : (
-                <img src={banner.mediaUrl} alt={banner.title} className="h-full w-full object-cover" />
-              )
-            ) : (
-              <ImageIcon size={22} className="text-neutral-400 dark:text-neutral-600" />
-            )}
-          </div>
-
-          <div className="mt-4 flex items-start justify-between gap-3">
-            <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{banner.title}</p>
-            <StatusBadge status={banner.isActive ? "Active" : "Inactive"} />
-          </div>
-
-          {banner.description && (
-            <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">{banner.description}</p>
-          )}
-
-          <p className="mt-3 text-[12.5px] text-sky-600 dark:text-sky-400">{redirectSummary(banner.redirect, categories)}</p>
-
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">Type</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-900 capitalize dark:text-neutral-50">{banner.type?.toLowerCase()}</p>
-            </div>
-            <div className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500">Status</p>
-              <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-                {banner.isActive ? "Active" : "Inactive"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">Validity</p>
-            <p className="mt-1 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">
-              {formatDateTime(banner.startDate)} → {formatDateTime(banner.endDate)}
-            </p>
-          </div>
-
-          {banner.createdAt && (
-            <p className="mt-4 text-[11.5px] text-neutral-400 dark:text-neutral-600">Created {formatDateTime(banner.createdAt)}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* -------------------------------------------------------------------------
  * Delete confirmation modal
  * ---------------------------------------------------------------------- */
 
-function DeleteConfirmModal({ banner, deleting, onCancel, onConfirm }) {
+export function DeleteConfirmModal({ banner, deleting, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
@@ -605,7 +638,7 @@ function parseRedirect(banner) {
   return r || { type: REDIRECT_TYPES.NONE };
 }
 
-function redirectSummary(redirect, categories) {
+export function redirectSummary(redirect, categories) {
   if (!redirect || redirect.type === REDIRECT_TYPES.NONE) return "No redirect";
   if (redirect.type === REDIRECT_TYPES.EXTERNAL_URL) return redirect.url || "External URL";
   if (redirect.type === REDIRECT_TYPES.CATEGORY) {
@@ -642,7 +675,7 @@ function extractMedia(banner) {
   return { type: banner.type || BANNER_TYPES.IMAGE, mediaUrl: "", posterUrl: "" };
 }
 
-function apiToRow(banner) {
+export function apiToRow(banner) {
   const redirect = parseRedirect(banner);
   const { type, mediaUrl, posterUrl } = extractMedia(banner);
   return {
@@ -662,6 +695,13 @@ function apiToRow(banner) {
     // soon" chart never calls Date.now() from inside the component body.
     daysLeft: banner.endDate ? (new Date(banner.endDate).getTime() - Date.now()) / 86400000 : null,
     startsInDays: banner.startDate ? (new Date(banner.startDate).getTime() - Date.now()) / 86400000 : null,
+    // Media details for the view page (width/height can be null on older records).
+    mediaWidth: banner.media?.width ?? null,
+    mediaHeight: banner.media?.height ?? null,
+    mediaSizeBytes: banner.media?.sizeBytes ?? null,
+    mediaMime: banner.media?.mimeType || "",
+    mediaDuration: banner.media?.duration ?? null,
+    updatedAt: banner.updatedAt,
     isActive: Boolean(banner.isActive),
     status: banner.isActive ? "Active" : "Inactive",
     // What the customer actually sees right now, for the table's status pill:
@@ -678,7 +718,7 @@ function apiToRow(banner) {
 }
 
 const LIVE_STATE_TONES = { Live: "emerald", Scheduled: "sky", Expired: "red", Inactive: "neutral" };
-const TYPE_BADGE = {
+export const TYPE_BADGE = {
   [BANNER_TYPES.IMAGE]: { label: "Image", icon: ImageIcon },
   [BANNER_TYPES.VIDEO]: { label: "Video", icon: Video },
   [BANNER_TYPES.GIF]: { label: "GIF", icon: Film },
@@ -687,7 +727,7 @@ const shortDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 // "x days left" / "Starts in x days" / "Expired" chip for the Schedule column.
-function scheduleChip(row) {
+export function scheduleChip(row) {
   if (row.liveState === "Scheduled") {
     const d = Math.ceil(row.startsInDays);
     return { label: d <= 1 ? "Starts tomorrow" : `Starts in ${d} days`, tone: "bg-sky-400/10 text-sky-600 dark:text-sky-400" };
@@ -700,6 +740,190 @@ function scheduleChip(row) {
     tone: d <= 7 ? "bg-amber-400/10 text-amber-600 dark:text-amber-400" : "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
   };
 }
+
+// Redirect target as a small chip — shared by the table and the grid cards.
+function RedirectChip({ redirect: r, categories }) {
+  if (!r || r.type === REDIRECT_TYPES.NONE) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 px-2 py-1 text-[11.5px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+        <LinkIcon size={11} className="shrink-0" /> No redirect
+      </span>
+    );
+  }
+  if (r.type === REDIRECT_TYPES.EXTERNAL_URL) {
+    let host = r.url || "External URL";
+    try {
+      host = new URL(r.url).hostname.replace(/^www./, "");
+    } catch {
+      // keep the raw text if it isn't a full URL
+    }
+    return (
+      <a
+        href={r.url}
+        target="_blank"
+        rel="noreferrer"
+        title={r.url}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-sky-400/10 px-2 py-1 text-[11.5px] font-medium text-sky-700 hover:underline dark:text-sky-400"
+      >
+        <LinkIcon size={11} className="shrink-0" /> <span className="truncate normal-case">{host}</span>
+      </a>
+    );
+  }
+  const summary = redirectSummary(r, categories);
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-violet-400/10 px-2 py-1 text-[11.5px] font-medium text-violet-700 dark:text-violet-400">
+      <Tag size={11} className="shrink-0" />{" "}
+      <span className="truncate" title={summary}>
+        {/* The tag icon already says "category", so drop the "Category: " prefix */}
+        {summary.replace(/^Category:\s*/, "")}
+      </span>
+    </span>
+  );
+}
+
+// Banner media (image, GIF or video poster) with the type badge — the
+// table thumbnail and the grid card's cover both use it. Images load lazily
+// and videos only fetch metadata, so a full grid stays light.
+function BannerMedia({ row, className = "", showBadge = true, children }) {
+  const badge = TYPE_BADGE[row.type] || TYPE_BADGE[BANNER_TYPES.IMAGE];
+  const BadgeIcon = badge.icon;
+  const isVideo = row.type === BANNER_TYPES.VIDEO;
+  const thumb = isVideo ? row.posterUrl || "" : row.mediaUrl;
+  return (
+    <div className={`relative ${BANNER_ASPECT} shrink-0 overflow-hidden bg-gradient-to-br from-emerald-400/20 via-sky-400/15 to-violet-400/20 ${className}`}>
+      {thumb ? (
+        <img src={thumb} alt={row.title} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+      ) : isVideo && row.mediaUrl ? (
+        <video src={row.mediaUrl} className="h-full w-full object-cover" muted preload="metadata" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <ImageIcon size={18} className="text-neutral-400" />
+        </div>
+      )}
+      {isVideo && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
+            <Play size={11} fill="currentColor" />
+          </span>
+        </span>
+      )}
+      {showBadge && (
+        <span className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+          <BadgeIcon size={9} /> {badge.label}
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+const CARD_BTN =
+  "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 text-[12px] font-medium text-neutral-600 transition-colors dark:border-neutral-800 dark:text-neutral-300";
+
+// Compact status pill for the card cover — the table's StatusStepButton is
+// fixed-width so its column lines up, which is far too wide over an image.
+const COVER_STATUS = {
+  Live: { dot: "bg-emerald-500", text: "text-emerald-700" },
+  Scheduled: { dot: "bg-sky-500", text: "text-sky-700" },
+  Expired: { dot: "bg-red-500", text: "text-red-700" },
+  Inactive: { dot: "bg-neutral-400", text: "text-neutral-600" },
+};
+
+// "12 Oct – 30 Nov 2026" (year once when both dates share it).
+function cardDateRange(start, end) {
+  if (!start && !end) return "No schedule set";
+  const fmt = (iso, withYear) =>
+    new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", ...(withYear ? { year: "numeric" } : {}) });
+  if (start && end) {
+    const sameYear = new Date(start).getFullYear() === new Date(end).getFullYear();
+    return `${fmt(start, !sameYear)} – ${fmt(end, true)}`;
+  }
+  return start ? `From ${fmt(start, true)}` : `Until ${fmt(end, true)}`;
+}
+
+// Grid card: cover with type + status along the top (so the banner's own
+// artwork at the bottom stays visible), then title, redirect, schedule,
+// and View / Edit / Delete.
+function BannerCard({ row, categories, onView, onEdit, onDelete }) {
+  const chip = scheduleChip(row);
+  const badge = TYPE_BADGE[row.type] || TYPE_BADGE[BANNER_TYPES.IMAGE];
+  const BadgeIcon = badge.icon;
+  const status = COVER_STATUS[row.liveState] || COVER_STATUS.Inactive;
+  return (
+    <div className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20">
+      <button onClick={() => onView(row)} className="relative block w-full text-left" aria-label={`View ${row.title}`}>
+        <BannerMedia row={row} showBadge={false}>
+          <span className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/40 to-transparent" />
+          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+            <BadgeIcon size={10} /> {badge.label}
+          </span>
+          <span className={`absolute right-2 top-2 flex items-center gap-1.5 rounded-full bg-white/95 px-2 py-0.5 text-[10.5px] font-semibold shadow-sm backdrop-blur-sm ${status.text}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
+            {row.liveState}
+          </span>
+        </BannerMedia>
+      </button>
+
+      <div className="flex flex-1 flex-col gap-2 p-3.5">
+        <div className="min-w-0">
+          <button
+            onClick={() => onView(row)}
+            title={row.title}
+            className="line-clamp-1 text-left text-[14px] font-semibold text-neutral-900 hover:text-emerald-600 dark:text-neutral-50 dark:hover:text-emerald-400"
+          >
+            {row.title}
+          </button>
+          {row.description && row.description !== row.title && (
+            <p className="mt-0.5 line-clamp-1 text-[11.5px] text-neutral-500" title={row.description}>
+              {row.description}
+            </p>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <RedirectChip redirect={row.redirect} categories={categories} />
+        </div>
+
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-neutral-100 pt-2.5 dark:border-neutral-800">
+          <p className="flex min-w-0 items-center gap-1 text-[11px] text-neutral-500">
+            <CalendarDays size={11} className="shrink-0" />
+            <span className="truncate">{cardDateRange(row.startDate, row.endDate)}</span>
+          </p>
+          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
+            <Clock3 size={10} /> {chip.label}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => onView(row)} className={`${CARD_BTN} hover:border-sky-400/40 hover:text-sky-600 dark:hover:text-sky-400`}>
+            <Eye size={13} /> View
+          </button>
+          <button onClick={() => onEdit(row)} className={`${CARD_BTN} hover:border-emerald-400/40 hover:text-emerald-600 dark:hover:text-emerald-400`}>
+            <Pencil size={13} /> Edit
+          </button>
+          <button
+            onClick={() => onDelete(row)}
+            aria-label={`Delete ${row.title}`}
+            title="Delete"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Remembered grid/table choice for this tab (storage can be blocked).
+const VIEW_KEY = "banners:view";
+const readView = () => {
+  try {
+    return sessionStorage.getItem(VIEW_KEY) === "table" ? "table" : "grid";
+  } catch {
+    return "grid";
+  }
+};
 
 function rowToFormDraft(row) {
   return {
@@ -738,8 +962,20 @@ export default function Banner() {
   const [brands, setBrands] = useState([]);
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [view, setViewState] = useState(readView);
+  // Grid fills 3 / 4 columns evenly; the table keeps its 10 rows.
+  const limit = view === "grid" ? 12 : 10;
+  const setView = (next) => {
+    setViewState(next);
+    setPage(1);
+    try {
+      sessionStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // not remembered — fine
+    }
+  };
   const [totalPages, setTotalPages] = useState(1);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -747,7 +983,10 @@ export default function Banner() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  const [viewTarget, setViewTarget] = useState(null);
+  // Banner details are a page now (/banner/:id), not a modal.
+  const navigate = useNavigate();
+  const location = useLocation();
+  const openDetails = (row) => navigate(`/banner/${row.id}`);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -776,7 +1015,7 @@ export default function Banner() {
     setLoading(true);
     setLoadError("");
     try {
-      const res = await getBanners({ page, limit, search });
+      const res = await getBanners({ page, limit, search: debouncedSearch });
       const rows = (res?.data?.data ?? []).map(apiToRow);
       setBanners(rows);
       setTotalPages(res?.data?.totalPages ?? 1);
@@ -785,7 +1024,7 @@ export default function Banner() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search]);
+  }, [page, limit, debouncedSearch]);
 
   const fetchAllBanners = useCallback(async () => {
     setChartsError("");
@@ -803,21 +1042,21 @@ export default function Banner() {
     fetchAllBanners();
   }, [fetchAllBanners]);
 
-  // Debounce search so we don't hit the API on every keystroke
+  // Debounce search so we don't hit the API on every keystroke; a new
+  // search goes back to page 1.
   useEffect(() => {
     const t = setTimeout(() => {
+      if (search === debouncedSearch) return;
+      setDebouncedSearch(search);
       setPage(1);
-      fetchBanners();
     }, 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, debouncedSearch]);
 
-  // Refetch on page change (search effect already handles search changes)
+  // One fetch per page / page size / search change.
   useEffect(() => {
     fetchBanners();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [fetchBanners]);
 
   const handleAddClick = () => {
     setEditingBanner(null);
@@ -830,6 +1069,21 @@ export default function Banner() {
     setSaveError("");
     setModalOpen(true);
   };
+
+  // "Edit" on the banner details page comes back here with { editId } —
+  // load that banner and open the edit form, then clear the state so a
+  // refresh doesn't reopen it.
+  const editIdFromDetails = location.state?.editId;
+  useEffect(() => {
+    if (!editIdFromDetails) return;
+    navigate(location.pathname, { replace: true, state: null });
+    getBannerById(editIdFromDetails)
+      .then((b) => {
+        if (b) handleEdit(apiToRow(b));
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editIdFromDetails]);
 
   const handleSave = async (form) => {
     setSaving(true);
@@ -898,25 +1152,33 @@ export default function Banner() {
     }
   };
 
-  // Chart data — derived from the unpaginated `allBanners` snapshot.
-  const statusMix = [
-    { name: "Active", value: allBanners.filter((b) => b.isActive).length },
-    { name: "Inactive", value: allBanners.filter((b) => !b.isActive).length },
-  ].filter((d) => d.value > 0);
-
-  const typeMix = TYPE_OPTIONS.map((t) => ({
-    name: t.label,
-    count: allBanners.filter((b) => b.type === t.value).length,
-  }));
-
-  const expiringCount = allBanners.filter(
-    (b) => b.isActive && b.daysLeft != null && b.daysLeft >= 0 && b.daysLeft <= 7
-  ).length;
-  const expiringMix = [
-    { name: "Expiring ≤ 7 days", value: expiringCount },
-    { name: "Others", value: allBanners.length - expiringCount },
-  ];
-  const expiringData = expiringMix.filter((d) => d.value > 0);
+  // Chart data — derived from the unpaginated `allBanners` snapshot, in
+  // one pass, and only when that snapshot changes (not on every keystroke).
+  const { statusMix, typeMix, expiringMix, expiringData } = useMemo(() => {
+    let active = 0;
+    let expiring = 0;
+    const byType = {};
+    for (const b of allBanners) {
+      if (b.isActive) {
+        active += 1;
+        if (b.daysLeft != null && b.daysLeft >= 0 && b.daysLeft <= 7) expiring += 1;
+      }
+      byType[b.type] = (byType[b.type] || 0) + 1;
+    }
+    const expiringMix = [
+      { name: "Expiring ≤ 7 days", value: expiring },
+      { name: "Others", value: allBanners.length - expiring },
+    ];
+    return {
+      statusMix: [
+        { name: "Active", value: active },
+        { name: "Inactive", value: allBanners.length - active },
+      ].filter((d) => d.value > 0),
+      typeMix: TYPE_OPTIONS.map((t) => ({ name: t.label, count: byType[t.value] || 0 })),
+      expiringMix,
+      expiringData: expiringMix.filter((d) => d.value > 0),
+    };
+  }, [allBanners]);
 
   // Column config for the shared Table component — same look as the
   // voucher table.
@@ -934,32 +1196,9 @@ export default function Banner() {
       label: "Banner",
       cellClass: "min-w-72 whitespace-normal",
       render: (row) => {
-        const badge = TYPE_BADGE[row.type] || TYPE_BADGE[BANNER_TYPES.IMAGE];
-        const BadgeIcon = badge.icon;
-        const thumb = row.type === BANNER_TYPES.VIDEO ? row.posterUrl || "" : row.mediaUrl;
         return (
-          <button onClick={() => setViewTarget(row)} className="group flex items-center gap-3 text-left">
-            <div className="relative h-14 w-28 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-emerald-400/20 via-sky-400/15 to-violet-400/20">
-              {thumb ? (
-                <img src={thumb} alt={row.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-              ) : row.type === BANNER_TYPES.VIDEO && row.mediaUrl ? (
-                <video src={row.mediaUrl} className="h-full w-full object-cover" muted />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <ImageIcon size={18} className="text-neutral-400" />
-                </div>
-              )}
-              {row.type === BANNER_TYPES.VIDEO && (
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
-                    <Play size={11} fill="currentColor" />
-                  </span>
-                </span>
-              )}
-              <span className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-                <BadgeIcon size={9} /> {badge.label}
-              </span>
-            </div>
+          <button onClick={() => openDetails(row)} className="group flex items-center gap-3 text-left">
+            <BannerMedia row={row} className="h-14 rounded-xl" />
             <div className="min-w-0">
               <p className="line-clamp-1 font-semibold text-neutral-900 group-hover:text-emerald-600 dark:text-neutral-50 dark:group-hover:text-emerald-400">
                 {row.title}
@@ -979,38 +1218,7 @@ export default function Banner() {
       key: "redirect",
       label: "Redirect",
       cellClass: "max-w-56 whitespace-normal",
-      render: (row) => {
-        const r = row.redirect;
-        if (!r || r.type === REDIRECT_TYPES.NONE) return <span className="text-[12px] text-neutral-400">No redirect</span>;
-        if (r.type === REDIRECT_TYPES.EXTERNAL_URL) {
-          let host = r.url || "External URL";
-          try {
-            host = new URL(r.url).hostname.replace(/^www./, "");
-          } catch {
-            // keep the raw text if it isn't a full URL
-          }
-          return (
-            <a
-              href={r.url}
-              target="_blank"
-              rel="noreferrer"
-              title={r.url}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-sky-400/10 px-2 py-1 text-[11.5px] font-medium text-sky-700 hover:underline dark:text-sky-400"
-            >
-              <LinkIcon size={11} className="shrink-0" /> <span className="truncate normal-case">{host}</span>
-            </a>
-          );
-        }
-        return (
-          <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-violet-400/10 px-2 py-1 text-[11.5px] font-medium text-violet-700 dark:text-violet-400">
-            <Tag size={11} className="shrink-0" />{" "}
-            <span className="truncate" title={redirectSummary(r, categories)}>
-              {/* The tag icon already says "category", so drop the "Category: " prefix */}
-              {redirectSummary(r, categories).replace(/^Category:\s*/, "")}
-            </span>
-          </span>
-        );
-      },
+      render: (row) => <RedirectChip redirect={row.redirect} categories={categories} />,
     },
     {
       key: "schedule",
@@ -1040,7 +1248,7 @@ export default function Banner() {
       align: "right",
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
-          <button onClick={() => setViewTarget(row)} aria-label={`View ${row.title}`} title="View" className={`${iconBtn} hover:border-sky-400/40 hover:text-sky-600 dark:hover:text-sky-400`}>
+          <button onClick={() => openDetails(row)} aria-label={`View ${row.title}`} title="View" className={`${iconBtn} hover:border-sky-400/40 hover:text-sky-600 dark:hover:text-sky-400`}>
             <Eye size={13} />
           </button>
           <button onClick={() => handleEdit(row)} aria-label={`Edit ${row.title}`} title="Edit" className={`${iconBtn} hover:border-emerald-400/40 hover:text-emerald-600 dark:hover:text-emerald-400`}>
@@ -1091,7 +1299,7 @@ export default function Banner() {
                   <PieChart>
                     <Pie data={statusMix} dataKey="value" nameKey="name" innerRadius={38} outerRadius={56} paddingAngle={3} stroke="none">
                       {statusMix.map((entry) => (
-                        <Cell key={entry.name} fill={entry.name === "Active" ? "#34d399" : "#d4d4d4"} />
+                        <Cell key={entry.name} fill={entry.name === "Active" ? "var(--color-emerald-400)" : "#d4d4d4"} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: 10, border: "none", fontSize: 12 }} />
@@ -1143,23 +1351,42 @@ export default function Banner() {
           </div>
         )}
 
-        {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:max-w-xs">
-          <Search size={16} className="shrink-0 text-neutral-500" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search banner..."
-            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
-          />
+        {/* Search + Grid / Table toggle */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-900 sm:w-full sm:max-w-xs">
+            <Search size={16} className="shrink-0 text-neutral-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search banner..."
+              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+            />
+          </div>
+          <div className="flex items-center gap-1 self-start rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900 sm:self-auto">
+            {[
+              { key: "grid", label: "Grid", icon: LayoutGrid },
+              { key: "table", label: "Table", icon: List },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                aria-label={`${label} view`}
+                aria-pressed={view === key}
+                title={`${label} view`}
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-colors ${
+                  view === key ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                }`}
+              >
+                <Icon size={15} />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Load state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-200 py-14 text-[13px] text-neutral-500 dark:border-neutral-800">
-            <Loader2 size={16} className="animate-spin" />
-            Loading banners…
-          </div>
+          <Loader label="Loading banners…" />
         )}
 
         {!loading && loadError && (
@@ -1170,8 +1397,31 @@ export default function Banner() {
 
         {!loading && !loadError && (
           <>
-            {/* Table */}
-            <Table columns={columns} data={banners} emptyMessage="No banners yet. Add one to get started." minWidth={960} />
+            {view === "grid" ? (
+              banners.length ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {banners.map((row) => (
+                    <BannerCard
+                      key={row.id}
+                      row={row}
+                      categories={categories}
+                      onView={openDetails}
+                      onEdit={handleEdit}
+                      onDelete={setDeleteTarget}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon="banner"
+                  title={debouncedSearch ? "No banners match your search" : "No banners yet"}
+                  description={debouncedSearch ? "Try a different title or clear the search." : "Banners show on the customer app's home screen. Add your first one to get started."}
+                  action={debouncedSearch ? { label: "Clear search", onClick: () => setSearch("") } : { label: "Add Banner", onClick: handleAddClick }}
+                />
+              )
+            ) : (
+              <Table columns={columns} data={banners} emptyTitle="No banners yet" emptyDescription="Banners show on the customer app's home screen. Add your first one to get started." emptyIcon="banner" emptyAction={{ label: "Add Banner", onClick: handleAddClick }} minWidth={960} />
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (
@@ -1218,14 +1468,6 @@ export default function Banner() {
           {saveError}
         </div>
       )}
-
-      {/* View Banner modal */}
-      <BannerViewModal
-        open={Boolean(viewTarget)}
-        banner={viewTarget}
-        categories={categories}
-        onClose={() => setViewTarget(null)}
-      />
 
       {/* Delete confirmation modal */}
       {deleteTarget && (

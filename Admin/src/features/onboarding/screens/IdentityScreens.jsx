@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { addBasicDetails } from "../services/onboardingApi";
 import { ENTITY_TYPES } from "../onboardingFlow";
 import { getSubCategories } from "../../subcategory/services/SubCategoryApi";
+import Loader from "../../../components/common/Loader";
 
 /* Design 02–05: business name, category, registration status, entity type.
    All four save through add-basic-details with `step` = this screen. */
@@ -103,7 +104,7 @@ export function BusinessCategoryScreen({ brandId, brand, eyebrow, onAdvance, onB
         <input className={`${inputCls} pl-9`} type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cafe, salon, pharmacy…" aria-label="Search categories" />
       </div>
       {loading ? (
-        <p className="flex items-center gap-2 text-[14px] text-[#5B616E]"><Loader2 size={15} className="animate-spin" /> Loading categories…</p>
+        <Loader variant="inline" label="Loading categories…" />
       ) : groups.length === 0 ? (
         <p className="text-[14px] text-[#5B616E]">No category matches “{search}”.</p>
       ) : (

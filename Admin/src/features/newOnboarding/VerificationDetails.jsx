@@ -27,7 +27,9 @@ import { getBrandDetails } from "../brand/services/BrandApi";
 import { mapBrandDetail } from "../brand/brandMapper";
 import { getVouchers } from "../voucher/services/VoucherApi";
 import { getVerificationHistory } from "./services/NewOnboardingApi";
+import ShowcaseAlbums from "../brand/ShowcaseAlbums";
 import { isNotFoundMessage } from "../../utils/helpers";
+import Loader from "../../components/common/Loader";
 
 const STATUS_LABELS = {
   APPROVED: "Approved",
@@ -301,6 +303,9 @@ export default function VerificationDetails({
   busyAction,
   actionError,
   reloadKey = 0,
+  // View only (New Onboarding) — no Approve / Reject / Revoke / Reviewed
+  // controls; decisions happen on Brand Waiting.
+  readOnly = false,
 }) {
   const { brand, flags, nameMatch, bankNameMatch, entityMatch, duplicateDetails } = verification;
   const checklist = buildChecklist(flags);
@@ -318,8 +323,15 @@ export default function VerificationDetails({
   const [showRevokeBox, setShowRevokeBox] = useState(false);
   const [revokeError, setRevokeError] = useState("");
 
-  const canReview = verification.derivedStatus === "MANUAL_REVIEW" || verification.derivedStatus === "REJECTED";
-  const canRevoke = verification.derivedStatus === "APPROVED";
+  // The admin's decision is driven by the brand itself, not the system's
+  // verdict (that's only advice — onboarding v2 guide §4): a brand whose
+  // vendor finished onboarding and that isn't approved yet can be approved
+  // or rejected; an approved brand can be revoked.
+  const brandApproved = Boolean(verification.brand?.isApproved);
+  const canReview = !readOnly && !brandApproved;
+  const canRevoke = !readOnly && brandApproved;
+  // No verification record yet (vendor hasn't submitted) — attemptNumber is 0.
+  const attemptCaption = verification.attemptNumber ? `Attempt #${verification.attemptNumber}` : "Not submitted yet";
 
   // Per-action busy flags — only the button actually clicked spins, but
   // every action button is disabled while any one request is in flight so
@@ -491,7 +503,7 @@ export default function VerificationDetails({
             <RingStat
               pct={verification.score ?? 0}
               label="Verification Score"
-              caption={`Attempt #${verification.attemptNumber}`}
+              caption={attemptCaption}
               tint={verification.score >= 80 ? "emerald" : verification.score >= 50 ? "amber" : "red"}
             />
             <RingStat
@@ -531,9 +543,11 @@ export default function VerificationDetails({
               <span className="text-[10px] text-neutral-500">/100</span>
             </div>
             <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-              Attempt #{verification.attemptNumber}
+              {attemptCaption}
             </span>
 
+            {!readOnly && (
+            <>
             <div className="h-6 w-px bg-neutral-200 dark:bg-neutral-800" />
 
             {/* Reviewed toggle — Case D: { action: "REVIEWED" }, plain flip,
@@ -567,6 +581,8 @@ export default function VerificationDetails({
                 {forceOffBusy ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
 
@@ -615,9 +631,7 @@ export default function VerificationDetails({
                 /vouchers/versions/get-all?brandId=... */}
             <SectionCard title="Listing Data" icon={Tag}>
               {vouchersLoading ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-[12.5px] text-neutral-500">
-                  <Loader2 size={14} className="animate-spin" /> Loading listings…
-                </div>
+                <Loader variant="inline" center className="py-6" label="Loading listings…" />
               ) : vouchersError ? (
                 <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
                   <AlertTriangle size={13} className="shrink-0" /> Failed to load listings: {vouchersError}
@@ -731,9 +745,7 @@ export default function VerificationDetails({
                 Each entry is collapsed by default — click to expand. */}
             <SectionCard title="Review Timeline">
               {historyLoading ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-[12.5px] text-neutral-500">
-                  <Loader2 size={14} className="animate-spin" /> Loading timeline…
-                </div>
+                <Loader variant="inline" center className="py-8" label="Loading timeline…" />
               ) : historyError ? (
                 <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
                   <AlertTriangle size={13} className="shrink-0" /> Failed to load timeline: {historyError}
@@ -771,6 +783,16 @@ export default function VerificationDetails({
                 <EmptyState label="No timeline events recorded yet." />
               )}
             </SectionCard>
+
+            {/* Showcase — same albums view as Live Brand's details page
+                (GET /showcase/get-brand-showcase/:brandId), so a brand still
+                waiting for approval shows its showcase too. ShowcaseAlbums has
+                its own "Showcase" heading, hence a plain card, not SectionCard. */}
+            {brandId && (
+              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <ShowcaseAlbums brand={{ id: brandId }} readOnly={readOnly} />
+              </div>
+            )}
           </div>
 
           {/* Right */}
@@ -781,10 +803,23 @@ export default function VerificationDetails({
                 <ShieldCheck size={16} className="text-emerald-600 dark:text-emerald-400" /> Verification Status
               </div>
 
-              {verification.derivedStatus === "APPROVED" && (
+              {brandApproved && (
                 <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-emerald-400/10 p-3.5">
                   <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <p className="text-[12.5px] text-emerald-700 dark:text-emerald-300">This brand has been approved by admin.</p>
+                </div>
+              )}
+              {/* System check passed / pending, but the brand still needs the admin's call. */}
+              {!brandApproved && ["APPROVED", "PENDING"].includes(verification.derivedStatus) && (
+                <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-sky-400/10 p-3.5">
+                  <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
+                  <p className="text-[12.5px] text-sky-700 dark:text-sky-300">
+                    {readOnly
+                      ? "The vendor is still onboarding — once they submit, approve or reject this brand from Brand Waiting."
+                      : verification.derivedStatus === "APPROVED"
+                      ? `System check passed (score ${verification.score}/100) — the vendor finished onboarding and this brand is awaiting your decision.`
+                      : "The vendor finished onboarding — this brand is awaiting your decision."}
+                  </p>
                 </div>
               )}
               {verification.derivedStatus === "REJECTED" && (
@@ -943,9 +978,7 @@ export default function VerificationDetails({
             {/* Plan Details — GET /brands/get?brandId=... */}
             <SectionCard title="Plan Details">
               {brandDetailLoading ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-[12.5px] text-neutral-500">
-                  <Loader2 size={14} className="animate-spin" /> Loading plan…
-                </div>
+                <Loader variant="inline" center className="py-6" label="Loading plan…" />
               ) : brandDetailError ? (
                 <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
                   <AlertTriangle size={13} className="shrink-0" /> Failed to load plan: {brandDetailError}
@@ -967,9 +1000,7 @@ export default function VerificationDetails({
                 fully-populated `subscribed` record the Brand folder shows. */}
             <SectionCard title="Subscribe Details" icon={CreditCard}>
               {brandDetailLoading ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-[12.5px] text-neutral-500">
-                  <Loader2 size={14} className="animate-spin" /> Loading subscription…
-                </div>
+                <Loader variant="inline" center className="py-6" label="Loading subscription…" />
               ) : brandDetailError ? (
                 <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
                   <AlertTriangle size={13} className="shrink-0" /> Failed to load subscription: {brandDetailError}

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import CommonEmptyState from "../../components/common/EmptyState";
 import {
   Tag,
   Crown,
@@ -370,10 +371,11 @@ function SectionCard({ title, children }) {
   );
 }
 
+// Shared EmptyState design (compact) for this page's empty sections.
 function EmptyState({ label }) {
   return (
-    <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-[13px] text-neutral-500 dark:border-neutral-800">
-      {label}
+    <div className="rounded-3xl border border-dashed border-emerald-200/70 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
+      <CommonEmptyState variant="compact" icon="promo" title={String(label || "Nothing here yet").replace(/\.$/, "")} />
     </div>
   );
 }

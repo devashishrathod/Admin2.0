@@ -288,6 +288,8 @@ export function mapBrandListItem(raw) {
     onboardingFlags: raw.onboarding || {},
     // Screen the vendor is on in the onboarding flow, e.g. "PAN_VERIFICATION".
     onboardingScreen: raw.currentScreen || raw.vendor?.currentScreen || '',
+    // Keep the API workflow status distinct from the derived brand status.
+    onboardingStatus: raw.status || raw.vendor?.status || '',
     // Extra list fields for the Live Brand table.
     subCategory: raw.subCategory?.name || '',
     // Plan usage: { subBrands, franchises, vouchers, showcase } → { used, limit, isUnlimited }.

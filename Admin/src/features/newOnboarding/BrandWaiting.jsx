@@ -9,17 +9,14 @@ import { RejectReasonModal } from "../brand/BrandShared";
 import { reviewBrandVerification } from "./services/NewOnboardingApi";
 import { fetchAllVerifications, latestByBrand } from "./verificationData";
 import OnboardingCard from "./OnboardingCard";
-import { onboardingTableColumns } from "./onboardingBrand";
+import { isUnderReview, onboardingTableColumns } from "./onboardingBrand";
 import VerificationDetails from "./VerificationDetails";
 import { useBrands } from "../brand/BrandContext";
 import Loader from "../../components/common/Loader";
 
 // Which brands show here is decided by the brand itself, not the system
-// verdict: the vendor finished onboarding (isOnBoardingCompleted) or is on
-// the UNDER_REVIEW screen, and brand.isApproved === false (see `waiting` in
-// the component). Approved brands move to Live Brands.
-const isUnderReviewScreen = (screen) =>
-  String(screen || "").trim().toUpperCase().replace(/[\s-]+/g, "_") === "UNDER_REVIEW";
+// verdict: onboarding is complete, the status/screen is UNDER_REVIEW, and
+// brand.isApproved === false (see `waiting` in the component).
 
 /* Approve from the table — optional note, sent as { action: "APPROVED", note }
    (same as the details page's Approve). */
@@ -149,13 +146,14 @@ export default function BrandWaiting() {
   }, [search]);
 
   // Every waiting brand (all server pages), then this page's slice of them.
-  // Brand Waiting rule: the vendor finished onboarding (isOnBoardingCompleted)
-  // or is on the UNDER_REVIEW screen, and the brand isn't approved yet
-  // (isApproved false) → it waits here for the admin to approve or reject.
+  // Brand Waiting rule: onboarding is complete or the API status/screen is
+  // UNDER_REVIEW, and the brand isn't approved yet.
   // One card per brand — its latest attempt.
   const waiting = [...latestByBrand(verifications).values()].filter(
     (v) =>
-      (v.vendor?.isOnBoardingCompleted || isUnderReviewScreen(v.vendor?.currentScreen)) &&
+      (v.vendor?.isOnBoardingCompleted ||
+        isUnderReview({ status: v.status, currentScreen: v.vendor?.currentScreen }) ||
+        isUnderReview({ status: v.brand?.status })) &&
       !v.brand?.isApproved
   );
   // Tabs — rejected (and revoked) brands moved here from New Onboarding.

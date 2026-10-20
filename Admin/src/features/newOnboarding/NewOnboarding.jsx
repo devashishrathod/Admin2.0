@@ -9,7 +9,7 @@ import Loader from "../../components/common/Loader";
 import VerificationDetails from "./VerificationDetails";
 import { fetchAllVerifications, latestByBrand, mapVerification } from "./verificationData";
 import OnboardingCard from "./OnboardingCard";
-import { ONBOARDING_STEPS, doneStepCount, onboardingTableColumns } from "./onboardingBrand";
+import { ONBOARDING_STEPS, doneStepCount, isUnderReview as hasUnderReviewStatus, onboardingTableColumns } from "./onboardingBrand";
 
 /* Most onboarding brands haven't submitted yet, so they have no
    verification record — build one from the brand itself so the details
@@ -33,10 +33,10 @@ function verificationFromBrand(b) {
 
 const isRejected = (b) => b.status === "Rejected";
 const isIncomplete = (b) => b.isOnboarding === false;
-// Vendor submitted and is on the UNDER_REVIEW screen — the brand now waits
-// for an admin decision on Brand Waiting, so it's left out of this page.
+// Submitted brands with an UNDER_REVIEW status or screen wait for an admin
+// decision on Brand Waiting, so they're left out of this page.
 const isUnderReview = (b) =>
-  String(b.onboardingScreen || "").trim().toUpperCase().replace(/[\s-]+/g, "_") === "UNDER_REVIEW";
+  hasUnderReviewStatus({ status: b.onboardingStatus, currentScreen: b.onboardingScreen });
 
 // Rejected brands live on Brand Waiting (Rejected tab), not here — this page
 // is only vendors still signing up, split by whether they've started.

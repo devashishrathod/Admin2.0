@@ -19,6 +19,13 @@ export const ONBOARDING_STEPS = [
 
 export const doneStepCount = (b) => ONBOARDING_STEPS.filter(([key]) => b.onboardingFlags?.[key]).length;
 
+const normalizeStep = (value) =>
+  String(value || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+
+export const isUnderReview = ({ status, currentScreen } = {}) =>
+  normalizeStep(status) === "UNDER_REVIEW" ||
+  normalizeStep(currentScreen) === "UNDER_REVIEW";
+
 // "PAN_VERIFICATION" -> "Pan verification"
 export const formatScreen = (screen) => {
   const text = screen.replace(/_/g, " ").toLowerCase();

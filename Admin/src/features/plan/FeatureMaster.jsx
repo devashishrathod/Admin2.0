@@ -1,14 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, GripVertical, Loader2, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createPlanFeature,
   deletePlanFeature,
-  getPlanFeatures,
   reorderPlanFeatures,
   updatePlanFeature,
 } from "./services/planApi";
+import { queryKeys } from "../../lib/query";
+import { usePlanFeatures } from "./queries/planQueries";
 import { ImpactConfirmModal } from "./PlanModals";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
 
 /* -------------------------------------------------------------------------
  * Feature master (#75f–#75j) — one common list of plan features. Every plan
@@ -467,10 +470,14 @@ function FeatureFormModal({ feature, onClose, onSaved }) {
  * Feature master screen
  * ---------------------------------------------------------------------- */
 
-export default function FeatureMaster({ onChanged }) {
-  const [features, setFeatures] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+export default function FeatureMaster() {
+  // Background refetches keep the table on screen (no spinner) after an edit.
+  // Every write here is a /subscriptions call, so the interceptor also
+  // refreshes the plans list (its cards show feature values).
+  const queryClient = useQueryClient();
+  const { data: featuresRes, isPending: loading, error: queryError } = usePlanFeatures();
+  const features = useMemo(() => (featuresRes ? extractFeatures(featuresRes) : []), [featuresRes]);
+  const error = queryError?.message ?? "";
   const [actionError, setActionError] = useState("");
 
   const [editing, setEditing] = useState(undefined); // undefined = closed, null = new
@@ -481,27 +488,6 @@ export default function FeatureMaster({ onChanged }) {
   const [deleteState, setDeleteState] = useState(null); // { feature, impact?, confirmToken?, message? }
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-
-  // Reloads quietly (no spinner) after an edit — the table stays on screen.
-  const load = async () => {
-    try {
-      setFeatures(extractFeatures(await getPlanFeatures()));
-      setError("");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  const afterChange = async () => {
-    await load();
-    onChanged?.();
-  };
 
   // Drag-drop reorder → PUT reorder with fresh sortOrders. Nothing is written
   // if any id is wrong, so on failure just reload the server's order.
@@ -515,18 +501,20 @@ export default function FeatureMaster({ onChanged }) {
     const [moved] = next.splice(from, 1);
     next.splice(toIndex, 0, moved);
     const items = next.map((f, i) => ({ featureId: f._id, sortOrder: (i + 1) * 10 }));
-    setFeatures(next.map((f, i) => ({ ...f, sortOrder: (i + 1) * 10 })));
+    // Optimistic: show the new order right away (in a shape extractFeatures
+    // reads); the refetch after the PUT brings the server's order.
+    const featuresKey = queryKeys.plans.view("features", {});
+    queryClient.setQueryData(featuresKey, {
+      data: { features: next.map((f, i) => ({ ...f, sortOrder: (i + 1) * 10 })) },
+    });
 
     setReordering(true);
     setActionError("");
     try {
-      const res = await reorderPlanFeatures(items);
-      const list = extractFeatures(res);
-      if (list.length) setFeatures(list);
-      onChanged?.();
+      await reorderPlanFeatures(items);
     } catch (err) {
       setActionError(err.message);
-      load();
+      queryClient.invalidateQueries({ queryKey: featuresKey });
     } finally {
       setReordering(false);
     }
@@ -539,7 +527,6 @@ export default function FeatureMaster({ onChanged }) {
     try {
       await deletePlanFeature(feature._id, confirmToken);
       setDeleteState(null);
-      afterChange();
     } catch (err) {
       if (err.status === 409 && err.details?.confirmToken) {
         setDeleteState({
@@ -642,7 +629,7 @@ export default function FeatureMaster({ onChanged }) {
                       <p className="text-[11px] text-neutral-500">{f.key}</p>
                     </td>
                     <td className="px-3 py-3 text-neutral-600 dark:text-neutral-400">{FEATURE_KIND_LABELS[f.kind] || f.kind}</td>
-                    <td className="px-3 py-3 text-neutral-600 dark:text-neutral-400">{f.group || "—"}</td>
+                    <td className="px-3 py-3 text-neutral-600 dark:text-neutral-400"><ValueOr value={f.group} fallback="No group" /></td>
                     <td className="px-3 py-3 text-center text-neutral-600 dark:text-neutral-400">{f.plansWithValue ?? 0}</td>
                     <td className="px-3 py-3 text-center text-neutral-600 dark:text-neutral-400">
                       {f.showInComparison !== false ? "Yes" : "No"}
@@ -693,10 +680,7 @@ export default function FeatureMaster({ onChanged }) {
         <FeatureFormModal
           feature={editing}
           onClose={() => setEditing(undefined)}
-          onSaved={() => {
-            setEditing(undefined);
-            afterChange();
-          }}
+          onSaved={() => setEditing(undefined)}
         />
       )}
 

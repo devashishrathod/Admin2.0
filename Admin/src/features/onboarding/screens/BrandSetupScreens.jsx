@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ImagePlus, Plus, MapPin, Clock, Store, CheckCircle2 } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Field, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
+import { useOnboardingFeatures, useOnboardingOutlets } from "../queries/onboardingQueries";
 import {
   updateBrandBasics,
   continueOnboarding,
   skipOnboardingScreen,
   addBrandFeature,
-  getBrandFeatures,
-  getOutlets,
   addOutlet,
   addOutletAddress,
   saveOutletHours,
@@ -86,7 +85,11 @@ export function BrandBasicsScreen({ brandId, brand, eyebrow, onAdvance }) {
 
 /* ---- 13 · BRAND_PROFESSIONAL_DETAILS (skippable) ------------------ */
 export function ProfessionalScreen({ brandId, eyebrow, onAdvance, onBack }) {
-  const [features, setFeatures] = useState([]);
+  // Features added in this session — shown when the list endpoint
+  // (optional) fails, so the admin still sees what they added.
+  const [added, setAdded] = useState([]);
+  const featuresQuery = useOnboardingFeatures(brandId);
+  const features = featuresQuery.isSuccess ? listOf(featuresQuery.data) : added;
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [icon, setIcon] = useState(null);
@@ -94,33 +97,16 @@ export function ProfessionalScreen({ brandId, eyebrow, onAdvance, onBack }) {
   const [featureError, setFeatureError] = useState("");
   const { run, busy, error } = useStepAction(onAdvance);
 
-  const loadFeatures = useCallback(async () => {
-    try {
-      setFeatures(listOf(await getBrandFeatures(brandId)));
-    } catch {
-      /* list endpoint optional — added features still show below */
-    }
-  }, [brandId]);
-  useEffect(() => {
-    let cancelled = false;
-    getBrandFeatures(brandId)
-      .then((res) => !cancelled && setFeatures(listOf(res)))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
+  // The list refreshes itself after the add (shared interceptor).
   const add = async () => {
     setAdding(true);
     setFeatureError("");
     try {
       const res = payload(await addBrandFeature(brandId, { title: title.trim(), description: desc.trim(), icon }));
-      setFeatures((f) => [...f, res?.feature || res || { title: title.trim(), description: desc.trim() }]);
+      setAdded((f) => [...f, res?.feature || res || { title: title.trim(), description: desc.trim() }]);
       setTitle("");
       setDesc("");
       setIcon(null);
-      loadFeatures();
     } catch (err) {
       setFeatureError(errorText(err));
     } finally {
@@ -298,8 +284,10 @@ function OutletHoursForm({ subBrandId, onSaved, onCancel }) {
 }
 
 export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
-  const [outlets, setOutlets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // A failed load shows an empty list (no error), as before.
+  const outletsQuery = useOnboardingOutlets(brandId);
+  const outlets = listOf(outletsQuery.data);
+  const loading = outletsQuery.isPending;
   const [done, setDone] = useState({}); // subBrandId → { address, hours } saved in this session
   const [open, setOpen] = useState(null); // { id, kind: "address" | "hours" }
   const [newNumber, setNewNumber] = useState("");
@@ -308,33 +296,16 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
   const [addError, setAddError] = useState("");
   const { run, busy, error } = useStepAction(onAdvance);
 
-  const load = useCallback(async () => {
-    try {
-      setOutlets(listOf(await getOutlets(brandId)));
-    } catch {
-      /* empty list on failure */
-    } finally {
-      setLoading(false);
-    }
-  }, [brandId]);
-  useEffect(() => {
-    let cancelled = false;
-    getOutlets(brandId)
-      .then((res) => !cancelled && setOutlets(listOf(res)))
-      .catch(() => {})
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-
   const add = async () => {
     setAdding(true);
     setAddError("");
     try {
       await addOutlet({ brandId, whatsappNumber: newNumber, isFirstOutlet: outlets.length === 0, outletType: newType });
       setNewNumber("");
-      await load();
+      // The next add's isFirstOutlet is read from this list, so keep the
+      // button busy until it's fresh. The interceptor already started the
+      // refetch (/subBrands write); cancelRefetch: false joins it.
+      await outletsQuery.refetch({ cancelRefetch: false });
     } catch (err) {
       setAddError(errorText(err));
     } finally {
@@ -370,7 +341,7 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
                   <div>
                     <p className="m-0 text-[15px] font-semibold">Outlet {i + 1}{o.name ? ` · ${o.name}` : ""}</p>
                     <p className="m-0 text-[13px] text-[#5B616E]">
-                      {i === 0 ? "First outlet · " : ""}Manager WhatsApp +91 {o.whatsappNumber || "—"} · {o.outletType || "OUTLET"}
+                      {i === 0 ? "First outlet · " : ""}Manager WhatsApp {o.whatsappNumber ? `+91 ${o.whatsappNumber}` : "not added"} · {o.outletType || "OUTLET"}
                     </p>
                   </div>
                 </div>

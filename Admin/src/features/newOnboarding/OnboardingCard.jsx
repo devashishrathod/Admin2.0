@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Phone, Check, X, XCircle, Hourglass, ArrowUpRight, ListChecks, ChevronDown, AlertTriangle } from "lucide-react";
 import { ONBOARDING_STEPS, doneStepCount, formatScreen } from "./onboardingBrand";
+import { isMissing, MISSING } from "../../utils/helpers";
 
 const STATUS_TONES = {
   amber: "bg-amber-400/10 text-amber-700 dark:text-amber-400",
@@ -279,13 +280,17 @@ export default function OnboardingCard({ brand, onOpen, now, status, actions }) 
           )}
         </DetailRow>
         {brand.vendorName && <DetailRow label="Vendor">{brand.vendorName}</DetailRow>}
-        <DetailRow label="Phone">
-          <span className="inline-flex items-center gap-1">
-            <Phone size={11} className="text-neutral-400" />
-            {brand.contactPhone}
-          </span>
+        <DetailRow label="Phone" muted={isMissing(brand.contactPhone)}>
+          {isMissing(brand.contactPhone) ? (
+            MISSING.phone
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <Phone size={11} className="text-neutral-400" />
+              {brand.contactPhone}
+            </span>
+          )}
         </DetailRow>
-        <DetailRow label="Joined">
+        <DetailRow label="Joined" muted={!brand.joinedDate}>
           {brand.joinedDate ? (
             <span className={stale ? "text-red-600 dark:text-red-400" : ""}>
               {new Date(brand.joinedDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
@@ -295,7 +300,7 @@ export default function OnboardingCard({ brand, onOpen, now, status, actions }) 
               </span>
             </span>
           ) : (
-            "—"
+            MISSING.date
           )}
         </DetailRow>
       </div>

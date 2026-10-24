@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Search,
@@ -25,17 +26,29 @@ import {
   Legend,
   LabelList,
 } from "recharts";
-import Table, { StatusBadge } from "../../components/common/Table";
+import Table from "../../components/common/Table";
 import {
   createSubCategory,
-  getSubCategories,
-  getSubCategoryById,
   updateSubCategory,
   deleteSubCategory,
 } from "../../features/subcategory/services/SubCategoryApi";
-import { getCategories } from "../../features/category/services/CategoryApi";
+import { useSubCategories, useSubCategory } from "./queries/subCategoryQueries";
+import { useCategories } from "../category/queries/categoryQueries";
+import { queryKeys } from "../../lib/query";
 import Loader from "../../components/common/Loader";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
+import {
+  LimitedField,
+  IconPicker,
+  ConfirmToggleModal,
+  DeleteWithCountsModal,
+  StatusTabsAndView,
+  CatalogGridCard,
+  CatalogViewModal,
+  PaginationBar,
+} from "../category/CatalogShared";
+import { NAME_MIN, NAME_MAX, DESC_MAX, STATUS_PARAM, listTotal } from "../category/catalogLimits";
+
 const EMPTY_FORM = {
   id: null,
   name: "",
@@ -45,68 +58,6 @@ const EMPTY_FORM = {
   categoryId: "",
   isActive: true,
 };
-
-/* -------------------------------------------------------------------------
- * Reusable image uploader (click to upload, preview, remove)
- * ---------------------------------------------------------------------- */
-
-function ImageUploader({ imagePreview, hasImage, onPick, onRemove, label = "Image" }) {
-  const inputRef = useRef(null);
-
-  const handleFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    onPick(file);
-    e.target.value = "";
-  };
-
-  return (
-    <div>
-      <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</label>
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-50 transition-colors hover:border-emerald-400/50 dark:border-neutral-700 dark:bg-neutral-950"
-        >
-          {imagePreview ? (
-            <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
-          ) : (
-            <ImageIcon size={20} className="text-neutral-500 dark:text-neutral-600" />
-          )}
-        </button>
-
-        <div className="flex flex-col items-start gap-1.5">
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
-            {hasImage ? "Change Image" : "Upload Image"}
-          </button>
-          {hasImage && (
-            <button
-              type="button"
-              onClick={onRemove}
-              className="text-[11.5px] font-medium text-red-600 transition-colors hover:text-red-500 dark:text-red-400 dark:hover:text-red-300"
-            >
-              Remove
-            </button>
-          )}
-          <p className="text-[11px] text-neutral-500 dark:text-neutral-600">PNG or JPG, up to 2MB</p>
-        </div>
-
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFile}
-        />
-      </div>
-    </div>
-  );
-}
 
 /* -------------------------------------------------------------------------
  * Add / Edit Sub-Category modal
@@ -127,15 +78,23 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
 
   const isEdit = Boolean(form.id);
 
+  // Icon + title + parent are required, description optional; the submit
+  // button stays disabled until those are filled.
+  const nameLen = form.name.trim().length;
+  const hasIcon = Boolean(form.image || form.imagePreview);
+  const canSubmit =
+    hasIcon && Boolean(form.categoryId) && nameLen >= NAME_MIN && nameLen <= NAME_MAX && form.description.length <= DESC_MAX;
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const nextErrors = {};
-    if (!form.name.trim()) nextErrors.name = "Sub-category name is required";
+    if (nameLen < NAME_MIN) nextErrors.name = `Title needs at least ${NAME_MIN} characters`;
     if (!form.categoryId) nextErrors.categoryId = "Please select a parent category";
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
+    if (!canSubmit) return;
     onSave(form);
   };
 
@@ -168,60 +127,44 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
         </div>
 
         <form onSubmit={handleSubmit} className="px-5 py-5">
-          <div className="mb-5">
-            <ImageUploader
-              imagePreview={form.imagePreview}
-              hasImage={Boolean(form.imagePreview)}
-              onPick={(file) =>
-                setForm((prev) => ({
-                  ...prev,
-                  image: file,
-                  imagePreview: URL.createObjectURL(file),
-                }))
-              }
-              onRemove={() => setForm((prev) => ({ ...prev, image: null, imagePreview: "" }))}
-              label="Sub-Category Image"
+          <div className="mb-4">
+            <IconPicker
+              preview={form.imagePreview}
+              onPick={(file) => setForm((prev) => ({ ...prev, image: file, imagePreview: URL.createObjectURL(file) }))}
             />
           </div>
 
           <div className="mb-4">
-            <label htmlFor="subcat-name" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Sub-Category Name
-            </label>
-            <input
+            <LimitedField
               id="subcat-name"
+              label="Title"
+              required
               value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              onChange={(v) => {
+                setForm((prev) => ({ ...prev, name: v }));
+                if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+              }}
+              max={NAME_MAX}
               placeholder="e.g. Mobiles & Accessories"
-              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                errors.name
-                  ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-              }`}
+              error={errors.name}
             />
-            {errors.name && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.name}</p>}
           </div>
 
           <div className="mb-4">
-            <label
-              htmlFor="subcat-description"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
-            >
-              Description
-            </label>
-            <textarea
+            <LimitedField
               id="subcat-description"
+              label="Description"
               value={form.description}
-              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+              onChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+              max={DESC_MAX}
+              multiline
               placeholder="Short description of this sub-category"
-              rows={3}
-              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
             />
           </div>
 
           <div className="mb-4">
             <label htmlFor="subcat-parent" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Parent Category
+              Parent Category<span className="ml-0.5 text-red-500">*</span>
             </label>
             <select
               id="subcat-parent"
@@ -248,28 +191,32 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
             )}
           </div>
 
-          <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
-            <div className="flex gap-2">
-              {[
-                { label: "Active", value: true },
-                { label: "Inactive", value: false },
-              ].map((s) => (
-                <button
-                  type="button"
-                  key={s.label}
-                  onClick={() => setForm((prev) => ({ ...prev, isActive: s.value }))}
-                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.isActive === s.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+          {/* Status — only when adding; on edit it's changed from the list's
+              toggle (with a confirm), not here. */}
+          {!isEdit && (
+            <div className="mb-6">
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
+              <div className="flex gap-2">
+                {[
+                  { label: "Active", value: true },
+                  { label: "Inactive", value: false },
+                ].map((s) => (
+                  <button
+                    type="button"
+                    key={s.label}
+                    onClick={() => setForm((prev) => ({ ...prev, isActive: s.value }))}
+                    className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
+                      form.isActive === s.value
+                        ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                        : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center justify-end gap-2.5">
             <button
@@ -282,11 +229,12 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={saving || !canSubmit}
+              title={!canSubmit ? "Add an icon, a title and the parent category first" : undefined}
+              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Sub-Category"}
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add"}
             </button>
           </div>
         </form>
@@ -295,140 +243,12 @@ function SubCategoryFormModal({ open, initialData, categories, saving, onClose, 
   );
 }
 
-/* -------------------------------------------------------------------------
- * View modal — read-only details for a sub-category
- * ---------------------------------------------------------------------- */
-
-function SubCategoryViewModal({ open, subCategory, categoryName, loading, onClose }) {
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
-      >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Sub-Category Details</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="px-5 py-5">
-          {loading || !subCategory ? (
-            <Loader variant="inline" center className="py-14" label="Loading sub-category…" />
-          ) : (
-            <>
-              <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-                  {subCategory.image ? (
-                    <img
-                      src={subCategory.image}
-                      alt={subCategory.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <ImageIcon size={20} className="text-neutral-600" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{subCategory.name}</p>
-                  <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-neutral-200 px-2.5 py-1 text-[11.5px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                    <Layers size={11} />
-                    {categoryName}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <StatusBadge status={subCategory.isActive ? "Active" : "Inactive"} />
-              </div>
-
-              {subCategory.description && (
-                <p className="mt-4 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-                  {subCategory.description}
-                </p>
-              )}
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                {[
-                  { label: "Brands", stat: subCategory.stats?.brands },
-                  { label: "Vouchers", stat: subCategory.stats?.vouchers },
-                ].map(({ label, stat }) => (
-                  <div
-                    key={label}
-                    className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20"
-                  >
-                    <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
-                    <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-                      {stat?.total ?? 0}
-                    </p>
-                    <p className="text-[10.5px] text-neutral-500">{stat?.active ?? 0} active</p>
-                  </div>
-                ))}
-              </div>
-
-              {subCategory.createdAt && (
-                <p className="mt-4 text-[11.5px] text-neutral-600">
-                  Created {new Date(subCategory.createdAt).toLocaleString("en-IN")}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
- * Delete confirmation modal
- * ---------------------------------------------------------------------- */
-
-function DeleteConfirmModal({ subCategory, deleting, onCancel, onConfirm }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
-            <AlertTriangle size={18} />
-          </div>
-          <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">Delete sub-category?</h3>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500">
-              This removes "{subCategory.name}" permanently.
-            </p>
-          </div>
-        </div>
-        <div className="mt-5 flex items-center justify-end gap-2.5">
-          <button
-            onClick={onCancel}
-            disabled={deleting}
-            className="rounded-xl border border-neutral-200 px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:border-neutral-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:opacity-60"
-          >
-            {deleting && <Loader2 size={14} className="animate-spin" />}
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Every count attached to a sub-category, for the delete box — brands and
+// vouchers both block a delete (the API refuses while either is > 0).
+const subCategoryCounts = (row) => [
+  { label: "Brands", ...row.stats.brands, blocks: true },
+  { label: "Vouchers", ...row.stats.vouchers, blocks: true },
+];
 
 /* -------------------------------------------------------------------------
  * Helpers to map between API shape and the form's shape
@@ -451,6 +271,20 @@ function apiToRow(sub) {
     voucherCount: vouchers.total,
     brandCount: brands.total,
     createdAt: sub.createdAt,
+    updatedAt: sub.updatedAt,
+  };
+}
+
+// Flips one sub-category's isActive inside a cached getAll response — used
+// for the optimistic status toggle. Detail entries (no data.data array) pass through.
+function patchCachedSubCategory(old, id, isActive) {
+  if (!Array.isArray(old?.data?.data)) return old;
+  return {
+    ...old,
+    data: {
+      ...old.data,
+      data: old.data.data.map((s) => ((s._id ?? s.id) === id ? { ...s, isActive } : s)),
+    },
   };
 }
 
@@ -481,17 +315,21 @@ function rowToFormDraft(row) {
  * ---------------------------------------------------------------------- */
 
 export default function SubCategory() {
-  const [categories, setCategories] = useState([]);
-
-  const [subCategories, setSubCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
+  // The search text actually sent to the API — trails `search` by 400ms.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
+  const [limit, setLimit] = useState(12);
+  // All / Active / Inactive — sent to the API as `isActive`.
+  const [statusFilter, setStatusFilter] = useState("All");
+  // Grid by default; table on request.
+  const [view, setView] = useState("grid");
+  // Row whose status switch was clicked — confirmed before the API call.
+  const [toggleTarget, setToggleTarget] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSubCategory, setEditingSubCategory] = useState(null);
@@ -499,8 +337,6 @@ export default function SubCategory() {
   const [saveError, setSaveError] = useState("");
 
   const [viewTarget, setViewTarget] = useState(null);
-  const [viewSubCategory, setViewSubCategory] = useState(null);
-  const [viewLoading, setViewLoading] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -508,84 +344,88 @@ export default function SubCategory() {
   const [togglingId, setTogglingId] = useState(null);
   const [toggleError, setToggleError] = useState("");
 
-  const categoryName =(id) => categories.find((c) => c.id === id)?.name || "—";
+  // Overview charts — every sub-category matching the current search,
+  // parent category and status filter (up to 100, not just the visible
+  // page), so the charts follow the filters like the list does.
+  const allSubCategoriesQuery = useSubCategories({
+    page: 1,
+    limit: 100,
+    search: debouncedSearch,
+    categoryId: categoryFilter === "All" ? undefined : categoryFilter,
+    isActive: STATUS_PARAM[statusFilter],
+  });
+  // "No any subcategory found" (404) = nothing matches → empty charts.
+  const chartsNotFound = /not found|no .*found/i.test(allSubCategoriesQuery.error?.message || "");
+  const allSubCategories = useMemo(
+    () => (chartsNotFound ? [] : (allSubCategoriesQuery.data?.data?.data ?? []).map(apiToRow)),
+    [allSubCategoriesQuery.data, chartsNotFound]
+  );
+  const chartsError = chartsNotFound ? "" : allSubCategoriesQuery.error?.message ?? "";
 
-  // A broader, unpaginated snapshot used only for the overview charts —
-  // the paginated `subCategories` list only ever holds one page.
-  const [allSubCategories, setAllSubCategories] = useState([]);
-  const [chartsError, setChartsError] = useState("");
+  // ── Parent categories (for the dropdown + filter) ────
+  // A failure just leaves the dropdown empty, as before.
+  const categoriesQuery = useCategories({ page: 1, limit: 100 });
+  const categories = useMemo(
+    () => (categoriesQuery.data?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name })),
+    [categoriesQuery.data]
+  );
 
-  const fetchAllSubCategories = useCallback(async () => {
-    setChartsError("");
-    try {
-      const res = await getSubCategories({ page: 1, limit: 100 });
-      setAllSubCategories((res?.data?.data ?? []).map(apiToRow));
-    } catch (err) {
-      setAllSubCategories([]);
-      setChartsError(err.message);
-    }
-  }, []);
+  const categoryName =(id) => categories.find((c) => c.id === id)?.name || "No category";
 
-  useEffect(() => {
-    fetchAllSubCategories();
-  }, [fetchAllSubCategories]);
+  // ── Sub-categories (current page) ──────────────────────────────
+  // Pagination, search, parent filter and status all run on the backend;
+  // the tab counts use the same filters, so they match the list.
+  const parentParam = categoryFilter === "All" ? undefined : categoryFilter;
+  const subCategoriesQuery = useSubCategories(
+    {
+      page,
+      limit,
+      search: debouncedSearch,
+      categoryId: parentParam,
+      isActive: STATUS_PARAM[statusFilter],
+    },
+    { placeholderData: keepPreviousData }
+  );
+  // A 404 "No any subcategory found" is just an empty page, not an error.
+  const listNotFound = /not found|no .*found/i.test(subCategoriesQuery.error?.message || "");
+  const subCategories = useMemo(
+    () => (listNotFound ? [] : (subCategoriesQuery.data?.data?.data ?? []).map(apiToRow)),
+    [subCategoriesQuery.data, listNotFound]
+  );
+  const totalPages = listNotFound ? 1 : subCategoriesQuery.data?.data?.totalPages ?? 1;
+  const total = listTotal(subCategoriesQuery) ?? 0;
+  const loading = subCategoriesQuery.isPending;
+  const loadError = listNotFound ? "" : subCategoriesQuery.error?.message ?? "";
 
-  // ── Load parent categories once (for the dropdown + filter) ────
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await getCategories({ page: 1, limit: 100 });
-        const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name }));
-        setCategories(rows);
-      } catch (err) {
-        console.error("Failed to load categories:", err.message);
-      }
-    })();
-  }, []);
-
-  // ── Load sub-categories ──────────────────────────────────────
-  const fetchSubCategories = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getSubCategories({
-        page,
-        limit,
-        search,
-        categoryId: categoryFilter === "All" ? undefined : categoryFilter,
-      });
-      const rows = (res?.data?.data ?? []).map(apiToRow);
-      setSubCategories(rows);
-      setTotalPages(res?.data?.totalPages ?? 1);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, search, categoryFilter]);
+  // Active / inactive totals for the tabs (limit 1 — only `total` is used).
+  const activeCountQuery = useSubCategories({ page: 1, limit: 1, search: debouncedSearch, categoryId: parentParam, isActive: true });
+  const inactiveCountQuery = useSubCategories({ page: 1, limit: 1, search: debouncedSearch, categoryId: parentParam, isActive: false });
+  const activeTotal = listTotal(activeCountQuery);
+  const inactiveTotal = listTotal(inactiveCountQuery);
+  const statusCounts = {
+    active: activeTotal,
+    inactive: inactiveTotal,
+    all: activeTotal != null && inactiveTotal != null ? activeTotal + inactiveTotal : undefined,
+  };
 
   // Debounce search
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(1);
-      fetchSubCategories();
+      setDebouncedSearch(search);
     }, 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Refetch on category filter change
-  useEffect(() => {
-    setPage(1);
-    fetchSubCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryFilter]);
-
-  // Refetch on page change
-  useEffect(() => {
-    fetchSubCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  // Full detail for the View modal; falls back to the clicked row's summary
+  // if the detail call fails.
+  const viewQuery = useSubCategory(viewTarget?.id);
+  const viewLoading = Boolean(viewTarget) && viewQuery.isPending;
+  const viewSubCategory = useMemo(() => {
+    if (!viewTarget) return null;
+    if (viewQuery.data) return apiToRow(viewQuery.data?.data ?? viewQuery.data);
+    return viewQuery.error ? viewTarget : null;
+  }, [viewTarget, viewQuery.data, viewQuery.error]);
 
   const handleAddClick = () => {
     setEditingSubCategory({ ...EMPTY_FORM, categoryId: categories[0]?.id ?? "" });
@@ -599,20 +439,8 @@ export default function SubCategory() {
     setModalOpen(true);
   };
 
-  const handleView = async (row) => {
+  const handleView = (row) => {
     setViewTarget(row);
-    setViewSubCategory(null);
-    setViewLoading(true);
-    try {
-      const res = await getSubCategoryById(row.id);
-      const detail = res?.data ?? res;
-      setViewSubCategory(apiToRow(detail));
-    } catch (err) {
-      setViewSubCategory(row);
-      console.error("Failed to load sub-category details:", err.message);
-    } finally {
-      setViewLoading(false);
-    }
   };
 
   const handleSave = async (form) => {
@@ -620,11 +448,11 @@ export default function SubCategory() {
     setSaveError("");
     try {
       if (form.id) {
+        // No isActive on edit — status changes only via the list toggle.
         await updateSubCategory(form.id, {
           name: form.name.trim(),
           description: form.description,
           image: form.image,
-          isActive: form.isActive,
         });
       } else {
         await createSubCategory(form.categoryId, {
@@ -636,8 +464,7 @@ export default function SubCategory() {
       }
       setModalOpen(false);
       setEditingSubCategory(null);
-      fetchSubCategories();
-      fetchAllSubCategories();
+      // No manual reload — the write interceptor refreshes ["subCategories"].
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -649,18 +476,20 @@ export default function SubCategory() {
   // with the flipped flag; no image, so the existing one is kept.
   const handleToggleActive = async (row) => {
     const isActive = !row.isActive;
-    const patchRow = (r) => (r.id === row.id ? { ...r, isActive, status: isActive ? "Active" : "Inactive" } : r);
     setTogglingId(row.id);
     setToggleError("");
-    setSubCategories((prev) => prev.map(patchRow));
-    setAllSubCategories((prev) => prev.map(patchRow));
+    // Optimistic: flip the row in every cached list page (table + charts).
+    queryClient.setQueriesData({ queryKey: queryKeys.subCategories.all }, (old) =>
+      patchCachedSubCategory(old, row.id, isActive)
+    );
     try {
       await updateSubCategory(row.id, { name: row.name, description: row.description ?? "", isActive });
+      setToggleTarget(null);
     } catch (err) {
-      const revert = (r) => (r.id === row.id ? row : r);
-      setSubCategories((prev) => prev.map(revert));
-      setAllSubCategories((prev) => prev.map(revert));
+      // Revert by refetching the real state from the server.
+      queryClient.invalidateQueries({ queryKey: queryKeys.subCategories.all });
       setToggleError(`Couldn't update "${row.name}": ${err.message}`);
+      setToggleTarget(null);
     } finally {
       setTogglingId(null);
     }
@@ -668,16 +497,30 @@ export default function SubCategory() {
 
   const confirmDelete = async () => {
     setDeleting(true);
+    setDeleteError("");
     try {
       await deleteSubCategory(deleteTarget.id);
       setDeleteTarget(null);
-      fetchSubCategories();
-      fetchAllSubCategories();
     } catch (err) {
-      console.error("Failed to delete sub-category:", err.message);
+      // e.g. "Cannot delete this sub-category — 3 brands and 10 vouchers …"
+      setDeleteError(err.message);
     } finally {
       setDeleting(false);
     }
+  };
+
+  // Filters reset to page 1.
+  const changeStatus = (s) => {
+    setStatusFilter(s);
+    setPage(1);
+  };
+  const changeLimit = (n) => {
+    setLimit(n);
+    setPage(1);
+  };
+  const openDelete = (row) => {
+    setDeleteError("");
+    setDeleteTarget(row);
   };
 
   // Overview charts — derived from the broader allSubCategories snapshot.
@@ -715,7 +558,7 @@ export default function SubCategory() {
     },
     {
       key: "image",
-      label: "Image",
+      label: "Icon",
       render: (row) => (
         <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
           {row.image ? (
@@ -728,8 +571,8 @@ export default function SubCategory() {
     },
     {
       key: "name",
-      label: "Sub-Category Name",
-      render: (row) => <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.name}</span>,
+      label: "Title",
+      render: (row) => <span className="font-medium capitalize text-neutral-900 dark:text-neutral-50">{row.name}</span>,
     },
     {
       key: "category",
@@ -762,9 +605,11 @@ export default function SubCategory() {
             checked={Boolean(row.isActive)}
             disabled={togglingId === row.id}
             title={row.isActive ? "Click to make Inactive" : "Click to make Active"}
-            onChange={() => handleToggleActive(row)}
+            onChange={() => setToggleTarget(row)}
           />
-          <StatusBadge status={row.status} />
+          <span className={`text-[11px] font-semibold ${row.isActive ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400"}`}>
+            {row.isActive ? "Active" : "Inactive"}
+          </span>
         </div>
       ),
     },
@@ -789,7 +634,7 @@ export default function SubCategory() {
             <Pencil size={15} />
           </button>
           <button
-            onClick={() => setDeleteTarget(row)}
+            onClick={() => openDelete(row)}
             aria-label={`Delete ${row.name}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
@@ -818,11 +663,11 @@ export default function SubCategory() {
             className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
           >
             <Plus size={16} />
-            Add Sub-Category
+            Add
           </button>
         </div>
 
-        {/* Overview charts — real data, independent of the table's filters */}
+        {/* Overview charts — follow the search / parent / status filters */}
         {chartsError && (
           <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={13} className="shrink-0" />
@@ -930,8 +775,8 @@ export default function SubCategory() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        {/* Filters — search, parent category, status tabs (backend counts), grid / table */}
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:max-w-xs sm:flex-1">
             <Search size={16} className="shrink-0 text-neutral-500" />
             <input
@@ -944,7 +789,10 @@ export default function SubCategory() {
 
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(1);
+            }}
             className="rounded-full bg-white px-3.5 py-2.5 text-[13px] text-neutral-700 shadow-[0_1px_3px_rgba(15,23,42,0.06)] focus:outline-none dark:bg-neutral-900 dark:text-neutral-300 dark:shadow-black/20 sm:w-56"
           >
             <option value="All">All Categories</option>
@@ -954,6 +802,9 @@ export default function SubCategory() {
               </option>
             ))}
           </select>
+          <div className="lg:ml-auto">
+            <StatusTabsAndView status={statusFilter} onStatus={changeStatus} counts={statusCounts} view={view} onView={setView} />
+          </div>
         </div>
 
         {/* Load state */}
@@ -976,37 +827,45 @@ export default function SubCategory() {
 
         {!loading && !loadError && (
           <>
-            {/* Table */}
-            <Table
-              columns={columns}
-              data={subCategories}
-              emptyTitle="No sub-categories yet" emptyDescription="Sub-categories sit under a main category and help customers narrow down brands. Add one to get started." emptyIcon="subcategory" emptyAction={{ label: "Add Sub-Category", onClick: handleAddClick }}
-              dense
-              minWidth={860}
-            />
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-4 flex items-center justify-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Prev
-                </button>
-                <span className="text-[12.5px] text-neutral-500">
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Next
-                </button>
+            {view === "grid" && subCategories.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {subCategories.map((row) => (
+                  <CatalogGridCard
+                    key={row.id}
+                    item={row}
+                    chip={
+                      <span className="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-medium capitalize text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        <Layers size={10} className="shrink-0" />
+                        {categoryName(row.categoryId)}
+                      </span>
+                    }
+                    stats={[
+                      { label: "Brands", total: row.stats.brands.total },
+                      { label: "Vouchers", total: row.stats.vouchers.total },
+                    ]}
+                    toggling={togglingId === row.id}
+                    onToggle={() => setToggleTarget(row)}
+                    onView={() => handleView(row)}
+                    onEdit={() => handleEdit(row)}
+                    onDelete={() => openDelete(row)}
+                  />
+                ))}
               </div>
+            ) : (
+              <Table
+                columns={columns}
+                data={subCategories}
+                emptyTitle={debouncedSearch || statusFilter !== "All" || categoryFilter !== "All" ? "No sub-categories match" : "No sub-categories yet"}
+                emptyDescription="Sub-categories sit under a main category and help customers narrow down brands. Add one to get started."
+                emptyIcon="subcategory"
+                emptyAction={{ label: "Add", onClick: handleAddClick }}
+                dense
+                minWidth={860}
+              />
             )}
+
+            {/* Pagination — counts come from the backend for the current filters */}
+            <PaginationBar page={page} limit={limit} total={total} totalPages={totalPages} onPage={setPage} onLimit={changeLimit} />
           </>
         )}
       </div>
@@ -1031,22 +890,48 @@ export default function SubCategory() {
       )}
 
       {/* View modal */}
-      <SubCategoryViewModal
+      <CatalogViewModal
         open={Boolean(viewTarget)}
-        subCategory={viewSubCategory}
-        categoryName={viewSubCategory ? categoryName(viewSubCategory.categoryId) : ""}
+        kind="Sub-category"
+        item={viewSubCategory}
+        parentName={viewSubCategory ? categoryName(viewSubCategory.categoryId) : ""}
         loading={viewLoading}
-        onClose={() => {
+        stats={
+          viewSubCategory
+            ? [
+                { label: "Brands", ...viewSubCategory.stats.brands },
+                { label: "Vouchers", ...viewSubCategory.stats.vouchers },
+              ]
+            : []
+        }
+        onClose={() => setViewTarget(null)}
+        onEdit={() => {
+          const row = viewSubCategory;
           setViewTarget(null);
-          setViewSubCategory(null);
+          if (row) handleEdit(row);
         }}
       />
 
-      {/* Delete confirmation modal */}
+      {/* Status toggle confirmation */}
+      {toggleTarget && (
+        <ConfirmToggleModal
+          kind="sub-category"
+          item={toggleTarget}
+          impact={`${toggleTarget.stats.brands.total} brands · ${toggleTarget.stats.vouchers.total} vouchers`}
+          busy={togglingId === toggleTarget.id}
+          onCancel={() => setToggleTarget(null)}
+          onConfirm={() => handleToggleActive(toggleTarget)}
+        />
+      )}
+
+      {/* Delete confirmation — with every attached count */}
       {deleteTarget && (
-        <DeleteConfirmModal
-          subCategory={deleteTarget}
+        <DeleteWithCountsModal
+          kind="sub-category"
+          item={deleteTarget}
+          counts={subCategoryCounts(deleteTarget)}
           deleting={deleting}
+          error={deleteError}
           onCancel={() => !deleting && setDeleteTarget(null)}
           onConfirm={confirmDelete}
         />

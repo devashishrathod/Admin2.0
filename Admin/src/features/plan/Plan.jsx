@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus,
   Pencil,
@@ -36,15 +36,15 @@ import PlanCompare from "./PlanCompare";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
 import { ApplyTermsModal, ENTITLEMENT_LABELS, ImpactConfirmModal } from "./PlanModals";
 import {
-  getPlans,
   addPlan,
   updatePlan,
   deletePlan,
-  getPlanFeatures,
   uploadPlanImage,
   removePlanImage,
 } from "../plan/services/planApi";
+import { usePlans, usePlanFeatures } from "./queries/planQueries";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
 
 /* -------------------------------------------------------------------------
  * Data shape (subscription redesign, Phases 1–8)
@@ -328,12 +328,12 @@ function Tabs({ tab, onChange }) {
 
 // One plan feature as shown on the card — "Outlets · 3", "Deal Pack · ✓".
 function featureChipText(value, unit) {
-  if (value == null) return "—";
+  if (value == null) return "Not set";
   if ("isUnlimited" in value || "limit" in value) return value.isUnlimited ? "Unlimited" : String(value.limit ?? 0);
   if ("isEnabled" in value) return value.isEnabled ? "Yes" : "No";
   if ("number" in value) return `${value.number}${unit ? ` ${unit}` : ""}`;
-  if ("text" in value) return value.text || "—";
-  return "—";
+  if ("text" in value) return value.text || "Not set";
+  return "Not set";
 }
 
 // The plan's featureValues (what the backend returns), falling back to
@@ -1085,11 +1085,23 @@ export default function Plan() {
   const [planStatusFilter, setPlanStatusFilter] = useState("All");
   const [planPage, setPlanPage] = useState(1);
 
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const { data: plansRes, isPending: loading, error: plansError } = usePlans();
+  const loadError = plansError?.message ?? "";
+  // `popular` isn't persisted by the API — remember the admin's choice per
+  // plan here so a refetch doesn't drop it.
+  const [popularById, setPopularById] = useState({});
+  const plans = useMemo(() => {
+    const res = plansRes;
+    const rawList = Array.isArray(res) ? res : res?.data?.data ?? res?.data?.plans ?? res?.data ?? res?.plans ?? [];
+    return (Array.isArray(rawList) ? rawList : []).map((raw) => {
+      const plan = normalizePlan(raw);
+      return plan.id in popularById ? { ...plan, popular: popularById[plan.id] } : plan;
+    });
+  }, [plansRes, popularById]);
 
-  const [features, setFeatures] = useState([]);
+  // Only needed for the renamed system labels — on failure the defaults stay.
+  const { data: featuresRes } = usePlanFeatures();
+  const features = useMemo(() => (featuresRes ? extractFeatures(featuresRes) : []), [featuresRes]);
 
   const [draft, setDraft] = useState(null);
   const [draftOrigin, setDraftOrigin] = useState(null); // plan as it was when the edit opened
@@ -1106,33 +1118,6 @@ export default function Plan() {
   const [applyTarget, setApplyTarget] = useState(null);
 
   const [viewingPlanId, setViewingPlanId] = useState(null);
-
-  const loadPlans = useCallback(async () => {
-    try {
-      const res = await getPlans();
-      const rawList = Array.isArray(res) ? res : res?.data?.data ?? res?.data?.plans ?? res?.data ?? res?.plans ?? [];
-      setPlans((Array.isArray(rawList) ? rawList : []).map(normalizePlan));
-      setLoadError("");
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Only needed for the renamed system labels — on failure the defaults stay.
-  const loadFeatures = useCallback(async () => {
-    try {
-      setFeatures(extractFeatures(await getPlanFeatures()));
-    } catch {
-      /* keep ENTITLEMENT_LABELS */
-    }
-  }, []);
-
-  useEffect(() => {
-    loadPlans();
-    loadFeatures();
-  }, [loadPlans, loadFeatures]);
 
   // System feature labels (admin may rename "Sub Brands" → "Outlets").
   const entitlementLabels = useMemo(() => {
@@ -1377,10 +1362,9 @@ export default function Plan() {
       imageFailed = `Plan saved, but the image failed: ${err.message}`;
     }
 
-    setPlans((prev) =>
-      isNew ? [...prev, savedPlan] : prev.map((p) => (p.id === savedPlan.id ? savedPlan : p))
-    );
-    loadFeatures(); // plansWithValue counts moved
+    // The plans list and the features' plansWithValue counts refetch on
+    // their own (the interceptor invalidates ["subscriptions"]).
+    setPopularById((prev) => ({ ...prev, [savedPlan.id]: savedPlan.popular }));
 
     const limitsChanged =
       !isNew &&
@@ -1406,7 +1390,6 @@ export default function Plan() {
     setDeleteError("");
     try {
       await deletePlan(plan.id, confirmToken);
-      setPlans((prev) => prev.filter((p) => p.id !== plan.id));
       setDeleteState(null);
     } catch (err) {
       if (err.status === 409 && err.details?.confirmToken) {
@@ -1498,7 +1481,7 @@ export default function Plan() {
       label: "Duration",
       render: (plan) => (
         <div>
-          <span>{plan.durationLabel || "—"}</span>
+          <span><ValueOr value={plan.durationLabel} fallback="Not set" /></span>
           {plan.isTrial && <span className="ml-2 rounded-md bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400">Free trial</span>}
         </div>
       ),
@@ -1540,7 +1523,7 @@ export default function Plan() {
             ))}
             {offered.length > 3 && <span className="text-[10.5px] text-neutral-400">+{offered.length - 3} more</span>}
           </div>
-        ) : <span className="text-neutral-400">—</span>;
+        ) : <span className="text-neutral-400">No features</span>;
       },
     },
     {
@@ -1622,16 +1605,9 @@ export default function Plan() {
         <Tabs tab={tab} onChange={setTab} />
 
 
-        {/* Reload plans too — adding/deleting a feature changes the plans'
-            feature values, which the plan cards show. */}
-        {tab === "features" && (
-          <FeatureMaster
-            onChanged={() => {
-              loadFeatures();
-              loadPlans();
-            }}
-          />
-        )}
+        {/* Feature writes are /subscriptions calls, so the plans list (whose
+            cards show feature values) refetches by itself. */}
+        {tab === "features" && <FeatureMaster />}
         {tab === "compare" && <PlanCompare />}
 
         {tab === "plans" && (

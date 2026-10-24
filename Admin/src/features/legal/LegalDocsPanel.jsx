@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X, Power, FileText, Eye, Calendar, Clock } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
 import ConfirmActionModal from "../../components/common/ConfirmActionModal";
 import { termsAndConditionsApi, privacyPoliciesApi } from "./services/LegalApi";
+import { useLegalDoc, useLegalDocs } from "./queries/legalQueries";
 import Loader from "../../components/common/Loader";
+import { MISSING, orText } from "../../utils/helpers";
 
 const TYPE_OPTIONS = ["CUSTOMER", "VENDOR"];
 const PAGE_SIZE = 10;
 
 function formatDateTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return MISSING.date;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return MISSING.date;
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -155,31 +157,15 @@ function LegalFormModal({ open, initialData, onClose, onSave }) {
  * Settlement/Customer/PromoCode elsewhere in this app), so a stale or
  * truncated list-view field never gets stuck on screen.
  * ---------------------------------------------------------------------- */
-function LegalViewModal({ doc, onClose, onFetchFull }) {
-  const [full, setFull] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    if (!doc) return;
-    setFull(null);
-    let cancelled = false;
-    setRefreshing(true);
-    onFetchFull(doc.id)
-      .then((res) => {
-        if (cancelled || !res) return;
-        setFull(normalizeLegalDoc(res?.data ?? res));
-      })
-      .catch(() => {
-        // Keep showing the list row's data — the background refresh is a
-        // nice-to-have, not a blocker.
-      })
-      .finally(() => {
-        if (!cancelled) setRefreshing(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [doc, onFetchFull]);
+function LegalViewModal({ kind, doc, onClose }) {
+  // If this fails, keep showing the list row's data — the background
+  // refresh is a nice-to-have, not a blocker.
+  const fullQuery = useLegalDoc(kind, doc?.id);
+  const full = useMemo(
+    () => (fullQuery.data ? normalizeLegalDoc(fullQuery.data?.data ?? fullQuery.data) : null),
+    [fullQuery.data]
+  );
+  const refreshing = Boolean(doc) && fullQuery.isFetching;
 
   if (!doc) return null;
   const shown = full || doc;
@@ -195,7 +181,7 @@ function LegalViewModal({ doc, onClose, onFetchFull }) {
             <div className="min-w-0">
               <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{shown.title}</h2>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full bg-sky-400/10 px-2.5 py-1 text-[11px] font-medium text-sky-600 dark:text-sky-400">{shown.type}</span>
+                <span className="rounded-full bg-sky-400/10 px-2.5 py-1 text-[11px] font-medium text-sky-600 dark:text-sky-400">{orText(shown.type, "No type")}</span>
                 <StatusBadge status={shown.isActive ? "Active" : "Inactive"} />
                 {refreshing && <Loader2 size={12} className="animate-spin text-neutral-400" />}
               </div>
@@ -259,9 +245,6 @@ export default function LegalDocsPanel({ kind }) {
   const api = kind === "privacy" ? privacyPoliciesApi : termsAndConditionsApi;
   const label = kind === "privacy" ? "Privacy Policy" : "Terms & Conditions";
 
-  const [docs, setDocs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
@@ -278,23 +261,13 @@ export default function LegalDocsPanel({ kind }) {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  const fetchDocs = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await api.getAll({ page: 1, limit: 100 });
-      const rows = (res?.data?.data ?? res?.data ?? []).map(normalizeLegalDoc);
-      setDocs(rows);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [api]);
-
-  useEffect(() => {
-    fetchDocs();
-  }, [fetchDocs]);
+  const docsQuery = useLegalDocs(kind, { page: 1, limit: 100 });
+  const docs = useMemo(
+    () => (docsQuery.data?.data?.data ?? docsQuery.data?.data ?? []).map(normalizeLegalDoc),
+    [docsQuery.data]
+  );
+  const loading = docsQuery.isPending;
+  const loadError = docsQuery.error?.message ?? "";
 
   const filtered = docs.filter((d) => d.title.toLowerCase().includes(search.trim().toLowerCase()));
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -308,7 +281,7 @@ export default function LegalDocsPanel({ kind }) {
     }
     setFormOpen(false);
     setEditingDoc(null);
-    fetchDocs();
+    // No manual reload — the write interceptor refreshes this resource's key.
   };
 
   const handleConfirmToggle = async () => {
@@ -317,7 +290,6 @@ export default function LegalDocsPanel({ kind }) {
     try {
       await api.update(toggleTarget.id, { isActive: !toggleTarget.isActive });
       setToggleTarget(null);
-      fetchDocs();
     } catch (err) {
       setToggleError(err.message);
     } finally {
@@ -331,7 +303,6 @@ export default function LegalDocsPanel({ kind }) {
     try {
       await api.remove(deleteTarget.id);
       setDeleteTarget(null);
-      fetchDocs();
     } catch (err) {
       setDeleteError(err.message);
     } finally {
@@ -356,7 +327,7 @@ export default function LegalDocsPanel({ kind }) {
       key: "type",
       label: "Audience",
       render: (d) => (
-        <span className="rounded-full bg-sky-400/10 px-2.5 py-1 text-[11px] font-medium text-sky-600 dark:text-sky-400">{d.type}</span>
+        <span className="rounded-full bg-sky-400/10 px-2.5 py-1 text-[11px] font-medium text-sky-600 dark:text-sky-400">{orText(d.type, "No type")}</span>
       ),
     },
     {
@@ -454,7 +425,7 @@ export default function LegalDocsPanel({ kind }) {
         />
       )}
 
-      <LegalViewModal doc={viewTarget} onClose={() => setViewTarget(null)} onFetchFull={api.getById} />
+      <LegalViewModal kind={kind} doc={viewTarget} onClose={() => setViewTarget(null)} />
 
       <LegalFormModal
         open={formOpen}

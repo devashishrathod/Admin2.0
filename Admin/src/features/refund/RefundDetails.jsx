@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import EmptyState from "../../components/common/EmptyState";
-import { ArrowLeft, Loader2, AlertTriangle, Check, Ban, History, Wallet, Landmark, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Loader2, AlertTriangle, Check, Ban, History, Wallet, Landmark, CheckCircle2, XCircle, Copy } from "lucide-react";
+import { useRefund } from "./queries/refundQueries";
 import {
-  getRefundById,
   approveRefund,
   rejectRefund,
   payRefund,
@@ -12,31 +12,62 @@ import {
   confirmBankPayout,
   failBankPayout,
 } from "./services/RefundApi";
-import { canAdminDecide } from "./refundUtils";
+import { canAdminDecide, needsOverrideReason, isAdminApproved, isValidUtr, refundMethodLabel } from "./refundUtils";
 import { inr, formatDate, fmtTime } from "../transaction/transactionUtils";
+import { localDateStr } from "../../utils/overviewStats";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING, isMissing, orText } from "../../utils/helpers";
 
-function Field({ label, value, mono }) {
+// Values wrap instead of being cut off, so full dates and IDs show; mono
+// IDs also get a copy button.
+function Field({ label, value, mono, fallback = MISSING.generic }) {
+  const [copied, setCopied] = useState(false);
+  const canCopy = mono && typeof value === "string" && !isMissing(value);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked (insecure origin / permissions) — the ID is still selectable.
+    }
+  };
+
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[11.5px] text-neutral-500">{label}</p>
-      <p
-        className={`mt-0.5 truncate text-[13.5px] font-medium text-neutral-800 dark:text-neutral-100 ${
-          mono ? "font-mono text-[12.5px]" : ""
-        }`}
-        title={typeof value === "string" ? value : undefined}
-      >
-        {value ?? "—"}
-      </p>
+      <div className="mt-0.5 flex items-start gap-1.5">
+        <p
+          className={`min-w-0 text-[13.5px] font-medium text-neutral-800 dark:text-neutral-100 ${
+            mono ? "break-all font-mono text-[12.5px]" : "break-words"
+          }`}
+        >
+          <ValueOr value={value} fallback={fallback} />
+        </p>
+        {canCopy && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            aria-label={`Copy ${label}`}
+            title={copied ? "Copied" : "Copy"}
+            className="mt-0.5 shrink-0 text-neutral-400 transition-colors hover:text-emerald-600 dark:hover:text-emerald-400"
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function Card({ title, children }) {
+// `cols={2}` for cards of long values (IDs), so they wrap less.
+function Card({ title, cols = 3, children }) {
   return (
     <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
       <h3 className="mb-4 text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{title}</h3>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">{children}</div>
+      <div className={`grid grid-cols-2 gap-4 ${cols === 3 ? "sm:grid-cols-3" : ""}`}>{children}</div>
     </div>
   );
 }
@@ -71,7 +102,7 @@ function PriceRow({ label, value, tone, strong }) {
 
 function formatDateTime(iso) {
   if (!iso) return "—";
-  return `${formatDate(new Date(iso).toISOString().slice(0, 10))} · ${fmtTime(iso)}`;
+  return `${formatDate(localDateStr(iso))} · ${fmtTime(iso)}`;
 }
 
 // "OUTLET_CLOSED" -> "Outlet Closed"
@@ -86,16 +117,19 @@ function humanizeEnum(value) {
 
 function bucketRefundStatus(status) {
   switch (status) {
+    // VENDOR_APPROVED is not here — it still waits on the admin's release.
     case "APPROVED":
-    case "VENDOR_APPROVED":
     case "ADMIN_APPROVED":
+    case "ADMIN_OVERRIDE":
     case "COMPLETED":
       return "approved";
     case "REJECTED":
     case "ADMIN_REJECTED":
+      return "rejected";
+    // The customer took it back — nobody rejected it.
     case "CANCELLED":
     case "WITHDRAWN":
-      return "rejected";
+      return "withdrawn";
     // FAILED is not final — the refund stays isOpen (statusLabel "Refund
     // failed — we are on it") and the admin retries /pay or switches to
     // manual bank, so it gets its own bucket rather than "rejected".
@@ -111,6 +145,7 @@ const STATUS_BADGE = {
   rejected: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400",
   failed: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400",
   pending: "bg-amber-400/10 text-amber-600 ring-amber-400/30 dark:text-amber-400",
+  withdrawn: "bg-neutral-200 text-neutral-600 ring-neutral-300/60 dark:bg-neutral-700/40 dark:text-neutral-400",
 };
 
 // Timeline events carry an `action` (CLAIM_CREATED, PAYMENT_CAPTURED,
@@ -148,7 +183,7 @@ function TimelineEvent({ event, isLast }) {
       <div className={`min-w-0 ${isLast ? "" : "pb-5"}`}>
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-100">
-            {event.label || humanizeEnum(event.action) || "Event"}
+            {event.label || orText(humanizeEnum(event.action), "Event")}
           </p>
           {event.by && (
             <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${ACTOR_CHIP[event.by] || ACTOR_CHIP.SYSTEM}`}>
@@ -157,7 +192,7 @@ function TimelineEvent({ event, isLast }) {
           )}
         </div>
         <p className="mt-0.5 text-[11.5px] text-neutral-500">
-          {formatDateTime(event.at)}
+          {orText(formatDateTime(event.at), "Time not recorded")}
           {event.amount != null && ` · ${inr(event.amount)}`}
           {event.fromStatus && event.toStatus && ` · ${humanizeEnum(event.fromStatus)} → ${humanizeEnum(event.toStatus)}`}
         </p>
@@ -198,24 +233,24 @@ function ClaimSection({ claim }) {
               className="h-14 w-14 shrink-0 rounded-xl object-cover"
             />
             <div className="min-w-0">
-              <p className="truncate text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">{voucher.name || "—"}</p>
-              <p className="truncate text-[12px] text-neutral-500">{claim.brandSnapshot?.name || "—"}</p>
+              <p className="truncate text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-100">{voucher.name || "Unnamed voucher"}</p>
+              <p className="truncate text-[12px] text-neutral-500">{claim.brandSnapshot?.name || "No brand"}</p>
             </div>
           </div>
         )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Claim Code" value={claim.claimCode} mono />
-          <Field label="Claim Status" value={humanizeEnum(claim.status)} />
-          <Field label="Brand" value={claim.brandSnapshot?.name} />
-          <Field label="Outlet" value={outlet.uniqueId} mono />
-          <Field label="Store ID" value={outlet.storeId} mono />
-          <Field label="State" value={outlet.state} />
-          <Field label="Claimed At" value={formatDateTime(claim.createdAt)} />
-          <Field label="Paid At" value={formatDateTime(claim.paidAt)} />
-          <Field label="Redeemed At" value={formatDateTime(claim.redeemedAt)} />
+          <Field label="Claim Code" value={claim.claimCode} mono fallback={MISSING.id} />
+          <Field label="Claim Status" value={humanizeEnum(claim.status)} fallback="No status" />
+          <Field label="Brand" value={claim.brandSnapshot?.name} fallback="No brand" />
+          <Field label="Outlet" value={outlet.uniqueId} mono fallback="No outlet" />
+          <Field label="Store ID" value={outlet.storeId} mono fallback={MISSING.id} />
+          <Field label="State" value={outlet.state} fallback="Not added" />
+          <Field label="Claimed At" value={formatDateTime(claim.createdAt)} fallback={MISSING.date} />
+          <Field label="Paid At" value={formatDateTime(claim.paidAt)} fallback="Not yet" />
+          <Field label="Redeemed At" value={formatDateTime(claim.redeemedAt)} fallback="Not yet" />
           <Field label="Offer Applied" value={claim.offerApplied ? "Yes" : "No"} />
           <Field label="Once Per User" value={claim.isOncePerUser ? "Yes" : "No"} />
-          <Field label="Voucher ID" value={claim.voucherId} mono />
+          <Field label="Voucher ID" value={claim.voucherId} mono fallback={MISSING.id} />
         </div>
       </div>
 
@@ -260,7 +295,8 @@ function currentStepIndex({ status, canDecide, refund }) {
   const manual = refund.method === "MANUAL_BANK";
   const steps = manual ? MANUAL_STEPS : GATEWAY_STEPS;
   if (status === "COMPLETED") return steps.length;
-  if (canDecide) return 0;
+  // Still with the vendor, or waiting on the admin's decision.
+  if (canDecide || !(isAdminApproved(status) || ["PROCESSING", "FAILED", "AWAITING_BANK_DETAILS"].includes(status))) return 0;
   if (!manual) return 1;
   if (status === "PROCESSING") return 3;
   if (status === "FAILED") return 2; // bank leg bounced — retry Pay to Bank
@@ -269,7 +305,7 @@ function currentStepIndex({ status, canDecide, refund }) {
 }
 
 function RefundSteps({ status, bucket, canDecide, refund }) {
-  if (bucket === "rejected") return null;
+  if (bucket === "rejected" || bucket === "withdrawn") return null;
   const steps = refund.method === "MANUAL_BANK" ? MANUAL_STEPS : GATEWAY_STEPS;
   const current = currentStepIndex({ status, canDecide, refund });
   const failed = status === "FAILED";
@@ -319,9 +355,13 @@ function RefundSteps({ status, bucket, canDecide, refund }) {
 export default function RefundDetails() {
   const { refundRequestId } = useParams();
   const navigate = useNavigate();
-  const [details, setDetails] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const {
+    data: details = null,
+    isPending: loading,
+    error: loadError,
+    refetch,
+  } = useRefund(refundRequestId, { select: (res) => res?.data || null });
+  const error = loadError?.message ?? "";
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionSuccess, setActionSuccess] = useState("");
@@ -334,32 +374,16 @@ export default function RefundDetails() {
   const [showConfirmBankBox, setShowConfirmBankBox] = useState(false);
   const [confirmBankForm, setConfirmBankForm] = useState({ utr: "", mode: "NEFT", paidAt: "" });
   const [showFailBankBox, setShowFailBankBox] = useState(false);
+  const [showPayBox, setShowPayBox] = useState(false);
   const [failBankReason, setFailBankReason] = useState("");
-
-  const fetchDetails = useCallback(async () => {
-    if (!refundRequestId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const res = await getRefundById(refundRequestId);
-      setDetails(res?.data || null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [refundRequestId]);
-
-  useEffect(() => {
-    fetchDetails();
-  }, [fetchDetails]);
 
   // Approve → Pay (or Request Bank Details as a fallback) → Reject — the
   // real admin refund workflow, confirmed via Postman against
   // /refunds/admin/:id/{approve,reject,pay,request-bank-details}.
   // `fn` returns the API response, whose own message (e.g. "Payout
   // started. Make the transfer, then confirm it with the UTR.") is shown
-  // back to the admin as the next-step hint.
+  // back to the admin as the next-step hint. The refund refetches by
+  // itself after the write (shared interceptor).
   const runAction = async (fn) => {
     setActionSubmitting(true);
     setActionError("");
@@ -367,7 +391,6 @@ export default function RefundDetails() {
     try {
       const res = await fn();
       setActionSuccess(res?.message || "Done.");
-      await fetchDetails();
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -375,9 +398,15 @@ export default function RefundDetails() {
     }
   };
 
+  // Over a vendor's "no" or silence the text is the required overrideReason.
   const handleApprove = () =>
     runAction(async () => {
-      const res = await approveRefund(refundRequestId, { note: approveNote.trim() || undefined });
+      const text = approveNote.trim() || undefined;
+      const override = needsOverrideReason(String(details?.refund?.status || "").toUpperCase());
+      const res = await approveRefund(
+        refundRequestId,
+        override ? { overrideReason: text } : { note: text }
+      );
       setShowApproveBox(false);
       setApproveNote("");
       return res;
@@ -385,7 +414,7 @@ export default function RefundDetails() {
 
   const handleReject = () =>
     runAction(async () => {
-      const res = await rejectRefund(refundRequestId, { note: rejectNote.trim() || undefined });
+      const res = await rejectRefund(refundRequestId, { note: rejectNote.trim() });
       setShowRejectBox(false);
       setRejectNote("");
       return res;
@@ -395,7 +424,12 @@ export default function RefundDetails() {
   // already-approved refund. Can 422 (e.g. "Razorpay could not process
   // this refund: Refund failed"); that message surfaces via actionError
   // so the admin can fall back to Request Bank Details instead.
-  const handlePay = () => runAction(() => payRefund(refundRequestId));
+  const handlePay = () =>
+    runAction(async () => {
+      const res = await payRefund(refundRequestId);
+      setShowPayBox(false);
+      return res;
+    });
 
   const handleRequestBankDetails = () =>
     runAction(async () => {
@@ -451,7 +485,7 @@ export default function RefundDetails() {
             : "We couldn't find a refund request with this link. It may have been removed, or the link is no longer valid."
         }
         action={{ label: "Back to Refunds", icon: ArrowLeft, onClick: () => navigate("/refund") }}
-        secondaryAction={error ? { label: "Try again", onClick: fetchDetails } : undefined}
+        secondaryAction={error ? { label: "Try again", onClick: () => refetch() } : undefined}
       />
     );
   }
@@ -479,22 +513,31 @@ export default function RefundDetails() {
   //    or mark it bounced (/fail-bank-payout)
   //  - MANUAL_BANK + bank account on file, not yet PROCESSING -> pay to
   //    bank again (covers the retry after a failed leg)
-  // Approve/Reject gate — see canAdminDecide (the API's canDecide is
-  // vendor-scoped, so VENDOR_APPROVED still needs the admin's decision).
+  // Approve/Reject gate — see canAdminDecide (only after the vendor has
+  // approved, rejected or timed out, per the super admin API doc).
   //  - FAILED (still isOpen) + non-MANUAL_BANK -> the gateway refund
   //    failed (refund.failureReason); retry /pay or switch to manual bank
   const isManualBank = refund.method === "MANUAL_BANK";
   const isOpen = refund.isOpen !== false;
   const isFailed = status === "FAILED";
-  const canDecide = canAdminDecide({ canDecide: refund.canDecide, isOpen: refund.isOpen, status });
-  const canPay = isOpen && !isManualBank && (status === "ADMIN_APPROVED" || isFailed);
-  const canRequestBankDetails = isOpen && (status === "ADMIN_APPROVED" || (isFailed && !isManualBank));
+  const approved = isAdminApproved(status);
+  const canDecide = canAdminDecide({ isOpen: refund.isOpen, status });
+  const canPay = isOpen && !isManualBank && (approved || isFailed);
+  const canRequestBankDetails = isOpen && (approved || (isFailed && !isManualBank));
   const canPayToBank =
     isManualBank &&
     refund.isOpen !== false &&
     !["PROCESSING", "COMPLETED"].includes(status) &&
     bucket !== "rejected" &&
-    (status === "ADMIN_APPROVED" || Boolean(refund.customerBankAccountId));
+    bucket !== "withdrawn" &&
+    (approved || Boolean(refund.customerBankAccountId));
+  const needsOverride = needsOverrideReason(status);
+
+  // Confirm Bank Payout checks: `paidAt` is when the bank moved the money,
+  // so it can't be in the future; the UTR must look like a bank reference.
+  const utrValid = isValidUtr(confirmBankForm.utr);
+  const paidAtInFuture = Boolean(confirmBankForm.paidAt) && new Date(confirmBankForm.paidAt) > new Date();
+  const nowLocalInput = `${localDateStr(new Date())}T${new Date().toTimeString().slice(0, 5)}`;
   const canConfirmBankPayout = status === "PROCESSING" && isManualBank;
   const canFailBankPayout = canConfirmBankPayout;
   const showActions =
@@ -511,7 +554,15 @@ export default function RefundDetails() {
     { key: "platformPromoReversal", label: "Platform Promo Reversal" },
     { key: "vendorPromoReversal", label: "Vendor Promo Reversal" },
     { key: "gatewayFeeAbsorbed", label: "Gateway Fee Absorbed" },
-  ].filter((row) => Number(split[row.key]) !== 0);
+    // Missing keys read as 0 and are hidden, not shown as ₹0.00 rows.
+  ].filter((row) => (Number(split[row.key]) || 0) !== 0);
+  const hasSplitTotal = split.totalRefund != null;
+
+  // Opening another action box clears the last action's error.
+  const toggleBox = (setter) => {
+    setActionError("");
+    setter((v) => !v);
+  };
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -528,7 +579,7 @@ export default function RefundDetails() {
         <div className="mb-6 flex flex-col gap-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[11.5px] text-neutral-500">
-              Claim {refund.claimCode || "—"}
+              Claim {orText(refund.claimCode, MISSING.id)}
               {claim?.brandSnapshot?.name && ` · ${claim.brandSnapshot.name}`}
               {claim?.voucherSnapshot?.name && ` · ${claim.voucherSnapshot.name}`}
             </p>
@@ -551,7 +602,7 @@ export default function RefundDetails() {
               {refund.statusLabel || status}
             </span>
             <span className="text-[11.5px] text-neutral-500">
-              {humanizeEnum(refund.method)} · {isOpen ? "Open" : "Closed"}
+              {refundMethodLabel(refund.method)} · {isOpen ? "Open" : "Closed"}
             </span>
           </div>
         </div>
@@ -598,27 +649,27 @@ export default function RefundDetails() {
             <div className="flex flex-wrap gap-2">
               {canDecide && (
                 <button
-                  onClick={() => setShowApproveBox((v) => !v)}
+                  onClick={() => toggleBox(setShowApproveBox)}
                   disabled={actionSubmitting}
                   className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Check size={14} />
-                  Approve
+                  {needsOverride ? "Override & Approve" : "Approve"}
                 </button>
               )}
               {canPay && (
                 <button
-                  onClick={handlePay}
+                  onClick={() => toggleBox(setShowPayBox)}
                   disabled={actionSubmitting}
                   className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {actionSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />}
+                  <Wallet size={14} />
                   {isFailed ? "Retry Pay Refund" : "Pay Refund"}
                 </button>
               )}
               {canRequestBankDetails && (
                 <button
-                  onClick={() => setShowBankDetailsBox((v) => !v)}
+                  onClick={() => toggleBox(setShowBankDetailsBox)}
                   disabled={actionSubmitting}
                   className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
                 >
@@ -638,7 +689,7 @@ export default function RefundDetails() {
               )}
               {canConfirmBankPayout && (
                 <button
-                  onClick={() => setShowConfirmBankBox((v) => !v)}
+                  onClick={() => toggleBox(setShowConfirmBankBox)}
                   disabled={actionSubmitting}
                   className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
                 >
@@ -648,7 +699,7 @@ export default function RefundDetails() {
               )}
               {canFailBankPayout && (
                 <button
-                  onClick={() => setShowFailBankBox((v) => !v)}
+                  onClick={() => toggleBox(setShowFailBankBox)}
                   disabled={actionSubmitting}
                   className="flex h-9 items-center gap-1.5 rounded-xl border border-red-200 px-3.5 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
                 >
@@ -658,7 +709,7 @@ export default function RefundDetails() {
               )}
               {canDecide && (
                 <button
-                  onClick={() => setShowRejectBox((v) => !v)}
+                  onClick={() => toggleBox(setShowRejectBox)}
                   disabled={actionSubmitting}
                   className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
                 >
@@ -670,8 +721,21 @@ export default function RefundDetails() {
 
             {showApproveBox && (
               <div className="mt-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950">
+                {needsOverride && (
+                  <p className="mb-3 text-[12.5px] text-amber-700 dark:text-amber-400">
+                    {status === "VENDOR_TIMEOUT"
+                      ? "The outlet never answered. Say why you are approving it yourself."
+                      : "The outlet rejected this refund. Say why you are overruling it."}
+                  </p>
+                )}
                 <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-                  Note (optional)
+                  {needsOverride ? (
+                    <>
+                      Override reason<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
+                    </>
+                  ) : (
+                    "Note (optional)"
+                  )}
                 </label>
                 <textarea
                   value={approveNote}
@@ -691,11 +755,40 @@ export default function RefundDetails() {
                   <button
                     type="button"
                     onClick={handleApprove}
-                    disabled={actionSubmitting}
+                    disabled={actionSubmitting || (needsOverride && !approveNote.trim())}
                     className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {actionSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                    Confirm Approve
+                    {needsOverride ? "Confirm Override" : "Confirm Approve"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Money leaves through the gateway with no undo — confirm first,
+                same as the list page's Pay modal. */}
+            {showPayBox && (
+              <div className="mt-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950">
+                <p className="text-[13px] text-neutral-700 dark:text-neutral-300">
+                  {inr(refund.approvedAmount ?? refund.requestedAmount)} will be refunded to the customer through the
+                  payment gateway. This cannot be undone.
+                </p>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPayBox(false)}
+                    className="flex h-9 items-center rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePay}
+                    disabled={actionSubmitting}
+                    className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {actionSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />}
+                    Confirm Pay
                   </button>
                 </div>
               </div>
@@ -704,7 +797,7 @@ export default function RefundDetails() {
             {showRejectBox && (
               <div className="mt-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950">
                 <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-                  Note (optional)
+                  Reason<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
                 </label>
                 <textarea
                   value={rejectNote}
@@ -724,7 +817,7 @@ export default function RefundDetails() {
                   <button
                     type="button"
                     onClick={handleReject}
-                    disabled={actionSubmitting}
+                    disabled={actionSubmitting || !rejectNote.trim()}
                     className="flex h-9 items-center gap-1.5 rounded-xl bg-red-500 px-3.5 text-[13px] font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {actionSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
@@ -777,9 +870,12 @@ export default function RefundDetails() {
                     <input
                       value={confirmBankForm.utr}
                       onChange={(e) => setConfirmBankForm((p) => ({ ...p, utr: e.target.value }))}
-                      placeholder="PMFXIIR0000001"
+                      placeholder="HDFCN52026102200123"
                       className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
                     />
+                    {confirmBankForm.utr.trim() && !utrValid && (
+                      <p className="mt-1 text-[11.5px] text-red-600 dark:text-red-400">12–22 letters or digits</p>
+                    )}
                   </div>
                   <div>
                     <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
@@ -803,6 +899,7 @@ export default function RefundDetails() {
                     </label>
                     <input
                       type="datetime-local"
+                      max={nowLocalInput}
                       value={confirmBankForm.paidAt}
                       onChange={(e) => setConfirmBankForm((p) => ({ ...p, paidAt: e.target.value }))}
                       className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-[13px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
@@ -820,7 +917,7 @@ export default function RefundDetails() {
                   <button
                     type="button"
                     onClick={handleConfirmBankPayout}
-                    disabled={actionSubmitting || !confirmBankForm.utr.trim()}
+                    disabled={actionSubmitting || !utrValid || paidAtInFuture}
                     className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {actionSubmitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
@@ -875,23 +972,27 @@ export default function RefundDetails() {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Card title="Refund Info">
             <Field label="Requested Amount" value={inr(refund.requestedAmount)} />
-            <Field label="Approved Amount" value={refund.approvedAmount != null ? inr(refund.approvedAmount) : "—"} />
-            <Field label="Reason" value={humanizeEnum(refund.reason)} />
-            <Field label="Method" value={humanizeEnum(refund.method)} />
+            <Field label="Approved Amount" value={refund.approvedAmount != null ? inr(refund.approvedAmount) : null} fallback={bucket === "pending" ? "Not yet" : "Not approved"} />
+            <Field label="Reason" value={humanizeEnum(refund.reason)} fallback={MISSING.reason} />
+            <Field label="Method" value={refundMethodLabel(refund.method)} fallback={MISSING.method} />
             <Field label="Full Refund" value={split.isFullRefund ? "Yes" : "No"} />
             <Field label="Is Override" value={refund.isOverride ? "Yes" : "No"} />
-            <Field label="Requested At" value={formatDateTime(refund.createdAt)} />
-            <Field label="Vendor Respond By" value={formatDateTime(refund.vendorRespondBy)} />
-            <Field label="Vendor Decision At" value={formatDateTime(refund.vendorDecisionAt)} />
-            <Field label="Admin Decision At" value={formatDateTime(refund.adminDecisionAt)} />
-            <Field label="Refund Initiated At" value={formatDateTime(refund.initiatedAt)} />
+            <Field label="Requested At" value={formatDateTime(refund.createdAt)} fallback={MISSING.date} />
+            {/* Step dates show once that step has happened, not as "—". */}
+            {refund.vendorDecisionAt ? (
+              <Field label="Vendor Decision At" value={formatDateTime(refund.vendorDecisionAt)} />
+            ) : (
+              <Field label="Vendor Respond By" value={formatDateTime(refund.vendorRespondBy)} fallback="No deadline set" />
+            )}
+            {refund.adminDecisionAt && <Field label="Admin Decision At" value={formatDateTime(refund.adminDecisionAt)} />}
+            {refund.initiatedAt && <Field label="Refund Initiated At" value={formatDateTime(refund.initiatedAt)} />}
             {refund.failedAt && <Field label="Failed At" value={formatDateTime(refund.failedAt)} />}
             {refund.failureReason && <Field label="Failure Reason" value={refund.failureReason} />}
-            <Field label="Completed At" value={formatDateTime(refund.completedAt)} />
-            <Field label="Last Updated" value={formatDateTime(refund.updatedAt)} />
+            {refund.completedAt && <Field label="Completed At" value={formatDateTime(refund.completedAt)} />}
+            <Field label="Last Updated" value={formatDateTime(refund.updatedAt)} fallback={MISSING.date} />
             <Field label="Reminders Sent" value={refund.remindersSent ?? 0} />
             <Field label="Attempt Count" value={refund.attemptCount ?? 0} />
-            <Field label="Razorpay Refund ID" value={refund.razorpayRefundId} mono />
+            {refund.razorpayRefundId && <Field label="Razorpay Refund ID" value={refund.razorpayRefundId} mono />}
             {refund.bankDetailsRequestedAt && (
               <Field label="Bank Details Requested At" value={formatDateTime(refund.bankDetailsRequestedAt)} />
             )}
@@ -903,14 +1004,14 @@ export default function RefundDetails() {
             )}
           </Card>
 
-          <Card title="Related IDs">
-            <Field label="Claim ID" value={refund.claimId} mono />
-            <Field label="Transaction ID" value={refund.transactionId} mono />
-            <Field label="Brand ID" value={refund.brandId} mono />
-            <Field label="Sub Brand ID" value={refund.subBrandId} mono />
-            <Field label="Vendor Decision By" value={refund.vendorDecisionBy} mono />
-            <Field label="Admin Decision By" value={refund.adminDecisionBy} mono />
-            <Field label="Customer ID" value={refund.customerId} mono />
+          <Card title="Related IDs" cols={2}>
+            <Field label="Claim ID" value={refund.claimId} mono fallback={MISSING.id} />
+            <Field label="Transaction ID" value={refund.transactionId} mono fallback={MISSING.id} />
+            <Field label="Brand ID" value={refund.brandId} mono fallback={MISSING.id} />
+            {refund.subBrandId && <Field label="Sub Brand ID" value={refund.subBrandId} mono />}
+            <Field label="Customer ID" value={refund.customerId} mono fallback={MISSING.id} />
+            {refund.vendorDecisionBy && <Field label="Vendor Decision By" value={refund.vendorDecisionBy} mono />}
+            {refund.adminDecisionBy && <Field label="Admin Decision By" value={refund.adminDecisionBy} mono />}
             {refund.customerBankAccountId && (
               <Field label="Customer Bank Account ID" value={refund.customerBankAccountId} mono />
             )}
@@ -939,12 +1040,16 @@ export default function RefundDetails() {
 
           <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 lg:col-span-2">
             <h3 className="mb-1 text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">Refund Split</h3>
-            <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {splitRows.map((row) => (
-                <PriceRow key={row.key} label={row.label} value={inr(split[row.key])} />
-              ))}
-              <PriceRow label="Total Refund" value={inr(split.totalRefund)} strong />
-            </div>
+            {splitRows.length === 0 && !hasSplitTotal ? (
+              <p className="py-2.5 text-[12.5px] text-neutral-500">The refund split hasn't been calculated yet.</p>
+            ) : (
+              <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                {splitRows.map((row) => (
+                  <PriceRow key={row.key} label={row.label} value={inr(split[row.key])} />
+                ))}
+                <PriceRow label="Total Refund" value={hasSplitTotal ? inr(split.totalRefund) : "Not calculated"} strong />
+              </div>
+            )}
           </div>
 
           {claim && <ClaimSection claim={claim} />}

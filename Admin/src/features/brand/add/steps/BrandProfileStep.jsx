@@ -1,41 +1,28 @@
-import { useEffect, useState } from "react";
 import { Field, TextInput, TextArea, SelectInput, PhoneInput, ImagePicker, FormSection } from "../components/FormControls";
-import { getCategories } from "../../../category/services/CategoryApi";
-import { getSubCategories } from "../../../subcategory/services/SubCategoryApi";
+import { useCategories } from "../../../category/queries/categoryQueries";
+import { useSubCategories } from "../../../subcategory/queries/subCategoryQueries";
 
 const toOptions = (res) =>
   (res?.data?.data ?? []).map((c) => ({ value: c._id ?? c.id, label: c.name }));
+const NO_OPTIONS = [];
 
 export default function BrandProfileStep({ form, errors, setSection }) {
   const { brandDetails, basicDetails } = form;
   const setBrand = (patch) => setSection("brandDetails", patch);
 
-  const [categories, setCategories] = useState([]);
-  const [categoryError, setCategoryError] = useState("");
-  // Sub-categories are tagged with the category they were loaded for, so a
-  // stale list never shows while the next category's list is loading.
-  const [subCategories, setSubCategories] = useState({ categoryId: "", options: [] });
-
-  useEffect(() => {
-    getCategories({ page: 1, limit: 100 })
-      .then((res) => setCategories(toOptions(res)))
-      .catch((err) => setCategoryError(err.message));
-  }, []);
-
   const { categoryId } = brandDetails;
-  useEffect(() => {
-    if (!categoryId) return;
-    let cancelled = false;
-    getSubCategories({ page: 1, limit: 100, categoryId })
-      .then((res) => !cancelled && setSubCategories({ categoryId, options: toOptions(res) }))
-      .catch((err) => !cancelled && setCategoryError(err.message));
-    return () => {
-      cancelled = true;
-    };
-  }, [categoryId]);
+  const categoriesQuery = useCategories({ page: 1, limit: 100 }, { select: toOptions });
+  // Keyed by category and no placeholder data, so a stale list never shows
+  // while the next category's list is loading.
+  const subCategoriesQuery = useSubCategories(
+    { page: 1, limit: 100, categoryId },
+    { enabled: Boolean(categoryId), select: toOptions }
+  );
+  const categories = categoriesQuery.data ?? NO_OPTIONS;
+  const categoryError = categoriesQuery.error?.message || subCategoriesQuery.error?.message || "";
 
-  const subOptions = subCategories.categoryId === categoryId ? subCategories.options : [];
-  const subLoading = Boolean(categoryId) && subCategories.categoryId !== categoryId;
+  const subOptions = (categoryId && subCategoriesQuery.data) || NO_OPTIONS;
+  const subLoading = Boolean(categoryId) && subCategoriesQuery.isPending;
 
   return (
     <div className="space-y-8">

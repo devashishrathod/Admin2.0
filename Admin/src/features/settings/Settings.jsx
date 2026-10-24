@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   SlidersHorizontal,
   Loader2,
@@ -17,7 +18,8 @@ import {
   HardDrive,
   Palette,
 } from "lucide-react";
-import { getSettings, updateSettings } from "./services/SettingsApi";
+import { updateSettings } from "./services/SettingsApi";
+import { settingsQueryOptions, useSettings } from "./queries/settingsQueries";
 import LegalDocsPanel from "../legal/LegalDocsPanel";
 import AppearanceThemePicker from "./components/AppearanceThemePicker";
 import Loader from "../../components/common/Loader";
@@ -241,9 +243,9 @@ const EMPTY_STORAGE = {
 };
 
 function formatDateTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return "Not set";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "Not set";
   return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -583,9 +585,19 @@ function Card({ title, right, children }) {
  * ---------------------------------------------------------------------- */
 
 export default function Settings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useSettings();
   const [form, setForm] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const loading = settingsQuery.isPending;
+  const loadError = settingsQuery.error?.message ?? "";
+
+  // Prefill the form ONCE, when the settings first arrive (set during
+  // render, React's "adjust state on new data" pattern). Background
+  // refetches — window focus, the interceptor after any settings write —
+  // must not overwrite what the admin is typing.
+  if (settingsQuery.data && form === null) {
+    setForm(apiToForm(settingsQuery.data?.data ?? settingsQuery.data));
+  }
 
   const [activeSection, setActiveSection] = useState("general");
   const [expandedGroup, setExpandedGroup] = useState(null);
@@ -593,23 +605,6 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedSection, setSavedSection] = useState("");
-
-  const fetchSettings = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getSettings();
-      setForm(apiToForm(res?.data ?? res));
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
 
   const setVendorField = (section, field, value) =>
     setForm((prev) => ({ ...prev, vendor: { ...prev.vendor, [section]: { ...prev.vendor[section], [field]: value } } }));
@@ -647,7 +642,14 @@ export default function Settings() {
     try {
       await updateSettings(buildSavePayload(activeSection, form));
       setSavedSection(activeSection);
-      fetchSettings();
+      // Re-sync the form with the server's saved copy, as before. The
+      // interceptor already invalidated ["settings"], so this joins that
+      // refetch rather than sending a second request. If it fails, the
+      // admin's own (just saved) values simply stay on screen.
+      queryClient
+        .query(settingsQueryOptions())
+        .then((res) => setForm(apiToForm(res?.data ?? res)))
+        .catch(() => {});
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -816,7 +818,7 @@ export default function Settings() {
                     ))}
                   </div>
                   <p className="mt-4 text-[11.5px] text-neutral-600">
-                    Last updated {formatDateTime(form.updatedAt)}
+                    Last updated: {formatDateTime(form.updatedAt)}
                     {form.updatedBy ? ` by ${form.updatedBy}` : ""}
                   </p>
                 </div>

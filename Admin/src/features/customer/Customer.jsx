@@ -1,8 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import EmptyState from "../../components/common/EmptyState";
 import {
   Search,
-  X,
   Smartphone,
   Apple,
   CheckCircle2,
@@ -10,14 +9,11 @@ import {
   Wallet,
   Coins,
   Receipt,
-  Crown,
   ChevronRight,
   ArrowLeft,
   Mail,
   Phone,
   CalendarDays,
-  Pencil,
-  Trash2,
   BadgeCheck,
   ShieldCheck,
   ShieldAlert,
@@ -27,74 +23,17 @@ import {
   Star,
   ArrowUpCircle,
   ArrowDownCircle,
-  History,
   Sparkles,
   Loader2,
   AlertTriangle,
-  MoreVertical,
   ChevronLeft,
-  Power,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
-import { getAllCustomers, getCustomerById } from "./services/CustomerApi";
-import ConfirmActionModal from "../../components/common/ConfirmActionModal";
-import ToggleSwitch from "../../components/common/ToggleSwitch";
+import { useCustomers, useCustomer } from "./queries/customerQueries";
 import StatTile from "../../components/common/StatTile";
 import Loader from "../../components/common/Loader";
-
-/* ------------------------------------------------------------------ */
-/*  Static reference data                                              */
-/* ------------------------------------------------------------------ */
-
-const MEMBERSHIP_PLANS_SEED = [
-  {
-    id: "prime-lite",
-    name: "Prime Lite",
-    tagline: "For occasional shoppers",
-    price: 465,
-    cycle: "Yearly",
-    status: "Active",
-    badge: null,
-  },
-  {
-    id: "prime-plus",
-    name: "Prime Plus",
-    tagline: "For regular customers who want more",
-    price: 930,
-    cycle: "Yearly",
-    status: "Active",
-    badge: "Most Popular",
-  },
-  {
-    id: "prime-elite",
-    name: "Prime Elite",
-    tagline: "For our most valued customers",
-    price: 1880,
-    cycle: "Yearly",
-    status: "Active",
-    badge: null,
-  },
-];
-
-
-const EMPTY_CUSTOMER_FORM = {
-  id: null,
-  name: "",
-  email: "",
-  phone: "",
-  avatar: "🧑",
-  platform: "Android",
-};
-
-const EMPTY_PLAN_FORM = {
-  id: null,
-  name: "",
-  tagline: "",
-  price: "",
-  cycle: "Yearly",
-  status: "Active",
-  badge: "",
-};
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING, isMissing, orText } from "../../utils/helpers";
 
 const money = (n) => `₹${Math.abs(n).toLocaleString("en-IN")}`;
 
@@ -138,16 +77,6 @@ function fmtRawMoney(v) {
   return money(Number(v) || 0);
 }
 
-// Normalizes one real customer record (GET /customers/admin/get-all or
-// /customers/admin/:customerId) into the flat shape this page's cards/detail
-// view already expect, and also keeps the full raw payload (`.raw`) so the
-// User Info tab can show every field the API returns. A small handful of
-// customers may genuinely lack a `fullName` (onboarding not completed), in
-// which case the card falls back to the real customerId rather than a
-// fabricated name. Fields this endpoint has no per-item source for
-// (itemized transactions, reviews, plan history, persona tags) default to
-// empty rather than being invented — the `claims`/`refunds` blocks on the
-// real response are aggregate counters, not per-item lists.
 // "8839999017" -> "+91 88399 99017". The real API returns a bare 10-digit
 // WhatsApp number with no country code.
 function formatPhone(raw) {
@@ -172,36 +101,45 @@ function formatAddress(primaryAddress) {
   return [primaryAddress.city, primaryAddress.state].filter(Boolean).join(", ") || "—";
 }
 
+// Maps one customer from GET /customers/admin/get-all (or /:customerId)
+// into the flat shape the cards and detail view use. Only fields the API
+// actually returns — a customer who hasn't finished signup has no
+// `fullName` / `email`, so the name falls back to their uniqueId
+// ("#TC357962") and email stays null instead of being invented. `.raw`
+// keeps the whole payload for the detail view's per-section tiles.
 function normalizeCustomer(raw) {
   const account = raw.account || {};
   const profile = raw.profile || {};
+  const claims = raw.claims || {};
+  const refunds = raw.refunds || {};
+  const disputes = raw.disputes || {};
   const isInactive = raw.isAccountActive === false || account.isActive === false;
   return {
     id: raw._id,
     name: raw.fullName || account.name || raw.uniqueId || raw._id || "—",
-    avatar: "🧑",
-    email: raw.email || account.email || "—",
+    uniqueId: raw.uniqueId || "—",
+    email: raw.email || account.email || null,
     phone: formatPhone(raw.whatsappNumber || account.whatsappNumber),
+    whatsappVerified: Boolean(account.isWhatsappVerified),
+    isOnline: Boolean(account.isOnline),
     platform: formatPlatform(profile.devicePlatforms?.[0]),
     status: isInactive ? "Inactive" : "Active",
+    signupCompleted: Boolean(raw.isSignUpCompleted),
     joined: formatDateLabel(raw.createdAt),
-    lastActive: formatDateLabel(profile.lastSeenAt || raw.updatedAt),
+    lastActive: formatDateLabel(profile.lastSeenAt || account.updatedAt || raw.updatedAt),
     address: formatAddress(profile.primaryAddress),
     wallet: Number(account.walletBalance) || 0,
     coins: Number(account.tCoinsBalance) || 0,
     followers: Number(account.followerCount) || 0,
     following: Number(account.followingCount) || 0,
-    // No real source yet for persona tags, membership plan linkage, or
-    // itemized transaction/review lists — `claims`/`refunds` on the real
-    // response are aggregate counters, not per-item lists this UI can
-    // render, so these stay empty rather than being invented.
-    persona: [],
-    planId: null,
-    planHistory: [],
-    transactions: [],
-    reviews: [],
-    // Full raw payload kept verbatim — the User Info tab dumps every field
-    // from here so nothing the real API returns is ever left unshown.
+    totalClaims: Number(claims.totalClaims) || 0,
+    netSpend: Number(claims.netSpend) || 0,
+    totalSaved: Number(claims.totalSaved) || 0,
+    lastClaimAt: claims.lastClaimAt ? formatDateLabel(claims.lastClaimAt) : null,
+    refundRequests: Number(refunds.totalRequests) || 0,
+    openRefunds: Number(refunds.openRequests) || 0,
+    disputedPayments: Number(disputes.disputedPayments) || 0,
+    hasVerifiedBank: Boolean(profile.hasVerifiedBankAccount),
     raw,
   };
 }
@@ -240,309 +178,8 @@ function PlatformBadge({ platform }) {
       }`}
     >
       {isAndroid ? <Smartphone size={12} /> : isIos ? <Apple size={12} /> : null}
-      {platform}
+      {orText(platform, "No device")}
     </span>
-  );
-}
-
-function StarRating({ rating }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <Star
-          key={n}
-          size={13}
-          className={n <= rating ? "fill-amber-400 text-amber-400" : "text-neutral-300 dark:text-neutral-700"}
-        />
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Customer edit modal (name / contact / platform only —              */
-/*  status changes go through the Active switch + confirm dialog)      */
-/* ------------------------------------------------------------------ */
-
-function CustomerFormModal({ open, initialData, onClose, onSave }) {
-  const [form, setForm] = useState(initialData || EMPTY_CUSTOMER_FORM);
-  const [errors, setErrors] = useState({});
-
-  React.useEffect(() => {
-    if (open) {
-      setForm(initialData || EMPTY_CUSTOMER_FORM);
-      setErrors({});
-    }
-  }, [open, initialData]);
-
-  if (!open) return null;
-
-  const handleChange = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const nextErrors = {};
-    if (!form.name.trim()) nextErrors.name = "Customer name is required";
-    if (!form.email.trim()) nextErrors.email = "Email is required";
-    if (Object.keys(nextErrors).length) {
-      setErrors(nextErrors);
-      return;
-    }
-    onSave(form);
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
-      >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-          <div>
-            <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Edit Customer</h2>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500">Update this customer's details.</p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="px-5 py-5">
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Customer Name
-            </label>
-            <input
-              value={form.name}
-              onChange={handleChange("name")}
-              placeholder="e.g. Rohit Sharma"
-              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                errors.name
-                  ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-              }`}
-            />
-            {errors.name && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.name}</p>}
-          </div>
-
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Email</label>
-            <input
-              value={form.email}
-              onChange={handleChange("email")}
-              placeholder="name@example.com"
-              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                errors.email
-                  ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-              }`}
-            />
-            {errors.email && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.email}</p>}
-          </div>
-
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Phone</label>
-            <input
-              value={form.phone}
-              onChange={handleChange("phone")}
-              placeholder="+91 90000 00000"
-              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
-            />
-          </div>
-
-          <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Platform</label>
-            <div className="flex gap-2">
-              {["Android", "iOS"].map((p) => (
-                <button
-                  type="button"
-                  key={p}
-                  onClick={() => setForm((prev) => ({ ...prev, platform: p }))}
-                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.platform === p
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Membership plan edit modal                                         */
-/* ------------------------------------------------------------------ */
-
-function PlanFormModal({ open, initialData, onClose, onSave }) {
-  const [form, setForm] = useState(initialData || EMPTY_PLAN_FORM);
-  const [errors, setErrors] = useState({});
-
-  React.useEffect(() => {
-    if (open) {
-      setForm(initialData || EMPTY_PLAN_FORM);
-      setErrors({});
-    }
-  }, [open, initialData]);
-
-  if (!open) return null;
-
-  const handleChange = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const nextErrors = {};
-    if (!form.name.trim()) nextErrors.name = "Plan name is required";
-    if (!form.price || Number(form.price) <= 0) nextErrors.price = "Enter a valid price";
-    if (Object.keys(nextErrors).length) {
-      setErrors(nextErrors);
-      return;
-    }
-    onSave({ ...form, price: Number(form.price) });
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
-      >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Edit Membership Plan</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="px-5 py-5">
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Plan Name</label>
-            <input
-              value={form.name}
-              onChange={handleChange("name")}
-              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 ${
-                errors.name
-                  ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-              }`}
-            />
-            {errors.name && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.name}</p>}
-          </div>
-
-          <div className="mb-4">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Tagline</label>
-            <input
-              value={form.tagline}
-              onChange={handleChange("tagline")}
-              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
-            />
-          </div>
-
-          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Price (₹)</label>
-              <input
-                value={form.price}
-                onChange={handleChange("price")}
-                inputMode="numeric"
-                className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 ${
-                  errors.price
-                    ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                    : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-                }`}
-              />
-              {errors.price && <p className="mt-1.5 text-[12px] text-red-600 dark:text-red-400">{errors.price}</p>}
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Billing Cycle</label>
-              <select
-                value={form.cycle}
-                onChange={handleChange("cycle")}
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
-              >
-                <option>Yearly</option>
-                <option>Monthly</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
-            <div className="flex gap-2">
-              {["Active", "Inactive"].map((s) => (
-                <button
-                  type="button"
-                  key={s}
-                  onClick={() => setForm((prev) => ({ ...prev, status: s }))}
-                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.status === s
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
 
@@ -576,144 +213,130 @@ function StatChip({ icon: Icon, value, label }) {
   );
 }
 
-function UserCard({ customer, plan, onOpen, onEdit, onDelete, onRequestToggleStatus }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+// Green dot when the API reports the customer's app as online right now.
+function OnlineDot({ online }) {
+  return (
+    <span
+      title={online ? "Online now" : "Offline"}
+      className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-white dark:ring-neutral-900 ${
+        online ? "bg-emerald-400" : "bg-neutral-300 dark:bg-neutral-600"
+      }`}
+    />
+  );
+}
+
+const CARD_FLAG_TONES = {
+  amber: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
+  red: "bg-red-400/10 text-red-600 dark:text-red-400",
+  neutral: "bg-neutral-200 text-neutral-600 dark:bg-neutral-700/40 dark:text-neutral-400",
+};
+
+// Small status flag on a card (signup pending, open refunds, disputes…).
+function CardFlag({ tone = "neutral", children }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${CARD_FLAG_TONES[tone]}`}>
+      {children}
+    </span>
+  );
+}
+
+// First letter of the name for the avatar — "#" for an id-shaped fallback
+// name of a customer who hasn't finished signup.
+const initialOf = (name) => (isMissing(name) ? "?" : String(name).replace(/^#/, "").charAt(0).toUpperCase() || "?");
+
+// Read-only: the backend has no customer update / delete / status API, so
+// the card only opens the detail view.
+function UserCard({ customer, onOpen }) {
   const accent = CUSTOMER_PLATFORM_ACCENTS[customer.platform] || "from-neutral-400/20 via-neutral-400/0";
   const avatarBg = CUSTOMER_AVATAR_BG[customer.platform] || "bg-neutral-200 dark:bg-neutral-800";
-  const displayName = toTitleCase(customer.name);
+  const displayName = toTitleCase(orText(customer.name, MISSING.name));
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:border-neutral-200 hover:shadow-lg hover:shadow-black/10 dark:border-neutral-800/60 dark:bg-neutral-900 dark:shadow-black/20 dark:hover:border-neutral-700 dark:hover:shadow-black/30">
       <div className={`pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b ${accent} opacity-70`} />
 
-      <div className="absolute right-3 top-3 z-10">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenuOpen((o) => !o);
-          }}
-          aria-label={`More actions for ${displayName}`}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-neutral-200 bg-neutral-50/80 text-neutral-500 backdrop-blur transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950/80 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
-        >
-          <MoreVertical size={14} />
-        </button>
-
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 z-20 mt-1.5 w-36 overflow-hidden rounded-xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  onEdit(customer);
-                }}
-                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              >
-                <Pencil size={13} />
-                Edit
-              </button>
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  onDelete(customer);
-                }}
-                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
-              >
-                <Trash2 size={13} />
-                Delete
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* A plain clickable div, not a <button> — it needs to host the
-          real <button> status toggle below it, and a button can't nest
-          another interactive control. */}
-      <div
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
         onClick={() => onOpen(customer)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onOpen(customer);
-          }
-        }}
         className="relative flex cursor-pointer flex-col p-4 text-left"
       >
-        <div className="mb-3.5 flex items-center gap-3 pr-8">
-          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-[21px] shadow-sm ring-2 ring-white dark:ring-neutral-900 ${avatarBg}`}>
-            {customer.avatar}
+        <div className="mb-3.5 flex w-full items-center gap-3">
+          <div className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-[17px] font-semibold text-neutral-700 shadow-sm ring-2 ring-white dark:text-neutral-200 dark:ring-neutral-900 ${avatarBg}`}>
+            {initialOf(customer.name)}
+            <OnlineDot online={customer.isOnline} />
           </div>
           <div className="min-w-0">
             <p className="truncate text-[14.5px] font-semibold leading-tight tracking-tight text-neutral-900 dark:text-neutral-50">
               {displayName}
             </p>
-            <p className="truncate text-[11.5px] text-neutral-500">{customer.email}</p>
+            <p className="mt-0.5 flex items-center gap-1 truncate text-[11.5px] text-neutral-500">
+              <ValueOr value={customer.phone} fallback={MISSING.phone} />
+              {customer.whatsappVerified && (
+                <BadgeCheck size={12} className="shrink-0 text-emerald-500" title="WhatsApp verified" />
+              )}
+            </p>
+            <p className="truncate font-mono text-[10.5px] text-neutral-400 dark:text-neutral-500"><ValueOr value={customer.uniqueId} fallback={MISSING.id} /></p>
           </div>
         </div>
 
         <div className="mb-3.5 flex flex-wrap items-center gap-1.5">
-          {/* Status pill and its toggle sit together — the switch is what
-              controls the pill next to it, so they read as one control. */}
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-50 py-0.5 pl-1 pr-2 dark:bg-neutral-950/60">
-            <StatusPill status={customer.status} />
-            <ToggleSwitch
-              checked={customer.status === "Active"}
-              onChange={() => onRequestToggleStatus(customer)}
-              title="Click to activate/deactivate"
-            />
-          </span>
+          <StatusPill status={customer.status} />
           <PlatformBadge platform={customer.platform} />
-          {plan && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-              <Crown size={12} />
-              {plan.name}
-            </span>
+          {!customer.signupCompleted && <CardFlag tone="amber">Signup pending</CardFlag>}
+          {/* Things an admin should act on — shown only when they apply. */}
+          {customer.openRefunds > 0 && (
+            <CardFlag tone="amber">
+              {customer.openRefunds} open refund{customer.openRefunds === 1 ? "" : "s"}
+            </CardFlag>
           )}
+          {customer.disputedPayments > 0 && (
+            <CardFlag tone="red">
+              {customer.disputedPayments} disputed
+            </CardFlag>
+          )}
+          {customer.refundRequests > 0 && !customer.hasVerifiedBank && <CardFlag tone="neutral">No verified bank</CardFlag>}
         </div>
 
-        <div className="mb-3.5 grid grid-cols-3 divide-x divide-neutral-100 rounded-xl bg-neutral-50/70 dark:divide-neutral-800 dark:bg-neutral-950/40">
-          <StatChip icon={Wallet} value={money(customer.wallet)} label="Wallet" />
-          <StatChip icon={Coins} value={customer.coins} label="Coins" />
-          <StatChip icon={Users} value={customer.followers} label="Followers" />
+        <div className="w-full overflow-hidden rounded-xl bg-neutral-50/70 dark:bg-neutral-950/40">
+          <div className="grid grid-cols-3 divide-x divide-neutral-100 dark:divide-neutral-800">
+            <StatChip icon={Receipt} value={customer.totalClaims} label="Claims" />
+            <StatChip icon={ArrowUpCircle} value={money(customer.netSpend)} label="Net Spend" />
+            <StatChip icon={Wallet} value={money(customer.wallet)} label="Wallet" />
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-neutral-100 border-t border-neutral-100 dark:divide-neutral-800 dark:border-neutral-800">
+            <StatChip icon={Coins} value={customer.coins} label="T-Coins" />
+            <StatChip icon={Sparkles} value={money(customer.totalSaved)} label="Saved" />
+            <StatChip icon={ArrowDownCircle} value={customer.refundRequests} label="Refunds" />
+          </div>
         </div>
+        {customer.lastClaimAt && (
+          <p className="mt-2 w-full text-[11px] text-neutral-500">Last claim {customer.lastClaimAt}</p>
+        )}
+        <div className="mb-3.5" />
 
-        <div className="flex items-center justify-between gap-2 border-t border-neutral-100 px-0.5 pt-3 dark:border-neutral-800/60">
+        <div className="flex w-full items-center justify-between gap-2 border-t border-neutral-100 px-0.5 pt-3 dark:border-neutral-800/60">
           <span className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-neutral-500">
             <CalendarDays size={12} className="shrink-0" />
-            Joined {customer.joined}
+            {isMissing(customer.joined) ? "Join date not set" : `Joined ${customer.joined}`}
           </span>
-          <ChevronRight size={15} className="shrink-0 text-neutral-500 transition-transform group-hover:translate-x-0.5" />
+          <span className="flex min-w-0 items-center gap-1 truncate text-[11px] text-neutral-500">
+            <Clock size={11} className="shrink-0" />
+            {isMissing(customer.lastActive) ? "Never seen" : `Seen ${customer.lastActive}`}
+            <ChevronRight size={15} className="shrink-0 transition-transform group-hover:translate-x-0.5" />
+          </span>
         </div>
-      </div>
+      </button>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Customer detail — tabbed view                                      */
+/*  Customer detail — every section the API returns                    */
 /* ------------------------------------------------------------------ */
 
-const TABS = [
-  { key: "info", label: "User Info", icon: ShieldCheck },
-  { key: "transactions", label: "Transactions", icon: Receipt },
-  { key: "reviews", label: "Reviews", icon: Star },
-  { key: "plans", label: "Plans", icon: Crown },
-];
-
-function CustomerDetail({
-  customer,
-  plans,
-  detailLoading,
-  onBack,
-  onEditPlan,
-  onDeletePlan,
-  onRequestToggleStatus,
-}) {
-  const [activeTab, setActiveTab] = useState("info");
-  const currentPlan = plans.find((p) => p.id === customer.planId) || null;
+// Read-only: GET /customers/admin/:customerId is the only customer API
+// besides the list, so nothing here edits the customer.
+function CustomerDetail({ customer, detailLoading, onBack }) {
   const avatarBg = CUSTOMER_AVATAR_BG[customer.platform] || "bg-neutral-200 dark:bg-neutral-800";
   const detailCoverAccent =
     customer.platform === "Android"
@@ -721,10 +344,7 @@ function CustomerDetail({
       : customer.platform === "iOS"
       ? "from-sky-400/30 via-blue-400/10"
       : "from-neutral-300/25 via-neutral-300/0";
-
-  const avgRating = customer.reviews.length
-    ? (customer.reviews.reduce((sum, r) => sum + r.rating, 0) / customer.reviews.length).toFixed(1)
-    : null;
+  const prefs = customer.raw?.account?.notificationPreferences;
 
   // Real chart data — built only from the raw API's claims/refunds counters,
   // shown only when the customer actually has that activity (never a chart
@@ -779,84 +399,49 @@ function CustomerDetail({
         )}
       </div>
 
-      {/* Identity strip — a cover banner with the avatar overlapping it,
-          name/status/platform/plan, and an explicit active/inactive
-          switch; every other real field lives in the bento tiles below
-          (nothing repeated, nothing skipped). */}
+      {/* Identity strip — cover banner with the avatar overlapping it;
+          every other field lives in the bento tiles below. */}
       <div className="mb-5 overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className={`h-16 bg-gradient-to-r ${detailCoverAccent} to-transparent`} />
         <div className="flex flex-wrap items-end gap-4 px-5 pb-5">
-          <div className={`-mt-9 flex h-18 w-18 shrink-0 items-center justify-center rounded-2xl text-[30px] shadow-md ring-4 ring-white dark:ring-neutral-900 ${avatarBg}`}>
-            {customer.avatar}
+          <div className={`relative -mt-9 flex h-18 w-18 shrink-0 items-center justify-center rounded-2xl text-[26px] font-semibold text-neutral-700 shadow-md ring-4 ring-white dark:text-neutral-200 dark:ring-neutral-900 ${avatarBg}`}>
+            {initialOf(customer.name)}
+            <OnlineDot online={customer.isOnline} />
           </div>
           <div className="min-w-0 flex-1 pb-0.5">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-[19px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-                {toTitleCase(customer.name)}
+                {toTitleCase(orText(customer.name, MISSING.name))}
               </h2>
               {customer.status === "Active" && <BadgeCheck size={17} className="shrink-0 text-emerald-400" />}
             </div>
-            <p className="mt-0.5 truncate text-[12px] text-neutral-500">{customer.email}</p>
+            <p className="mt-0.5 truncate text-[12px] text-neutral-500">
+              {orText(customer.uniqueId, MISSING.id)} · {orText(customer.phone, MISSING.phone)}
+            </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <StatusPill status={customer.status} />
               <PlatformBadge platform={customer.platform} />
-              {currentPlan && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                  <Crown size={12} />
-                  {currentPlan.name}
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  customer.isOnline
+                    ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                    : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
+                }`}
+              >
+                {customer.isOnline ? "Online" : "Offline"}
+              </span>
+              {!customer.signupCompleted && (
+                <span className="inline-flex items-center rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  Signup pending
                 </span>
               )}
             </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2.5 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-            <StatusPill status={customer.status} />
-            <ToggleSwitch
-              checked={customer.status === "Active"}
-              onChange={() => onRequestToggleStatus(customer)}
-              title="Click to activate/deactivate"
-            />
           </div>
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="mb-5 flex flex-wrap gap-2 border-b border-neutral-200 pb-3 dark:border-neutral-800">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.key;
-          let count = null;
-          if (tab.key === "transactions") count = customer.transactions.length;
-          if (tab.key === "reviews") count = customer.reviews.length;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12.5px] font-medium transition-colors ${
-                isActive
-                  ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                  : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-200"
-              }`}
-            >
-              <Icon size={14} />
-              {tab.label}
-              {count !== null && (
-                <span
-                  className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                    isActive ? "bg-emerald-400/20 text-emerald-700 dark:text-emerald-300" : "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-                  }`}
-                >
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ---------------- Tab: User Info — one bento grid, nothing skipped ---------------- */}
-      {activeTab === "info" && (
-        <div className="space-y-4">
-          {/* Hero (contact) + quick-glance stat tiles */}
+      <div className="space-y-4">
+          {/* Contact card + quick-glance account tiles */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="col-span-2 row-span-2 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-neutral-900 dark:text-neutral-50">
@@ -864,66 +449,59 @@ function CustomerDetail({
                 Contact & Account
               </h3>
               <div className="space-y-2.5">
-                <InfoRow icon={<Mail size={13} />} label="Email" value={customer.email} />
-                <InfoRow icon={<Phone size={13} />} label="Phone" value={customer.phone} />
+                <InfoRow
+                  icon={<Phone size={13} />}
+                  label="WhatsApp"
+                  value={isMissing(customer.phone) ? null : `${customer.phone}${customer.whatsappVerified ? " · Verified" : ""}`}
+                  fallback={MISSING.phone}
+                />
+                {customer.email && <InfoRow icon={<Mail size={13} />} label="Email" value={customer.email} />}
                 <InfoRow
                   icon={customer.platform === "Android" ? <Smartphone size={13} /> : customer.platform === "iOS" ? <Apple size={13} /> : <ShieldCheck size={13} />}
                   label="Platform"
                   value={customer.platform}
+                  fallback="Not recorded"
                 />
-                <InfoRow icon={<CalendarDays size={13} />} label="Joined" value={customer.joined} />
-                <InfoRow icon={<Clock size={13} />} label="Last Active" value={customer.lastActive} />
-                <InfoRow icon={<ShieldCheck size={13} />} label="Address" value={customer.address} />
+                <InfoRow icon={<CalendarDays size={13} />} label="Joined" value={customer.joined} fallback={MISSING.date} />
+                <InfoRow icon={<Clock size={13} />} label="Last Seen" value={fmtRawDate(customer.raw?.profile?.lastSeenAt)} fallback="Not recorded" />
+                <InfoRow icon={<ShieldCheck size={13} />} label="Address" value={customer.address} fallback={MISSING.location} />
               </div>
             </div>
 
             <DetailTile icon={<Wallet size={12} />} label="Wallet" value={money(customer.wallet)} />
-            <DetailTile icon={<Coins size={12} />} label="Coins" value={customer.coins} />
+            <DetailTile icon={<Coins size={12} />} label="T-Coins" value={customer.coins} />
             <DetailTile icon={<Users size={12} />} label="Followers" value={customer.followers} />
             <DetailTile icon={<UserPlus size={12} />} label="Following" value={customer.following} />
-            <DetailTile icon={<Star size={12} />} label="Review Count" value={fmtRaw(customer.raw?.account?.reviewCount)} />
-            <DetailTile icon={<BadgeCheck size={12} />} label="Referral Code" value={fmtRaw(customer.raw?.account?.referralCode)} />
-            <DetailTile icon={<UserPlus size={12} />} label="Referral Count" value={fmtRaw(customer.raw?.account?.referralCount)} />
-            <DetailTile icon={<CalendarDays size={12} />} label="Date of Birth" value={fmtRawDate(customer.raw?.dob)} />
-          </div>
-
-          {/* Persona tags */}
-          <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            <p className="mb-2 flex items-center gap-1.5 text-[11.5px] font-medium text-neutral-500">
-              <Sparkles size={12} /> Persona Tags
-            </p>
-            {customer.persona.length === 0 ? (
-              <p className="text-[12.5px] text-neutral-500 dark:text-neutral-600">No persona data yet.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {customer.persona.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-700 dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-neutral-300"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
+            <DetailTile icon={<Star size={12} />} label="Reviews" value={fmtRaw(customer.raw?.account?.reviewCount)} />
+            <DetailTile icon={<BadgeCheck size={12} />} label="Referral Code" value={fmtRaw(customer.raw?.account?.referralCode)} fallback={MISSING.id} />
+            <DetailTile icon={<UserPlus size={12} />} label="Referrals" value={fmtRaw(customer.raw?.account?.referralCount)} />
+            <DetailTile icon={<Receipt size={12} />} label="Total Claims" value={customer.totalClaims} />
           </div>
 
           {customer.raw && (
             <>
               <BentoSection icon={<BadgeCheck size={15} />} title="Account & Identity">
-                <DetailTile label="Unique ID" value={fmtRaw(customer.raw.uniqueId)} />
-                <DetailTile label="Account ID" value={fmtRaw(customer.raw.account?.uniqueId)} />
-                <DetailTile label="Role" value={fmtRaw(customer.raw.account?.role)} />
-                <DetailTile label="Login Type" value={fmtRaw(customer.raw.account?.loginType)} />
+                <DetailTile label="Unique ID" value={fmtRaw(customer.raw.uniqueId)} fallback={MISSING.id} />
+                <DetailTile label="Account ID" value={fmtRaw(customer.raw.account?.uniqueId)} fallback={MISSING.id} />
+                <DetailTile label="Role" value={fmtRaw(customer.raw.account?.role)} fallback={MISSING.date} />
+                <DetailTile label="Login Type" value={fmtRaw(customer.raw.account?.loginType)} fallback={MISSING.method} />
                 <DetailTile label="Signup Completed" value={fmtRaw(customer.raw.isSignUpCompleted)} />
                 <DetailTile label="Onboarding Completed" value={fmtRaw(customer.raw.account?.isOnBoardingCompleted)} />
+                <DetailTile label="WhatsApp Verified" value={fmtRaw(customer.raw.account?.isWhatsappVerified)} />
                 <DetailTile label="Email Verified" value={fmtRaw(customer.raw.account?.isEmailVerified)} />
                 <DetailTile label="Mobile Verified" value={fmtRaw(customer.raw.account?.isMobileVerified)} />
                 <DetailTile label="Logged In" value={fmtRaw(customer.raw.account?.isLoggedIn)} />
+                <DetailTile label="Online Now" value={fmtRaw(customer.raw.account?.isOnline)} />
                 <DetailTile label="Account Active" value={fmtRaw(customer.raw.isAccountActive)} />
                 <DetailTile label="Profile Active" value={fmtRaw(customer.raw.isProfileActive)} />
-                <DetailTile label="Created At" value={fmtRawDate(customer.raw.createdAt)} />
-                <DetailTile label="Updated At" value={fmtRawDate(customer.raw.updatedAt)} />
+                <DetailTile label="Created At" value={fmtRawDate(customer.raw.createdAt)} fallback={MISSING.date} />
+                <DetailTile label="Updated At" value={fmtRawDate(customer.raw.updatedAt)} fallback={MISSING.date} />
+              </BentoSection>
+
+              <BentoSection icon={<Mail size={15} />} title="Notification Preferences">
+                <DetailTile label="Push" value={fmtRaw(prefs?.push)} />
+                <DetailTile label="WhatsApp" value={fmtRaw(prefs?.whatsapp)} />
+                <DetailTile label="Email" value={fmtRaw(prefs?.email)} />
               </BentoSection>
 
               <BentoSection icon={<Receipt size={15} />} title="Claims Summary">
@@ -986,9 +564,9 @@ function CustomerDetail({
                 <DetailTile label="Total Saved" value={fmtRawMoney(customer.raw.claims?.totalSaved)} />
                 <DetailTile label="Net Spend" value={fmtRawMoney(customer.raw.claims?.netSpend)} />
                 <DetailTile label="Avg. Claim Value" value={fmtRawMoney(customer.raw.claims?.averageClaimValue)} />
-                <DetailTile label="First Claim At" value={fmtRawDate(customer.raw.claims?.firstClaimAt)} />
-                <DetailTile label="Last Claim At" value={fmtRawDate(customer.raw.claims?.lastClaimAt)} />
-                <DetailTile label="Last Paid At" value={fmtRawDate(customer.raw.claims?.lastPaidAt)} />
+                <DetailTile label="First Claim At" value={fmtRawDate(customer.raw.claims?.firstClaimAt)} fallback="Not yet" />
+                <DetailTile label="Last Claim At" value={fmtRawDate(customer.raw.claims?.lastClaimAt)} fallback="Not yet" />
+                <DetailTile label="Last Paid At" value={fmtRawDate(customer.raw.claims?.lastPaidAt)} fallback="Not yet" />
               </BentoSection>
 
               <BentoSection icon={<ArrowDownCircle size={15} />} title="Refunds Summary">
@@ -1030,13 +608,13 @@ function CustomerDetail({
                 <DetailTile label="Failed" value={fmtRaw(customer.raw.refunds?.failedRequests)} />
                 <DetailTile label="Awaiting Bank Details" value={fmtRaw(customer.raw.refunds?.awaitingBankDetails)} />
                 <DetailTile label="Refunded Amount" value={fmtRawMoney(customer.raw.refunds?.refundedAmount)} />
-                <DetailTile label="Last Request At" value={fmtRawDate(customer.raw.refunds?.lastRequestAt)} />
+                <DetailTile label="Last Request At" value={fmtRawDate(customer.raw.refunds?.lastRequestAt)} fallback="Not yet" />
               </BentoSection>
 
               <BentoSection icon={<ShieldAlert size={15} />} title="Disputes">
                 <DetailTile label="Disputed Payments" value={fmtRaw(customer.raw.disputes?.disputedPayments)} />
                 <DetailTile label="Disputed Amount" value={fmtRawMoney(customer.raw.disputes?.disputedAmount)} />
-                <DetailTile label="Last Disputed At" value={fmtRawDate(customer.raw.disputes?.lastDisputedAt)} />
+                <DetailTile label="Last Disputed At" value={fmtRawDate(customer.raw.disputes?.lastDisputedAt)} fallback="Not yet" />
               </BentoSection>
 
               <BentoSection icon={<Sparkles size={15} />} title="Engagement">
@@ -1049,221 +627,28 @@ function CustomerDetail({
 
               <BentoSection icon={<Smartphone size={15} />} title="Profile & Devices">
                 <DetailTile label="Address Count" value={fmtRaw(customer.raw.profile?.addressCount)} />
-                <DetailTile label="Primary Address" value={fmtRaw(customer.raw.profile?.primaryAddress)} />
+                <DetailTile label="Primary Address" value={fmtRaw(customer.raw.profile?.primaryAddress)} fallback={MISSING.location} />
                 <DetailTile label="Bank Accounts" value={fmtRaw(customer.raw.profile?.bankAccountCount)} />
                 <DetailTile label="Verified Bank Account" value={fmtRaw(customer.raw.profile?.hasVerifiedBankAccount)} />
                 <DetailTile label="Active Devices" value={fmtRaw(customer.raw.profile?.activeDeviceCount)} />
-                <DetailTile label="Device Platforms" value={fmtRaw(customer.raw.profile?.devicePlatforms)} />
-                <DetailTile label="Last Seen At" value={fmtRawDate(customer.raw.profile?.lastSeenAt)} />
+                <DetailTile label="Device Platforms" value={fmtRaw(customer.raw.profile?.devicePlatforms)} fallback="Not recorded" />
+                <DetailTile label="Last Seen At" value={fmtRawDate(customer.raw.profile?.lastSeenAt)} fallback="Not recorded" />
               </BentoSection>
             </>
           )}
         </div>
-      )}
-
-      {/* ---------------- Tab: Transactions ---------------- */}
-      {activeTab === "transactions" && (
-        <div>
-          <h3 className="mb-3 flex items-center justify-between text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
-            <span className="flex items-center gap-2">
-              <Receipt size={15} className="text-neutral-500 dark:text-neutral-400" />
-              Transactions
-            </span>
-            <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-              {customer.transactions.length} total
-            </span>
-          </h3>
-          <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            {customer.transactions.length === 0 ? (
-              <p className="p-5 text-[13px] text-neutral-500">No transactions yet.</p>
-            ) : (
-              <ul className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2">
-                {customer.transactions.map((tx) => (
-                  <li key={tx.id} className="flex items-center justify-between rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-                    <div>
-                      <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{tx.label}</p>
-                      <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-neutral-500">
-                        <Clock size={11} /> {tx.date}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p
-                        className={`text-[13.5px] font-semibold ${
-                          tx.amount < 0 ? "text-neutral-800 dark:text-neutral-200" : "text-emerald-600 dark:text-emerald-400"
-                        }`}
-                      >
-                        {tx.amount < 0 ? "-" : "+"}
-                        {money(tx.amount)}
-                      </p>
-                      <p
-                        className={`mt-0.5 text-[11px] ${
-                          tx.status === "Success"
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : tx.status === "Failed"
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-amber-600 dark:text-amber-400"
-                        }`}
-                      >
-                        {tx.status}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- Tab: Reviews ---------------- */}
-      {activeTab === "reviews" && (
-        <div>
-          <h3 className="mb-3 flex items-center justify-between text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
-            <span className="flex items-center gap-2">
-              <Star size={15} className="text-amber-400" />
-              Reviews given to brands
-            </span>
-            <span className="flex items-center gap-2">
-              {avgRating && (
-                <span className="flex items-center gap-1 rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                  <Star size={11} className="fill-amber-400" /> {avgRating} avg
-                </span>
-              )}
-              <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                {customer.reviews.length} total
-              </span>
-            </span>
-          </h3>
-          <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            {customer.reviews.length === 0 ? (
-              <p className="p-5 text-[13px] text-neutral-500">This customer hasn't reviewed any brand yet.</p>
-            ) : (
-              <ul className="grid grid-cols-1 gap-2 p-3">
-                {customer.reviews.map((rev) => (
-                  <li key={rev.id} className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{rev.brand}</p>
-                      <StarRating rating={rev.rating} />
-                    </div>
-                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-neutral-600 dark:text-neutral-400">{rev.comment}</p>
-                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-600">
-                      <Clock size={11} /> {rev.date}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- Tab: Plans ---------------- */}
-      {activeTab === "plans" && (
-        <div>
-          <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
-            <Crown size={15} className="text-amber-400" />
-            Membership Plan
-          </h3>
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {plans.map((plan) => {
-              const isCurrent = plan.id === customer.planId;
-              return (
-                <div
-                  key={plan.id}
-                  className={`relative flex flex-col rounded-2xl p-4 ${
-                    isCurrent
-                      ? "border border-emerald-400/60 bg-emerald-400/5"
-                      : "bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20"
-                  }`}
-                >
-                  {plan.badge && (
-                    <span className="absolute -top-2.5 left-4 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-semibold text-neutral-950">
-                      {plan.badge}
-                    </span>
-                  )}
-                  {isCurrent && (
-                    <span className="absolute -top-2.5 right-4 rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-semibold text-neutral-950">
-                      Current Plan
-                    </span>
-                  )}
-                  <p className="mt-1 text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</p>
-                  <p className="mt-1 text-[12px] text-neutral-500">{plan.tagline}</p>
-                  <div className="mt-3">
-                    <StatusPill status={plan.status} />
-                  </div>
-                  <p className="mt-3 text-[17px] font-semibold text-neutral-900 dark:text-neutral-50">
-                    {money(plan.price)}
-                    <span className="text-[12px] font-normal text-neutral-500">/{plan.cycle}</span>
-                  </p>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-600">+ GST</p>
-
-                  <div className="mt-4 flex items-center gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-                    <button
-                      onClick={() => onEditPlan(plan)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                    >
-                      <Pencil size={12} /> Edit
-                    </button>
-                    <button
-                      onClick={() => onDeletePlan(plan)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 py-1.5 text-[12px] font-medium text-neutral-700 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-red-400"
-                    >
-                      <Trash2 size={12} /> Delete
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Plan history — shows upgrades / downgrades over time */}
-          <div>
-            <h3 className="mb-3 flex items-center gap-2 text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">
-              <History size={15} className="text-neutral-500 dark:text-neutral-400" />
-              Plan History
-            </h3>
-            <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-              {(!customer.planHistory || customer.planHistory.length === 0) ? (
-                <p className="p-5 text-[13px] text-neutral-500">No previous plan changes on record.</p>
-              ) : (
-                <ul className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2">
-                  {customer.planHistory.map((h) => (
-                    <li key={h.id} className="flex items-center gap-3 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-                      {h.type === "upgrade" && (
-                        <ArrowUpCircle size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-                      )}
-                      {h.type === "downgrade" && (
-                        <ArrowDownCircle size={16} className="shrink-0 text-red-600 dark:text-red-400" />
-                      )}
-                      {(h.type === "start" || h.type === "renew") && (
-                        <Crown size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{h.label}</p>
-                        <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-neutral-500">
-                          <Clock size={11} /> {h.date}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function InfoRow({ icon, label, value }) {
+function InfoRow({ icon, label, value, fallback = MISSING.generic }) {
   return (
     <div className="flex items-center justify-between border-b border-neutral-200/70 pb-3 last:border-0 last:pb-0 dark:border-neutral-800/70">
       <span className="flex items-center gap-1.5 text-[12px] text-neutral-500">
         {icon}
         {label}
       </span>
-      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
+      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></span>
     </div>
   );
 }
@@ -1286,7 +671,7 @@ function BentoSection({ icon, title, children }) {
 
 // One bento tile — label on top, value below. Used for every raw-API field
 // so nothing from the response is ever left undisplayed.
-function DetailTile({ icon, label, value }) {
+function DetailTile({ icon, label, value, fallback = MISSING.generic }) {
   return (
     <div className="flex flex-col justify-between gap-1.5 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
       <span className="flex items-center gap-1 text-[10px] text-neutral-500">
@@ -1295,9 +680,9 @@ function DetailTile({ icon, label, value }) {
       </span>
       <span
         className="truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-50"
-        title={typeof value === "string" ? value : undefined}
+        title={typeof value === "string" && !isMissing(value) ? value : undefined}
       >
-        {value}
+        <ValueOr value={value} fallback={fallback} />
       </span>
     </div>
   );
@@ -1307,69 +692,61 @@ function DetailTile({ icon, label, value }) {
 /*  Main page                                                          */
 /* ------------------------------------------------------------------ */
 
+// One 100-row page; search, filters and pagination are client-side.
+const CUSTOMER_LIST_PARAMS = { page: 1, limit: 100 };
+
+function FilterChip({ label, active, onClick, count }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+        active
+          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+          : "border-neutral-200 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+      }`}
+    >
+      {label}
+      <span className="text-[11px] opacity-70">{count}</span>
+    </button>
+  );
+}
+
 export default function Customer() {
-  const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [plans, setPlans] = useState(MEMBERSHIP_PLANS_SEED);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [platformFilter, setPlatformFilter] = useState("All");
 
   const [selectedId, setSelectedId] = useState(null);
-  // Holds the customer pending an activate/deactivate confirmation — the
-  // switch never flips the status itself, it just opens this dialog.
-  const [statusConfirmTarget, setStatusConfirmTarget] = useState(null);
 
-  const [customerModalOpen, setCustomerModalOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState(null);
-
-  const [planModalOpen, setPlanModalOpen] = useState(false);
-  const [editingPlan, setEditingPlan] = useState(null);
-
-  const fetchCustomers = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getAllCustomers({ page: 1, limit: 100 });
-      const rows = (res?.data?.data ?? res?.data ?? []).map(normalizeCustomer);
-      setCustomers(rows);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+  const { data: listRes, isPending: loading, error } = useCustomers(CUSTOMER_LIST_PARAMS);
+  const loadError = error?.message ?? "";
 
   // List rows are lightweight — pull the fully-populated customer once the
   // detail view opens, same pattern as BrandDetailsPage's refreshBrandDetail.
-  const handleOpenCustomer = useCallback(async (customer) => {
-    setSelectedId(customer.id);
-    setDetailLoading(true);
-    try {
-      const res = await getCustomerById(customer.id);
-      const raw = res?.data?.customer ?? res?.data ?? res;
-      if (raw) {
-        const detailed = normalizeCustomer(raw);
-        setCustomers((prev) => prev.map((c) => (c.id === detailed.id ? { ...c, ...detailed } : c)));
-      }
-    } catch {
-      // Keep showing the lightweight list row if the detail fetch fails.
-    } finally {
-      setDetailLoading(false);
-    }
-  }, []);
+  // If it fails, the lightweight list row keeps showing.
+  const { data: detailRes, isFetching: detailLoading } = useCustomer(selectedId);
+  const handleOpenCustomer = (customer) => setSelectedId(customer.id);
+
+  const customers = useMemo(() => {
+    const rawDetail = detailRes?.data?.customer ?? detailRes?.data ?? detailRes;
+    const detailed = rawDetail ? normalizeCustomer(rawDetail) : null;
+    return (listRes?.data?.data ?? listRes?.data ?? [])
+      .map(normalizeCustomer)
+      .map((c) => (detailed && c.id === detailed.id ? { ...c, ...detailed } : c));
+  }, [listRes, detailRes]);
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const digits = q.replace(/\D/g, "");
     return customers.filter((c) => {
+      // Most customers have no email or name yet — search the phone
+      // (digits only, so "+91 62968" matches) and customer ID too.
       const matchesSearch =
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.email.toLowerCase().includes(search.toLowerCase());
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.uniqueId.toLowerCase().includes(q) ||
+        (c.email || "").toLowerCase().includes(q) ||
+        (digits.length > 0 && c.phone.replace(/\D/g, "").includes(digits));
       const matchesStatus = statusFilter === "All" || c.status === statusFilter;
       const matchesPlatform = platformFilter === "All" || c.platform === platformFilter;
       return matchesSearch && matchesStatus && matchesPlatform;
@@ -1400,84 +777,14 @@ export default function Customer() {
     [customers]
   );
 
-  /* ---- customer actions ---- */
-
-  const handleEditCustomer = (c) => {
-    setEditingCustomer(c);
-    setCustomerModalOpen(true);
-  };
-
-  const handleDeleteCustomer = (c) => {
-    setCustomers((prev) => prev.filter((x) => x.id !== c.id));
-    if (selectedId === c.id) setSelectedId(null);
-  };
-
-  const handleSaveCustomer = (formValues) => {
-    setCustomers((prev) =>
-      prev.map((c) =>
-        c.id === formValues.id
-          ? { ...c, ...formValues, name: formValues.name.trim(), email: formValues.email.trim() }
-          : c
-      )
-    );
-    setCustomerModalOpen(false);
-    setEditingCustomer(null);
-  };
-
-  const handleToggleStatus = (c) => {
-    setCustomers((prev) =>
-      prev.map((x) =>
-        x.id === c.id ? { ...x, status: x.status === "Active" ? "Inactive" : "Active" } : x
-      )
-    );
-  };
-
-  /* ---- plan actions ---- */
-
-  const handleEditPlan = (plan) => {
-    setEditingPlan(plan);
-    setPlanModalOpen(true);
-  };
-
-  const handleDeletePlan = (plan) => {
-    setPlans((prev) => prev.filter((p) => p.id !== plan.id));
-    setCustomers((prev) =>
-      prev.map((c) => (c.planId === plan.id ? { ...c, planId: null } : c))
-    );
-  };
-
-  const handleSavePlan = (formValues) => {
-    setPlans((prev) => prev.map((p) => (p.id === formValues.id ? { ...p, ...formValues } : p)));
-    setPlanModalOpen(false);
-    setEditingPlan(null);
-  };
-
-  const FilterChip = ({ label, active, onClick, count }) => (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
-        active
-          ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-          : "border-neutral-200 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-      }`}
-    >
-      {label}
-      <span className="text-[11px] opacity-70">{count}</span>
-    </button>
-  );
-
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="w-full">
         {selectedCustomer ? (
           <CustomerDetail
             customer={selectedCustomer}
-            plans={plans}
             detailLoading={detailLoading}
             onBack={() => setSelectedId(null)}
-            onEditPlan={handleEditPlan}
-            onDeletePlan={handleDeletePlan}
-            onRequestToggleStatus={setStatusConfirmTarget}
           />
         ) : (
           <>
@@ -1486,7 +793,7 @@ export default function Customer() {
               <div>
                 <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Customers</h1>
                 <p className="mt-1 text-[13px] text-neutral-500">
-                  Manage mobile customers, their membership plans and activity.
+                  Every customer on the Trydood app, with their claims, spend and activity.
                 </p>
               </div>
 
@@ -1551,7 +858,7 @@ export default function Customer() {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search customer..."
+                  placeholder="Search name, phone or ID..."
                   className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
                 />
               </div>
@@ -1580,7 +887,7 @@ export default function Customer() {
                   title={customers.length ? "No customers match these filters" : "No customers yet"}
                   description={
                     customers.length
-                      ? "Try a different search, plan or status filter."
+                      ? "Try a different name, phone number, customer ID or filter."
                       : "Customers appear here as soon as people sign up in the Trydood app."
                   }
                 />
@@ -1589,15 +896,7 @@ export default function Customer() {
               <>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {pageRows.map((c) => (
-                    <UserCard
-                      key={c.id}
-                      customer={c}
-                      plan={plans.find((p) => p.id === c.planId)}
-                      onOpen={handleOpenCustomer}
-                      onEdit={handleEditCustomer}
-                      onDelete={handleDeleteCustomer}
-                      onRequestToggleStatus={setStatusConfirmTarget}
-                    />
+                    <UserCard key={c.id} customer={c} onOpen={handleOpenCustomer} />
                   ))}
                 </div>
 
@@ -1645,48 +944,6 @@ export default function Customer() {
           </>
         )}
       </div>
-
-      <CustomerFormModal
-        open={customerModalOpen}
-        initialData={editingCustomer}
-        onClose={() => {
-          setCustomerModalOpen(false);
-          setEditingCustomer(null);
-        }}
-        onSave={handleSaveCustomer}
-      />
-
-      <PlanFormModal
-        open={planModalOpen}
-        initialData={editingPlan}
-        onClose={() => {
-          setPlanModalOpen(false);
-          setEditingPlan(null);
-        }}
-        onSave={handleSavePlan}
-      />
-
-      <ConfirmActionModal
-        open={Boolean(statusConfirmTarget)}
-        tone={statusConfirmTarget?.status === "Active" ? "danger" : "neutral"}
-        icon={Power}
-        title={
-          statusConfirmTarget?.status === "Active"
-            ? `Deactivate ${toTitleCase(statusConfirmTarget?.name)}?`
-            : `Activate ${toTitleCase(statusConfirmTarget?.name)}?`
-        }
-        description={
-          statusConfirmTarget?.status === "Active"
-            ? "They'll immediately lose access to their account until reactivated."
-            : "They'll immediately regain access to their account."
-        }
-        confirmLabel={statusConfirmTarget?.status === "Active" ? "Deactivate" : "Activate"}
-        onClose={() => setStatusConfirmTarget(null)}
-        onConfirm={() => {
-          handleToggleStatus(statusConfirmTarget);
-          setStatusConfirmTarget(null);
-        }}
-      />
     </div>
   );
 }

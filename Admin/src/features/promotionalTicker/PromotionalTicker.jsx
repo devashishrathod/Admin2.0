@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Search,
@@ -24,18 +25,18 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip
 import Table, { StatusBadge } from "../../components/common/Table";
 import {
   createPromotionalTicker,
-  getPromotionalTickers,
-  getPromotionalTickerById,
   updatePromotionalTicker,
   deletePromotionalTicker,
   REDIRECT_TYPES,
 } from "./services/PromotionalTickerApi";
-import { getCategories } from "../category/services/CategoryApi";
-import { getAllBrands } from "../brand/services/BrandApi";
+import { promotionalTickerQueryOptions, usePromotionalTickers } from "./queries/promotionalTickerQueries";
+import { useCategories } from "../category/queries/categoryQueries";
+import { useBrandsPage } from "../brand/queries/brandQueries";
 import DeleteConfirmModal from "./TickerDeleteConfirmModal";
 import EmptyState from "../../components/common/EmptyState";
 import { apiToRow, formatDateTime, redirectSummary } from "./tickerUtils";
 import Loader from "../../components/common/Loader";
+import { MISSING, orText } from "../../utils/helpers";
 
 const EMPTY_FORM = {
   id: null,
@@ -497,7 +498,7 @@ function TickerCard({ row, categories, brands, onView, onEdit, onDelete }) {
 
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-2.5 dark:border-neutral-800">
           <p className="flex items-center gap-1 whitespace-nowrap text-[11px] text-neutral-500">
-            <CalendarDays size={11} /> {shortDate(row.startDate)} – {shortDate(row.endDate)}
+            <CalendarDays size={11} /> {shortDate(row.startDate)} – {shortDate(row.endDate, "No end date")}
           </p>
           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
             <Clock3 size={10} /> {chip.label}
@@ -525,8 +526,8 @@ function TickerCard({ row, categories, brands, onView, onEdit, onDelete }) {
   );
 }
 
-const shortDate = (iso) =>
-  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const shortDate = (iso, fallback = "Not set") =>
+  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : fallback;
 
 // Remembered grid/table choice for this tab (storage can be blocked).
 const VIEW_KEY = "tickers:view";
@@ -561,17 +562,7 @@ function rowToFormDraft(row) {
 export default function PromotionalTicker() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [tickers, setTickers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
-  // Unpaginated snapshot used only to power the summary charts above the
-  // table — never build a summary from a single paginated page of rows.
-  const [allTickers, setAllTickers] = useState([]);
-  const [chartsError, setChartsError] = useState("");
-
-  const [categories, setCategories] = useState([]);
-  const [brands, setBrands] = useState([]);
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -589,7 +580,6 @@ export default function PromotionalTicker() {
     }
   };
   const openDetails = (row) => navigate(`/promotional-ticker/${row.id}`);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTicker, setEditingTicker] = useState(null);
@@ -600,56 +590,46 @@ export default function PromotionalTicker() {
   const [deleting, setDeleting] = useState(false);
 
   // Categories power the redirect-target picker when redirect type is
-  // CATEGORY — fetched once from the existing Category API.
-  useEffect(() => {
-    getCategories({ page: 1, limit: 100 })
-      .then((res) => {
-        const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name }));
-        setCategories(rows);
-      })
-      .catch(() => {});
-    // Brands power the picker when redirect type is BRAND.
-    getAllBrands({ page: 1, limit: 100 })
-      .then((res) => {
-        // Real brands only — isDummy ones never show in the picker.
-        const rows = (res?.data?.data ?? res?.data ?? [])
-          .filter((b) => !b.isDummy)
-          .map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.name || b._id }));
-        setBrands(rows);
-      })
-      .catch(() => {});
-  }, []);
+  // CATEGORY. A failure just leaves the picker empty.
+  const categoriesQuery = useCategories({ page: 1, limit: 100 });
+  const categories = useMemo(
+    () => (categoriesQuery.data?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name })),
+    [categoriesQuery.data]
+  );
+  // Brands power the picker when redirect type is BRAND.
+  // Real brands only — isDummy ones never show in the picker.
+  const brandsQuery = useBrandsPage({ page: 1, limit: 100 });
+  const brands = useMemo(
+    () =>
+      (brandsQuery.data?.data?.data ?? brandsQuery.data?.data ?? [])
+        .filter((b) => !b.isDummy)
+        .map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.name || b._id })),
+    [brandsQuery.data]
+  );
 
-  const fetchTickers = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getPromotionalTickers({ page, limit, search: debouncedSearch });
-      const rows = (res?.data?.data ?? []).map(apiToRow);
-      setTickers(rows);
-      setTotalPages(res?.data?.totalPages ?? 1);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, debouncedSearch]);
+  // One fetch per page / page size / search change.
+  const tickersQuery = usePromotionalTickers(
+    { page, limit, search: debouncedSearch },
+    { placeholderData: keepPreviousData }
+  );
+  const tickers = useMemo(
+    () => (tickersQuery.data?.data?.data ?? []).map(apiToRow),
+    [tickersQuery.data]
+  );
+  const totalPages = tickersQuery.data?.data?.totalPages ?? 1;
+  const loading = tickersQuery.isPending;
+  const loadError = tickersQuery.error?.message ?? "";
 
-  const fetchAllTickers = useCallback(async () => {
-    setChartsError("");
-    try {
-      const res = await getPromotionalTickers({ page: 1, limit: 100 });
-      setAllTickers((res?.data?.data ?? []).map(apiToRow));
-    } catch (err) {
-      // Table above still works even if this fails — just surface why the
-      // chart row is missing instead of silently leaving it blank.
-      setChartsError(err.message);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAllTickers();
-  }, [fetchAllTickers]);
+  // Unpaginated snapshot used only to power the summary charts above the
+  // table — never build a summary from a single paginated page of rows.
+  // Table above still works even if this fails — chartsError surfaces why
+  // the chart row is missing instead of silently leaving it blank.
+  const allTickersQuery = usePromotionalTickers({ page: 1, limit: 100 });
+  const allTickers = useMemo(
+    () => (allTickersQuery.data?.data?.data ?? []).map(apiToRow),
+    [allTickersQuery.data]
+  );
+  const chartsError = allTickersQuery.error?.message ?? "";
 
   // Debounce search so we don't hit the API on every keystroke; a new
   // search goes back to page 1.
@@ -661,11 +641,6 @@ export default function PromotionalTicker() {
     }, 400);
     return () => clearTimeout(t);
   }, [search, debouncedSearch]);
-
-  // One fetch per page / page size / search change.
-  useEffect(() => {
-    fetchTickers();
-  }, [fetchTickers]);
 
   const handleAddClick = () => {
     setEditingTicker(null);
@@ -683,7 +658,10 @@ export default function PromotionalTicker() {
   useEffect(() => {
     if (!editIdFromDetails) return;
     navigate(location.pathname, { replace: true, state: null });
-    getPromotionalTickerById(editIdFromDetails)
+    // Through the cache: the details page just loaded this ticker, so this
+    // is usually instant (no request while it's still fresh).
+    queryClient
+      .query(promotionalTickerQueryOptions(editIdFromDetails))
       .then((ticker) => {
         if (ticker) handleEdit(apiToRow(ticker));
         else setSaveError("This promotional ticker could not be found.");
@@ -714,8 +692,7 @@ export default function PromotionalTicker() {
       }
       setModalOpen(false);
       setEditingTicker(null);
-      fetchTickers();
-      fetchAllTickers();
+      // No manual reload — the write interceptor refreshes ["promotionalTickers"].
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -728,8 +705,6 @@ export default function PromotionalTicker() {
     try {
       await deletePromotionalTicker(deleteTarget.id);
       setDeleteTarget(null);
-      fetchTickers();
-      fetchAllTickers();
     } catch (err) {
       console.error("Failed to delete ticker:", err.message);
     } finally {
@@ -806,7 +781,7 @@ export default function PromotionalTicker() {
         return (
           <div>
             <p className="whitespace-nowrap text-[12px] text-neutral-500 dark:text-neutral-400">
-              {formatDateTime(row.startDate)} → {formatDateTime(row.endDate)}
+              {orText(formatDateTime(row.startDate), MISSING.date)} → {orText(formatDateTime(row.endDate), "No end date")}
             </p>
             <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
               <Clock3 size={10} /> {chip.label}

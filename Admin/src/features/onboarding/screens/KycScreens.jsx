@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Upload, FileText, CheckCircle2, XCircle, Loader2, ExternalLink } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Field, Note, KeyValue, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
+import { useKycDocuments } from "../queries/onboardingQueries";
 import {
-  getKycDocuments,
   uploadKycDocument,
   reviewKycDocument,
   continueOnboarding,
@@ -25,7 +25,9 @@ const payload = (res) => res?.data ?? res ?? {};
 // ≥1 document → continue; 0 → skip. The admin can also accept / reject each.
 const MAX_BYTES = 5 * 1024 * 1024;
 
-function DocSlot({ brandId, slotDef, doc, hint, onChanged }) {
+// Uploads and reviews are writes under /brands, so the document list
+// refreshes itself afterwards (shared interceptor).
+function DocSlot({ brandId, slotDef, doc, hint }) {
   const [docType, setDocType] = useState(doc?.docType || slotDef.types[0][0]);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState("");
@@ -42,7 +44,6 @@ function DocSlot({ brandId, slotDef, doc, hint, onChanged }) {
     setError("");
     try {
       await uploadKycDocument(brandId, { file, slot: slotDef.slot, docType });
-      await onChanged();
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -58,7 +59,6 @@ function DocSlot({ brandId, slotDef, doc, hint, onChanged }) {
       await reviewKycDocument(doc._id || doc.id, statusValue === "REJECTED" ? { status: statusValue, reason: reason.trim() } : { status: statusValue });
       setRejecting(false);
       setReason("");
-      await onChanged();
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -127,36 +127,12 @@ function DocSlot({ brandId, slotDef, doc, hint, onChanged }) {
 }
 
 export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
-  const [docs, setDocs] = useState([]);
-  const [slotHint, setSlotHint] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // A failed load just shows empty slots (no error), as before.
+  const { data: docsRes, isPending: loading } = useKycDocuments(brandId);
+  const docsData = docsRes ? payload(docsRes) : {};
+  const docs = docsData.documents || [];
+  const slotHint = docsData.slotHint || null;
   const { run, busy, error } = useStepAction(onAdvance);
-
-  const fetchDocs = useCallback(
-    () =>
-      getKycDocuments(brandId)
-        .then(payload)
-        .catch(() => ({})),
-    [brandId]
-  );
-  const apply = (res) => {
-    setDocs(res.documents || []);
-    setSlotHint(res.slotHint || null);
-    setLoading(false);
-  };
-  const load = async () => apply(await fetchDocs());
-  useEffect(() => {
-    let cancelled = false;
-    fetchDocs().then((res) => {
-      if (cancelled) return;
-      setDocs(res.documents || []);
-      setSlotHint(res.slotHint || null);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchDocs]);
 
   const bySlot = (slot) => docs.filter((d) => d.slot === slot && !d.isReplaced).slice(-1)[0];
   const isFood = /food|cafe|restaurant|bakery|sweet/i.test(`${brand?.category?.name || ""} ${brand?.subCategory?.name || ""}`);
@@ -181,7 +157,7 @@ export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack 
         <Loader variant="inline" label="Loading documents…" />
       ) : (
         DOC_SLOTS.map((s) => (
-          <DocSlot key={s.slot} brandId={brandId} slotDef={s} doc={bySlot(s.slot)} hint={s.slot === "BUSINESS_LICENSE" ? licenceHint : null} onChanged={load} />
+          <DocSlot key={s.slot} brandId={brandId} slotDef={s} doc={bySlot(s.slot)} hint={s.slot === "BUSINESS_LICENSE" ? licenceHint : null} />
         ))
       )}
       <Note tone="muted">PDF works best. JPG or PNG must be clear (at least 800 px on the short side). Up to 5 MB each.</Note>
@@ -357,7 +333,7 @@ export function BankScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
       </div>
       {result && (
         <Note tone={result.isVerified ? "ok" : "warn"}>
-          {result.isVerified ? "Account verified." : "Account could not be verified."} Name at bank: <strong>{result.nameOnRecord || "—"}</strong>
+          {result.isVerified ? "Account verified." : "Account could not be verified."} Name at bank: <strong>{result.nameOnRecord || "Not available"}</strong>
         </Note>
       )}
       <Note tone="warn">If skipped, onboarding can still finish, but the brand can't publish vouchers until a verified bank account is added.</Note>

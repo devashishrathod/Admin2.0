@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Plus,
   Search,
@@ -35,7 +35,9 @@ import {
 } from "recharts";
 import Table from "../../components/common/Table";
 import PromoCodeDetails from "./PromoCodeDetails";
-import { createPromoCode, getPromoCodes, updatePromoCode } from "./services/PromoCodeApi";
+import { keepPreviousData } from "@tanstack/react-query";
+import { createPromoCode, updatePromoCode } from "./services/PromoCodeApi";
+import { usePromoCodes } from "./queries/promoCodeQueries";
 import {
   PROMO_DISCOUNT_TYPES,
   PROMO_AUDIENCE,
@@ -49,11 +51,12 @@ import {
   COST_BEARING_LABELS,
   APPLICABLE_ACTION_LABELS,
 } from "./promoCodeEnums";
-import { getAllVoucherVersions } from "../voucher/services/VoucherApi";
-import { getAllBrands } from "../brand/services/BrandApi";
-import { getCategories } from "../category/services/CategoryApi";
-import { getPlans } from "../plan/services/planApi";
+import { useAllVoucherVersions } from "../voucher/queries/voucherQueries";
+import { useBrandsPage } from "../brand/queries/brandQueries";
+import { useCategories } from "../category/queries/categoryQueries";
+import { usePlans } from "../plan/queries/planQueries";
 import Loader from "../../components/common/Loader";
+import { orText, MISSING } from "../../utils/helpers";
 
 const STATUS_FILTERS = ["All", PROMO_STATUSES.LIVE, PROMO_STATUSES.SCHEDULED, PROMO_STATUSES.EXPIRED];
 const STATUS_LABELS = { All: "All", LIVE: "Live", SCHEDULED: "Scheduled", EXPIRED: "Expired" };
@@ -927,16 +930,41 @@ function rowToFormDraft(row) {
  * ---------------------------------------------------------------------- */
 
 export default function PromoCode() {
-  const [promoCodes, setPromoCodes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+
+  // Debounce search / status so we don't hit the API on every keystroke —
+  // the list is keyed on these settled values, not the live inputs.
+  const [appliedFilters, setAppliedFilters] = useState({ search: "", statusFilter: "All" });
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      setAppliedFilters({ search, statusFilter });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search, statusFilter]);
+
+  const {
+    data: promoRes,
+    isPending: loading,
+    error: promoError,
+  } = usePromoCodes(
+    {
+      page,
+      limit,
+      search: appliedFilters.search,
+      status: appliedFilters.statusFilter === "All" ? "" : appliedFilters.statusFilter,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    },
+    { placeholderData: keepPreviousData }
+  );
+  const loadError = promoError?.message ?? "";
+  const promoCodes = useMemo(() => (promoRes?.data?.data ?? []).map(apiToRow), [promoRes]);
+  const totalPages = promoRes?.data?.totalPages ?? 1;
+  const total = promoRes?.data?.total ?? promoCodes.length;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState(null);
@@ -949,114 +977,60 @@ export default function PromoCode() {
   // that feature's own "get all" API rather than a fabricated one. Errors
   // are surfaced (not swallowed) so an empty picker always says WHY it's
   // empty instead of just silently showing nothing.
-  const [vouchers, setVouchers] = useState([]);
-  const [brands, setBrands] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [plans, setPlans] = useState([]);
-  const [pickerErrors, setPickerErrors] = useState({});
+  // 100 is the real backend cap on the brand / category list endpoints (a
+  // limit of 200 gets rejected outright with "must be less than or equal
+  // to 100").
+  // Vouchers: every page — the newest 100 versions can all be dummy ones,
+  // which left this picker empty when only page 1 was loaded.
+  const vouchersQuery = useAllVoucherVersions();
+  const brandsQuery = useBrandsPage({ page: 1, limit: 100 });
+  const categoriesQuery = useCategories({ page: 1, limit: 100 });
+  const plansQuery = usePlans();
 
-  useEffect(() => {
-    // 100 is the real backend cap on these two list endpoints (a limit of
-    // 200 gets rejected outright with "must be less than or equal to
-    // 100") — capped here for all three for consistency.
-    // Every page — the newest 100 versions can all be dummy ones, which
-    // left this picker empty when only page 1 was loaded.
-    getAllVoucherVersions()
-      .then((allRows) => {
-        // /vouchers/versions/get-all returns one row per VERSION — v._id is
-        // that version's own id, not the parent voucher's. The backend's
-        // voucherIds field checks against the parent Voucher collection, so
-        // sending a version id there always comes back "does not exist".
-        // Dedupe on the parent id too, since a voucher with multiple
-        // versions would otherwise show up more than once in the picker.
-        // Dummy vouchers (or ones under a dummy brand) are left out.
-        const seen = new Map();
-        allRows.forEach((v) => {
-          if (v.isDummy ?? v.voucher?.isDummy ?? v.brand?.isDummy) return;
-          const voucherId = v.voucherId || v.voucher?._id;
-          if (voucherId && !seen.has(voucherId)) {
-            seen.set(voucherId, { id: voucherId, label: v.name || voucherId });
-          }
-        });
-        setVouchers(Array.from(seen.values()));
-      })
-      .catch((err) => {
-        console.error("Failed to load vouchers for promo code picker:", err.message);
-        setPickerErrors((prev) => ({ ...prev, vouchers: true }));
-      });
-    getAllBrands({ page: 1, limit: 100 })
-      .then((res) => {
-        // Real brands only — isDummy ones never show in the picker.
-        const rows = (res?.data?.data ?? res?.data ?? [])
-          .filter((b) => !b.isDummy)
-          .map((b) => ({ id: b._id, label: b.brandName || b._id }));
-        setBrands(rows);
-      })
-      .catch((err) => {
-        console.error("Failed to load brands for promo code picker:", err.message);
-        setPickerErrors((prev) => ({ ...prev, brands: true }));
-      });
-    getCategories({ page: 1, limit: 100 })
-      .then((res) => {
-        const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id, label: c.name || c._id }));
-        setCategories(rows);
-      })
-      .catch((err) => {
-        console.error("Failed to load categories for promo code picker:", err.message);
-        setPickerErrors((prev) => ({ ...prev, categories: true }));
-      });
-    // getPlans() returns the raw envelope, not a fixed { data: { data } }
-    // shape — same defensive unwrap Plan.jsx itself uses.
-    getPlans()
-      .then((res) => {
-        const rawList = Array.isArray(res) ? res : res?.data?.data ?? res?.data?.plans ?? res?.data ?? res?.plans ?? [];
-        const rows = (Array.isArray(rawList) ? rawList : []).map((p) => ({ id: p._id ?? p.id, label: p.name || p._id || p.id }));
-        setPlans(rows);
-      })
-      .catch((err) => {
-        console.error("Failed to load plans for promo code picker:", err.message);
-        setPickerErrors((prev) => ({ ...prev, plans: true }));
-      });
-  }, []);
+  const vouchers = useMemo(() => {
+    // /vouchers/versions/get-all returns one row per VERSION — v._id is
+    // that version's own id, not the parent voucher's. The backend's
+    // voucherIds field checks against the parent Voucher collection, so
+    // sending a version id there always comes back "does not exist".
+    // Dedupe on the parent id too, since a voucher with multiple
+    // versions would otherwise show up more than once in the picker.
+    // Dummy vouchers (or ones under a dummy brand) are left out.
+    const seen = new Map();
+    (vouchersQuery.data ?? []).forEach((v) => {
+      if (v.isDummy ?? v.voucher?.isDummy ?? v.brand?.isDummy) return;
+      const voucherId = v.voucherId || v.voucher?._id;
+      if (voucherId && !seen.has(voucherId)) {
+        seen.set(voucherId, { id: voucherId, label: v.name || voucherId });
+      }
+    });
+    return Array.from(seen.values());
+  }, [vouchersQuery.data]);
+  // Real brands only — isDummy ones never show in the picker.
+  const brands = useMemo(
+    () =>
+      (brandsQuery.data?.data?.data ?? brandsQuery.data?.data ?? [])
+        .filter((b) => !b.isDummy)
+        .map((b) => ({ id: b._id, label: b.brandName || b._id })),
+    [brandsQuery.data]
+  );
+  const categories = useMemo(
+    () => (categoriesQuery.data?.data?.data ?? []).map((c) => ({ id: c._id, label: c.name || c._id })),
+    [categoriesQuery.data]
+  );
+  // getPlans() returns the raw envelope, not a fixed { data: { data } }
+  // shape — same defensive unwrap Plan.jsx itself uses.
+  const plans = useMemo(() => {
+    const res = plansQuery.data;
+    const rawList = Array.isArray(res) ? res : res?.data?.data ?? res?.data?.plans ?? res?.data ?? res?.plans ?? [];
+    return (Array.isArray(rawList) ? rawList : []).map((p) => ({ id: p._id ?? p.id, label: p.name || p._id || p.id }));
+  }, [plansQuery.data]);
 
-  const fetchPromoCodes = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getPromoCodes({
-        page,
-        limit,
-        search,
-        status: statusFilter === "All" ? "" : statusFilter,
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      });
-      const rows = (res?.data?.data ?? []).map(apiToRow);
-      setPromoCodes(rows);
-      setTotalPages(res?.data?.totalPages ?? 1);
-      setTotal(res?.data?.total ?? rows.length);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, search, statusFilter]);
-
-  // Debounce search so we don't hit the API on every keystroke
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1);
-      fetchPromoCodes();
-    }, 400);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter]);
-
-  // Refetch on page change (search/status effect already handles those changes)
-  useEffect(() => {
-    fetchPromoCodes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  const pickerErrors = {
+    vouchers: Boolean(vouchersQuery.error),
+    brands: Boolean(brandsQuery.error),
+    categories: Boolean(categoriesQuery.error),
+    plans: Boolean(plansQuery.error),
+  };
 
   if (selectedId) {
     return <PromoCodeDetails id={selectedId} onBack={() => setSelectedId(null)} />;
@@ -1168,7 +1142,6 @@ export default function PromoCode() {
       }
       setModalOpen(false);
       setEditingPromo(null);
-      fetchPromoCodes();
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -1243,7 +1216,7 @@ export default function PromoCode() {
       label: "Validity",
       render: (row) => (
         <p className="text-[12.5px] text-neutral-700 dark:text-neutral-300">
-          {formatDate(row.validFrom)} → {formatDate(row.validTill)}
+          {orText(formatDate(row.validFrom), MISSING.date)} → {orText(formatDate(row.validTill), "No end date")}
         </p>
       ),
     },

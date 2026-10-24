@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm install @tanstack/react-query@5 2>&1)",
+      "PowerShell(npm ls @tanstack/react-query)",
+      "PowerShell(\\(Get-Content src/features/customer/Customer.jsx | Measure-Object -Line\\).Lines)",
+      "PowerShell(Get-ChildItem src/features/brand/BrandDetails -Recurse -File | ForEach-Object { \"{0,-45} {1,5} lines\" -f $_.FullName.Replace\\(\\(Resolve-Path src/features/brand/BrandDetails\\).Path + '\\\\',''\\), \\(Get-Content $_.FullName\\).Count })",
+      "Bash(node -e ' *)"
+    ],
+    "additionalDirectories": [
+      "D:\\FullStackproject\\AdminTry\\Admin\\src\\features\\brand"
+    ]
+  }
+}

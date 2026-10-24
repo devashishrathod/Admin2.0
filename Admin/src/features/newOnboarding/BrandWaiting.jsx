@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { keepPreviousData } from "@tanstack/react-query";
 import { Search, LayoutGrid, List, X, Check, AlertTriangle } from "lucide-react";
 import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
@@ -7,20 +8,17 @@ import Table from "../../components/common/Table";
 import StatusStepButton from "../../components/common/StatusStepButton";
 import { RejectReasonModal } from "../brand/BrandShared";
 import { reviewBrandVerification } from "./services/NewOnboardingApi";
-import { fetchAllVerifications, latestByBrand } from "./verificationData";
+import { latestByBrand } from "./verificationData";
+import { useAllBrandVerifications } from "./queries/onboardingReviewQueries";
 import OnboardingCard from "./OnboardingCard";
-import { onboardingTableColumns } from "./onboardingBrand";
+import { isUnderReview, onboardingTableColumns } from "./onboardingBrand";
 import VerificationDetails from "./VerificationDetails";
 import { useBrands } from "../brand/BrandContext";
 import Loader from "../../components/common/Loader";
 
 // Which brands show here is decided by the brand itself, not the system
-// verdict: the vendor finished onboarding (isOnBoardingCompleted) or is on
-// the UNDER_REVIEW screen, and brand.isApproved === false (see `waiting` in
-// the component). Approved brands move to Live Brands.
-const isUnderReviewScreen = (screen) =>
-  String(screen || "").trim().toUpperCase().replace(/[\s-]+/g, "_") === "UNDER_REVIEW";
-
+// verdict: onboarding is complete, the status/screen is UNDER_REVIEW, and
+// brand.isApproved === false (see `waiting` in the component).
 /* Approve from the table — optional note, sent as { action: "APPROVED", note }
    (same as the details page's Approve). */
 function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
@@ -93,11 +91,10 @@ function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
 
 export default function BrandWaiting() {
   const navigate = useNavigate();
-  const [verifications, setVerifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
 
   const [search, setSearch] = useState("");
+  // The search actually sent to the API — trails `search` by 400ms.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState("All"); // All · Waiting · Rejected
   const [limit] = useState(9); // 3×3 grid of cards per page
@@ -111,8 +108,7 @@ export default function BrandWaiting() {
   // Reviewed toggle only spins the Reviewed toggle, not the Approve button.
   const [busyAction, setBusyAction] = useState(null);
   const [actionError, setActionError] = useState("");
-  const [detailReloadKey, setDetailReloadKey] = useState(0);
-  const { allBrands, fetchBrands } = useBrands();
+  const { allBrands } = useBrands();
   // Grid by default; switch to a table with the toggle above the list.
   const [view, setView] = useState("grid");
   // "Now" captured once when the page opens (render must stay pure).
@@ -126,26 +122,21 @@ export default function BrandWaiting() {
      server page at a time hid waiting brands on later pages (page 1 empty,
      "Page 1 of 6"). So every page is loaded, the waiting ones kept, and
      paging happens here over just those. */
-  const fetchVerifications = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      setVerifications(await fetchAllVerifications(search));
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
+  const {
+    data: verifications = [],
+    isPending: loading,
+    error,
+    refetch: refetchVerifications,
+  } = useAllBrandVerifications(debouncedSearch, { placeholderData: keepPreviousData });
+  const loadError = error?.message ?? "";
 
   // Debounce search so we don't hit the API on every keystroke
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(1);
-      fetchVerifications();
+      setDebouncedSearch(search);
     }, 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   // Every waiting brand (all server pages), then this page's slice of them.
@@ -155,7 +146,9 @@ export default function BrandWaiting() {
   // One card per brand — its latest attempt.
   const waiting = [...latestByBrand(verifications).values()].filter(
     (v) =>
-      (v.vendor?.isOnBoardingCompleted || isUnderReviewScreen(v.vendor?.currentScreen)) &&
+      (v.vendor?.isOnBoardingCompleted ||
+        isUnderReview({ status: v.status, currentScreen: v.vendor?.currentScreen }) ||
+        isUnderReview({ status: v.brand?.status })) &&
       !v.brand?.isApproved
   );
   // Tabs — rejected (and revoked) brands moved here from New Onboarding.
@@ -251,11 +244,11 @@ export default function BrandWaiting() {
     try {
       const brandId = verification.brandId || verification.brand?.id;
       await reviewBrandVerification(brandId, payload);
-      await fetchVerifications();
-      // Refresh the open detail view and the app-wide brand list (Live
-      // Brand / New Onboarding / Dashboard) so nothing needs a reload.
-      setDetailReloadKey((k) => k + 1);
-      fetchBrands({ silent: true });
+      // The interceptor already refreshes every ["brands"] query (this list,
+      // the open detail view, the app-wide brand list). Wait for this list
+      // so the buttons only re-enable once the new status is on screen —
+      // cancelRefetch: false joins that refetch instead of restarting it.
+      await refetchVerifications({ cancelRefetch: false });
       return true;
     } catch (err) {
       setActionError(err.message);
@@ -291,7 +284,6 @@ export default function BrandWaiting() {
         onRevoke={(reason) => handleRevoke(selected, reason)}
         busyAction={busyAction}
         actionError={actionError}
-        reloadKey={detailReloadKey}
       />
     );
   }
@@ -415,7 +407,7 @@ export default function BrandWaiting() {
               icon="error"
               title="Couldn't load the approval queue"
               description={`${loadError} — check your connection and try again.`}
-              action={{ label: "Try again", onClick: fetchVerifications }}
+              action={{ label: "Try again", onClick: () => refetchVerifications() }}
             />
           </div>
         )}

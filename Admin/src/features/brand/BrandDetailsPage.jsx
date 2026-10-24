@@ -1,9 +1,9 @@
 import React, { useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { useBrands } from "./BrandContext";
 import { useConfirmDelete } from "./BrandShared";
-import BrandDetails from "./BrandDetails";
+import BrandDetails from "./BrandDetails/BrandDetails";
 import EmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
 
@@ -13,6 +13,7 @@ export default function BrandDetailsPage() {
   const {
     allBrands: brands,
     loading,
+    error,
     refreshBrandDetail,
     toggleActive,
     handleApprovalDecision,
@@ -31,7 +32,7 @@ export default function BrandDetailsPage() {
       navigate(-1);
       return;
     }
-    navigate(brand?.isDummy ? "/brand/dummy" : brand?.status === "Expired" ? "/brand/expired" : "/brand");
+    navigate(brand?.isDummy ? "/brand/dummy" : brand?.isRealDummy ? "/brand/real-dummy" : brand?.status === "Expired" ? "/brand/expired" : "/brand");
   };
 
   // List rows are lightweight — pull the fully-populated brand (pan/gst/
@@ -66,14 +67,26 @@ export default function BrandDetailsPage() {
   }
 
   return (
-    <BrandDetails
-      brand={brand}
-      onBack={goBack}
-      onToggleActive={toggleActive}
-      onDelete={deleteBrand}
-      onUpdate={updateBrandDetails}
-      onDecision={handleApprovalDecision}
-      onSetTopBrand={setTopBrand}
-    />
+    <>
+      {/* Failed actions (activate/deactivate, hide, approve) roll back the
+          switch — say why, instead of it just snapping back. */}
+      {error && (
+        <div className="mx-auto mt-4 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2 rounded-2xl bg-red-500/[0.06] px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
+            <AlertTriangle size={14} className="shrink-0" />
+            {error}
+          </div>
+        </div>
+      )}
+      <BrandDetails
+        brand={brand}
+        onBack={goBack}
+        onToggleActive={toggleActive}
+        onDelete={deleteBrand}
+        onUpdate={updateBrandDetails}
+        onDecision={handleApprovalDecision}
+        onSetTopBrand={setTopBrand}
+      />
+    </>
   );
 }

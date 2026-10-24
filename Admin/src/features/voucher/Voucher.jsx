@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Search,
   Download,
@@ -23,9 +23,11 @@ import {
   Lock,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
-import { getVouchers } from "./services/VoucherApi";
+import { useVouchers } from "./queries/voucherQueries";
 import CommonEmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * Type configuration — Voucher / Deal Pack / Membership share the same
@@ -69,7 +71,7 @@ const DETAIL_TABS = (type) => ["Overview", `${type} Info`, TYPE_META[type].activ
 
 /* -------------------------------------------------------------------------
  * Mock data — Deal Pack / Membership have no real API yet, so these two
- * stay mock. Voucher is real — see normalizeRealVoucher()/fetchVouchers()
+ * stay mock. Voucher is real — see normalizeRealVoucher() and useVouchers()
  * below, which populate dataByType.Voucher from GET
  * /vouchers/versions/get-all instead of this object.
  *
@@ -209,26 +211,26 @@ function TypeIcon({ type, size = "md" }) {
   );
 }
 
-function InfoRow({ icon: Icon, label, value }) {
+function InfoRow({ icon: Icon, label, value, fallback = MISSING.generic }) {
   return (
     <div className="flex items-center justify-between py-2.5">
       <span className="flex items-center gap-2 text-[12.5px] text-neutral-500">
         {Icon && <Icon size={13} />}
         {label}
       </span>
-      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
+      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></span>
     </div>
   );
 }
 
-function DetailTile({ icon: Icon, label, value }) {
+function DetailTile({ icon: Icon, label, value, fallback = MISSING.generic }) {
   return (
     <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
       <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
         {Icon && <Icon size={11} className="shrink-0" />}
         <span className="truncate">{label}</span>
       </p>
-      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></p>
     </div>
   );
 }
@@ -561,31 +563,31 @@ function OverviewTab({ item, type }) {
           </div>
           <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
             <p className="text-[10.5px] text-neutral-500">Code</p>
-            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.code}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={item.code} fallback="No code" /></p>
           </div>
           <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
             <p className="text-[10.5px] text-neutral-500">{meta.priceLabel}</p>
-            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.priceValue}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={item.priceValue} fallback={MISSING.amount} /></p>
           </div>
           <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
             <p className="text-[10.5px] text-neutral-500">{meta.valueLabel}</p>
-            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.secondaryValue}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={item.secondaryValue} fallback={MISSING.amount} /></p>
           </div>
           <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
             <p className="text-[10.5px] text-neutral-500">Published Date</p>
-            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.publishedDate}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={item.publishedDate} fallback={MISSING.date} /></p>
           </div>
           <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
             <p className="text-[10.5px] text-neutral-500">Time</p>
-            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.time}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={item.time} fallback={MISSING.date} /></p>
           </div>
           <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
             <p className="text-[10.5px] text-neutral-500">Valid From</p>
-            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.validFrom}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={item.validFrom} fallback={MISSING.date} /></p>
           </div>
           <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
             <p className="text-[10.5px] text-neutral-500">Valid To</p>
-            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{item.validTo}</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={item.validTo} fallback="No end date" /></p>
           </div>
         </div>
 
@@ -615,10 +617,10 @@ function InfoTab({ item }) {
 
       <SectionCard title="Details">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <DetailTile icon={Tag} label="Category" value={item.category} />
-          <DetailTile icon={IndianRupee} label="Min Purchase" value={item.minPurchase} />
-          <DetailTile icon={IndianRupee} label="Max Discount" value={item.maxDiscount} />
-          <DetailTile icon={Clock} label="Usage Limit" value={item.usageLimit} />
+          <DetailTile icon={Tag} label="Category" value={item.category} fallback={MISSING.category} />
+          <DetailTile icon={IndianRupee} label="Min Purchase" value={item.minPurchase} fallback="No minimum" />
+          <DetailTile icon={IndianRupee} label="Max Discount" value={item.maxDiscount} fallback="No cap" />
+          <DetailTile icon={Clock} label="Usage Limit" value={item.usageLimit || null} fallback="No limit" />
         </div>
       </SectionCard>
 
@@ -668,13 +670,13 @@ function MerchantTab({ item }) {
   return (
     <div className="space-y-4">
       <SectionCard title="Merchant">
-        <InfoRow icon={Store} label="Merchant Name" value={item.merchant} />
+        <InfoRow icon={Store} label="Merchant Name" value={item.merchant} fallback="No brand" />
       </SectionCard>
 
       <SectionCard title="Contact">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <DetailTile icon={Phone} label="Phone" value={item.merchantContact.phone} />
-          <DetailTile icon={Mail} label="Email" value={item.merchantContact.email} />
+          <DetailTile icon={Phone} label="Phone" value={item.merchantContact.phone} fallback={MISSING.phone} />
+          <DetailTile icon={Mail} label="Email" value={item.merchantContact.email} fallback={MISSING.email} />
         </div>
       </SectionCard>
 
@@ -762,8 +764,8 @@ function ItemDetails({ item, type, onBack, onApprove, onReject, onToggleTopSugge
               <TypeIcon type={type} size="lg" />
               <div>
                 <p className="text-[12px] font-medium text-neutral-500">{item.itemId}</p>
-                <h1 className="mt-0.5 text-[17px] font-semibold text-neutral-900 dark:text-neutral-50">{item.title}</h1>
-                <p className="mt-1 text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400">{item.merchant}</p>
+                <h1 className="mt-0.5 text-[17px] font-semibold text-neutral-900 dark:text-neutral-50"><ValueOr value={item.title} fallback="Untitled" /></h1>
+                <p className="mt-1 text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400"><ValueOr value={item.merchant} fallback="No brand" /></p>
               </div>
             </div>
             <div className="flex flex-col items-end gap-1.5">
@@ -943,27 +945,24 @@ function normalizeRealVoucher(v) {
  * ---------------------------------------------------------------------- */
 
 export default function Voucher() {
-  const [dataByType, setDataByType] = useState({ Voucher: [], ...INITIAL_DATA });
-  const [voucherLoading, setVoucherLoading] = useState(true);
-  const [voucherError, setVoucherError] = useState("");
+  const [mockByType, setMockByType] = useState(INITIAL_DATA);
+  const { data: vouchersRes, isPending: voucherLoading, error: vouchersError } = useVouchers({ page: 1, limit: 100 });
+  const voucherError = vouchersError?.message ?? "";
 
-  const fetchVouchers = useCallback(async () => {
-    setVoucherLoading(true);
-    setVoucherError("");
-    try {
-      const res = await getVouchers({ page: 1, limit: 100 });
-      const rows = (res?.data?.data ?? []).map(normalizeRealVoucher);
-      setDataByType((prev) => ({ ...prev, Voucher: rows }));
-    } catch (err) {
-      setVoucherError(err.message);
-    } finally {
-      setVoucherLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchVouchers();
-  }, [fetchVouchers]);
+  // Approve / reject / top suggestion / edit / delete on this page are still
+  // local-only (no API wired). Voucher rows come from the cache, so those
+  // changes live in an overlay — id → updates, or null once deleted — that a
+  // background refetch can't undo.
+  const [voucherEdits, setVoucherEdits] = useState({});
+  const voucherRows = useMemo(
+    () =>
+      (vouchersRes?.data?.data ?? [])
+        .map(normalizeRealVoucher)
+        .filter((row) => voucherEdits[row.id] !== null)
+        .map((row) => (voucherEdits[row.id] ? { ...row, ...voucherEdits[row.id] } : row)),
+    [vouchersRes, voucherEdits]
+  );
+  const dataByType = { ...mockByType, Voucher: voucherRows };
 
   const [activeType, setActiveType] = useState("Voucher");
   const [approvalFilter, setApprovalFilter] = useState("All");
@@ -1003,9 +1002,14 @@ export default function Voucher() {
   const topCount = items.filter((i) => i.topSuggestion).length;
 
   const updateItem = (id, updates) => {
-    setDataByType((prev) => ({
+    // Dummy vouchers are view-only — never updated.
+    if (activeType === "Voucher") {
+      const row = voucherRows.find((i) => i.id === id);
+      if (row && !row.isDummy) setVoucherEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...updates } }));
+      return;
+    }
+    setMockByType((prev) => ({
       ...prev,
-      // Dummy vouchers are view-only — never updated.
       [activeType]: prev[activeType].map((i) => (i.id === id && !i.isDummy ? { ...i, ...updates } : i)),
     }));
   };
@@ -1018,7 +1022,11 @@ export default function Voucher() {
   const handleToggleTopSuggestion = (item) => updateItem(item.id, { topSuggestion: !item.topSuggestion });
 
   const handleDelete = (item) => {
-    setDataByType((prev) => ({
+    if (activeType === "Voucher") {
+      if (!item.isDummy) setVoucherEdits((prev) => ({ ...prev, [item.id]: null }));
+      return;
+    }
+    setMockByType((prev) => ({
       ...prev,
       [activeType]: prev[activeType].filter((i) => i.id !== item.id || i.isDummy),
     }));
@@ -1045,14 +1053,14 @@ export default function Voucher() {
     {
       key: "merchant",
       label: "Merchant",
-      render: (row) => <span className="font-medium text-neutral-800 dark:text-neutral-200">{row.merchant}</span>,
+      render: (row) => <span className="font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={row.merchant} fallback="No brand" /></span>,
     },
     {
       key: "title",
       label: "Title",
       render: (row) => (
         <span className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
-          {row.title}
+          <ValueOr value={row.title} fallback="Untitled" />
           {row.topSuggestion && <TopSuggestionBadge type={activeType} />}
         </span>
       ),
@@ -1060,17 +1068,17 @@ export default function Voucher() {
     {
       key: "publishedDate",
       label: "Published Date",
-      render: (row) => <span className="text-neutral-500 dark:text-neutral-400">{row.publishedDate}</span>,
+      render: (row) => <span className="text-neutral-500 dark:text-neutral-400"><ValueOr value={row.publishedDate} fallback={MISSING.date} /></span>,
     },
     {
       key: "priceValue",
       label: TYPE_META[activeType].priceLabel,
-      render: (row) => <span className="font-semibold text-neutral-800 dark:text-neutral-200">{row.priceValue}</span>,
+      render: (row) => <span className="font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={row.priceValue} fallback={MISSING.amount} /></span>,
     },
     {
       key: "secondaryValue",
       label: TYPE_META[activeType].valueLabel,
-      render: (row) => <span className="text-neutral-700 dark:text-neutral-300">{row.secondaryValue}</span>,
+      render: (row) => <span className="text-neutral-700 dark:text-neutral-300"><ValueOr value={row.secondaryValue} fallback={MISSING.amount} /></span>,
     },
     {
       key: "approvalStatus",
@@ -1093,7 +1101,7 @@ export default function Voucher() {
       key: "topSuggestion",
       label: topSuggestionLabel(activeType),
       render: (row) => (
-        row.isDummy ? <span className="text-[11px] text-neutral-400">—</span> : <TopSuggestionToggle item={row} type={activeType} onToggle={handleToggleTopSuggestion} />
+        row.isDummy ? <span className="text-[11px] text-neutral-400">View only</span> : <TopSuggestionToggle item={row} type={activeType} onToggle={handleToggleTopSuggestion} />
       ),
     },
     {

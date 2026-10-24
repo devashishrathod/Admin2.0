@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -29,8 +30,9 @@ import {
   Tooltip,
 } from "recharts";
 import Table from "../../components/common/Table";
-import { getAllSubscriptionPages } from "./services/SubscriptionsApi";
-import { formatBatch } from "../../utils/helpers";
+import { useAllSubscriptionPages } from "./queries/subscriptionsQueries";
+import { formatBatch, MISSING } from "../../utils/helpers";
+import ValueOr from "../../components/common/ValueOr";
 import Loader from "../../components/common/Loader";
 
 const PRICING_COLORS = { list: "#22c55e", discount: "#f59e0b", gst: "#38bdf8", payable: "#a78bfa" };
@@ -61,21 +63,21 @@ function StatusPill({ status, isLapsed }) {
 }
 
 function formatDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return MISSING.date;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return MISSING.date;
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function formatCurrency(amount) {
-  if (amount == null) return "—";
+  if (amount == null) return MISSING.amount;
   return `₹${Number(amount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 function formatDateTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return MISSING.date;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return MISSING.date;
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -185,12 +187,12 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
       >
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] uppercase tracking-wider text-neutral-500">Subscriptions / {row.brand?.brandName || "—"}</p>
+            <p className="text-[11px] uppercase tracking-wider text-neutral-500">Subscriptions / {row.brand?.brandName || "No brand"}</p>
             <h2 className="mt-1 text-[26px] font-bold leading-tight text-neutral-900 dark:text-neutral-50">
               {formatCurrency(row.paidAmount)}
             </h2>
             <p className="mt-0.5 text-[12px] text-neutral-500">
-              {row.isLapsed ? "Expired" : `Valid till ${formatDate(row.endDate)}`}
+              {row.isLapsed ? "Expired" : row.endDate ? `Valid till ${formatDate(row.endDate)}` : "No end date"}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -227,13 +229,13 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-4 text-white">
             <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
             <div className="relative flex items-center justify-between">
-              <p className="text-[11px] font-medium text-emerald-100">{row.plan?.name || "—"}</p>
+              <p className="text-[11px] font-medium text-emerald-100">{row.plan?.name || MISSING.plan}</p>
               <CreditCard size={16} className="text-emerald-100" />
             </div>
             <p className="relative mt-2 text-[20px] font-bold leading-tight">{formatCurrency(row.plan?.price)}</p>
             <div className="relative mt-4 flex items-center justify-between text-[11px] text-emerald-100">
               <span>{row.plan?.type === "MONTHLY" ? "Monthly" : "Yearly"}</span>
-              <span>{row.source || "—"}</span>
+              <span>{row.source || MISSING.method}</span>
             </div>
           </div>
 
@@ -243,7 +245,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
                 <span className="flex items-center gap-1.5 text-neutral-500">
                   <Hash size={12} /> Transaction ID
                 </span>
-                <span className="font-mono text-[11px] text-neutral-800 dark:text-neutral-200">{row.transactionId || "—"}</span>
+                <span className="font-mono text-[11px] text-neutral-800 dark:text-neutral-200"><ValueOr value={row.transactionId} fallback={MISSING.id} /></span>
               </div>
               <div className="flex items-center justify-between text-[12px]">
                 <span className="flex items-center gap-1.5 text-neutral-500">
@@ -261,7 +263,7 @@ function SubscriptionDetailPanel({ row, onClose, onOpenBrand }) {
             <div className="rounded-2xl bg-neutral-50 p-3.5 dark:bg-neutral-950/60">
               <div className="mb-1.5 flex items-center justify-between text-[11px] text-neutral-500">
                 <span>Time Elapsed</span>
-                <span>{row.isLapsed ? "Expired" : `${row.daysRemaining ?? "—"}d left`}</span>
+                <span>{row.isLapsed ? "Expired" : row.daysRemaining != null ? `${row.daysRemaining}d left` : "No end date"}</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
                 <div
@@ -411,12 +413,8 @@ export default function Subscriptions({ scope = "all" }) {
   const navigate = useNavigate();
   const isDummyScope = scope === "dummy";
 
-  // Every row matching the server-side filters, both real and dummy.
-  const [allRows, setAllRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [source, setSource] = useState("All");
   const [page, setPage] = useState(1);
@@ -426,22 +424,20 @@ export default function Subscriptions({ scope = "all" }) {
 
   // The API can't filter on isDummy, so every page is loaded and split
   // here — paging is then done client-side over this scope's rows.
-  const fetchSubscriptions = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const list = await getAllSubscriptionPages({
-        search,
-        status: status === "All" ? undefined : status,
-        source: source === "All" ? undefined : source,
-      });
-      setAllRows(list);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, status, source]);
+  // Every row matching the server-side filters, both real and dummy.
+  const {
+    data: allRows = [],
+    isPending: loading,
+    error,
+  } = useAllSubscriptionPages(
+    {
+      search: debouncedSearch,
+      status: status === "All" ? undefined : status,
+      source: source === "All" ? undefined : source,
+    },
+    { placeholderData: keepPreviousData }
+  );
+  const loadError = error?.message ?? "";
 
   const scopedRows = useMemo(
     () => allRows.filter((r) => isDummySubscription(r) === isDummyScope),
@@ -451,21 +447,15 @@ export default function Subscriptions({ scope = "all" }) {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const rows = scopedRows.slice((page - 1) * limit, page * limit);
 
-  // Debounce search
+  // Debounce search — the query refetches when debouncedSearch (or the
+  // status / source filters) change; paging is local, so no refetch.
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(1);
-      fetchSubscriptions();
+      setDebouncedSearch(search);
     }, 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
-
-  // Refetch on filter change (paging is local now — no refetch needed)
-  useEffect(() => {
-    fetchSubscriptions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, source]);
 
   const columns = [
     {
@@ -474,9 +464,9 @@ export default function Subscriptions({ scope = "all" }) {
       render: (row) => (
         <button onClick={() => setSelected(row)} className="text-left">
           <p className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-100 hover:text-emerald-600 dark:hover:text-emerald-400">
-            {row.brand?.brandName || "—"}
+            <ValueOr value={row.brand?.brandName} fallback="No brand" />
           </p>
-          <p className="text-[11.5px] text-neutral-500">{row.brand?.merchantId || "—"}</p>
+          <p className="text-[11.5px] text-neutral-500"><ValueOr value={row.brand?.merchantId} fallback="No merchant ID" /></p>
           {isDummySubscription(row) && (
             <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
               <FlaskConical size={9} />
@@ -496,7 +486,7 @@ export default function Subscriptions({ scope = "all" }) {
       label: "Plan",
       render: (row) => (
         <div>
-          <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{row.plan?.name || "—"}</p>
+          <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={row.plan?.name} fallback={MISSING.plan} /></p>
           <p className="text-[11.5px] text-neutral-500">
             {row.plan?.type === "MONTHLY" ? "Monthly" : "Yearly"} · {formatCurrency(row.plan?.price)}
           </p>
@@ -514,7 +504,7 @@ export default function Subscriptions({ scope = "all" }) {
       render: (row) => (
         <div className="flex flex-col items-start gap-1">
           <span className="rounded-full bg-neutral-200 dark:bg-neutral-800 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-700 dark:text-neutral-300">
-            {row.source || "—"}
+            {row.source || MISSING.method}
           </span>
           {row.isFreeGrant && (
             <span className="flex items-center gap-1 text-[10.5px] font-medium text-violet-600 dark:text-violet-400">
@@ -542,10 +532,14 @@ export default function Subscriptions({ scope = "all" }) {
       render: (row) => (
         <div>
           <p className="text-[12.5px] text-neutral-700 dark:text-neutral-300">
-            {formatDate(row.startDate)} → {formatDate(row.endDate)}
+            {!row.startDate && !row.endDate ? (
+              <ValueOr value={null} fallback="Dates not set" />
+            ) : (
+              `${formatDate(row.startDate)} → ${row.endDate ? formatDate(row.endDate) : "No end date"}`
+            )}
           </p>
           <p className={`text-[11px] ${row.isLapsed ? "text-red-600 dark:text-red-400" : "text-neutral-500"}`}>
-            {row.isLapsed ? "Expired" : `${row.daysRemaining ?? "—"} days left`}
+            {row.isLapsed ? "Expired" : row.daysRemaining != null ? `${row.daysRemaining} days left` : "No end date"}
           </p>
         </div>
       ),

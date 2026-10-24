@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -13,10 +13,8 @@ import {
 import { StatusBadge } from "../../components/common/Table";
 import EmptyState from "../../components/common/EmptyState";
 import TickerDeleteConfirmModal from "./TickerDeleteConfirmModal";
-import {
-  deletePromotionalTicker,
-  getPromotionalTickerById,
-} from "./services/PromotionalTickerApi";
+import { deletePromotionalTicker } from "./services/PromotionalTickerApi";
+import { usePromotionalTicker } from "./queries/promotionalTickerQueries";
 import { apiToRow, formatDateTime, redirectSummary } from "./tickerUtils";
 import Loader from "../../components/common/Loader";
 
@@ -42,31 +40,17 @@ function InfoRow({ icon: Icon, label, children }) {
 export default function PromotionalTickerDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [ticker, setTicker] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const raw = await getPromotionalTickerById(id);
-      setTicker(raw ? apiToRow(raw) : null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    // Fetch the route's ticker into local page state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
+  // The service returns the ticker object, or null when it doesn't exist.
+  const tickerQuery = usePromotionalTicker(id);
+  const ticker = useMemo(() => (tickerQuery.data ? apiToRow(tickerQuery.data) : null), [tickerQuery.data]);
+  // Also show the loader while "Try again" refetches after an error.
+  const loading = tickerQuery.isPending || (tickerQuery.isError && tickerQuery.isFetching);
+  const error = tickerQuery.error?.message ?? "";
+  const load = () => tickerQuery.refetch();
 
   const goBack = () => {
     if ((window.history.state?.idx ?? 0) > 0) navigate(-1);

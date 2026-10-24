@@ -39,7 +39,6 @@ import PromoCodeReports from './features/promoCode/PromoCodeReports'
 import Notification from './features/notification/Notification'
 import Subscriptions from './features/subscriptions/Subscriptions'
 import Faq from './features/faq/Faq'
-// import BrandPage from './features/BrandPage'
 // import LoginPage from './features/auth/components/LoginPage'
 
 
@@ -111,6 +110,15 @@ function App() {
           element={
             <Layout>
               <Brand key="dummy" scope="dummy" />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/brand/real-dummy"
+          element={
+            <Layout>
+              <Brand key="real-dummy" scope="realDummy" />
             </Layout>
           }
         />

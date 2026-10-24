@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import EmptyState from "../../components/common/EmptyState";
 import {
@@ -37,10 +37,11 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { getVoucherClaimById } from "./services/TransactionApi";
-import { getCustomerById } from "../customer/services/CustomerApi";
-import { getVoucherById } from "../voucher/services/VoucherApi";
+import { useVoucherClaim } from "./queries/transactionQueries";
+import { useCustomer } from "../customer/queries/customerQueries";
+import { useVoucher } from "../voucher/queries/voucherQueries";
 import { TxnStatusBadge } from "./Transaction";
+import { releaseTransactionHold } from "./services/TransactionApi";
 import {
   inr,
   formatDate,
@@ -48,7 +49,10 @@ import {
   formatPaymentMethod,
   normalizeClaimStatus,
 } from "./transactionUtils";
+import { localDateStr } from "../../utils/overviewStats";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING, isMissing, orText } from "../../utils/helpers";
 
 // "8839999017" -> "+91 88399 99017" — the real Customer API returns a bare
 // 10-digit WhatsApp number with no country code (see Customer.jsx).
@@ -60,7 +64,7 @@ function formatPhone(raw) {
 
 function formatDateTime(iso) {
   if (!iso) return "—";
-  return `${formatDate(new Date(iso).toISOString().slice(0, 10))} · ${fmtTime(iso)}`;
+  return `${formatDate(localDateStr(iso))} · ${fmtTime(iso)}`;
 }
 
 const CARD_TINTS = {
@@ -73,7 +77,7 @@ const CARD_TINTS = {
 
 // A single labeled fact — small muted label (with an optional icon) above a
 // bold value. Used inside every Card below.
-function Field({ icon: Icon, label, value, mono }) {
+function Field({ icon: Icon, label, value, mono, fallback = MISSING.generic }) {
   return (
     <div className="min-w-0">
       <p className="flex items-center gap-1.5 text-[11px] text-neutral-500">
@@ -84,9 +88,9 @@ function Field({ icon: Icon, label, value, mono }) {
         className={`mt-1 truncate text-[13.5px] font-medium text-neutral-800 dark:text-neutral-100 ${
           mono ? "font-mono text-[12.5px]" : ""
         }`}
-        title={typeof value === "string" ? value : undefined}
+        title={typeof value === "string" && !isMissing(value) ? value : undefined}
       >
-        {value ?? "—"}
+        <ValueOr value={value} fallback={fallback} />
       </p>
     </div>
   );
@@ -148,7 +152,7 @@ function Card({ icon: Icon, tint = "neutral", title, right, children }) {
 }
 
 // A compact fact chip for the "at a glance" strip right under the header.
-function QuickFact({ icon: Icon, label, value }) {
+function QuickFact({ icon: Icon, label, value, fallback = MISSING.generic }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
@@ -156,7 +160,7 @@ function QuickFact({ icon: Icon, label, value }) {
       </span>
       <div className="min-w-0">
         <p className="truncate text-[10.5px] uppercase tracking-wide text-neutral-500">{label}</p>
-        <p className="truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-50">{value}</p>
+        <p className="truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-50"><ValueOr value={value} fallback={fallback} /></p>
       </div>
     </div>
   );
@@ -189,7 +193,7 @@ function TimelineEvent({ event, isLast }) {
           {event.label || event.action}
         </p>
         <p className="mt-0.5 text-[11.5px] text-neutral-500">
-          {formatDateTime(event.at)}
+          {orText(formatDateTime(event.at), "Time not recorded")}
           {event.by && ` · by ${event.by}`}
           {event.amount != null && ` · ${inr(event.amount)}`}
         </p>
@@ -198,49 +202,99 @@ function TimelineEvent({ event, isLast }) {
   );
 }
 
-export default function TransactionDetails() {
-  const { claimId } = useParams();
-  const navigate = useNavigate();
-  const [details, setDetails] = useState(null);
-  const [loading, setLoading] = useState(true);
+// PATCH /transactions/admin/:id/release-hold — a settlement hold is set
+// the moment a refund is asked for; one nobody releases keeps the
+// vendor's money out of every settlement, silently. The API refuses while
+// a refund is open or a chargeback unresolved — that message shows here.
+function ReleaseHold({ transactionId }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [customer, setCustomer] = useState(null);
-  const [voucherInfo, setVoucherInfo] = useState(null);
+  const [done, setDone] = useState("");
 
-  const fetchDetails = useCallback(async () => {
-    if (!claimId) return;
-    setLoading(true);
+  const submit = async () => {
+    setSubmitting(true);
     setError("");
-    setCustomer(null);
-    setVoucherInfo(null);
     try {
-      const res = await getVoucherClaimById(claimId);
-      const data = res?.data || null;
-      setDetails(data);
-
-      const customerId = data?.payment?.customerId || data?.claim?.customerId;
-      if (customerId) {
-        getCustomerById(customerId)
-          .then((cRes) => setCustomer(cRes?.data?.customer ?? cRes?.data ?? null))
-          .catch(() => setCustomer(null));
-      }
-
-      const voucherId = data?.claim?.voucherId || data?.payment?.voucherId;
-      if (voucherId) {
-        getVoucherById(voucherId)
-          .then((vRes) => setVoucherInfo(vRes?.data?.data?.[0] ?? null))
-          .catch(() => setVoucherInfo(null));
-      }
+      const res = await releaseTransactionHold(transactionId, { reason: reason.trim() });
+      setDone(res?.message || "Hold released — this payment can be settled again.");
+      setOpen(false);
+      setReason("");
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  }, [claimId]);
+  };
 
-  useEffect(() => {
-    fetchDetails();
-  }, [fetchDetails]);
+  if (done) return <p className="text-[12.5px] text-emerald-700 dark:text-emerald-400">{done}</p>;
+
+  return (
+    <div>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-amber-400/40 px-3 text-[12.5px] font-medium text-amber-700 hover:bg-amber-400/10 dark:text-amber-400"
+        >
+          <ShieldCheck size={13} />
+          Release settlement hold
+        </button>
+      ) : (
+        <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950">
+          <label className="mb-1.5 block text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+            Reason<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
+          </label>
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Refund was rejected — vendor should be paid."
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-800 focus:border-emerald-400/60 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              onClick={() => setOpen(false)}
+              className="h-8 rounded-lg border border-neutral-200 px-3 text-[12.5px] text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submit}
+              disabled={submitting || !reason.trim()}
+              className="h-8 rounded-lg bg-emerald-400 px-3 text-[12.5px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting ? "Releasing…" : "Release Hold"}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-2 text-[12.5px] text-red-600 dark:text-red-400">{error}</p>}
+    </div>
+  );
+}
+
+export default function TransactionDetails() {
+  const { claimId } = useParams();
+  const navigate = useNavigate();
+  const {
+    data: details = null,
+    isPending: loading,
+    error: claimError,
+    refetch,
+  } = useVoucherClaim(claimId, { select: (res) => res?.data || null });
+  const error = claimError?.message ?? "";
+
+  // Follow-up reads keyed off the claim's ids — they wait for the claim
+  // (enabled turns on once the id is known). Their failures stay silent:
+  // the cards just don't render, as before.
+  const customerId = details?.payment?.customerId || details?.claim?.customerId;
+  const voucherId = details?.claim?.voucherId || details?.payment?.voucherId;
+  const { data: customer = null } = useCustomer(customerId, {
+    select: (res) => res?.data?.customer ?? res?.data ?? null,
+  });
+  const { data: voucherInfo = null } = useVoucher(voucherId, {
+    select: (res) => res?.data?.data?.[0] ?? null,
+  });
 
   if (loading) {
     return (
@@ -261,7 +315,7 @@ export default function TransactionDetails() {
             : "We couldn't find a voucher claim with this link. It may have been removed, or the link is no longer valid."
         }
         action={{ label: "Back to Transactions", icon: ArrowLeft, onClick: () => navigate("/transaction") }}
-        secondaryAction={error ? { label: "Try again", onClick: fetchDetails } : undefined}
+        secondaryAction={error ? { label: "Try again", onClick: () => refetch() } : undefined}
       />
     );
   }
@@ -270,13 +324,17 @@ export default function TransactionDetails() {
   const pricing = claim.pricing || {};
   const status = normalizeClaimStatus(payment.status);
   const dateSrc = payment.createdAt || payment.verifiedAt;
-  const dateStr = dateSrc ? new Date(dateSrc).toISOString().slice(0, 10) : null;
+  const dateStr = localDateStr(dateSrc);
   const hasPromo = Boolean(pricing.promoCode);
   const hasGst = Boolean(pricing.isGstEnabled);
   const hasOfferCap = Boolean(pricing.offerMinBillAmount || pricing.offerMaxDiscountAmount);
   const hasFeeSlab = Boolean(pricing.feeSlabSize);
 
-  const customerName = customer?.fullName || customer?.account?.name || "—";
+  // The claim response's `customer` block (admin token) covers identity and
+  // contact; wallet / T-Coins / followers still need GET /customers/admin/:id.
+  const embeddedCustomer = details.customer || {};
+  const hasCustomer = Boolean(details.customer || customer);
+  const customerName = embeddedCustomer.fullName || customer?.fullName || customer?.account?.name || "—";
   const customerInitial = customerName !== "—" ? customerName.charAt(0).toUpperCase() : "?";
 
   const priceBreakdown = [
@@ -320,14 +378,14 @@ export default function TransactionDetails() {
               <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-neutral-500">
                   <Building2 size={12} className="shrink-0" />
-                  {brand.brandName || "—"}
+                  <ValueOr value={brand.brandName} fallback="No brand" />
                   <span className="text-neutral-300 dark:text-neutral-700">·</span>
                   <Tag size={12} className="shrink-0" />
                   {claim.voucherSnapshot?.name || "Voucher"}
                 </p>
                 <div className="mt-1.5 flex items-center gap-2">
                   <span className="rounded-lg bg-neutral-100 px-2 py-0.5 font-mono text-[13px] font-semibold text-neutral-800 dark:bg-neutral-800 dark:text-neutral-100">
-                    {payment.razorpayPaymentId || "—"}
+                    {orText(payment.razorpayPaymentId, MISSING.id)}
                   </span>
                 </div>
                 <p className="mt-2 text-[26px] font-bold leading-none text-neutral-900 dark:text-neutral-50">
@@ -369,39 +427,40 @@ export default function TransactionDetails() {
             <QuickFact
               icon={Calendar}
               label="Date & Time"
-              value={dateStr ? `${formatDate(dateStr)} · ${fmtTime(dateSrc)}` : "—"}
+              value={dateStr ? `${formatDate(dateStr)} · ${fmtTime(dateSrc)}` : null}
+              fallback={MISSING.date}
             />
-            <QuickFact icon={CreditCard} label="Method" value={formatPaymentMethod(payment.paymentMethod)} />
-            <QuickFact icon={Store} label="Outlet" value={outlet.uniqueId || claim.outletSnapshot?.uniqueId || "—"} />
-            <QuickFact icon={MapPin} label="State" value={claim.outletSnapshot?.state || "—"} />
+            <QuickFact icon={CreditCard} label="Method" value={formatPaymentMethod(payment.paymentMethod)} fallback={MISSING.method} />
+            <QuickFact icon={Store} label="Outlet" value={outlet.uniqueId || claim.outletSnapshot?.uniqueId} fallback="No outlet" />
+            <QuickFact icon={MapPin} label="State" value={claim.outletSnapshot?.state} fallback="Not added" />
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Card icon={CreditCard} tint="sky" title="Payment Info">
-            <Field icon={Building2} label="Vendor" value={brand.brandName} />
-            <Field icon={User} label="Customer" value={customerName !== "—" ? customerName : payment.customerId} mono={customerName === "—"} />
-            <Field icon={Calendar} label="Date" value={dateStr ? formatDate(dateStr) : "—"} />
-            <Field icon={Clock} label="Time" value={dateSrc ? fmtTime(dateSrc) : "—"} />
-            <Field icon={CreditCard} label="Method" value={formatPaymentMethod(payment.paymentMethod)} />
-            <Field label="Currency" value={payment.currency} />
-            <Field icon={Receipt} label="Invoice" value={payment.invoiceId} />
-            <Field icon={Hash} label="Razorpay Order ID" value={payment.razorpayOrderId} mono />
+            <Field icon={Building2} label="Vendor" value={brand.brandName} fallback="No brand" />
+            <Field icon={User} label="Customer" value={customerName !== "—" ? customerName : payment.customerId} mono={customerName === "—"} fallback={MISSING.name} />
+            <Field icon={Calendar} label="Date" value={dateStr ? formatDate(dateStr) : null} fallback={MISSING.date} />
+            <Field icon={Clock} label="Time" value={dateSrc ? fmtTime(dateSrc) : null} fallback="Not recorded" />
+            <Field icon={CreditCard} label="Method" value={formatPaymentMethod(payment.paymentMethod)} fallback={MISSING.method} />
+            <Field label="Currency" value={payment.currency} fallback="Not recorded" />
+            <Field icon={Receipt} label="Invoice" value={payment.invoiceId} fallback="Not issued" />
+            <Field icon={Hash} label="Razorpay Order ID" value={payment.razorpayOrderId} mono fallback={MISSING.id} />
             <Field label="Amount Refunded" value={inr(payment.amountRefunded)} />
           </Card>
 
           <Card icon={Tag} tint="emerald" title="Claim & Redemption">
-            <Field icon={Hash} label="Claim Code" value={claim.claimCode} mono />
-            <Field label="Claim Status" value={claim.status} />
-            <Field icon={Tag} label="Voucher" value={claim.voucherSnapshot?.name} />
-            <Field icon={Calendar} label="Redeemed At" value={formatDateTime(claim.redeemedAt)} />
-            <Field icon={Calendar} label="Paid At" value={formatDateTime(claim.paidAt)} />
-            <Field icon={Store} label="Outlet" value={outlet.uniqueId || claim.outletSnapshot?.uniqueId} />
-            <Field icon={Hash} label="Store ID" value={outlet.storeId || claim.outletSnapshot?.storeId} mono />
-            <Field icon={MapPin} label="State" value={claim.outletSnapshot?.state} />
+            <Field icon={Hash} label="Claim Code" value={claim.claimCode} mono fallback={MISSING.id} />
+            <Field label="Claim Status" value={claim.status} fallback="No status" />
+            <Field icon={Tag} label="Voucher" value={claim.voucherSnapshot?.name} fallback="No voucher" />
+            <Field icon={Calendar} label="Redeemed At" value={formatDateTime(claim.redeemedAt)} fallback="Not yet" />
+            <Field icon={Calendar} label="Paid At" value={formatDateTime(claim.paidAt)} fallback="Not yet" />
+            <Field icon={Store} label="Outlet" value={outlet.uniqueId || claim.outletSnapshot?.uniqueId} fallback="No outlet" />
+            <Field icon={Hash} label="Store ID" value={outlet.storeId || claim.outletSnapshot?.storeId} mono fallback={MISSING.id} />
+            <Field icon={MapPin} label="State" value={claim.outletSnapshot?.state} fallback="Not added" />
           </Card>
 
-          {customer && (
+          {hasCustomer && (
             <Card
               tint="violet"
               title="Customer"
@@ -412,19 +471,33 @@ export default function TransactionDetails() {
               }
             >
               <div className="col-span-2 sm:col-span-3">
-                <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">{customerName}</p>
+                <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50"><ValueOr value={customerName} fallback={MISSING.name} /></p>
               </div>
-              <Field icon={Hash} label="Unique ID" value={customer.uniqueId} mono />
-              <Field icon={Phone} label="Phone" value={formatPhone(customer.whatsappNumber || customer.account?.whatsappNumber)} />
-              <Field icon={Mail} label="Email" value={customer.email || customer.account?.email} />
-              <Field icon={Wallet} label="Wallet Balance" value={inr(customer.account?.walletBalance)} />
-              <Field icon={Coins} label="T-Coins" value={customer.account?.tCoinsBalance ?? 0} />
-              <Field icon={Users} label="Followers" value={customer.account?.followerCount ?? 0} />
+              <Field icon={Hash} label="Unique ID" value={embeddedCustomer.uniqueId || customer?.uniqueId} mono fallback={MISSING.id} />
               <Field
-                icon={ShieldCheck}
-                label="Account Active"
-                value={customer.isAccountActive === false || customer.account?.isActive === false ? "No" : "Yes"}
+                icon={Phone}
+                label="Phone"
+                value={formatPhone(
+                  embeddedCustomer.mobile ||
+                    embeddedCustomer.whatsappNumber ||
+                    customer?.whatsappNumber ||
+                    customer?.account?.whatsappNumber
+                )}
+                fallback={MISSING.phone}
               />
+              <Field icon={Mail} label="Email" value={embeddedCustomer.email || customer?.email || customer?.account?.email} fallback={MISSING.email} />
+              {customer && (
+                <>
+                  <Field icon={Wallet} label="Wallet Balance" value={inr(customer.account?.walletBalance)} />
+                  <Field icon={Coins} label="T-Coins" value={customer.account?.tCoinsBalance ?? 0} />
+                  <Field icon={Users} label="Followers" value={customer.account?.followerCount ?? 0} />
+                  <Field
+                    icon={ShieldCheck}
+                    label="Account Active"
+                    value={customer.isAccountActive === false || customer.account?.isActive === false ? "No" : "Yes"}
+                  />
+                </>
+              )}
             </Card>
           )}
 
@@ -455,23 +528,24 @@ export default function TransactionDetails() {
                   </span>
                 )}
               </div>
-              <Field icon={Hash} label="Voucher Code" value={voucherInfo.voucher?.voucherCode} mono />
-              <Field icon={Layers} label="Sub-Category" value={voucherInfo.subCategory?.name} />
-              <Field icon={Building2} label="Brand" value={voucherInfo.brand?.brandName} />
+              <Field icon={Hash} label="Voucher Code" value={voucherInfo.voucher?.voucherCode} mono fallback={MISSING.id} />
+              <Field icon={Layers} label="Sub-Category" value={voucherInfo.subCategory?.name} fallback={MISSING.category} />
+              <Field icon={Building2} label="Brand" value={voucherInfo.brand?.brandName} fallback="No brand" />
               <Field
                 icon={Calendar}
                 label="Validity"
                 value={
                   voucherInfo.startAt && voucherInfo.endAt
                     ? `${formatDateTime(voucherInfo.startAt)} → ${formatDateTime(voucherInfo.endAt)}`
-                    : "—"
+                    : null
                 }
+                fallback={MISSING.date}
               />
               {voucherInfo.offers?.[0] && (
                 <Field
                   icon={Percent}
                   label="Offer"
-                  value={`${voucherInfo.offers[0].title || "—"}${
+                  value={`${voucherInfo.offers[0].title || "Untitled offer"}${
                     voucherInfo.offers[0].minBillAmount ? ` · min ${inr(voucherInfo.offers[0].minBillAmount)}` : ""
                   }`}
                 />
@@ -566,8 +640,13 @@ export default function TransactionDetails() {
             )}
             <Field icon={CreditCard} label="Gateway Fee" value={inr(payment.gatewayFee)} />
             <Field icon={Landmark} label="Net Received" value={inr(payment.netReceived)} />
-            <Field label="Settlement Stage" value={payment.settlementStage} />
+            <Field label="Settlement Stage" value={payment.settlementStage} fallback={MISSING.date} />
             <Field label="Settlement Hold" value={payment.settlementHold ? "Yes" : "No"} />
+            {payment.settlementHold && payment._id && (
+              <div className="col-span-2 sm:col-span-3">
+                <ReleaseHold transactionId={payment._id} />
+              </div>
+            )}
             <Field icon={ShieldAlert} label="Disputed" value={payment.isDisputed ? "Yes" : "No"} />
           </Card>
         </div>

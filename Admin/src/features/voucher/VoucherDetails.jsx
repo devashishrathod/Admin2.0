@@ -34,7 +34,8 @@ import { VOUCHER_STATUSES } from "./services/VoucherApi";
 import { RingStat } from "../brand/BrandShared";
 import VoucherImageGallery, { BannerAddModal, BannerThumb, BannerReviewModal } from "./VoucherImageGallery";
 import StatusStepButton from "../../components/common/StatusStepButton";
-import { formatBatch } from "../../utils/helpers";
+import { formatBatch, isMissing, orText, MISSING } from "../../utils/helpers";
+import ValueOr from "../../components/common/ValueOr";
 
 // Banner review status (bannerStatus) → pill label / colour.
 const BANNER_STATUS_TONES = { PENDING: "amber", APPROVED: "emerald", REJECTED: "red" };
@@ -66,14 +67,14 @@ function bannerStatusLabel(banner) {
  * reflects the `busy` / `actionError` state passed down.
  * ---------------------------------------------------------------------- */
 
-function InfoRow({ icon: Icon, label, value }) {
+function InfoRow({ icon: Icon, label, value, fallback = MISSING.generic }) {
   return (
     <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
       <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
         {Icon && <Icon size={11} className="shrink-0" />}
         <span className="truncate">{label}</span>
       </p>
-      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></p>
     </div>
   );
 }
@@ -201,7 +202,7 @@ export default function VoucherDetails({
                 )}
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-neutral-500">
-                <Tag size={11} /> {voucher.versionCode} · {voucher.brandName}
+                <Tag size={11} /> {orText(voucher.versionCode, "No code")} · <ValueOr value={voucher.brandName} fallback="No brand" />
               </p>
             </div>
           </div>
@@ -280,23 +281,24 @@ export default function VoucherDetails({
                 Voucher Details
               </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <InfoRow icon={Hash} label="Voucher Code" value={voucher.voucherCode} />
+                <InfoRow icon={Hash} label="Voucher Code" value={voucher.voucherCode} fallback="No code" />
                 <InfoRow
                   icon={Layers3}
                   label="Version"
-                  value={`${voucher.versionCode}`}
+                  value={voucher.versionCode}
+                  fallback="No code"
                 />
-                <InfoRow icon={UserRound} label="Created By" value={voucher.creator?.role || "—"} />
-                <InfoRow icon={Layers} label="Category" value={`${voucher.category} · ${voucher.subCategory}`} />
-                <InfoRow icon={Calendar} label="Created" value={voucher.createdAtDisplay} />
-                <InfoRow icon={Clock} label="Last Updated" value={voucher.updatedAtDisplay} />
+                <InfoRow icon={UserRound} label="Created By" value={voucher.creator?.role} fallback={MISSING.method} />
+                <InfoRow icon={Layers} label="Category" value={[voucher.category, voucher.subCategory].filter((c) => !isMissing(c)).join(" · ")} fallback={MISSING.category} />
+                <InfoRow icon={Calendar} label="Created" value={voucher.createdAtDisplay} fallback={MISSING.date} />
+                <InfoRow icon={Clock} label="Last Updated" value={voucher.updatedAtDisplay} fallback={MISSING.date} />
                 {/* Only shown once the voucher has actually been published —
                     no fallback to createdAt, so a DRAFT never shows this. */}
                 {voucher.publishedDate && (
                   <InfoRow icon={Calendar} label="Published" value={voucher.publishedDate} />
                 )}
-                <InfoRow icon={Calendar} label="Start Date" value={voucher.startDate} />
-                <InfoRow icon={Calendar} label="End Date" value={voucher.endDate} />
+                <InfoRow icon={Calendar} label="Start Date" value={voucher.startDate} fallback={MISSING.date} />
+                <InfoRow icon={Calendar} label="End Date" value={voucher.endDate} fallback="No end date" />
                 {/* <InfoRow icon={Store} label="Sub-Brands Attached" value={voucher.attachedSubBrandsCount ?? 0} />*/}
                 <InfoRow
                   icon={Lock}
@@ -358,7 +360,7 @@ export default function VoucherDetails({
                         </div>
                       )}
                       <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">
-                        {voucher.categoryDetails.name}
+                        {orText(voucher.categoryDetails.name, MISSING.category)}
                       </p>
                     </div>
                   </div>
@@ -379,7 +381,7 @@ export default function VoucherDetails({
                         </div>
                       )}
                       <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">
-                        {voucher.subCategoryDetails.name}
+                        {orText(voucher.subCategoryDetails.name, MISSING.category)}
                       </p>
                     </div>
                   </div>
@@ -443,7 +445,7 @@ export default function VoucherDetails({
                           <p className="mt-0.5 text-[11.5px] text-neutral-500">
                             {h.by ? <>by <span className="font-medium text-neutral-700 dark:text-neutral-300">{h.by}</span></> : null}
                             {h.by && h.remarks ? " · " : null}
-                            {h.remarks || (!h.by ? "—" : null)}
+                            {h.remarks || (!h.by ? "No remarks" : null)}
                           </p>
                         </div>
                       </div>
@@ -711,13 +713,13 @@ export default function VoucherDetails({
                     )}
                   </div>
                   <div>
-                    <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">{voucher.brand.name}</p>
-                    <p className="text-[11.5px] text-neutral-500">{voucher.brand.legalName}</p>
+                    <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50"><ValueOr value={voucher.brand.name} fallback="No brand" /></p>
+                    <p className="text-[11.5px] text-neutral-500"><ValueOr value={voucher.brand.legalName} fallback="No legal name" /></p>
                   </div>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <InfoRow icon={BadgeCheck} label="Brand ID" value={voucher.brand.uniqueId} />
-                  <InfoRow icon={Store} label="Merchant ID" value={voucher.brand.merchantId} />
+                  <InfoRow icon={BadgeCheck} label="Brand ID" value={voucher.brand.uniqueId} fallback={MISSING.id} />
+                  <InfoRow icon={Store} label="Merchant ID" value={voucher.brand.merchantId} fallback={MISSING.id} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <span
@@ -786,11 +788,11 @@ export default function VoucherDetails({
                   Parent Voucher Record
                 </p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <InfoRow icon={Globe} label="Timezone" value={voucher.parentVoucher.timezone} />
-                  <InfoRow icon={Layers3} label="Current Version" value={voucher.parentVoucher.currentVersionNumber} />
+                  <InfoRow icon={Globe} label="Timezone" value={voucher.parentVoucher.timezone} fallback={MISSING.date} />
+                  <InfoRow icon={Layers3} label="Current Version" value={voucher.parentVoucher.currentVersionNumber} fallback={MISSING.id} />
                   <InfoRow icon={ShieldCheck} label="Parent Status" value={voucher.parentVoucher.status} />
-                  <InfoRow icon={Calendar} label="Created" value={voucher.parentVoucher.createdAtDisplay} />
-                  <InfoRow icon={Clock} label="Last Updated" value={voucher.parentVoucher.updatedAtDisplay} />
+                  <InfoRow icon={Calendar} label="Created" value={voucher.parentVoucher.createdAtDisplay} fallback={MISSING.date} />
+                  <InfoRow icon={Clock} label="Last Updated" value={voucher.parentVoucher.updatedAtDisplay} fallback={MISSING.date} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <span
@@ -822,19 +824,19 @@ export default function VoucherDetails({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-neutral-500">Voucher code</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{voucher.voucherCode}</span>
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={voucher.voucherCode} fallback="No code" /></span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-neutral-500">Vendor</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{voucher.brand?.name || voucher.brandName}</span>
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={isMissing(voucher.brand?.name) ? voucher.brandName : voucher.brand.name} fallback="No brand" /></span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-neutral-500">Version number</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{voucher.versionNumber ?? "—"}</span>
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={voucher.versionNumber} fallback={MISSING.id} /></span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-neutral-500">Last updated</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{voucher.updatedAtDisplay}</span>
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={voucher.updatedAtDisplay} fallback={MISSING.date} /></span>
                 </div>
               </div>
             </div>
@@ -879,8 +881,8 @@ export default function VoucherDetails({
                         <td className="px-3 py-3 font-semibold text-emerald-600 dark:text-emerald-400">
                           {o.discountType === "PERCENTAGE" ? `${o.discountValue}%` : `₹${o.discountValue}`}
                         </td>
-                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.minBillAmount}</td>
-                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">₹{o.maxDiscountAmount}</td>
+                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{isMissing(o.minBillAmount) ? "No minimum" : `₹${o.minBillAmount}`}</td>
+                        <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{isMissing(o.maxDiscountAmount) ? "No cap" : `₹${o.maxDiscountAmount}`}</td>
                         <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.usageType}</td>
                         <td className="px-3 py-3 text-neutral-600 dark:text-neutral-300">{o.discountApplicableOn}</td>
                         <td className="px-5 py-3 text-right">
@@ -931,7 +933,7 @@ export default function VoucherDetails({
                         <td className={`border-l-4 px-5 py-3 ${accent.left}`}>
                           <span className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-100">
                             <span className={`h-2 w-2 shrink-0 rounded-full ${accent.dot}`} />
-                            {v.versionCode}
+                            {orText(v.versionCode, "No code")}
                             {viewing && (
                               <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                                 Viewing
@@ -943,7 +945,7 @@ export default function VoucherDetails({
                           <VoucherStatusBadge status={v.status} />
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 text-neutral-600 dark:text-neutral-300">
-                          {v.startDate} → {v.endDate}
+                          {orText(v.startDate, MISSING.date)} → {orText(v.endDate, "No end date")}
                         </td>
                         <td className="px-5 py-3 text-right font-semibold text-neutral-800 dark:text-neutral-200">{v.claimCount}</td>
                       </tr>

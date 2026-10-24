@@ -13,7 +13,6 @@ import ShowcaseStep from "./steps/ShowcaseStep";
 import ReviewStep from "./steps/ReviewStep";
 import { createInitialForm, VALIDATORS, buildBrandFormData, isRegisteredBusiness } from "./brandFormConfig";
 import { createBrand } from "../services/BrandApi";
-import { useBrands } from "../BrandContext";
 
 const STEPS = [
   { key: "business", label: "Business", title: "Business details", description: "Who owns the brand and how the business is registered.", Component: BusinessStep },
@@ -31,7 +30,6 @@ const UNREGISTERED_STEPS = STEPS.filter((s) => s.key !== "gstPan");
 
 export default function AddBrand() {
   const navigate = useNavigate();
-  const { fetchBrands } = useBrands();
 
   const [form, setForm] = useState(createInitialForm);
   const [step, setStep] = useState(0);
@@ -101,8 +99,8 @@ export default function AddBrand() {
     setSubmitting(true);
     setSubmitError("");
     try {
+      // The brand lists refresh themselves (shared interceptor, /brands write).
       await createBrand(buildBrandFormData(form));
-      fetchBrands();
       navigate("/new-onboarding");
     } catch (err) {
       setSubmitError(err.message);

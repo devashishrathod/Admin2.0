@@ -322,7 +322,7 @@ const INITIAL_DATA = {
  * ---------------------------------------------------------------------- */
 
 const formatDiscount = (c) => (c.discountType === "Percentage" ? `${c.discountValue}%` : `₹${c.discountValue}`);
-const formatRupee = (n) => (n || n === 0 ? `₹${Number(n).toLocaleString("en-IN")}` : "—");
+const formatRupee = (n) => (n || n === 0 ? `₹${Number(n).toLocaleString("en-IN")}` : "Not set");
 
 function StatusPill({ status }) {
   const styles = {
@@ -721,7 +721,7 @@ function ViewModal({ coupon, type, onClose, onApprove, onReject }) {
 
         <div className="space-y-4">
           <SectionCard title="Description">
-            <p className="text-[13.5px] leading-relaxed text-neutral-700 dark:text-neutral-300">{coupon.description || "—"}</p>
+            <p className="text-[13.5px] leading-relaxed text-neutral-700 dark:text-neutral-300">{coupon.description || <span className="text-neutral-400 dark:text-neutral-500">No description</span>}</p>
           </SectionCard>
 
           <SectionCard title="Discount Details">

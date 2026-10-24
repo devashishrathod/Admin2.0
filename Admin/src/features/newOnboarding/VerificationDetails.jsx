@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -23,13 +24,18 @@ import {
 } from "lucide-react";
 import { BrandAvatar, StatusBadge, SectionCard, EmptyState, ToggleSwitch, StatChip, RingStat } from "../brand/BrandShared";
 import { REJECTION_REASONS } from "../brand/data/BrandData";
-import { getBrandDetails } from "../brand/services/BrandApi";
+import { useBrandDetails } from "../brand/queries/brandQueries";
 import { mapBrandDetail } from "../brand/brandMapper";
-import { getVouchers } from "../voucher/services/VoucherApi";
-import { getVerificationHistory } from "./services/NewOnboardingApi";
+import { useVouchers } from "../voucher/queries/voucherQueries";
+import { useVerificationHistory } from "./queries/onboardingReviewQueries";
 import ShowcaseAlbums from "../brand/ShowcaseAlbums";
-import { isNotFoundMessage } from "../../utils/helpers";
+import { isNotFoundMessage, MISSING, orText } from "../../utils/helpers";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+
+// GET /brands/get response → the flat brand-detail shape (stable reference
+// so `select` only re-runs when the data changes).
+const selectBrandDetail = (res) => mapBrandDetail(res?.data || res);
 
 const STATUS_LABELS = {
   APPROVED: "Approved",
@@ -46,9 +52,9 @@ const STATUS_ACCENTS = {
 };
 
 function formatDateTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return MISSING.date;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return MISSING.date;
   return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -61,14 +67,14 @@ function scoreColor(score) {
 // Local bento-tile variant of BrandShared's InfoRow. Not reusing InfoRow
 // itself here since it's shared across other layouts that still want the
 // plain divider-row look.
-function DetailTile({ icon: Icon, label, value }) {
+function DetailTile({ icon: Icon, label, value, fallback = MISSING.generic }) {
   return (
     <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
       <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
         {Icon && <Icon size={11} className="shrink-0" />}
         <span className="truncate">{label}</span>
       </p>
-      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></p>
     </div>
   );
 }
@@ -96,7 +102,7 @@ function buildChecklist(flags = {}) {
 
 // "APPROVAL_ACKNOWLEDGED" -> "Approval Acknowledged"
 function formatAction(action) {
-  if (!action) return "—";
+  if (!action) return "Unknown action";
   return action
     .toLowerCase()
     .split("_")
@@ -119,7 +125,7 @@ function summarizeMetadata(entry) {
   if (!meta || typeof meta !== "object") return null;
   const parts = [];
   if (meta.previousScreen || meta.newScreen) {
-    parts.push(`${meta.previousScreen || "—"} → ${meta.newScreen || "—"}`);
+    parts.push(`${meta.previousScreen || "None"} → ${meta.newScreen || "None"}`);
   }
   return parts.length ? parts.join(", ") : null;
 }
@@ -235,7 +241,7 @@ function TimelineEntry({ entry, isLast }) {
     entry.performedByUser?.name ||
     entry.performedByUser?.uniqueId ||
     (entry.performedByType === "SYSTEM" ? "System" : entry.performedByType) ||
-    "—";
+    "Unknown";
 
   return (
     <div className={`relative flex gap-3 ${isLast ? "" : "pb-5"}`}>
@@ -283,7 +289,7 @@ function TimelineEntry({ entry, isLast }) {
         {open && (entry.previousStatus || entry.newStatus) && (
           <div className="mt-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
             <p className="text-[12px] text-neutral-600 dark:text-neutral-400">
-              Status: {entry.previousStatus || "—"} → {entry.newStatus || "—"}
+              Status: {entry.previousStatus || "None"} → {entry.newStatus || "None"}
             </p>
           </div>
         )}
@@ -302,7 +308,6 @@ export default function VerificationDetails({
   onRevoke,
   busyAction,
   actionError,
-  reloadKey = 0,
   // View only (New Onboarding) — no Approve / Reject / Revoke / Reviewed
   // controls; decisions happen on Brand Waiting.
   readOnly = false,
@@ -345,100 +350,51 @@ export default function VerificationDetails({
   const revokeBusy = busyAction === "revoke";
 
   // Real audit trail — GET /brands/verifications/history?brandId=...
+  // Review actions are PUTs under /brands, so the interceptor refreshes this
+  // and the brand snapshot below on its own.
   const brandId = verification.brandId || brand?.id;
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState("");
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyTotalPages, setHistoryTotalPages] = useState(1);
+  const historyQuery = useVerificationHistory(
+    { brandId, page: historyPage, limit: 20 },
+    { placeholderData: keepPreviousData }
+  );
+  const history = historyQuery.data?.data?.data ?? [];
+  const historyTotalPages = historyQuery.data?.data?.totalPages ?? 1;
+  // isLoading (not isPending): with no brandId the query never runs, and the
+  // timeline should show its empty state rather than a spinner.
+  const historyLoading = historyQuery.isLoading;
+  const historyError = historyQuery.error?.message ?? "";
 
   // The brand's full history can span several past attempts — only show
   // the ones belonging to this attempt (the "parent" being reviewed here),
   // not every attempt's events mixed together.
   const currentAttemptHistory = history.filter((h) => h.systemVerifyId === verification.id);
 
-  const fetchHistory = useCallback(async () => {
-    if (!brandId) return;
-    setHistoryLoading(true);
-    setHistoryError("");
-    try {
-      const res = await getVerificationHistory({ brandId, page: historyPage, limit: 20 });
-      const payload = res?.data ?? {};
-      setHistory(payload.data ?? []);
-      setHistoryTotalPages(payload.totalPages ?? 1);
-    } catch (err) {
-      setHistoryError(err.message);
-    } finally {
-      setHistoryLoading(false);
-    }
-    // reloadKey: bumped by the parent after every review action, so the
-    // history and brand snapshot below refetch without a page reload.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brandId, historyPage, reloadKey]);
-
-  useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
-
   // Plan / Subscription snapshot — GET /brands/get?brandId=... (same
   // fully-populated payload the Brand folder's detail page uses).
-  const [brandDetail, setBrandDetail] = useState(null);
-  const [brandDetailLoading, setBrandDetailLoading] = useState(true);
-  const [brandDetailError, setBrandDetailError] = useState("");
-
-  useEffect(() => {
-    if (!brandId) return;
-    let cancelled = false;
-    (async () => {
-      setBrandDetailLoading(true);
-      setBrandDetailError("");
-      try {
-        const res = await getBrandDetails(brandId);
-        if (!cancelled) setBrandDetail(mapBrandDetail(res?.data || res));
-      } catch (err) {
-        if (!cancelled) setBrandDetailError(err.message);
-      } finally {
-        if (!cancelled) setBrandDetailLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId, reloadKey]);
-
+  const brandDetailQuery = useBrandDetails(brandId, { select: selectBrandDetail });
+  const brandDetail = brandDetailQuery.data ?? null;
+  const brandDetailLoading = brandDetailQuery.isPending;
+  const brandDetailError = brandDetailQuery.error?.message ?? "";
 
   // Listing data — the vouchers this brand has created, GET
   // /vouchers/versions/get-all?brandId=...
-  const [vouchers, setVouchers] = useState([]);
-  const [vouchersLoading, setVouchersLoading] = useState(true);
-  const [vouchersError, setVouchersError] = useState("");
-
-  useEffect(() => {
-    if (!brandId) return;
-    let cancelled = false;
-    (async () => {
-      setVouchersLoading(true);
-      setVouchersError("");
-      try {
-        const res = await getVouchers({ brandId, page: 1, limit: 20 });
-        if (!cancelled) setVouchers(res?.data?.data ?? []);
-      } catch (err) {
-        // The backend throws a "not found"-style message (e.g. "No any
-        // voucherversion found") when a brand simply has zero vouchers yet
-        // — that's a normal empty state, not a real failure, so don't show
-        // it as an error.
-        if (!cancelled) {
-          if (isNotFoundMessage(err.message)) setVouchers([]);
-          else setVouchersError(err.message);
-        }
-      } finally {
-        if (!cancelled) setVouchersLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
+  const vouchersQuery = useVouchers(
+    { brandId, page: 1, limit: 20 },
+    {
+      enabled: Boolean(brandId),
+      // "Not found" just means no vouchers yet (below) — retrying won't help.
+      retry: (count, err) => !isNotFoundMessage(err.message) && count < 1,
+    }
+  );
+  const vouchers = vouchersQuery.data?.data?.data ?? [];
+  const vouchersLoading = vouchersQuery.isPending;
+  // The backend throws a "not found"-style message (e.g. "No any
+  // voucherversion found") when a brand simply has zero vouchers yet
+  // — that's a normal empty state, not a real failure, so don't show
+  // it as an error.
+  const vouchersError =
+    vouchersQuery.error && !isNotFoundMessage(vouchersQuery.error.message) ? vouchersQuery.error.message : "";
 
   const handleApproveSubmit = (e) => {
     e.preventDefault();
@@ -649,11 +605,11 @@ export default function VerificationDetails({
                         </span>
                         <div className="min-w-0">
                           <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{v.name}</p>
-                          <p className="mt-0.5 text-[11px] text-neutral-500">{v.versionCode || "—"}</p>
+                          <p className="mt-0.5 text-[11px] text-neutral-500">{v.versionCode || "No version"}</p>
                         </div>
                       </div>
                       <span className="shrink-0 rounded-full bg-neutral-200 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        {v.status ? v.status.replace(/_/g, " ") : "—"}
+                        {v.status ? v.status.replace(/_/g, " ") : "No status"}
                       </span>
                     </div>
                   ))}
@@ -672,7 +628,7 @@ export default function VerificationDetails({
                     </span>
                     GST Constitution
                   </span>
-                  <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{entityMatch?.gstConstitution || "—"}</span>
+                  <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={entityMatch?.gstConstitution} fallback="Not added" /></span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
                   <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
@@ -681,7 +637,7 @@ export default function VerificationDetails({
                     </span>
                     Brand Entity Type
                   </span>
-                  <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{entityMatch?.brandEntityType || "—"}</span>
+                  <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={entityMatch?.brandEntityType} fallback="Not added" /></span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
                   <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
@@ -1033,7 +989,7 @@ export default function VerificationDetails({
                         {brandDetail.subscriptionDetail.isActive ? "Active" : "Inactive"}
                       </span>
                       <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-emerald-100">
-                        {brandDetail.subscriptionDetail.status}
+                        {orText(brandDetail.subscriptionDetail.status, "No status")}
                       </span>
                     </div>
                   </div>
@@ -1047,7 +1003,7 @@ export default function VerificationDetails({
                         Subscription ID
                       </span>
                       <span className="font-mono text-[11.5px] tracking-tight text-neutral-800 dark:text-neutral-200">
-                        {brandDetail.subscriptionDetail.subscriptionId}
+                        <ValueOr value={brandDetail.subscriptionDetail.subscriptionId} fallback={MISSING.id} />
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
@@ -1058,7 +1014,7 @@ export default function VerificationDetails({
                         Transaction ID
                       </span>
                       <span className="font-mono text-[11.5px] tracking-tight text-neutral-800 dark:text-neutral-200">
-                        {brandDetail.subscriptionDetail.transactionId}
+                        <ValueOr value={brandDetail.subscriptionDetail.transactionId} fallback={MISSING.id} />
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
@@ -1068,7 +1024,7 @@ export default function VerificationDetails({
                         </span>
                         Start Date
                       </span>
-                      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{brandDetail.subscriptionDetail.startDateDisplay}</span>
+                      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={brandDetail.subscriptionDetail.startDateDisplay} fallback={MISSING.date} /></span>
                     </div>
                     <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
                       <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
@@ -1077,7 +1033,7 @@ export default function VerificationDetails({
                         </span>
                         End Date
                       </span>
-                      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{brandDetail.subscriptionDetail.endDateDisplay}</span>
+                      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={brandDetail.subscriptionDetail.endDateDisplay} fallback="No end date" /></span>
                     </div>
                   </div>
                 </>
@@ -1089,12 +1045,12 @@ export default function VerificationDetails({
             {/* Brand */}
             <SectionCard title="Brand">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <DetailTile icon={Hash} label="Merchant ID" value={brand.merchantId || "—"} />
-                <DetailTile icon={Phone} label="Mobile" value={brand.mobile || "—"} />
-                <DetailTile icon={Phone} label="WhatsApp" value={brand.whatsappNumber || "—"} />
-                <DetailTile icon={Mail} label="Email" value={brand.email || "—"} />
-                <DetailTile icon={Store} label="Entity Type" value={brand.businessEntityType || "—"} />
-                <DetailTile icon={Store} label="Registration" value={brand.businessRegistrationStatus || "—"} />
+                <DetailTile icon={Hash} label="Merchant ID" value={brand.merchantId} fallback={MISSING.id} />
+                <DetailTile icon={Phone} label="Mobile" value={brand.mobile} fallback={MISSING.phone} />
+                <DetailTile icon={Phone} label="WhatsApp" value={brand.whatsappNumber} fallback={MISSING.phone} />
+                <DetailTile icon={Mail} label="Email" value={brand.email} fallback={MISSING.email} />
+                <DetailTile icon={Store} label="Entity Type" value={brand.businessEntityType} fallback="Not added" />
+                <DetailTile icon={Store} label="Registration" value={brand.businessRegistrationStatus} fallback="Not added" />
                 <DetailTile icon={RotateCcw} label="Verification Attempts" value={brand.verificationAttemptCount ?? 0} />
               </div>
             </SectionCard>

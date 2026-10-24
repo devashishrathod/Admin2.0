@@ -28,6 +28,7 @@ import {
   HelpCircle,
   TrendingUp,
   FlaskConical,
+  Rocket,
 } from "lucide-react";
 
 // Grouped nav — each group renders with an uppercase label (hidden when
@@ -64,8 +65,10 @@ export const NAV_GROUPS = [
       { id: "new-onboarding", label: "New Onboarding", icon: UserPlus, path: "/new-onboarding" },
       { id: "brand-waiting", label: "Brand Waiting", icon: Hourglass, path: "/brand-waiting" },
       { id: "brand", label: "Live Brands", icon: BadgeCheck, path: "/brand" },
+      { id: "brand-real-dummy", label: "RD Brands", icon: Rocket, path: "/brand/real-dummy" },
       { id: "brand-expired", label: "Expired Brands", icon: CalendarX, path: "/brand/expired" },
       { id: "brand-dummy", label: "D Brands", icon: FlaskConical, path: "/brand/dummy" },
+
     ],
   },
   {

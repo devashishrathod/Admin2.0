@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -15,6 +16,7 @@ import {
   MoreVertical,
   ChevronLeft,
   Sparkles,
+  Hourglass,
   PieChart as PieChartIcon,
   BarChart3,
   Users,
@@ -52,11 +54,18 @@ import {
 } from "recharts";
 import Table from "../../components/common/Table";
 import { useBrands } from "./BrandContext";
-import { ToggleActiveConfirmModal } from "./BrandShared";
+import { ToggleActiveConfirmModal, UsageBar } from "./BrandShared";
+import { ONBOARDING_FLAG_LABELS, compactCount, brandCardFacts } from "./brandCardUtils";
+import TopBrandModal from "./BrandDetails/modals/TopBrandModal";
+import ComingSoonModal from "./ComingSoonModal";
+import RdBadge from "./RdBadge";
 import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
-import { formatBatch } from "../../utils/helpers";
+import { formatBatch, MISSING } from "../../utils/helpers";
+import ValueOr from "../../components/common/ValueOr";
 import Loader from "../../components/common/Loader";
+import DateRangeFilter from "../../components/common/DateRangeFilter";
+import { localDateStr } from "../../utils/overviewStats";
 
 const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Hidden Brand", "Top Brand"];
 const STATUS_TAB_LABELS = {
@@ -171,50 +180,6 @@ function BrandStat({ icon: Icon, children }) {
   );
 }
 
-const compactCount = (n) => {
-  const v = Number(n) || 0;
-  return v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v;
-};
-
-// Plan-usage meter: green < 70%, amber 70–90%, red > 90%; unlimited plans
-// show a full muted bar and "used / ∞".
-function UsageBar({ label, item }) {
-  const used = item?.used ?? 0;
-  const unlimited = Boolean(item?.isUnlimited);
-  const limit = item?.limit ?? 0;
-  const pct = unlimited ? 100 : limit > 0 ? Math.min(100, (used / limit) * 100) : used > 0 ? 100 : 0;
-  const tone = unlimited
-    ? "bg-sky-400/50"
-    : pct > 90
-    ? "bg-red-500"
-    : pct >= 70
-    ? "bg-amber-500"
-    : "bg-emerald-500";
-  return (
-    <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2 text-[11px]">
-        <span className="truncate text-neutral-500 dark:text-neutral-400">{label}</span>
-        <span className="shrink-0 font-semibold tabular-nums text-neutral-800 dark:text-neutral-200">
-          {used}/{unlimited ? "∞" : limit}
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-const ONBOARDING_FLAG_LABELS = [
-  ["hasPan", "PAN"],
-  ["hasGst", "GST"],
-  ["hasBank", "Bank"],
-  ["hasLocation", "Location"],
-  ["hasWorkHours", "Work hours"],
-  ["hasFirstOutlet", "First outlet"],
-  ["hasSystemVerification", "System verification"],
-  ["hasAcceptedPartnershipDeed", "Partnership deed"],
-];
 
 /* Instant, styled hover tooltip (the native `title` one is slow and plain).
    `lines` = [[text, ok], ...] — each row gets a green ✓ or grey ✗. Uses a
@@ -294,9 +259,6 @@ function LogoActions({ onView, onEdit, size = "sm" }) {
   );
 }
 
-// Enum words kept upper-case when the entity type key is prettified.
-const ENTITY_ACRONYMS = new Set(["LLP", "OPC", "HUF", "NGO"]);
-
 /* Compact icon + switch used on the brand card's top-right. `tone` is the
    "on" colour: emerald for Active, amber for Hidden-from-customers. */
 function MiniToggle({ icon: Icon, checked, tone = "emerald", label, onClick }) {
@@ -333,11 +295,68 @@ function MiniToggle({ icon: Icon, checked, tone = "emerald", label, onClick }) {
   );
 }
 
-function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHidden }) {
+/* Search as an icon button; a click opens the input (autofocused). It
+   stays open while it has text and folds back to the icon when emptied
+   and left — keeps the tabs + filters on one line. */
+function CollapsibleSearch({ value, onChange, placeholder }) {
+  const [open, setOpen] = useState(Boolean(value));
+  if (!open && !value) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Search brands"
+        title="Search brands"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-600 transition-colors hover:border-neutral-300 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-neutral-100"
+      >
+        <Search size={16} />
+      </button>
+    );
+  }
+  return (
+    <div className="flex w-56 shrink-0 items-center gap-2 rounded-xl border border-emerald-400/40 bg-white px-3 py-2.5 dark:bg-neutral-900">
+      <Search size={15} className="shrink-0 text-neutral-500" />
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => !value && setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            onChange("");
+            setOpen(false);
+          }
+        }}
+        placeholder={placeholder}
+        className="w-full min-w-0 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+      />
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          onChange("");
+          setOpen(false);
+        }}
+        aria-label="Close search"
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
+// `onDelete` is still passed in but unused while Delete Brand is commented
+// out of the menu (there's no delete API yet — it only removed the card locally).
+function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSetTopBrand, onSetComingSoon }) {
   // Dummy (isDummy) brands are view-only: no Edit, no Delete.
   const readOnly = Boolean(brand.isDummy);
   // Confirm popup for Active/Inactive (same one the details page uses).
   const [showActiveConfirm, setShowActiveConfirm] = useState(false);
+  // Top Brand placement — same modal as the details page.
+  const [showTopBrandModal, setShowTopBrandModal] = useState(false);
+  // "Coming soon" on/off — its own modal (ComingSoonModal).
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // Verification details (business, onboarding, KYC) start collapsed too.
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -354,33 +373,22 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
     e.stopPropagation();
     setUsageOpen((o) => !o);
   };
-  const outletCount = brand.outletCount ?? (Number(String(brand.subBrandCount).split("/")[0]) || 0);
-  const hasPlan = brand.subscriptionPlan && brand.subscriptionPlan !== "—";
   const statusLabel = brand.status === "Pending" || brand.status === "Rejected" ? brand.status : getBrandStatusLabel(brand);
   const cover = brand.coverImage || brand.ambiencePhotos?.[0];
   const usage = brand.usage;
-  const flags = brand.onboardingFlags || {};
-  const onboardingDone = ONBOARDING_FLAG_LABELS.filter(([k]) => flags[k]).length;
-  const onboardingMissing = ONBOARDING_FLAG_LABELS.length - onboardingDone;
-  // businessRegistrationStatus "REGISTERED" (mapper also gives "GST Registered").
-  const isRegistered = brand.registrationKey ? brand.registrationKey === "REGISTERED" : brand.businessStatus === "GST Registered";
-  // "REGISTERED" → "Registered", "UNREGISTERED" → "Unregistered".
-  const registrationLabel = brand.registrationKey
-    ? brand.registrationKey.charAt(0) + brand.registrationKey.slice(1).toLowerCase().replace(/_/g, " ")
-    : isRegistered
-    ? "Registered"
-    : "Unregistered";
-  // Full entity type straight from the enum key: "PRIVATE_LIMITED" → "Private Limited".
-  const entityTypeLabel = brand.entityTypeKey
-    ? brand.entityTypeKey
-        .split("_")
-        .map((w) => (ENTITY_ACRONYMS.has(w) ? w : w.charAt(0) + w.slice(1).toLowerCase()))
-        .join(" ")
-    : brand.businessType !== "—"
-    ? brand.businessType
-    : "";
-  const subCategory = brand.subCategory && brand.subCategory !== brand.category ? brand.subCategory : "";
-  const merchantId = brand.merchantToken && brand.merchantToken !== "—" ? brand.merchantToken : null;
+  // Shared with the brand details Overview (brandCardUtils).
+  const {
+    outletCount,
+    hasPlan,
+    flags,
+    onboardingDone,
+    onboardingMissing,
+    isRegistered,
+    registrationLabel,
+    entityTypeLabel,
+    subCategory,
+    merchantId,
+  } = brandCardFacts(brand);
 
   const copyMerchantId = async (e) => {
     e.stopPropagation();
@@ -434,12 +442,17 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
                 <div className="absolute right-0 z-20 mt-1 w-72 overflow-hidden rounded-xl border border-neutral-200 bg-white p-2 shadow-xl shadow-black/10 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/40">
                   <div className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/70">
                     <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
-                      <Power size={14} className="shrink-0 text-neutral-500" />
-                      {brand.active ? "Active" : "Inactive"}
+                      <Power
+                        size={14}
+                        className={`shrink-0 ${brand.active ? "text-neutral-500" : "text-amber-600 dark:text-amber-400"}`}
+                      />
+                      Inactive
                     </span>
+                    {/* ON = brand is inactive (same sense as "Hide from customers"). */}
                     <MiniToggle
                       icon={Power}
-                      checked={Boolean(brand.active)}
+                      checked={!brand.active}
+                      tone="amber"
                       label={brand.active ? "Deactivate brand" : "Activate brand"}
                       onClick={() => {
                         setMenuOpen(false);
@@ -449,15 +462,15 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
                   </div>
                   <div className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/70">
                     <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
-                      {brand.hiddenFromCustomers ? (
-                        <EyeOff size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
-                      ) : (
-                        <Eye size={14} className="shrink-0 text-neutral-500" />
-                      )}
-                      {brand.hiddenFromCustomers ? "Hidden from customers" : "Visible to customers"}
+                      <EyeOff
+                        size={14}
+                        className={`shrink-0 ${brand.hiddenFromCustomers ? "text-amber-600 dark:text-amber-400" : "text-neutral-500"}`}
+                      />
+                      Hide from customers
                     </span>
+                    {/* ON = hidden from customers. */}
                     <MiniToggle
-                      icon={brand.hiddenFromCustomers ? EyeOff : Eye}
+                      icon={EyeOff}
                       checked={Boolean(brand.hiddenFromCustomers)}
                       tone="amber"
                       label={brand.hiddenFromCustomers ? "Show to customers" : "Hide from customers"}
@@ -467,6 +480,55 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
                       }}
                     />
                   </div>
+                  {onSetTopBrand && (
+                    <>
+                      <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpen(false);
+                          setShowTopBrandModal(true);
+                        }}
+                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-[12px] font-medium text-neutral-700 transition-colors hover:bg-amber-50 dark:text-neutral-300 dark:hover:bg-amber-950/20"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-amber-500" />
+                          {brand.isTopBrand ? "Edit Top Brand" : "Mark as Top Brand"}
+                        </span>
+                        {brand.isTopBrand && (
+                          <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                            #{brand.topOrder}
+                          </span>
+                        )}
+                      </button>
+                    </>
+                  )}
+                  {onSetComingSoon && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(false);
+                        setShowComingSoonModal(true);
+                      }}
+                      title={brand.realDummyNote || undefined}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-[12px] font-medium text-neutral-700 transition-colors hover:bg-violet-50 dark:text-neutral-300 dark:hover:bg-violet-950/20"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Hourglass size={14} className="text-violet-500" />
+                        {brand.isRealDummy ? "Remove RD" : "Mark as RD"}
+                      </span>
+                      {brand.isRealDummy && (
+                        <span className="rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                          ON
+                        </span>
+                      )}
+                    </button>
+                  )}
+                  {/* Delete Brand — commented out for now: there's no delete
+                      API yet, so it only removed the card locally and the
+                      brand came back on the next refresh.
                   <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
                   <button
                     type="button"
@@ -480,6 +542,7 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
                     <Trash2 size={14} />
                     Delete Brand
                   </button>
+                  */}
                 </div>
               </>
             )}
@@ -487,17 +550,37 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
         )}
       </div>
 
-      {showActiveConfirm && (
-        <ToggleActiveConfirmModal
-          brand={brand}
-          willActivate={!brand.active}
-          onClose={() => setShowActiveConfirm(false)}
-          onConfirm={(hideFromCustomers) => {
-            onToggleActive?.(brand, hideFromCustomers);
-            setShowActiveConfirm(false);
-          }}
-        />
-      )}
+      {/* Portal to <body> — the card's transform/blur would otherwise trap
+          the fixed overlay inside the card instead of centring it on screen. */}
+      {(showComingSoonModal || showTopBrandModal || showActiveConfirm) &&
+        createPortal(
+          <>
+            {showComingSoonModal && (
+              <ComingSoonModal brand={brand} onClose={() => setShowComingSoonModal(false)} onSubmit={onSetComingSoon} />
+            )}
+
+            {showTopBrandModal && (
+              <TopBrandModal
+                brand={brand}
+                onClose={() => setShowTopBrandModal(false)}
+                onSubmit={onSetTopBrand}
+              />
+            )}
+
+            {showActiveConfirm && (
+              <ToggleActiveConfirmModal
+                brand={brand}
+                willActivate={!brand.active}
+                onClose={() => setShowActiveConfirm(false)}
+                onConfirm={(hideFromCustomers) => {
+                  onToggleActive?.(brand, hideFromCustomers);
+                  setShowActiveConfirm(false);
+                }}
+              />
+            )}
+          </>,
+          document.body
+        )}
 
       <button onClick={() => onOpen(brand)} className="flex flex-1 flex-col text-left" aria-label={`Open ${brand.brandName}`}>
         {/* Cover — the brand's coverImage (or first ambience photo), with the
@@ -558,6 +641,12 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
                 Top #{brand.topOrder}
               </span>
             )}
+            {brand.isRealDummy && (
+              <RdBadge
+                brand={brand}
+                className="rounded-full bg-white px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wide text-violet-600 shadow-sm dark:bg-neutral-900 dark:text-violet-400"
+              />
+            )}
           </div>
         </div>
 
@@ -586,7 +675,7 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
               <img src={brand.categoryImage} alt="" className="h-4 w-4 shrink-0 rounded object-cover" />
             )}
             <span className="truncate">
-              {brand.category}
+              <ValueOr value={brand.category} fallback={MISSING.category} />
               {subCategory && <span className="text-neutral-400"> › {subCategory}</span>}
             </span>
           </p>
@@ -681,7 +770,7 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
             ) : (
               <span className="flex min-w-0 flex-col gap-1 rounded-xl bg-neutral-50 p-2.5 dark:bg-neutral-800/50">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Plan usage</span>
-                <span className="text-[11.5px] font-bold text-neutral-400">—</span>
+                <span className="text-[11.5px] font-bold text-neutral-400">No usage data</span>
               </span>
             )}
           </div>
@@ -778,7 +867,7 @@ function BrandCard({ brand, onOpen, onEdit, onDelete, onToggleActive, onToggleHi
             {copied ? <Check size={11} className="shrink-0 text-emerald-500" /> : <Copy size={11} className="shrink-0" />}
           </button>
         ) : (
-          <span className="text-[11px] text-neutral-400">—</span>
+          <span className="text-[11px] text-neutral-400">No merchant ID</span>
         )}
         {brand.joinedDate && (
           <span className="flex shrink-0 items-center gap-1 text-[11px] text-neutral-500">
@@ -831,6 +920,10 @@ export default function Brand({ scope = "live" }) {
   const navigate = useNavigate();
   const isExpiredScope = scope === "expired";
   const isDummyScope = scope === "dummy";
+  // Real brands shown as "Coming soon" (isRealDummy) — same UI as D Brands.
+  const isRealDummyScope = scope === "realDummy";
+  // Pages that use the D-Brands layout (KPI tiles, 3 overview charts).
+  const isTileScope = isDummyScope || isRealDummyScope;
   const {
     brands: liveBrands,
     dummyBrands,
@@ -840,9 +933,18 @@ export default function Brand({ scope = "live" }) {
     deleteBrandById,
     toggleActive,
     setHiddenFromCustomers,
+    setTopBrand,
+    setComingSoon,
   } = useBrands();
   // Everything below (charts, tabs, filters, table) works on this list.
-  const brands = isDummyScope ? dummyBrands : isExpiredScope ? liveBrands.filter(isExpired) : liveBrands;
+  const brands = isDummyScope
+    ? dummyBrands
+    : isRealDummyScope
+    ? liveBrands.filter((b) => b.isRealDummy === true)
+    : isExpiredScope
+    ? liveBrands.filter(isExpired)
+    : // Real-dummy brands move to their own "Real Dummy" page.
+      liveBrands.filter((b) => !b.isRealDummy);
 
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState("All");
@@ -853,6 +955,9 @@ export default function Brand({ scope = "live" }) {
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  // Joined-date range ("YYYY-MM-DD", IST) — empty = no limit on that side.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(() => Number(readSession(`brands:${scope}:page`)) || 1);
   const [pageSize, setPageSize] = useState(() => {
     const savedPageSize = Number(readSession(`brands:${scope}:pageSize`));
@@ -872,30 +977,36 @@ export default function Brand({ scope = "live" }) {
     .sort()
     .map((name) => ({ name }));
 
-  const filtered = brands.filter((b) => {
+  const matchesTab = (b, tab) =>
+    tab === "All"
+      ? true
+      : tab === "Active Brand"
+      ? b.active && !isExpiredBrand(b)
+      : tab === "Deactive Brand"
+      ? !b.active && !isExpiredBrand(b)
+      : tab === "Hidden Brand"
+      ? Boolean(b.hiddenFromCustomers)
+      : tab === "Top Brand"
+      ? Boolean(b.isTopBrand)
+      : true;
+
+  // Search + plan + category + joined date — every filter except the status
+  // tab. The tab counts use this, so each tab's number is what that tab
+  // would show. A brand with no joined date drops out once a date is set.
+  const filterBase = brands.filter((b) => {
     const matchesSearch =
       b.brandName?.toLowerCase().includes(search.toLowerCase()) ||
       b.location?.toLowerCase().includes(search.toLowerCase()) ||
       b.category?.toLowerCase().includes(search.toLowerCase());
-
-    const matchesTab =
-      statusTab === "All"
-        ? true
-        : statusTab === "Active Brand"
-        ? b.active && !isExpiredBrand(b)
-        : statusTab === "Deactive Brand"
-        ? !b.active && !isExpiredBrand(b)
-        : statusTab === "Hidden Brand"
-        ? Boolean(b.hiddenFromCustomers)
-        : statusTab === "Top Brand"
-        ? Boolean(b.isTopBrand)
-        : true;
-
     const matchesPlan = planFilter === "All Plans" || b.subscriptionPlan === planFilter;
     const matchesCategory = categoryFilter === "All Categories" || b.category === categoryFilter;
+    const joined = localDateStr(b.joinedDate);
+    const matchesDate = (!dateFrom || (joined && joined >= dateFrom)) && (!dateTo || (joined && joined <= dateTo));
+    return matchesSearch && matchesPlan && matchesCategory && matchesDate;
+  });
+  const tabCount = (tab) => filterBase.filter((b) => matchesTab(b, tab)).length;
 
-    return matchesSearch && matchesTab && matchesPlan && matchesCategory;
-  })
+  const filtered = filterBase.filter((b) => matchesTab(b, statusTab))
     // Top brands first in their topOrder (#1, #2, #3…), the rest keep the
     // API order after them. sort() is stable, so ties stay put.
     .sort((a, b) => {
@@ -915,16 +1026,24 @@ export default function Brand({ scope = "live" }) {
   const setSearchAndReset = applyFilter(setSearch);
   const setPlanFilterAndReset = applyFilter(setPlanFilter);
   const setCategoryFilterAndReset = applyFilter(setCategoryFilter);
+  const setDateFromAndReset = applyFilter(setDateFrom);
+  const setDateToAndReset = applyFilter(setDateTo);
 
   const resetFilters = () => {
     setSearch("");
     setStatusTab("All");
     setPlanFilter("All Plans");
     setCategoryFilter("All Categories");
+    setDateFrom("");
+    setDateTo("");
     setPage(1);
   };
   const filtersActive =
-    Boolean(search) || statusTab !== "All" || planFilter !== "All Plans" || categoryFilter !== "All Categories";
+    Boolean(search) ||
+    statusTab !== "All" ||
+    planFilter !== "All Plans" ||
+    categoryFilter !== "All Categories" ||
+    Boolean(dateFrom || dateTo);
 
   // Empty state for both views — wording follows the list and the filters.
   const brandEmpty = filtersActive
@@ -940,6 +1059,12 @@ export default function Brand({ scope = "live" }) {
         title: "No D brands",
         description: "Test / demo brands will show up here once they're added.",
       }
+    : isRealDummyScope
+    ? {
+        icon: "brand",
+        title: "No real dummy brands",
+        description: "Brands you mark as “Coming soon” (from a brand's ⋮ menu or its details page) show up here.",
+      }
     : isExpiredScope
     ? {
         icon: "brand",
@@ -953,26 +1078,27 @@ export default function Brand({ scope = "live" }) {
         action: { label: "Go to Brand Waiting", onClick: () => navigate("/brand-waiting") },
       };
 
-  // Overview charts — real, derived from the full brand list (not the
-  // current page/filter), so they always reflect the true totals.
-  const activeCount = brands.filter((b) => b.active && !isExpiredBrand(b)).length;
-  const deactiveCount = brands.filter((b) => !b.active && !isExpiredBrand(b)).length;
-  const expiredCount = brands.filter(isExpiredBrand).length;
-  const hiddenFromCustomersCount = brands.filter((b) => b.hiddenFromCustomers).length;
+  // Overview charts — follow the current status tab, search, plan and
+  // category (every page of the result, not just the visible page), so
+  // they always describe the brands the list is showing.
+  const activeCount = filtered.filter((b) => b.active && !isExpiredBrand(b)).length;
+  const deactiveCount = filtered.filter((b) => !b.active && !isExpiredBrand(b)).length;
+  const expiredCount = filtered.filter(isExpiredBrand).length;
+  const hiddenFromCustomersCount = filtered.filter((b) => b.hiddenFromCustomers).length;
   const statusMix = [
     { name: "Verified", value: activeCount, color: "#2FDE8C" },
     { name: "Deactive", value: deactiveCount, color: "#A3A3A3" },
     { name: "Expired", value: expiredCount, color: "#F87171" },
   ].filter((s) => s.value > 0);
 
-  const topBrandsByFollowers = [...brands]
+  const topBrandsByFollowers = [...filtered]
     .sort((a, b) => (Number(b.followers) || 0) - (Number(a.followers) || 0))
     .slice(0, 5)
     .map((b) => ({ name: b.brandName, followers: Number(b.followers) || 0 }));
 
   const sortedPlanMix = Object.entries(
-    brands.reduce((acc, b) => {
-      const plan = b.subscriptionPlan || "—";
+    filtered.reduce((acc, b) => {
+      const plan = b.subscriptionPlan && b.subscriptionPlan !== "—" ? b.subscriptionPlan : "No plan";
       acc[plan] = (acc[plan] || 0) + 1;
       return acc;
     }, {})
@@ -1032,7 +1158,7 @@ export default function Brand({ scope = "live" }) {
               <VerifiedTick size={14} />
             </p>
             <p className="mt-0.5 truncate text-[11px] text-neutral-500">
-              {row.category !== "—" ? row.category : "—"}
+              <ValueOr value={row.category} fallback={MISSING.category} />
               {row.subCategory && row.subCategory !== row.category && <span className="text-neutral-400"> › {row.subCategory}</span>}
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -1059,12 +1185,12 @@ export default function Brand({ scope = "live" }) {
       cellClass: "min-w-44 max-w-52 whitespace-normal",
       render: (row) => (
         <div className="min-w-0">
-          <p className="truncate font-medium capitalize text-neutral-800 dark:text-neutral-200">{row.vendorName || row.ownerName || "—"}</p>
+          <p className="truncate font-medium capitalize text-neutral-800 dark:text-neutral-200"><ValueOr value={row.vendorName || row.ownerName} fallback={MISSING.name} /></p>
           {row.vendorName && row.ownerName && row.ownerName !== row.vendorName && (
             <p className="truncate text-[11px] text-neutral-500">{row.ownerName}</p>
           )}
           <p className="mt-0.5 flex items-center gap-1 whitespace-nowrap text-[11px] text-neutral-500">
-            <Phone size={10} className="shrink-0" /> {row.contactPhone}
+            <Phone size={10} className="shrink-0" /> <ValueOr value={row.contactPhone} fallback={MISSING.phone} />
           </p>
           {row.contactEmail !== "—" && (
             <p className="flex items-center gap-1 truncate text-[11px] text-neutral-500">
@@ -1095,7 +1221,7 @@ export default function Brand({ scope = "live" }) {
             <UsageBar label="Vouchers" item={row.usage.vouchers} />
           </div>
         ) : (
-          <span className="text-neutral-400">—</span>
+          <span className="text-[11.5px] text-neutral-400">No usage data</span>
         ),
     },
     {
@@ -1193,10 +1319,12 @@ export default function Brand({ scope = "live" }) {
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">{isDummyScope ? "D Brands" : isExpiredScope ? "Expired Brands" : "Live Brands"}</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">{isDummyScope ? "D Brands" : isRealDummyScope ? "Real Dummy Brands" : isExpiredScope ? "Expired Brands" : "Live Brands"}</h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               {isDummyScope
                 ? "Test / demo brands — kept separate from Live Brands."
+                : isRealDummyScope
+                ? "Real, approved brands shown to customers as “Coming soon” until launch."
                 : isExpiredScope
                 ? "Approved brands whose plan has expired — they need a renewal to go live again."
                 : "Approved brands that are live on the platform — open one to see its full profile."}
@@ -1215,14 +1343,14 @@ export default function Brand({ scope = "live" }) {
           </div>
         </div>
 
-        {/* D Brands — KPI tiles like Live Vouchers; clicking one filters the list. */}
-        {isDummyScope && (
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {/* D Brands / Real Dummy — KPI tiles like Live Vouchers; clicking one filters the list. */}
+        {isTileScope && (
+          <div className={`mb-4 grid grid-cols-2 gap-3 ${isRealDummyScope ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
             <StatTile
-              icon={Store}
-              label="Total D Brands"
-              value={brands.length}
-              hint="Test / demo brands"
+              icon={isRealDummyScope ? Hourglass : Store}
+              label={isRealDummyScope ? "Coming Soon" : "Total D Brands"}
+              value={tabCount("All")}
+              hint={isRealDummyScope ? "Shown as coming soon" : "Test / demo brands"}
               tint="emerald"
               active={statusTab === "All"}
               onClick={() => setStatusTabAndReset("All")}
@@ -1230,7 +1358,7 @@ export default function Brand({ scope = "live" }) {
             <StatTile
               icon={ShieldCheck}
               label="Verified"
-              value={brands.filter((b) => b.active && !isExpiredBrand(b)).length}
+              value={tabCount("Active Brand")}
               hint="Active right now"
               tint="sky"
               active={statusTab === "Active Brand"}
@@ -1239,33 +1367,48 @@ export default function Brand({ scope = "live" }) {
             <StatTile
               icon={Power}
               label="Inactive"
-              value={brands.filter((b) => !b.active && !isExpiredBrand(b)).length}
+              value={tabCount("Deactive Brand")}
               hint="Switched off"
               tint="neutral"
               active={statusTab === "Deactive Brand"}
               onClick={() => setStatusTabAndReset("Deactive Brand")}
             />
-            <StatTile
-              icon={Sparkles}
-              label="Top Brands"
-              value={brands.filter((b) => b.isTopBrand).length}
-              hint="Marked as top"
-              tint="amber"
-              active={statusTab === "Top Brand"}
-              onClick={() => setStatusTabAndReset("Top Brand")}
-            />
-            <StatTile
-              icon={Layers}
-              label="Batches"
-              value={new Set(brands.map((b) => b.dummyBatch).filter(Boolean)).size}
-              hint="Seed batches"
-              tint="violet"
-            />
+            {/* No Top Brand tab on Real Dummy, so no tile for it either. */}
+            {!isRealDummyScope && (
+              <StatTile
+                icon={Sparkles}
+                label="Top Brands"
+                value={tabCount("Top Brand")}
+                hint="Marked as top"
+                tint="amber"
+                active={statusTab === "Top Brand"}
+                onClick={() => setStatusTabAndReset("Top Brand")}
+              />
+            )}
+            {isRealDummyScope ? (
+              <StatTile
+                icon={EyeOff}
+                label="Hidden"
+                value={tabCount("Hidden Brand")}
+                hint="Hidden from customers"
+                tint="violet"
+                active={statusTab === "Hidden Brand"}
+                onClick={() => setStatusTabAndReset("Hidden Brand")}
+              />
+            ) : (
+              <StatTile
+                icon={Layers}
+                label="Batches"
+                value={new Set(filtered.map((b) => b.dummyBatch).filter(Boolean)).size}
+                hint="Seed batches"
+                tint="violet"
+              />
+            )}
           </div>
         )}
 
-        {/* Overview charts — real data, independent of filters; kept small */}
-        <div className={`mb-5 grid grid-cols-1 gap-3 ${isDummyScope || isExpiredScope ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
+        {/* Overview charts — real data for the current tab + filters; kept small */}
+        <div className={`mb-5 grid grid-cols-1 gap-3 ${isTileScope || isExpiredScope ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
           <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
               <PieChartIcon size={13} className="text-emerald-500" /> Status Mix
@@ -1293,8 +1436,8 @@ export default function Brand({ scope = "live" }) {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-[16px] font-bold leading-none text-neutral-900 dark:text-neutral-50">{brands.length}</span>
-                  <span className="mt-0.5 text-[9px] text-neutral-500">Total</span>
+                  <span className="text-[16px] font-bold leading-none text-neutral-900 dark:text-neutral-50">{filtered.length}</span>
+                  <span className="mt-0.5 text-[9px] text-neutral-500">{filtersActive ? "Shown" : "Total"}</span>
                 </div>
               </div>
               <div className="min-w-0 flex-1 space-y-1">
@@ -1345,7 +1488,7 @@ export default function Brand({ scope = "live" }) {
             )}
           </div>
 
-          {!isDummyScope && !isExpiredScope && (
+          {!isTileScope && !isExpiredScope && (
             <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
                 <EyeOff size={13} className="text-amber-500" /> Hidden from Customers
@@ -1373,25 +1516,20 @@ export default function Brand({ scope = "live" }) {
         )}
 
         {/* Status tabs + Search + filters */}
+        {/* One line: tabs on the left (never wrap; scroll sideways on narrow
+            screens), filters on the right as compact pills. */}
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="no-scrollbar flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto">
             {/* Status tabs only on Live Brands — every row here is already expired */}
-            {!isExpiredScope && STATUS_TABS.filter((tab) => !isDummyScope || tab !== "Hidden Brand").map((tab) => {
-              const count =
-                tab === "All"
-                  ? brands.length
-                  : tab === "Active Brand"
-                  ? brands.filter((b) => b.active && !isExpiredBrand(b)).length
-                  : tab === "Deactive Brand"
-                  ? brands.filter((b) => !b.active && !isExpiredBrand(b)).length
-                  : tab === "Hidden Brand"
-                  ? brands.filter((b) => b.hiddenFromCustomers).length
-                  : brands.filter((b) => b.isTopBrand).length;
+            {!isExpiredScope && STATUS_TABS.filter(
+              (tab) => !(isDummyScope && tab === "Hidden Brand") && !(isRealDummyScope && tab === "Top Brand")
+            ).map((tab) => {
+              const count = tabCount(tab);
               return (
                 <button
                   key={tab}
                   onClick={() => setStatusTabAndReset(tab)}
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
                     statusTab === tab
                       ? tab === "Top Brand"
                         ? "bg-amber-400/10 text-amber-600 dark:text-amber-400"
@@ -1417,21 +1555,13 @@ export default function Brand({ scope = "live" }) {
             })}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 sm:max-w-xs dark:border-neutral-800 dark:bg-neutral-900">
-              <Search size={16} className="shrink-0 text-neutral-500" />
-              <input
-                value={search}
-                onChange={(e) => setSearchAndReset(e.target.value)}
-                placeholder="Search brand, location, category..."
-                className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+            <CollapsibleSearch value={search} onChange={setSearchAndReset} placeholder="Search brand, category..." />
 
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 onClick={() => setPlanMenuOpen((o) => !o)}
-                className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
                   planFilter !== "All Plans"
                     ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                     : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700"
@@ -1467,10 +1597,10 @@ export default function Brand({ scope = "live" }) {
               )}
             </div>
 
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 onClick={() => setCategoryMenuOpen((o) => !o)}
-                className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
                   categoryFilter !== "All Categories"
                     ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                     : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700"
@@ -1504,6 +1634,21 @@ export default function Brand({ scope = "live" }) {
                   </div>
                 </>
               )}
+            </div>
+
+            {/* Joined date range — start / end shown in full */}
+            <div className="shrink-0" title="Filter by the date the brand joined">
+              <DateRangeFilter
+                startDate={dateFrom}
+                endDate={dateTo}
+                onStartChange={setDateFromAndReset}
+                onEndChange={setDateToAndReset}
+                onClear={() => {
+                  setDateFrom("");
+                  setDateTo("");
+                  setPage(1);
+                }}
+              />
             </div>
 
             <button
@@ -1596,6 +1741,8 @@ export default function Brand({ scope = "live" }) {
                   onDelete={deleteBrand}
                   onToggleActive={toggleActive}
                   onToggleHidden={setHiddenFromCustomers}
+                  onSetTopBrand={setTopBrand}
+                  onSetComingSoon={setComingSoon}
                 />
               ))}
             </div>

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search,
   Trash2,
@@ -48,10 +49,12 @@ import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
 import VoucherDetails from "./VoucherDetails";
 import { downloadCsv, printAsPdf } from "../../utils/exportTable";
-import { isNotFoundMessage, formatBatch } from "../../utils/helpers";
+import { isNotFoundMessage, formatBatch, isMissing, orText, MISSING } from "../../utils/helpers";
+import ValueOr from "../../components/common/ValueOr";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/query";
+import { useAllVoucherVersions, useVoucher } from "./queries/voucherQueries";
 import {
-  getAllVoucherVersions,
-  getVoucherById,
   approveVoucher,
   rejectVoucher,
   publishVoucher,
@@ -530,7 +533,7 @@ function apiVoucherDetailToRow(payload) {
 const cardClass = "rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20";
 
 // "01/02/2026, 10:30 am" -> "01/02/2026" — cards/table only need the date.
-const dateOnly = (display) => (display && display !== "—" ? display.split(",")[0] : "—");
+const dateOnly = (display, fallback = MISSING.date) => (display && display !== "—" ? display.split(",")[0] : fallback);
 
 // Live validity state from the raw start/end — drives the card's chip.
 function validityOf(v) {
@@ -564,7 +567,7 @@ function BrandMark({ voucher, size = "sm" }) {
     </div>
   ) : (
     <div className={`flex shrink-0 items-center justify-center bg-orange-500 font-semibold text-white ${box}`}>
-      {voucher.brandName?.charAt(0)?.toUpperCase() || "?"}
+      {(!isMissing(voucher.brandName) && voucher.brandName?.charAt(0)?.toUpperCase()) || "?"}
     </div>
   );
 }
@@ -646,7 +649,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, onA
           </span>
         )}
         <span className="absolute bottom-2.5 left-3 max-w-[60%] truncate rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-neutral-700 backdrop-blur dark:bg-neutral-900/80 dark:text-neutral-200">
-          {voucher.category}
+          {orText(voucher.category, MISSING.category)}
         </span>
       </button>
 
@@ -676,7 +679,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, onA
         <div className="mb-3 flex items-center gap-2">
           <BrandMark voucher={voucher} />
           <div className="min-w-0">
-            <p className="truncate text-[11.5px] font-medium text-neutral-500">{voucher.brandName}</p>
+            <p className="truncate text-[11.5px] font-medium text-neutral-500"><ValueOr value={voucher.brandName} fallback="No brand" /></p>
             <button
               onClick={() => onOpen(voucher)}
               className="block max-w-full truncate text-left text-[14px] font-semibold leading-tight text-neutral-900 hover:text-emerald-600 dark:text-neutral-50 dark:hover:text-emerald-400"
@@ -690,7 +693,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, onA
         <div className="relative mb-3 rounded-xl border border-dashed border-emerald-400/50 bg-emerald-400/[0.06] px-3.5 py-2.5">
           <span className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-dashed border-emerald-400/50 bg-white dark:bg-neutral-900" />
           <span className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-dashed border-emerald-400/50 bg-white dark:bg-neutral-900" />
-          <p className="line-clamp-1 text-[13.5px] font-bold text-emerald-700 dark:text-emerald-400">{voucher.discount}</p>
+          <p className="line-clamp-1 text-[13.5px] font-bold text-emerald-700 dark:text-emerald-400">{orText(voucher.discount, "No offer")}</p>
           <p className="mt-0.5 text-[10.5px] text-neutral-500">
             {voucher.minBillAmount ? `Min bill ₹${Number(voucher.minBillAmount).toLocaleString("en-IN")}` : "No minimum bill"}
             {voucher.maxDiscountAmount ? ` · Up to ₹${Number(voucher.maxDiscountAmount).toLocaleString("en-IN")} off` : ""}
@@ -702,7 +705,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, onA
           <span className="flex min-w-0 items-center gap-1.5">
             <CalendarDays size={12} className="shrink-0" />
             <span className="truncate">
-              {dateOnly(voucher.startDate)} – {dateOnly(voucher.endDate)}
+              {dateOnly(voucher.startDate)} – {dateOnly(voucher.endDate, "No end date")}
             </span>
           </span>
           {validity && (
@@ -714,7 +717,7 @@ function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, onA
 
         <div className="mt-auto flex items-center gap-2">
           <span className="flex min-w-0 flex-1 items-center gap-1 truncate font-mono text-[10.5px] text-neutral-400">
-            <Tag size={10} className="shrink-0" /> {voucher.versionCode}
+            <Tag size={10} className="shrink-0" /> {orText(voucher.versionCode, "No code")}
           </span>
           {!voucher.isDummy && (
             <button
@@ -1166,8 +1169,22 @@ function RejectIconButton({ busy, onClick, label }) {
 export default function VoucherListing({ scope = "all" }) {
   const scopeConfig = SCOPES[scope] || SCOPES.all;
   const isScoped = Boolean(scopeConfig.match);
+  const queryClient = useQueryClient();
+  // Every page — one call caps at 100 versions.
+  const {
+    data: rawVersions,
+    isPending: listPending,
+    error: listError,
+    refetch: refetchList,
+  } = useAllVoucherVersions();
+  // A "not found" answer just means there are no vouchers yet.
+  const listNotFound = Boolean(listError && isNotFoundMessage(listError.message));
+  const loadError = listError && !listNotFound ? listError.message : "";
   // Full list from the API; `vouchers` below is this page's slice of it.
-  const [allVouchers, setVouchers] = useState([]);
+  const allVouchers = useMemo(
+    () => (listNotFound ? [] : (rawVersions ?? []).map(apiVersionToRow)),
+    [rawVersions, listNotFound]
+  );
   // Dummy vouchers only ever show on the Dummy Vouchers page. Live Vouchers
   // keeps every non-dummy version that has no page of its own (Live, Paused,
   // Rejected, Archived) and opens filtered to Live — see `defaultStatusFilter`.
@@ -1181,8 +1198,15 @@ export default function VoucherListing({ scope = "all" }) {
   const [rejecting, setRejecting] = useState(null);
   // Row whose status pill was clicked — { row, kind: "approve" | "publish" | "banner" }.
   const [stepping, setStepping] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  // The Refresh / Retry buttons swap the list for the loader while they run
+  // (background refetches after an action keep it on screen).
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const loading = listPending || manualRefreshing;
+  const reloadList = async () => {
+    setManualRefreshing(true);
+    await refetchList();
+    setManualRefreshing(false);
+  };
 
   const [search, setSearch] = useState("");
   // "Now" captured once when the page opens, for the KPI tiles' age counts
@@ -1190,41 +1214,31 @@ export default function VoucherListing({ scope = "all" }) {
   const [openedAt] = useState(() => Date.now());
   const [statusFilter, setStatusFilter] = useState(defaultStatusFilter);
   const [view, setView] = useState(scopeConfig.defaultView || "grid");
-  const [selectedId, setSelectedId] = useState(null);
+  // `?open=<versionId>` opens that voucher straight away — used by a
+  // brand's Voucher tab — and stays open across a refresh.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openParam = searchParams.get("open");
+  const navigate = useNavigate();
+  const [selectedId, setSelectedId] = useState(() => openParam || null);
   const [page, setPage] = useState(1);
+
+  // Back from the details page: opened from another page → go back there
+  // (e.g. the brand's Voucher tab); otherwise back to this list.
+  const closeDetails = () => {
+    if (openParam) {
+      if ((window.history.state?.idx ?? 0) > 0) {
+        navigate(-1);
+        return;
+      }
+      setSearchParams({}, { replace: true });
+    }
+    setSelectedId(null);
+  };
   const pageSize = view === "grid" ? 9 : 10;
 
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  // Fresh single-voucher fetch for the details page — the list row from
-  // getVouchers() is shown immediately (no blank flash on open), then
-  // overlaid with whatever this returns once it resolves.
-  const [voucherDetail, setVoucherDetail] = useState(null);
-
-  // `silent` = background refresh after an action — keeps the list on
-  // screen instead of swapping it for the loading state.
-  const fetchList = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    setLoadError("");
-    try {
-      // Every page — one call caps at 100 versions.
-      const raw = await getAllVoucherVersions();
-      setVouchers(raw.map(apiVersionToRow));
-    } catch (err) {
-      if (isNotFoundMessage(err.message)) {
-        setVouchers([]);
-      } else {
-        setLoadError(err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchList();
-  }, [fetchList]);
 
   const filtered = useMemo(() => {
     return vouchers.filter((v) => {
@@ -1249,45 +1263,30 @@ export default function VoucherListing({ scope = "all" }) {
   // Voucher Waiting).
   const selectedListRow = allVouchers.find((v) => v.id === selectedId) || null;
 
-  // GET /vouchers/get/:voucherId — fetches the fresher single-voucher
-  // detail once a row is opened. Ids that drive approve/reject/publish/
-  // banner actions always come from the list row, never from this fetch,
-  // since its exact response shape isn't confirmed yet.
-  // `detailReloadKey` is bumped after every approve/reject/publish/banner
-  // action — without it this only ran once per opened voucher, so the
-  // stale detail (spread over the refreshed list row below) kept the old
-  // status and the old action buttons on screen after an approve.
-  const [detailReloadKey, setDetailReloadKey] = useState(0);
+  // GET /vouchers/get/:voucherId — the fresher single-voucher detail once a
+  // row is opened. The list row is shown immediately (no blank flash on
+  // open), then overlaid with this once it resolves. Ids that drive
+  // approve/reject/publish/banner actions always come from the list row,
+  // never from this fetch, since its exact response shape isn't confirmed yet.
+  const { data: detailRes, error: detailError } = useVoucher(selectedListRow?.voucherId);
+  const voucherDetail = useMemo(
+    () => (selectedListRow && detailRes ? apiVoucherDetailToRow(detailRes?.data) : null),
+    [selectedListRow, detailRes]
+  );
+  // The list row covers the UI, so a failure here shouldn't surface as a
+  // page-level error — just a note for debugging while the shape of
+  // GET /vouchers/get/:voucherId gets confirmed.
   useEffect(() => {
-    if (!selectedListRow) {
-      setVoucherDetail(null);
-      return;
-    }
-    let cancelled = false;
-    getVoucherById(selectedListRow.voucherId)
-      .then((res) => {
-        if (!cancelled) setVoucherDetail(apiVoucherDetailToRow(res?.data));
-      })
-      .catch((err) => {
-        // The list row (already showing) covers the UI — this fetch is a
-        // refresh on top of it, so a failure here shouldn't surface as a
-        // page-level error, just a note for debugging while the shape of
-        // GET /vouchers/get/:voucherId gets confirmed.
-        if (!cancelled) console.error("[VoucherList] GET /vouchers/get/:voucherId failed:", err.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedListRow?.voucherId, detailReloadKey]);
+    if (detailError) console.error("[VoucherList] GET /vouchers/get/:voucherId failed:", detailError.message);
+  }, [detailError]);
 
-  // After a workflow action: drop the now-stale detail (so the freshly
-  // fetched list row's status shows immediately), refetch the list, then
-  // trigger a detail refetch.
-  const refreshAfterAction = async () => {
-    setVoucherDetail(null);
-    await fetchList({ silent: true });
-    setDetailReloadKey((k) => k + 1);
-  };
+  // After a workflow action the interceptor has already started refetching
+  // the list and the opened detail (both under ["vouchers"]). This only
+  // waits for those refetches — cancelRefetch: false joins the in-flight
+  // request instead of sending another — so the busy state lasts until the
+  // new status and action buttons are on screen.
+  const refreshAfterAction = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.vouchers.all }, { cancelRefetch: false });
 
   const selectedVoucher = selectedListRow
     ? { ...selectedListRow, ...(voucherDetail || {}), id: selectedListRow.id, voucherId: selectedListRow.voucherId }
@@ -1353,7 +1352,7 @@ export default function VoucherListing({ scope = "all" }) {
     if (kind === "delete") {
       await deleteVoucher(row.voucherId, reason); // parent voucher id
       if (selectedId === row.id) setSelectedId(null);
-      await fetchList({ silent: true });
+      await refreshAfterAction();
       return;
     }
     if (kind === "pause") await pauseVoucher(row.id, reason); // version id
@@ -1468,7 +1467,7 @@ export default function VoucherListing({ scope = "all" }) {
         isSuggested: !voucher.isSuggested,
         suggestionOrder: 1,
       });
-      await fetchList({ silent: true });
+      await refreshAfterAction();
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -1477,12 +1476,16 @@ export default function VoucherListing({ scope = "all" }) {
   };
 
   /* ---- Detail view --------------------------------------------------- */
+  // Opened via ?open= — wait for the list instead of flashing it first.
+  if (openParam && selectedId && !selectedVoucher && listPending) {
+    return <Loader variant="page" label="Loading voucher…" />;
+  }
   if (selectedVoucher) {
     return (
       <>
       <VoucherDetails
         voucher={selectedVoucher}
-        onBack={() => setSelectedId(null)}
+        onBack={closeDetails}
         onApprove={() => handleApprove(selectedVoucher)}
         onReject={(reason) => handleReject(selectedVoucher, reason)}
         onPublish={() => handlePublish(selectedVoucher)}
@@ -1620,7 +1623,7 @@ export default function VoucherListing({ scope = "all" }) {
               {row.isDummy && <DummyBadge size="sm" />}
             </p>
             <p className="mt-0.5 flex items-center gap-1 whitespace-nowrap font-mono text-[10.5px] text-neutral-400">
-              <Tag size={10} className="shrink-0" /> {row.versionCode}
+              <Tag size={10} className="shrink-0" /> {orText(row.versionCode, "No code")}
             </p>
             {row.isDummy && row.dummyBatch && (
               <p className="mt-0.5 whitespace-nowrap font-mono text-[10.5px] text-violet-600 dark:text-violet-400">
@@ -1638,8 +1641,8 @@ export default function VoucherListing({ scope = "all" }) {
         <div className="flex items-center gap-2">
           <BrandMark voucher={row} />
           <div className="min-w-0">
-            <p className="truncate font-medium text-neutral-800 dark:text-neutral-200">{row.brandName}</p>
-            <p className="truncate text-[10.5px] text-neutral-400">{row.category}</p>
+            <p className="truncate font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={row.brandName} fallback="No brand" /></p>
+            <p className="truncate text-[10.5px] text-neutral-400">{orText(row.category, MISSING.category)}</p>
           </div>
         </div>
       ),
@@ -1651,7 +1654,7 @@ export default function VoucherListing({ scope = "all" }) {
       render: (row) => (
         <div>
           <span className="inline-block rounded-lg border border-dashed border-emerald-400/50 bg-emerald-400/[0.06] px-2 py-1 text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
-            {row.discount}
+            {orText(row.discount, "No offer")}
           </span>
           {row.offers.length > 1 && <p className="mt-1 text-[10.5px] text-neutral-500">+{row.offers.length - 1} more offers</p>}
         </div>
@@ -1665,7 +1668,7 @@ export default function VoucherListing({ scope = "all" }) {
         return (
           <div>
             <p className="whitespace-nowrap text-[12px] text-neutral-600 dark:text-neutral-300">
-              {dateOnly(row.startDate)} – {dateOnly(row.endDate)}
+              {dateOnly(row.startDate)} – {dateOnly(row.endDate, "No end date")}
             </p>
             {validity && (
               <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${TONE_CLASSES[validity.tone]}`}>
@@ -1891,7 +1894,7 @@ export default function VoucherListing({ scope = "all" }) {
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <button
-              onClick={fetchList}
+              onClick={reloadList}
               aria-label="Refresh"
               title="Refresh"
               className="flex h-9.5 w-9.5 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
@@ -2191,7 +2194,7 @@ export default function VoucherListing({ scope = "all" }) {
         {!loading && loadError && (
           <div className="flex items-center justify-between gap-3 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
             <span className="flex items-center gap-2"><AlertTriangle size={14} /> Failed to load vouchers: {loadError}</span>
-            <button onClick={fetchList} className="font-semibold underline underline-offset-2">Retry</button>
+            <button onClick={reloadList} className="font-semibold underline underline-offset-2">Retry</button>
           </div>
         )}
 

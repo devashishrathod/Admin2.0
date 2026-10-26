@@ -41,7 +41,9 @@ function buildFormData({ name, description, image, isActive }) {
     const fd = new FormData();
     fd.append('name', name ?? '');
     fd.append('description', description ?? '');
-    fd.append('isActive', String(Boolean(isActive)));
+    // Sent only when the caller sets it — an edit that leaves status alone
+    // must not overwrite it (the API sets whatever value it receives).
+    if (typeof isActive === 'boolean') fd.append('isActive', String(isActive));
     // Only attach `image` when a new File was actually selected —
     // on update, omit it entirely to keep the existing image.
     if (image instanceof File) {
@@ -76,11 +78,14 @@ export async function createCategory({ name, description, image, isActive = true
 }
 
 // ── Get All Categories (paginated + searchable) ──────────────
-// GET {{TryDood2.0BaseUrl}}/categories/getAll?page=&limit=&search=
-export async function getCategories({ page = 1, limit = 10, search = '' } = {}) {
+// GET {{TryDood2.0BaseUrl}}/categories/getAll?page=&limit=&search=&isActive=
+// Each row carries `stats` (subCategories / brands / vouchers / promoCodes,
+// each { total, active }). Empty result = 404 "No any category found".
+export async function getCategories({ page = 1, limit = 10, search = '', isActive } = {}) {
     try {
         const params = { page, limit };
         if (search) params.search = search;
+        if (typeof isActive === 'boolean') params.isActive = isActive;
         const { data } = await api.get('/categories/getAll', { params });
         return data;
     } catch (error) {
@@ -89,11 +94,11 @@ export async function getCategories({ page = 1, limit = 10, search = '' } = {}) 
 }
 
 // ── Get Single Category (for View) ────────────────────────────
-// GET {{TryDood2.0BaseUrl}}/categories/:id
-// NOTE: adjust path if your real "get one" endpoint differs.
+// GET {{TryDood2.0BaseUrl}}/categories/get/:id   (doc #63; the old
+// /categories/:id path 404'd — known issue A-10)
 export async function getCategoryById(id) {
     try {
-        const { data } = await api.get(`/categories/${id}`);
+        const { data } = await api.get(`/categories/get/${id}`);
         return data;
     } catch (error) {
         handleError(error);
@@ -102,9 +107,10 @@ export async function getCategoryById(id) {
 
 // ── Update Category ───────────────────────────────────────────
 // PUT {{TryDood2.0BaseUrl}}/categories/update/:id
-// form-data: { name, description, image? (file, optional), isActive }
-// NOTE: adjust method (PUT/PATCH) and path to match your real endpoint.
-export async function updateCategory(id, { name, description, image, isActive = true }) {
+// form-data: { name, description, image? (file, optional), isActive? }
+// `isActive` is sent only when passed (the status toggle) — editing the
+// name / icon leaves the status as it is.
+export async function updateCategory(id, { name, description, image, isActive }) {
     try {
         const fd = buildFormData({ name, description, image, isActive });
         const { data } = await api.put(`/categories/update/${id}`, fd, {

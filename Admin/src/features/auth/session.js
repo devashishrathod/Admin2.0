@@ -12,6 +12,8 @@
  *   - expireSession() logs out once and goes to the login screen.
  * ---------------------------------------------------------------------- */
 
+import { invalidateAfterWrite } from "../../lib/query";
+
 // JWT payload is base64url JSON; returns null for anything unreadable.
 function decodeJwtPayload(token) {
   try {
@@ -57,10 +59,16 @@ export async function expireSession() {
   window.location.replace(`/?${params.toString()}`);
 }
 
-/** Adds the shared 401 → login handling to one axios instance. */
+/** Adds the shared response handling to one axios instance:
+ *  - success on a write (POST/PUT/PATCH/DELETE) → refresh the cached data
+ *    it changed, on every screen (lib/query/invalidateAfterWrite.js),
+ *  - 401 → logout and back to login. */
 export function attachSessionHandling(api) {
   api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      invalidateAfterWrite(response.config);
+      return response;
+    },
     (error) => {
       // 401 = not authenticated / session expired (permission problems are 403).
       if (error?.response?.status === 401) expireSession();

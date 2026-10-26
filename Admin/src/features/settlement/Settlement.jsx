@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   Filter,
@@ -6,7 +7,6 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowLeft,
-  Ticket as TicketIcon,
   Wallet,
   Landmark,
   Receipt,
@@ -16,7 +16,8 @@ import {
   RefreshCw,
   Eye,
   PauseCircle,
-  PlayCircle,
+  Wrench,
+  XCircle,
   Ban,
   RotateCcw,
   CalendarClock,
@@ -32,46 +33,66 @@ import {
   PieChart as PieChartIcon,
 } from "lucide-react";
 import {
-  getSettlements,
-  getSettlementById,
-  getSettlementTransactions,
-  raiseTicket,
   approveSettlement,
   startSettlementPayout,
   confirmSettlementPayout,
   retrySettlementPayout,
   reverseSettlementPayout,
   holdSettlement,
-  unholdSettlement,
   cancelSettlement,
+  failSettlementPayout,
+  abandonSettlement,
+  rebuildSettlement,
+  writeOffBrandDebt,
 } from "./services/SettlementApi";
+import {
+  useAllSettlements,
+  useSettlement,
+  useSettlementTransactions,
+  usePayoutHealth,
+  useBrandSettlementDebt,
+} from "./queries/settlementQueries";
+import { useSettings } from "../settings/queries/settingsQueries";
+import { isValidUtr } from "../refund/refundUtils";
+import { queryKeys } from "../../lib/query";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
 import BulkActionModal from "../../components/common/BulkActionModal";
 import BulkSelectBar from "../../components/common/BulkSelectBar";
 import StatusStepButton from "../../components/common/StatusStepButton";
-import { mapSettlementStatus, SETTLEMENT_TONES } from "./settlementUtils";
+import { mapSettlementStatus, SETTLEMENT_TONES, settlementNeedsAttention } from "./settlementUtils";
 import SelectDropdown from "../../components/common/SelectDropdown";
 import { downloadCsv } from "../../utils/exportTable";
 import { todayStr } from "../transaction/transactionUtils";
 import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
-import { pctChange, weekOverWeek } from "../../utils/overviewStats";
+import { pctChange, weekOverWeek, localDateStr } from "../../utils/overviewStats";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING, orText } from "../../utils/helpers";
 
 
 /* -------------------------------------------------------------------------
- * T+2 day settlement logic
+ * T+N day settlement logic
  * -------------------------------------------------------------------------
  * Rule: payment customer se jis din aata hai (paymentReceivedDate = T),
- * uska settlement 2 calendar days baad due hota hai (T+2).
+ * uska settlement N calendar days baad due hota hai (T+N), where N is the
+ * backend's own `customer.settlement.delayDays` setting (default 3 per the
+ * super admin API doc) — never a number hardcoded here.
  *  - dueDate == today            -> "Today" (Today Settlement)
  *  - dueDate < today             -> "Overdue by Xd" (already due, ab tak settle nahi hua)
  *  - dueDate == today + 1        -> "Tomorrow"
- *  - dueDate > today             -> "In X days" (abhi pending, 2 din complete nahi hue)
+ *  - dueDate > today             -> "In X days" (abhi pending, N din complete nahi hue)
  *  - status === "Settlement done"-> "Completed" (already settled)
- * Change SETTLEMENT_CYCLE_DAYS agar aapko T+1 / T+3 chahiye.
  * ---------------------------------------------------------------------- */
 
-const SETTLEMENT_CYCLE_DAYS = 2;
+const DEFAULT_DELAY_DAYS = 3;
+
+// `delayDays` from GET /settings (customer.settlement), or the doc default.
+function useSettlementDelayDays() {
+  const { data } = useSettings();
+  const n = Number((data?.data ?? data)?.customer?.settlement?.delayDays);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_DELAY_DAYS;
+}
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -117,7 +138,7 @@ function daysBetween(a, b) {
  * Core T+2 eligibility calculator.
  * Given a settlement row, works out its due date and a human label.
  */
-function getSettlementSchedule(settlement, today = new Date()) {
+function getSettlementSchedule(settlement, delayDays, today = new Date()) {
   const received = parseDMY(settlement.paymentReceivedDate);
   if (!received) {
     return {
@@ -130,7 +151,7 @@ function getSettlementSchedule(settlement, today = new Date()) {
     };
   }
 
-  const dueDate = addDays(received, SETTLEMENT_CYCLE_DAYS);
+  const dueDate = addDays(received, delayDays);
   const daysLeft = daysBetween(today, dueDate); // dueDate - today
 
   if (settlement.status === "Settlement done") {
@@ -138,7 +159,7 @@ function getSettlementSchedule(settlement, today = new Date()) {
   }
   // Terminal/paused states — a due-date countdown isn't meaningful once a
   // settlement has left the normal pending → processing → paid path.
-  if (["Cancelled", "On hold", "Reversed", "Failed", "Abandoned"].includes(settlement.status)) {
+  if (["Cancelled", "On hold", "Reversed", "Failed", "Abandoned", "Carried forward", "Draft"].includes(settlement.status)) {
     return { dueDate, dueLabel: "—", isToday: false, isOverdue: false, isPending: false, daysLeft };
   }
 
@@ -206,18 +227,20 @@ function normalizeBreakup(raw) {
 // use. `id` stays the Mongo `_id` (what the detail/transactions endpoints
 // actually take as :settlement_id) — `settlementNumber` is the separate
 // human-readable reference ("TD/STL/26-27/000123") shown in the UI.
-// The endpoint doesn't embed the brand's name — only `brandId` — so
-// "Vendor" shows the raw id rather than a fabricated brand name.
+// The endpoint doesn't embed the brand's name yet — only `brandId` — so
+// "Vendor" shows the brand name when sent and the raw id otherwise.
 function normalizeSettlement(raw) {
+  const brandId = typeof raw.brandId === "object" ? raw.brandId?._id : raw.brandId;
   return {
     id: raw._id || raw.id || "—",
     settlementNumber: raw.settlementNumber || null,
-    vendor: raw.brandId || "—",
+    brandId: brandId || null,
+    vendor: raw.brandName || raw.brand?.brandName || raw.brandId?.brandName || brandId || "—",
     paymentReceivedDate: formatDMYFromISO(raw.periodEnd || raw.periodStart || raw.createdAt) || "—",
-    // Raw ISO "YYYY-MM-DD" (not the "DD Mon YYYY" display string above) so
-    // the date-range filter can compare it directly against a native
-    // <input type="date"> value.
-    dateForFilter: (raw.periodEnd || raw.periodStart || raw.createdAt || "").slice(0, 10) || null,
+    // Local (IST) "YYYY-MM-DD" (not the "DD Mon YYYY" display string above)
+    // so the date-range filter and daily chart compare it directly
+    // against a native <input type="date"> value.
+    dateForFilter: localDateStr(raw.periodEnd || raw.periodStart || raw.createdAt),
     settlementDate: formatDMYFromISO(raw.paidAt) || "—",
     createdAt: formatDMYFromISO(raw.createdAt) || "—",
     periodStart: formatDMYFromISO(raw.periodStart) || "—",
@@ -234,6 +257,12 @@ function normalizeSettlement(raw) {
     requestId: raw.idempotencyKey || raw.documentToken || "—",
     idempotencyKey: raw.idempotencyKey || "—",
     documentToken: raw.documentToken || "—",
+    documentUrl: raw.documentUrl || null,
+    // Why it's stuck / who approved — admin-only fields per the doc.
+    failureNote: raw.failureNote || "",
+    approvedBy: raw.approvedBy?.name || raw.approvedBy?.fullName || (typeof raw.approvedBy === "string" ? raw.approvedBy : "") || "",
+    approvedAt: raw.approvedAt || null,
+    taintedTransactionIds: Array.isArray(raw.taintedTransactionIds) ? raw.taintedTransactionIds.map(String) : [],
     reserveLabel: raw.reserveLabel || null,
     reserveBasis: {
       disputeCount: Number(raw.reserveBasis?.disputeCount) || 0,
@@ -252,7 +281,6 @@ function normalizeSettlement(raw) {
     needsRevalidation: Boolean(raw.needsRevalidation),
     attemptCount: Number(raw.attemptCount) || 0,
     transactions: [],
-    tickets: [],
     // Populated straight from GET /settlements/admin/:id — legs and
     // timeline are siblings of `settlement` in that response, not nested
     // inside it, so handleOpenSettlement merges them in separately.
@@ -285,6 +313,28 @@ function normalizeSettlementTransaction(raw) {
     date: dateLabel,
     meta: Object.entries(metaSource).map(([label, value]) => ({ label, value: String(value) })),
   };
+}
+
+// GET /transactions/admin/health → the signals worth an admin's look.
+// The doc names the three settlement signals and their levels; each may
+// come as a count, an array, or an object with a count — read all three.
+const HEALTH_SIGNALS = [
+  { key: "unconfirmedPayouts", level: "critical", text: "payout leg(s) started 24h+ ago with no UTR — money may have moved and the system doesn't know" },
+  { key: "overdueSettlements", level: "attention", text: "settlement(s) unpaid for 7+ days — the alert was already sent" },
+  { key: "strandedDrafts", level: "attention", text: "empty draft(s) older than 6h — the cleanup job isn't running" },
+];
+
+function signalCount(value) {
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === "number") return value;
+  if (value && typeof value === "object") return Number(value.count ?? value.total ?? (Array.isArray(value.items) ? value.items.length : 0)) || 0;
+  return 0;
+}
+
+function readHealthSignals(res) {
+  const d = res?.data ?? res ?? {};
+  const source = d.signals ?? d.settlements ?? d;
+  return HEALTH_SIGNALS.map((s) => ({ ...s, count: signalCount(source?.[s.key]) })).filter((s) => s.count > 0);
 }
 
 const STATUS_OPTIONS = [
@@ -346,7 +396,7 @@ function LegStatusBadge({ status }) {
         styles[s] || "bg-neutral-200 text-neutral-600 ring-neutral-300 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-neutral-700"
       }`}
     >
-      {s || "—"}
+      {s || "No status"}
     </span>
   );
 }
@@ -354,7 +404,7 @@ function LegStatusBadge({ status }) {
 // Shows the T+2 due state: Today / Tomorrow / In X days / Overdue / Completed
 function DueBadge({ schedule }) {
   if (!schedule || schedule.dueLabel === "—") {
-    return <span className="text-[12px] text-neutral-600">—</span>;
+    return <span className="text-[12px] text-neutral-400 dark:text-neutral-500">No due date</span>;
   }
   if (schedule.dueLabel === "Completed") {
     return (
@@ -394,8 +444,12 @@ const STATUS_MIX_COLORS = {
   Abandoned: "#D4D4D4",
 };
 
+// The admin worklist tab — flagged / Failed / On hold (doc's needsAttention).
+const NEEDS_ATTENTION = "Needs attention";
+
 const STATUS_TABS = [
   { key: "All", label: "All" },
+  { key: NEEDS_ATTENTION, label: "Needs attention" },
   { key: "Pending Approval", label: "Pending Approval" },
   { key: "Approved", label: "Approved" },
   { key: "Processing", label: "Processing" },
@@ -407,47 +461,53 @@ const AWAITING_PAYOUT = ["Pending Approval", "Approved", "Processing"];
 const getSettlementDate = (s) => s.dateForFilter;
 const getSettlementAmount = (s) => s.amount;
 
+// A big payout can go out in several NEFT legs; the settlement is PAID
+// only once they add up. The confirm response says where it stands.
+function confirmSettled(res) {
+  const d = res?.data ?? res ?? {};
+  return d.settled !== false;
+}
+
+function confirmMessage(res) {
+  const d = res?.data ?? res ?? {};
+  if (d.settled === false) {
+    return `Leg confirmed. Paid so far ${inr(d.paidSoFar)}, remaining ${inr(d.remaining)} — confirm the next leg once it lands.`;
+  }
+  return res?.message || "Payout confirmed.";
+}
+
 /* -------------------------------------------------------------------------
  * Detail view (mirrors the vendor-side settlement detail screen)
  * ---------------------------------------------------------------------- */
 
-function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onViewReserveBasis }) {
+function SettlementDetail({ settlement, delayDays, detailLoading, onBack, onViewReserveBasis }) {
   const b = settlement.breakup;
-  const [openTicket, setOpenTicket] = useState(
-    settlement.tickets[0]?.id || null
-  );
-  const [ticketSubmitting, setTicketSubmitting] = useState(false);
-  const [ticketError, setTicketError] = useState("");
-  const schedule = useMemo(() => getSettlementSchedule(settlement), [settlement]);
-
-  const handleCreateTicket = async () => {
-    setTicketSubmitting(true);
-    setTicketError("");
-    try {
-      await raiseTicket(settlement.id);
-    } catch (err) {
-      setTicketError(err.message);
-    } finally {
-      setTicketSubmitting(false);
-    }
-  };
+  const schedule = useMemo(() => getSettlementSchedule(settlement, delayDays), [settlement, delayDays]);
 
   // Approve → Start Payout → Confirm Payout — the real admin workflow.
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [actionSuccess, setActionSuccess] = useState("");
   const [showApproveBox, setShowApproveBox] = useState(false);
   const [approveNote, setApproveNote] = useState("");
   const [showConfirmBox, setShowConfirmBox] = useState(false);
-  const [confirmForm, setConfirmForm] = useState({ utr: "", mode: "NEFT", paidAt: "" });
+  const [confirmForm, setConfirmForm] = useState({ utr: "", mode: "NEFT", reference: "", paidAt: "" });
   const [showReverseBox, setShowReverseBox] = useState(false);
   const [reverseReason, setReverseReason] = useState("");
+  // The other actions share one inline box (see ACTION_BOXES below).
+  const [openBox, setOpenBox] = useState(null);
+  const [boxText, setBoxText] = useState("");
 
+  // The detail, its statement lines and the list behind it all refetch
+  // after the write by themselves (shared interceptor → ["settlements"]).
+  // `fn` may return a success message to show (e.g. legs still remaining).
   const runAction = async (fn) => {
     setActionSubmitting(true);
     setActionError("");
+    setActionSuccess("");
     try {
-      await fn();
-      onRefresh?.();
+      const message = await fn();
+      if (message) setActionSuccess(message);
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -455,41 +515,142 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
     }
   };
 
+  // Opening any action box clears the last action's error.
+  const toggleBox = (setter) => {
+    setActionError("");
+    setter((v) => !v);
+  };
+  const toggleSharedBox = (key) => {
+    setActionError("");
+    setBoxText("");
+    setOpenBox((k) => (k === key ? null : key));
+  };
+
   const handleApprove = () =>
     runAction(async () => {
-      await approveSettlement(settlement.id, { note: approveNote.trim() || undefined });
+      const res = await approveSettlement(settlement.id, { note: approveNote.trim() || undefined });
       setShowApproveBox(false);
       setApproveNote("");
+      return res?.message;
     });
-
-  const handleStartPayout = () => runAction(() => startSettlementPayout(settlement.id));
 
   const handleConfirmPayout = () =>
     runAction(async () => {
-      await confirmSettlementPayout(settlement.id, {
+      const res = await confirmSettlementPayout(settlement.id, {
         utr: confirmForm.utr.trim(),
         mode: confirmForm.mode,
+        reference: confirmForm.reference.trim() || undefined,
         paidAt: confirmForm.paidAt ? new Date(confirmForm.paidAt).toISOString() : new Date().toISOString(),
       });
       setShowConfirmBox(false);
-      setConfirmForm({ utr: "", mode: "NEFT", paidAt: "" });
+      setConfirmForm({ utr: "", mode: "NEFT", reference: "", paidAt: "" });
+      return confirmMessage(res);
     });
 
-  const handleRetry = () => runAction(() => retrySettlementPayout(settlement.id));
+  const handleRetry = () =>
+    runAction(async () => (await retrySettlementPayout(settlement.id))?.message);
 
   // Reverse only makes sense once a settlement has actually been paid out
   // (PAID → REVERSED in the confirmed lifecycle) — no real "canReverse"
   // flag exists yet, so this is inferred from the status itself.
   const handleReverse = () =>
     runAction(async () => {
-      await reverseSettlementPayout(settlement.id, { reason: reverseReason.trim() });
+      const res = await reverseSettlementPayout(settlement.id, { reason: reverseReason.trim() });
       setShowReverseBox(false);
       setReverseReason("");
+      return res?.message;
     });
 
-  const canReverse = settlement.status === "Settlement done";
+  // Confirm Payout checks: the UTR must look like a bank reference and
+  // `paidAt` (when the bank moved the money) can't be in the future.
+  const utrValid = isValidUtr(confirmForm.utr);
+  const paidAtInFuture = Boolean(confirmForm.paidAt) && new Date(confirmForm.paidAt) > new Date();
+
+  // Which lifecycle actions apply — the API sends canApprove / canPay /
+  // canRetry; the rest follow the doc's state table.
+  const st = settlement.status;
+  const canReverse = st === "Settlement done";
+  const canConfirm = st === "Processing";
+
+  // Actions that need only a confirm (and maybe a required text) — one box
+  // each, per the super admin API doc's settlement endpoints.
+  const ACTION_BOXES = {
+    pay: {
+      show: settlement.canPay,
+      button: "Start Payout",
+      icon: Wallet,
+      primary: true,
+      note: `${inr(settlement.amount)} goes to ${settlement.accountHolderName} · ${settlement.maskedAccountNumber}. A NEFT can't be recalled; if the bank account changed since the build, it goes On hold instead.`,
+      confirm: "Confirm Start Payout",
+      run: () => startSettlementPayout(settlement.id),
+    },
+    fail: {
+      show: canConfirm,
+      button: "Mark Payout Failed",
+      icon: XCircle,
+      tone: "red",
+      label: "What the bank said",
+      placeholder: "e.g. Beneficiary name mismatch — bank returned the NEFT.",
+      note: "The bounced leg is kept on record. Fix the account, then Retry.",
+      confirm: "Mark Failed",
+      run: (text) => failSettlementPayout(settlement.id, { note: text }),
+    },
+    abandon: {
+      show: st === "Failed",
+      button: "Abandon",
+      icon: Ban,
+      tone: "red",
+      label: "Reason",
+      placeholder: "e.g. Vendor closed the account; pay in the next cycle.",
+      note: "Rows are released and the money comes back in a later settlement. Use Retry instead if this same payout should go again.",
+      confirm: "Abandon Settlement",
+      run: (text) => abandonSettlement(settlement.id, { note: text }),
+    },
+    hold: {
+      show: st === "Pending Approval",
+      button: "Hold",
+      icon: PauseCircle,
+      label: "Reason (staff only — the vendor just sees \"on hold\")",
+      placeholder: "e.g. Refund raised after the build — checking.",
+      confirm: "Hold",
+      run: (text) => holdSettlement(settlement.id, { reason: text }),
+    },
+    rebuild: {
+      show: st === "On hold",
+      button: "Rebuild",
+      icon: Wrench,
+      note: "Drops only the flagged rows; clean rows stay in this settlement. If nothing (or less than the minimum payout) is left, it is carried forward.",
+      confirm: "Rebuild",
+      run: () => rebuildSettlement(settlement.id),
+    },
+    cancel: {
+      show: st === "On hold" || st === "Approved",
+      button: "Cancel Settlement",
+      icon: Ban,
+      tone: "red",
+      label: "Reason",
+      placeholder: "e.g. Wrong period — rebuilding next cycle.",
+      note: "Every row moves to the next cycle.",
+      confirm: "Cancel Settlement",
+      run: (text) => cancelSettlement(settlement.id, { reason: text }),
+    },
+  };
+  const box = openBox ? ACTION_BOXES[openBox] : null;
+
+  const handleBoxConfirm = () =>
+    runAction(async () => {
+      const res = await box.run(boxText.trim());
+      setOpenBox(null);
+      setBoxText("");
+      return res?.message;
+    });
+
   const showActions =
-    settlement.canApprove || settlement.canPay || settlement.canRetry || settlement.status === "Processing" || canReverse;
+    settlement.canApprove ||
+    settlement.canRetry ||
+    canConfirm ||
+    canReverse ||
+    Object.values(ACTION_BOXES).some((a) => a.show);
 
   return (
     <div className="w-full">
@@ -499,7 +660,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
           className="flex items-center gap-2 text-[13.5px] font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-50"
         >
           <ArrowLeft size={16} />
-          {settlement.settlementNumber || settlement.id}
+          {orText(settlement.settlementNumber || settlement.id, MISSING.id)}
         </button>
         <div className="flex items-center gap-2">
           {detailLoading && (
@@ -508,25 +669,52 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
               Refreshing…
             </span>
           )}
-          <button
-            onClick={handleCreateTicket}
-            disabled={ticketSubmitting}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
-            {ticketSubmitting ? <Loader2 size={14} className="animate-spin" /> : <TicketIcon size={14} />}
-            Create Ticket
-          </button>
-          <button className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300">
-            <Download size={14} />
-            Download Statement
-          </button>
+          {/* The statement PDF generator isn't built yet (doc: "abhi nahi
+              bana") — the button shows only once a document URL exists. */}
+          {settlement.documentUrl && (
+            <a
+              href={settlement.documentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300"
+            >
+              <Download size={14} />
+              Download Statement
+            </a>
+          )}
         </div>
       </div>
 
-      {ticketError && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-4 py-3 text-[13px] text-red-600 dark:text-red-400">
-          <AlertTriangle size={14} className="shrink-0" />
-          {ticketError}
+      {/* Why this settlement is stuck — admin-only details per the doc. */}
+      {settlement.needsRevalidation && (
+        <div className="mb-4 rounded-2xl bg-amber-400/10 p-4 ring-1 ring-amber-400/30">
+          <p className="flex items-center gap-2 text-[13.5px] font-semibold text-amber-700 dark:text-amber-400">
+            <ShieldAlert size={15} className="shrink-0" />
+            Needs revalidation — a refund or dispute arrived after this settlement was built
+          </p>
+          <p className="mt-1 text-[12.5px] text-neutral-600 dark:text-neutral-300">
+            Approve will be refused until it's rebuilt. Put it on hold, then Rebuild to drop only the affected rows.
+          </p>
+          {settlement.taintedTransactionIds.length > 0 && (
+            <p className="mt-2 break-all font-mono text-[11.5px] text-neutral-500">
+              Affected transactions: {settlement.taintedTransactionIds.join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+      {settlement.failureNote && (
+        <div className="mb-4 flex items-start gap-2 rounded-2xl bg-red-500/5 p-4 text-[13px] text-red-600 ring-1 ring-red-400/30 dark:text-red-400">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            <span className="font-semibold">Failure note:</span> {settlement.failureNote}
+          </span>
+        </div>
+      )}
+
+      {actionSuccess && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl bg-emerald-400/10 px-4 py-3 text-[13px] text-emerald-700 dark:text-emerald-400">
+          <CheckCircle2 size={14} className="shrink-0" />
+          {actionSuccess}
         </div>
       )}
 
@@ -541,7 +729,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
           <div className="flex flex-wrap gap-2">
             {settlement.canApprove && (
               <button
-                onClick={() => setShowApproveBox((v) => !v)}
+                onClick={() => toggleBox(setShowApproveBox)}
                 disabled={actionSubmitting}
                 className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -549,19 +737,31 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
                 Approve
               </button>
             )}
-            {settlement.canPay && (
+            {Object.entries(ACTION_BOXES)
+              .filter(([, a]) => a.show)
+              .map(([key, a]) => {
+                const Icon = a.icon;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleSharedBox(key)}
+                    disabled={actionSubmitting}
+                    className={`flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                      a.primary
+                        ? "bg-emerald-400 font-semibold text-neutral-950 hover:bg-emerald-300"
+                        : a.tone === "red"
+                        ? "border border-red-400/40 font-medium text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                        : "border border-neutral-200 font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    }`}
+                  >
+                    <Icon size={14} />
+                    {a.button}
+                  </button>
+                );
+              })}
+            {canConfirm && (
               <button
-                onClick={handleStartPayout}
-                disabled={actionSubmitting}
-                className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {actionSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Wallet size={14} />}
-                Start Payout
-              </button>
-            )}
-            {settlement.status === "Processing" && (
-              <button
-                onClick={() => setShowConfirmBox((v) => !v)}
+                onClick={() => toggleBox(setShowConfirmBox)}
                 disabled={actionSubmitting}
                 className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
@@ -581,7 +781,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
             )}
             {canReverse && (
               <button
-                onClick={() => setShowReverseBox((v) => !v)}
+                onClick={() => toggleBox(setShowReverseBox)}
                 disabled={actionSubmitting}
                 className="flex h-9 items-center gap-1.5 rounded-xl border border-red-400/40 px-3.5 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
               >
@@ -622,12 +822,19 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
 
           {showConfirmBox && (
             <div className="mt-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <TextField
                   label="UTR"
                   value={confirmForm.utr}
                   onChange={(e) => setConfirmForm((p) => ({ ...p, utr: e.target.value }))}
-                  placeholder="PNFXSTL000000001"
+                  placeholder="HDFCN52026102200123"
+                  error={confirmForm.utr.trim() && !utrValid ? "12–22 letters or digits" : ""}
+                />
+                <TextField
+                  label="Reference (optional — defaults to the UTR)"
+                  value={confirmForm.reference}
+                  onChange={(e) => setConfirmForm((p) => ({ ...p, reference: e.target.value }))}
+                  placeholder="Bank statement reference"
                 />
                 <div>
                   <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
@@ -646,10 +853,11 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
                   </select>
                 </div>
                 <TextField
-                  label="Paid At"
+                  label="Paid At (when the bank sent it — not now)"
                   type="datetime-local"
                   value={confirmForm.paidAt}
                   onChange={(e) => setConfirmForm((p) => ({ ...p, paidAt: e.target.value }))}
+                  error={paidAtInFuture ? "Can't be in the future" : ""}
                 />
               </div>
               <div className="mt-3 flex justify-end gap-2">
@@ -663,7 +871,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
                 <button
                   type="button"
                   onClick={handleConfirmPayout}
-                  disabled={actionSubmitting || !confirmForm.utr.trim()}
+                  disabled={actionSubmitting || !utrValid || paidAtInFuture}
                   className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {actionSubmitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
@@ -702,6 +910,40 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
             </div>
           )}
 
+          {box && (
+            <div className="mt-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950">
+              {box.note && <p className="mb-3 text-[12.5px] text-neutral-600 dark:text-neutral-300">{box.note}</p>}
+              {box.label && (
+                <TextField
+                  label={box.label}
+                  value={boxText}
+                  onChange={(e) => setBoxText(e.target.value)}
+                  placeholder={box.placeholder}
+                />
+              )}
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpenBox(null)}
+                  className="flex h-9 items-center rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBoxConfirm}
+                  disabled={actionSubmitting || (box.label && !boxText.trim())}
+                  className={`flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
+                    box.tone === "red" ? "bg-red-500 text-white hover:bg-red-400" : "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
+                  }`}
+                >
+                  {actionSubmitting && <Loader2 size={14} className="animate-spin" />}
+                  {box.confirm}
+                </button>
+              </div>
+            </div>
+          )}
+
           {actionError && (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-4 py-3 text-[13px] text-red-600 dark:text-red-400">
               <AlertTriangle size={14} className="shrink-0" />
@@ -718,25 +960,28 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
         </h3>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="To Credit Amount" value={inr(settlement.amount)} accent />
-          <Field label="Settlement Id" value={settlement.settlementNumber || settlement.id} />
-          <Field label="Settlement Bank Name" value={settlement.bankName} />
-          <Field label="Settlement Request Id" value={settlement.requestId} />
-          <Field label="Account Holder" value={settlement.accountHolderName} />
-          <Field label="Bank Account" value={settlement.maskedAccountNumber} />
-          <Field label="IFSC Code" value={settlement.ifscCode} />
-          <Field label="Transactions" value={settlement.transactionCount} />
-          <Field label="Cycle Type" value={settlement.cycleType} />
-          <Field label="Payout Provider" value={settlement.payoutProvider} />
-          <Field label="Created On" value={settlement.createdAt} />
-          <Field label="Statement Token" value={settlement.documentToken} />
-          <Field label="Period Start" value={settlement.periodStart} />
-          <Field label="Period End" value={settlement.periodEnd} />
+          <Field label="Settlement Id" value={settlement.settlementNumber || settlement.id} fallback={MISSING.id} />
+          <Field label="Settlement Bank Name" value={settlement.bankName} fallback="Not added" />
+          <Field label="Settlement Request Id" value={settlement.requestId} fallback={MISSING.id} />
+          <Field label="Account Holder" value={settlement.accountHolderName} fallback="Not added" />
+          <Field label="Bank Account" value={settlement.maskedAccountNumber} fallback="Not added" />
+          <Field label="IFSC Code" value={settlement.ifscCode} fallback="Not added" />
+          <Field label="Transactions" value={settlement.transactionCount ?? 0} />
+          <Field label="Cycle Type" value={settlement.cycleType} fallback={MISSING.date} />
+          <Field label="Payout Provider" value={settlement.payoutProvider} fallback={MISSING.method} />
+          <Field label="Created On" value={settlement.createdAt} fallback={MISSING.date} />
+          <Field label="Statement Token" value={settlement.documentToken} fallback="Not issued" />
+          <Field label="Period Start" value={settlement.periodStart} fallback={MISSING.date} />
+          <Field label="Period End" value={settlement.periodEnd} fallback={MISSING.date} />
+          {settlement.approvedBy && <Field label="Approved By" value={settlement.approvedBy} />}
+          {settlement.approvedAt && <Field label="Approved At" value={formatGenericValue(settlement.approvedAt)} />}
+          {settlement.attemptCount > 0 && <Field label="Payout Attempts" value={settlement.attemptCount} />}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <StatusBadge status={settlement.status} />
           <span className="flex items-center gap-1.5 text-[12px] text-neutral-500">
             <CalendarClock size={13} />
-            T+{SETTLEMENT_CYCLE_DAYS} due{schedule.dueDate ? `: ${formatDMY(schedule.dueDate)}` : ""}
+            T+{delayDays} due{schedule.dueDate ? `: ${formatDMY(schedule.dueDate)}` : ""}
           </span>
           <DueBadge schedule={schedule} />
           {settlement.viewer && (
@@ -788,6 +1033,8 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
         </div>
       </section>
 
+      {settlement.brandId && <BrandDebtSection brandId={settlement.brandId} />}
+
       {/* Ledger legs — from the settlement detail endpoint, kept separate
           from the statement-line transactions fetched below. Each leg gets
           its own card (status badge + a Field grid), same visual language
@@ -811,12 +1058,12 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
                 </div>
                 <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
                   <Field label="Amount" value={inr(leg.amount)} accent />
-                  <Field label="UTR" value={leg.utr || "—"} />
-                  <Field label="Mode" value={leg.mode || "—"} />
-                  <Field label="Provider" value={leg.provider || "—"} />
-                  <Field label="Bank Last4" value={leg.bankLast4 || "—"} />
-                  <Field label="Initiated At" value={formatGenericValue(leg.initiatedAt)} />
-                  <Field label="Paid At" value={formatGenericValue(leg.paidAt)} />
+                  <Field label="UTR" value={leg.utr} fallback="No UTR yet" />
+                  <Field label="Mode" value={leg.mode} fallback={MISSING.method} />
+                  <Field label="Provider" value={leg.provider} fallback={MISSING.method} />
+                  <Field label="Bank Last4" value={leg.bankLast4} fallback="Not added" />
+                  <Field label="Initiated At" value={formatGenericValue(leg.initiatedAt)} fallback="Not yet" />
+                  <Field label="Paid At" value={formatGenericValue(leg.paidAt)} fallback="Not yet" />
                 </div>
               </div>
             ))}
@@ -861,7 +1108,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
                         : mapSettlementStatus(ev.toStatus)}
                     </p>
                     <p className="mt-0.5 text-[12px] text-neutral-500">
-                      {formatGenericValue(ev.at)}
+                      <ValueOr value={formatGenericValue(ev.at)} fallback="Time not recorded" />
                       {ev.by ? ` · by ${ev.by}` : ""}
                     </p>
                     {ev.reason && (
@@ -872,7 +1119,7 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
                         {metaEntries.map((m) => (
                           <span key={m.label} className="text-[12px] text-neutral-500 dark:text-neutral-400">
                             {m.label}:{" "}
-                            <span className="text-neutral-700 dark:text-neutral-200">{m.value}</span>
+                            <span className="text-neutral-700 dark:text-neutral-200"><ValueOr value={m.value} /></span>
                           </span>
                         ))}
                       </div>
@@ -924,51 +1171,139 @@ function SettlementDetail({ settlement, detailLoading, onBack, onRefresh, onView
         </ol>
       </section>
 
-      {/* Tickets */}
-      <section className="mb-8 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-        <h3 className="mb-4 text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
-          Ticket Raise
-        </h3>
-        {settlement.tickets.length === 0 ? (
-          <p className="text-[13px] text-neutral-500">
-            No tickets raised for this settlement.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {settlement.tickets.map((tk) => {
-              const open = openTicket === tk.id;
-              return (
-                <div
-                  key={tk.id}
-                  className="rounded-xl bg-neutral-50 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20"
-                >
-                  <button
-                    onClick={() => setOpenTicket(open ? null : tk.id)}
-                    className="flex w-full items-center justify-between px-4 py-3 text-left"
-                  >
-                    <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
-                      {tk.id}{" "}
-                      <span className="ml-2 text-[11.5px] text-neutral-500">
-                        {tk.date}
-                      </span>
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <StatusBadge status={tk.status === "Open" ? "Processing" : "Settlement done"} />
-                      {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                    </div>
-                  </button>
-                  {open && (
-                    <p className="border-t border-neutral-200 px-4 py-3 text-[12.5px] leading-relaxed text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-                      {tk.detail}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* No settlement-ticket API exists, so there is no ticket section. */}
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
+ * Brand debt — GET /settlements/admin/debt/:brandId and its write-off.
+ * A settlement with netPayable <= 0 carries forward; once the brand stops
+ * selling, that debt just sits on our books (doc: "Settlements — jo 12 me
+ * nahi the"). Fetched only when asked, since most brands owe nothing.
+ * ---------------------------------------------------------------------- */
+export function BrandDebtSection({ brandId }) {
+  const [asked, setAsked] = useState(false);
+  const debtQuery = useBrandSettlementDebt(asked ? brandId : null);
+  const [showWriteOff, setShowWriteOff] = useState(false);
+  const [form, setForm] = useState({ reason: "", olderThanDays: "90" });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const debt = debtQuery.data?.data ?? debtQuery.data ?? null;
+  // The response shape isn't documented — show its scalar fields as-is.
+  const entries = debt && typeof debt === "object"
+    ? Object.entries(debt).filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v))
+    : [];
+  const days = Number(form.olderThanDays);
+  const formValid = form.reason.trim() && Number.isInteger(days) && days >= 0;
+
+  const handleWriteOff = async () => {
+    setSubmitting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await writeOffBrandDebt(brandId, { reason: form.reason.trim(), olderThanDays: days });
+      setSuccess(res?.message || "Debt written off.");
+      setShowWriteOff(false);
+      setForm({ reason: "", olderThanDays: "90" });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="mb-4 rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-neutral-500">Brand Debt</h3>
+        {!asked ? (
+          <button
+            onClick={() => setAsked(true)}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 px-3 text-[12.5px] font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <Landmark size={13} />
+            Check debt
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              setError("");
+              setShowWriteOff((v) => !v);
+            }}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-red-400/40 px-3 text-[12.5px] font-medium text-red-600 hover:bg-red-500/10 dark:text-red-400"
+          >
+            Write off
+          </button>
+        )}
+      </div>
+
+      {asked && debtQuery.isPending && (
+        <p className="mt-3 flex items-center gap-1.5 text-[12.5px] text-neutral-500">
+          <Loader2 size={13} className="animate-spin" /> Loading…
+        </p>
+      )}
+      {asked && debtQuery.error && (
+        <p className="mt-3 text-[12.5px] text-red-600 dark:text-red-400">{debtQuery.error.message}</p>
+      )}
+      {asked && !debtQuery.isPending && !debtQuery.error && (
+        entries.length ? (
+          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {entries.map(([k, v]) => (
+              <Field key={k} label={humanizeKey(k)} value={typeof v === "number" && /amount|debt|total|owed/i.test(k) ? inr(v) : formatGenericValue(v)} />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-[12.5px] text-neutral-500">No debt recorded for this brand.</p>
+        )
+      )}
+
+      {showWriteOff && (
+        <div className="mt-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-950">
+          <p className="mb-3 text-[12.5px] text-neutral-600 dark:text-neutral-300">
+            Writes off this brand's carried-forward debt older than the given days. The loss is booked as platform cost.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <TextField
+                label="Reason"
+                value={form.reason}
+                onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}
+                placeholder="e.g. Brand closed in March; not recoverable."
+              />
+            </div>
+            <TextField
+              label="Older than (days)"
+              type="number"
+              value={form.olderThanDays}
+              onChange={(e) => setForm((p) => ({ ...p, olderThanDays: e.target.value }))}
+            />
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowWriteOff(false)}
+              className="flex h-9 items-center rounded-xl border border-neutral-200 px-3.5 text-[13px] font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleWriteOff}
+              disabled={submitting || !formValid}
+              className="flex h-9 items-center gap-1.5 rounded-xl bg-red-500 px-3.5 text-[13px] font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting && <Loader2 size={14} className="animate-spin" />}
+              Confirm Write Off
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-3 text-[12.5px] text-red-600 dark:text-red-400">{error}</p>}
+      {success && <p className="mt-3 text-[12.5px] text-emerald-700 dark:text-emerald-400">{success}</p>}
+    </section>
   );
 }
 
@@ -1027,7 +1362,7 @@ function SettlementReserveBasis({ settlement, onBack }) {
           className="flex items-center gap-2 text-[13.5px] font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-50"
         >
           <ArrowLeft size={16} />
-          Reserve Basis · {settlement.settlementNumber || settlement.id}
+          Reserve Basis · {orText(settlement.settlementNumber || settlement.id, MISSING.id)}
         </button>
       </div>
 
@@ -1057,23 +1392,24 @@ function SettlementReserveBasis({ settlement, onBack }) {
           <Field label="Reserve Held" value={inr(b.reserveHeld)} />
           <Field label="Reserve Percent" value={`${b.reservePercent}%`} />
           <Field label="Reserve Released" value={inr(b.reserveReleased)} />
-          <Field label="Reserve Reason" value={settlement.reserveLabel || "—"} />
+          <Field label="Reserve Reason" value={settlement.reserveLabel} fallback={MISSING.reason} />
         </div>
       </section>
     </div>
   );
 }
 
-function Field({ label, value, accent }) {
+// Values wrap instead of being cut off, so long ids/tokens show in full.
+function Field({ label, value, accent, fallback = MISSING.generic }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[11.5px] text-neutral-500">{label}</p>
       <p
-        className={`mt-0.5 truncate text-[13.5px] font-medium ${
+        className={`mt-0.5 break-words text-[13.5px] font-medium ${
           accent ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-neutral-100"
         }`}
       >
-        {value}
+        <ValueOr value={value} fallback={fallback} />
       </p>
     </div>
   );
@@ -1165,22 +1501,33 @@ function getNextStep(s) {
   if (s.canPay) return { key: "payout", label: "Start Payout" };
   if (s.status === "Processing") return { key: "confirm", label: "Confirm Payout" };
   if (s.canRetry) return { key: "retry", label: "Retry" };
-  if (s.status === "On hold") return { key: "unhold", label: "Unhold" };
+  // There is no "unhold" — per the doc an ON_HOLD settlement is rebuilt
+  // (or cancelled from the detail page).
+  if (s.status === "On hold") return { key: "rebuild", label: "Rebuild" };
   return null;
 }
 
 // What a row looks like right after a step succeeds — applied instantly so
 // the pill changes on click, then the silent refetch brings the real data.
+// Rebuild's outcome (back to approval, or carried forward) is the
+// server's call, so it waits for the refetch.
 const STEP_RESULT = {
   approve: { status: "Approved", canApprove: false, canPay: true },
   payout: { status: "Processing", canPay: false },
   confirm: { status: "Settlement done" },
-  retry: { status: "Processing", canRetry: false },
+  // FAILED → APPROVED with a new leg — it still has to be paid again.
+  retry: { status: "Approved", canRetry: false, canPay: true },
   // PAID → REVERSED: the bank pulled the credit back after payout.
   reverse: { status: "Reversed" },
   hold: { status: "On hold", canApprove: false },
-  unhold: { status: "Pending Approval", canApprove: true },
+  rebuild: {},
 };
+
+// Confirm only flips to "Settlement done" once every leg is paid.
+function stepPatch(stepKey, res) {
+  if (stepKey === "confirm" && !confirmSettled(res)) return {};
+  return STEP_RESULT[stepKey];
+}
 
 /* The status pill is the workflow button — see components/common/StatusStepButton. */
 function SettlementStatusStep({ settlement, onStep }) {
@@ -1199,15 +1546,17 @@ const STEP_COPY = {
   approve: { title: "Approve settlement?", description: "It moves to Approved and becomes ready for payout.", action: "Approve" },
   payout: { title: "Start payout?", description: "This starts the bank transfer for this settlement.", action: "Start Payout" },
   confirm: { title: "Confirm payout", description: "Enter the bank UTR once the money has reached the vendor.", action: "Confirm" },
-  retry: { title: "Retry payout?", description: "The failed payout will be attempted again.", action: "Retry Payout" },
-  unhold: { title: "Take off hold?", description: "It goes back to Pending Approval so it can be approved and paid.", action: "Unhold" },
+  retry: { title: "Retry payout?", description: "It goes back to Approved with a fresh bank snapshot, ready to pay again.", action: "Retry Payout" },
+  rebuild: { title: "Rebuild settlement?", description: "Drops only the flagged rows; if too little is left it is carried forward.", action: "Rebuild" },
 };
 
 function SettlementStepModal({ settlement, step, submitting, error, onClose, onConfirm }) {
   const copy = STEP_COPY[step.key];
   const [note, setNote] = useState("");
-  const [confirmForm, setConfirmForm] = useState({ utr: "", mode: "NEFT", paidAt: "" });
+  const [confirmForm, setConfirmForm] = useState({ utr: "", mode: "NEFT", reference: "", paidAt: "" });
   const needsUtr = step.key === "confirm";
+  const utrValid = isValidUtr(confirmForm.utr);
+  const paidAtInFuture = Boolean(confirmForm.paidAt) && new Date(confirmForm.paidAt) > new Date();
 
   const submit = () => {
     if (step.key === "approve") return onConfirm({ note: note.trim() || undefined });
@@ -1215,6 +1564,7 @@ function SettlementStepModal({ settlement, step, submitting, error, onClose, onC
       return onConfirm({
         utr: confirmForm.utr.trim(),
         mode: confirmForm.mode,
+        reference: confirmForm.reference.trim() || undefined,
         paidAt: confirmForm.paidAt ? new Date(confirmForm.paidAt).toISOString() : new Date().toISOString(),
       });
     }
@@ -1226,7 +1576,7 @@ function SettlementStepModal({ settlement, step, submitting, error, onClose, onC
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-neutral-900">
         <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{copy.title}</h2>
         <p className="mt-1 text-[12.5px] text-neutral-500">
-          <span className="font-medium text-neutral-700 dark:text-neutral-300">{settlement.settlementNumber || settlement.id}</span>
+          <span className="font-medium text-neutral-700 dark:text-neutral-300">{orText(settlement.settlementNumber || settlement.id, MISSING.id)}</span>
           {" · "}
           {inr(settlement.amount)} — {copy.description}
         </p>
@@ -1248,7 +1598,14 @@ function SettlementStepModal({ settlement, step, submitting, error, onClose, onC
               label="UTR"
               value={confirmForm.utr}
               onChange={(e) => setConfirmForm((p) => ({ ...p, utr: e.target.value }))}
-              placeholder="PNFXSTL000000001"
+              placeholder="HDFCN52026102200123"
+              error={confirmForm.utr.trim() && !utrValid ? "12–22 letters or digits" : ""}
+            />
+            <TextField
+              label="Reference (optional — defaults to the UTR)"
+              value={confirmForm.reference}
+              onChange={(e) => setConfirmForm((p) => ({ ...p, reference: e.target.value }))}
+              placeholder="Bank statement reference"
             />
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1268,6 +1625,7 @@ function SettlementStepModal({ settlement, step, submitting, error, onClose, onC
                 type="datetime-local"
                 value={confirmForm.paidAt}
                 onChange={(e) => setConfirmForm((p) => ({ ...p, paidAt: e.target.value }))}
+                error={paidAtInFuture ? "Can't be in the future" : ""}
               />
             </div>
           </div>
@@ -1290,7 +1648,7 @@ function SettlementStepModal({ settlement, step, submitting, error, onClose, onC
           </button>
           <button
             onClick={submit}
-            disabled={submitting || (needsUtr && !confirmForm.utr.trim())}
+            disabled={submitting || (needsUtr && (!utrValid || paidAtInFuture))}
             className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting && <Loader2 size={14} className="animate-spin" />}
@@ -1302,10 +1660,49 @@ function SettlementStepModal({ settlement, step, submitting, error, onClose, onC
   );
 }
 
+// Every page of settlements; search, filters and pagination are client-side.
+const LIST_PARAMS = {};
+
+// The list response keeps its rows at `data.data` or straight at `data` —
+// maps `fn` over them wherever they are, keeping the response's shape.
+function mapRawSettlements(res, fn) {
+  if (Array.isArray(res?.data?.data)) return { ...res, data: { ...res.data, data: res.data.data.map(fn) } };
+  if (Array.isArray(res?.data)) return { ...res, data: res.data.map(fn) };
+  return res;
+}
+
 export default function Settlement() {
-  const [settlements, setSettlements] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const queryClient = useQueryClient();
+  const delayDays = useSettlementDelayDays();
+  const {
+    data: listRes,
+    isPending: loading,
+    isFetching,
+    error,
+    refetch,
+  } = useAllSettlements(LIST_PARAMS);
+  // Payout health: failures that look like nothing happened (doc).
+  const { data: healthRes } = usePayoutHealth();
+  const healthSignals = useMemo(() => readHealthSignals(healthRes), [healthRes]);
+  const loadError = error?.message ?? "";
+  const settlements = useMemo(
+    () =>
+      (listRes?.data?.data ?? listRes?.data ?? []).map((raw) =>
+        // `_patch` = optimistic overrides from patchSettlement; the refetch
+        // the write triggers replaces the raw row, dropping it.
+        raw._patch ? { ...normalizeSettlement(raw), ...raw._patch } : normalizeSettlement(raw)
+      ),
+    [listRes]
+  );
+  // Flip a row to its next state at once after a step succeeds. The fields
+  // are normalized (display status, flags), so they ride on the cached raw
+  // row as `_patch` until the interceptor's refetch lands.
+  const patchSettlement = (id, patch) =>
+    queryClient.setQueryData(queryKeys.settlements.view("all", LIST_PARAMS), (prev) =>
+      mapRawSettlements(prev, (raw) =>
+        (raw._id || raw.id) === id ? { ...raw, _patch: { ...raw._patch, ...patch } } : raw
+      )
+    );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [showTodayOnly, setShowTodayOnly] = useState(false);
@@ -1314,9 +1711,8 @@ export default function Settlement() {
   const [expandedId, setExpandedId] = useState(null);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState(null); // -> detail view
+  const [selectedRow, setSelectedRow] = useState(null); // -> detail view
   const [showReserveBasis, setShowReserveBasis] = useState(false); // -> reserve basis page
-  const [detailLoading, setDetailLoading] = useState(false);
 
   // Hold / Cancel — quick row-level actions, gated on the confirmed
   // lifecycle (ON_HOLD only ever follows Pending Approval, CANCELLED only
@@ -1329,69 +1725,49 @@ export default function Settlement() {
   // Next workflow step started from a table row — { row, step }.
   const [stepTarget, setStepTarget] = useState(null);
 
-  // `silent` = background refresh after an action — keeps the table on
-  // screen instead of swapping it for the loading state.
-  const fetchSettlements = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getSettlements({ page: 1, limit: 100 });
-      const rows = (res?.data?.data ?? res?.data ?? []).map(normalizeSettlement);
-      setSettlements(rows);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSettlements();
-  }, [fetchSettlements]);
-
   // List rows are lightweight — pull the full breakup + real statement
   // lines (transactions) once a settlement is opened, same lightweight-list
   // -> full-detail pattern as Brand/Customer.
-  const handleOpenSettlement = useCallback(async (row) => {
-    setSelected(row);
+  const handleOpenSettlement = (row) => {
+    setSelectedRow(row);
     setShowReserveBasis(false);
-    setDetailLoading(true);
-    try {
-      const [detailRes, txnRes] = await Promise.all([
-        getSettlementById(row.id),
-        getSettlementTransactions(row.id, { page: 1, limit: 50 }),
-      ]);
-      // The detail endpoint's `data` carries `settlement`, `legs`,
-      // `timeline` and `viewer` as siblings — legs/timeline/viewer are
-      // NOT nested inside `settlement`, so they're pulled out here.
-      const detailData = detailRes?.data ?? {};
-      const rawDetail = detailData.settlement ?? (detailData._id ? detailData : null);
-      const txnRows = (txnRes?.data?.data ?? txnRes?.data ?? []).map(normalizeSettlementTransaction);
-      setSelected((prev) => ({
-        ...prev,
-        ...(rawDetail ? normalizeSettlement(rawDetail) : {}),
-        legs: Array.isArray(detailData.legs) ? detailData.legs : [],
-        timeline: Array.isArray(detailData.timeline) ? detailData.timeline : [],
-        viewer: detailData.viewer || null,
-        transactions: txnRows,
-        tickets: prev?.tickets || [],
-      }));
-    } catch {
-      // Keep showing the lightweight list row if the detail fetch fails.
-    } finally {
-      setDetailLoading(false);
-    }
-  }, []);
+  };
+  const detailQuery = useSettlement(selectedRow?.id);
+  const statementQuery = useSettlementTransactions(selectedRow?.id);
+  const detailLoading = Boolean(selectedRow) && (detailQuery.isFetching || statementQuery.isFetching);
 
-  // T+2 schedule computed fresh against "now" whenever settlements change
+  const selected = useMemo(() => {
+    if (!selectedRow) return null;
+    const detailRes = detailQuery.data;
+    const txnRes = statementQuery.data;
+    // Keep showing the lightweight list row until both detail reads have
+    // succeeded (or if either fails) — same as the old Promise.all.
+    if (!detailRes || !txnRes) return selectedRow;
+    // The detail endpoint's `data` carries `settlement`, `legs`,
+    // `timeline` and `viewer` as siblings — legs/timeline/viewer are
+    // NOT nested inside `settlement`, so they're pulled out here.
+    const detailData = detailRes?.data ?? {};
+    const rawDetail = detailData.settlement ?? (detailData._id ? detailData : null);
+    const txnRows = (txnRes?.data?.data ?? txnRes?.data ?? []).map(normalizeSettlementTransaction);
+    return {
+      ...selectedRow,
+      ...(rawDetail ? normalizeSettlement(rawDetail) : {}),
+      legs: Array.isArray(detailData.legs) ? detailData.legs : [],
+      timeline: Array.isArray(detailData.timeline) ? detailData.timeline : [],
+      viewer: detailData.viewer || null,
+      transactions: txnRows,
+    };
+  }, [selectedRow, detailQuery.data, statementQuery.data]);
+
+  // T+N schedule computed fresh against "now" whenever settlements change
   const schedules = useMemo(() => {
     const now = new Date();
     const map = {};
     settlements.forEach((s) => {
-      map[s.id] = getSettlementSchedule(s, now);
+      map[s.id] = getSettlementSchedule(s, delayDays, now);
     });
     return map;
-  }, [settlements]);
+  }, [settlements, delayDays]);
 
   // Settlements due exactly today -> drives the "Today Settlement" stat card
   const todaySettlementStats = useMemo(() => {
@@ -1446,9 +1822,10 @@ export default function Settlement() {
   }, [settlements]);
 
   const statusCounts = useMemo(() => {
-    const counts = { All: settlements.length };
+    const counts = { All: settlements.length, [NEEDS_ATTENTION]: 0 };
     settlements.forEach((s) => {
       counts[s.status] = (counts[s.status] || 0) + 1;
+      if (settlementNeedsAttention(s)) counts[NEEDS_ATTENTION] += 1;
     });
     return counts;
   }, [settlements]);
@@ -1458,9 +1835,8 @@ export default function Settlement() {
     setRowActionError("");
     try {
       await holdSettlement(holdTarget.id, { reason });
-      setSettlements((prev) => prev.map((x) => (x.id === holdTarget.id ? { ...x, ...STEP_RESULT.hold } : x)));
+      patchSettlement(holdTarget.id, STEP_RESULT.hold);
       setHoldTarget(null);
-      fetchSettlements({ silent: true });
     } catch (err) {
       setRowActionError(err.message);
     } finally {
@@ -1475,7 +1851,7 @@ export default function Settlement() {
     retry: (id) => retrySettlementPayout(id),
     reverse: (id, payload) => reverseSettlementPayout(id, payload),
     hold: (id, payload) => holdSettlement(id, payload),
-    unhold: (id) => unholdSettlement(id),
+    rebuild: (id) => rebuildSettlement(id),
   };
 
   const handleStepConfirm = async (payload) => {
@@ -1483,12 +1859,11 @@ export default function Settlement() {
     setRowActionError("");
     try {
       const { row, step } = stepTarget;
-      await STEP_ACTIONS[step.key](row.id, payload);
+      const res = await STEP_ACTIONS[step.key](row.id, payload);
       setStepTarget(null);
-      // Flip the row's pill to its next state at once, then quietly refetch
-      // (no table spinner) for the server's real status and flags.
-      setSettlements((prev) => prev.map((x) => (x.id === row.id ? { ...x, ...STEP_RESULT[step.key] } : x)));
-      fetchSettlements({ silent: true });
+      // Flip the row's pill to its next state at once; the list refetches
+      // by itself (no table spinner) for the server's real status and flags.
+      patchSettlement(row.id, stepPatch(step.key, res));
     } catch (err) {
       setRowActionError(err.message);
     } finally {
@@ -1503,9 +1878,8 @@ export default function Settlement() {
     setRowActionError("");
     try {
       await reverseSettlementPayout(reverseTarget.id, { reason });
-      setSettlements((prev) => prev.map((x) => (x.id === reverseTarget.id ? { ...x, ...STEP_RESULT.reverse } : x)));
+      patchSettlement(reverseTarget.id, STEP_RESULT.reverse);
       setReverseTarget(null);
-      fetchSettlements({ silent: true });
     } catch (err) {
       setRowActionError(err.message);
     } finally {
@@ -1519,7 +1893,6 @@ export default function Settlement() {
     try {
       await cancelSettlement(cancelTarget.id, { reason });
       setCancelTarget(null);
-      fetchSettlements({ silent: true });
     } catch (err) {
       setRowActionError(err.message);
     } finally {
@@ -1533,7 +1906,9 @@ export default function Settlement() {
         s.id.toLowerCase().includes(search.toLowerCase()) ||
         (s.settlementNumber || "").toLowerCase().includes(search.toLowerCase()) ||
         s.vendor.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "All" || s.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "All" ||
+        (statusFilter === NEEDS_ATTENTION ? settlementNeedsAttention(s) : s.status === statusFilter);
       const matchesToday = !showTodayOnly || schedules[s.id]?.isToday;
       const matchesDateFrom = !dateFrom || (s.dateForFilter && s.dateForFilter >= dateFrom);
       const matchesDateTo = !dateTo || (s.dateForFilter && s.dateForFilter <= dateTo);
@@ -1591,9 +1966,11 @@ export default function Settlement() {
   };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  // An action can move rows out of the tab — never stay past the last page.
+  const currentPage = Math.min(page, totalPages);
   const pageRows = filtered.slice(
-    (page - 1) * rowsPerPage,
-    page * rowsPerPage
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
   );
 
   /* ---- Multi-select + bulk actions ----------------------------------- */
@@ -1611,6 +1988,12 @@ export default function Settlement() {
   // current search/date filters).
   const selectByStatus = (status) => setSelectedIds(new Set(filtered.filter((s) => s.status === status).map((s) => s.id)));
   const clearSelection = () => setSelectedIds(new Set());
+  // Changing the tab, search, status or dates starts over on page 1 and
+  // drops the selection, so bulk actions never touch hidden rows.
+  const resetView = () => {
+    setPage(1);
+    clearSelection();
+  };
 
   const selectedRows = settlements.filter((s) => selectedIds.has(s.id));
   // Each bulk action only runs on the selected settlements it's valid for.
@@ -1620,7 +2003,7 @@ export default function Settlement() {
     confirm: (s) => s.status === "Processing",
     reverse: (s) => s.status === "Settlement done",
     hold: (s) => s.status === "Pending Approval",
-    unhold: (s) => s.status === "On hold",
+    rebuild: (s) => s.status === "On hold",
   };
   const BULK_COPY = {
     approve: { title: "Approve settlements", action: "Approve", input: "note" },
@@ -1628,7 +2011,7 @@ export default function Settlement() {
     confirm: { title: "Confirm payouts", action: "Confirm Payouts", input: "utr" },
     reverse: { title: "Reverse payouts", action: "Reverse", input: "reason" },
     hold: { title: "Put on hold", action: "Hold", input: "reason" },
-    unhold: { title: "Take off hold", action: "Unhold", input: "none" },
+    rebuild: { title: "Rebuild settlements", action: "Rebuild", input: "none" },
   };
   const bulkRows = bulkKind ? selectedRows.filter(BULK_ELIGIBLE[bulkKind]) : [];
 
@@ -1636,13 +2019,12 @@ export default function Settlement() {
   const runBulkOne = async (row, payload) => {
     // The shared modal sends a note/reason as `text`; approve takes `note`, reverse takes `reason`.
     const body = bulkKind === "approve" ? { note: payload.text } : ["reverse", "hold"].includes(bulkKind) ? { reason: payload.text } : payload;
-    await STEP_ACTIONS[bulkKind](row.id, body);
-    setSettlements((prev) => prev.map((x) => (x.id === row.id ? { ...x, ...STEP_RESULT[bulkKind] } : x)));
+    const res = await STEP_ACTIONS[bulkKind](row.id, body);
+    patchSettlement(row.id, stepPatch(bulkKind, res));
   };
   const closeBulk = () => {
     setBulkKind(null);
     clearSelection();
-    fetchSettlements({ silent: true });
   };
 
 
@@ -1659,14 +2041,9 @@ export default function Settlement() {
       <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <SettlementDetail
           settlement={selected}
+          delayDays={delayDays}
           detailLoading={detailLoading}
-          onBack={() => setSelected(null)}
-          // Refresh the open detail and the list behind it, so the rows and
-          // stat cards are already current when the admin goes Back.
-          onRefresh={() => {
-            handleOpenSettlement(selected);
-            fetchSettlements({ silent: true });
-          }}
+          onBack={() => setSelectedRow(null)}
           onViewReserveBasis={() => setShowReserveBasis(true)}
         />
       </div>
@@ -1684,20 +2061,42 @@ export default function Settlement() {
             </h1>
             <p className="mt-1 text-[13px] text-neutral-500">
               Monitor payment settlements across all vendors with complete
-              transparency. Settlement cycle: T+{SETTLEMENT_CYCLE_DAYS} days from payment received.
+              transparency. Settlement cycle: T+{delayDays} days from payment received (from Settings).
             </p>
           </div>
           <div className="flex gap-2">
             <button
-              onClick={fetchSettlements}
-              disabled={loading}
+              onClick={() => refetch()}
+              disabled={isFetching}
               className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
-              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
         </div>
+
+        {/* Payout health — the doc's "fails by looking like nothing
+            happened" signals; shown only when something is off. */}
+        {healthSignals.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {healthSignals.map((s) => (
+              <div
+                key={s.key}
+                className={`flex items-start gap-2 rounded-2xl px-4 py-3 text-[13px] ring-1 ${
+                  s.level === "critical"
+                    ? "bg-red-500/5 text-red-600 ring-red-400/30 dark:text-red-400"
+                    : "bg-amber-400/10 text-amber-700 ring-amber-400/30 dark:text-amber-400"
+                }`}
+              >
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">{s.level === "critical" ? "Critical" : "Attention"}:</span> {s.count} {s.text}.
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* KPI cards */}
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -1722,7 +2121,7 @@ export default function Settlement() {
             icon={CalendarClock}
             label="Due Today"
             value={inr(todaySettlementStats.amount)}
-            sub={`${todaySettlementStats.count} due today · T+${SETTLEMENT_CYCLE_DAYS} cycle`}
+            sub={`${todaySettlementStats.count} due today · T+${delayDays} cycle`}
           />
           <KpiCard icon={Receipt} label="Avg. Settlement" value={inr(kpis.avg)} trend={kpis.avgTrend} />
         </div>
@@ -1756,7 +2155,7 @@ export default function Settlement() {
           active={statusFilter}
           onChange={(key) => {
             setStatusFilter(key);
-            setPage(1);
+            resetView();
           }}
         />
 
@@ -1770,9 +2169,9 @@ export default function Settlement() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                setPage(1);
+                resetView();
               }}
-              placeholder="Search settlement id, vendor, txn id..."
+              placeholder="Search settlement id or number, vendor..."
               className="w-44 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200 sm:w-56"
             />
           </div>
@@ -1782,7 +2181,7 @@ export default function Settlement() {
             icon={Filter}
             onChange={(s) => {
               setStatusFilter(s);
-              setPage(1);
+              resetView();
             }}
           />
           <DateRangeFilter
@@ -1790,22 +2189,22 @@ export default function Settlement() {
             endDate={dateTo}
             onStartChange={(v) => {
               setDateFrom(v);
-              setPage(1);
+              resetView();
             }}
             onEndChange={(v) => {
               setDateTo(v);
-              setPage(1);
+              resetView();
             }}
             onClear={() => {
               setDateFrom("");
               setDateTo("");
-              setPage(1);
+              resetView();
             }}
           />
           <button
             onClick={() => {
               setShowTodayOnly((v) => !v);
-              setPage(1);
+              resetView();
             }}
             className={`flex h-9.5 items-center gap-1.5 rounded-xl border px-3.5 text-[13px] font-medium transition-colors ${
               showTodayOnly
@@ -1848,7 +2247,7 @@ export default function Settlement() {
               { key: "payout", label: "Start Payout", icon: Wallet },
               { key: "confirm", label: "Confirm Payout", icon: Upload },
               { key: "hold", label: "Hold", icon: PauseCircle, tone: "red" },
-              { key: "unhold", label: "Unhold", icon: PlayCircle },
+              { key: "rebuild", label: "Rebuild", icon: Wrench },
               { key: "reverse", label: "Reverse", icon: RotateCcw, tone: "red" },
             ].map((a) => ({ ...a, count: selectedRows.filter(BULK_ELIGIBLE[a.key]).length, onClick: () => setBulkKind(a.key) }))}
             onClear={clearSelection}
@@ -1859,9 +2258,14 @@ export default function Settlement() {
         {loading ? (
           <Loader label="Loading settlements…" />
         ) : loadError ? (
-          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load settlements: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load settlements"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => refetch() }}
+            />
           </div>
         ) : (
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -1888,7 +2292,7 @@ export default function Settlement() {
                   <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Settlement Id</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Vendor</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Payment Received</th>
-                  <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Due (T+{SETTLEMENT_CYCLE_DAYS})</th>
+                  <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Due (T+{delayDays})</th>
                   <th className="px-4 py-3.5 text-center text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Txns</th>
                   <th className="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Amount</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Status</th>
@@ -1931,11 +2335,11 @@ export default function Settlement() {
                             onClick={() => handleOpenSettlement(s)}
                             className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
                           >
-                            {s.settlementNumber || s.id}
+                            {orText(s.settlementNumber || s.id, MISSING.id)}
                           </button>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3.5 font-mono text-[12px] text-neutral-500 dark:text-neutral-400">{s.vendor}</td>
-                        <td className="whitespace-nowrap px-4 py-3.5">{s.paymentReceivedDate}</td>
+                        <td className="whitespace-nowrap px-4 py-3.5 font-mono text-[12px] text-neutral-500 dark:text-neutral-400"><ValueOr value={s.vendor} fallback="No brand" /></td>
+                        <td className="whitespace-nowrap px-4 py-3.5"><ValueOr value={s.paymentReceivedDate} fallback={MISSING.date} /></td>
                         <td className="whitespace-nowrap px-4 py-3.5">
                           <DueBadge schedule={schedule} />
                         </td>
@@ -1986,7 +2390,7 @@ export default function Settlement() {
                                 <RotateCcw size={14} />
                               </button>
                             )}
-                            {s.status === "Approved" && (
+                            {(s.status === "Approved" || s.status === "On hold") && (
                               <button
                                 onClick={() => {
                                   setRowActionError("");
@@ -2067,7 +2471,7 @@ export default function Settlement() {
                 key={n}
                 onClick={() => setPage(n)}
                 className={`flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-medium ${
-                  page === n
+                  currentPage === n
                     ? "bg-emerald-400 text-neutral-950"
                     : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 }`}
@@ -2105,7 +2509,7 @@ export default function Settlement() {
           rows={bulkRows}
           getRef={(s) => s.settlementNumber || s.id}
           getAmount={(s) => s.amount}
-          getSubtitle={(s) => s.vendor}
+          getSubtitle={(s) => orText(s.vendor, "No brand")}
           onRun={runBulkOne}
           onClose={closeBulk}
         />

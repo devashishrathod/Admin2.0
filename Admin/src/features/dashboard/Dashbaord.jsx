@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -38,18 +38,20 @@ import {
 } from "recharts";
 import { useBrands } from "../brand/BrandContext";
 import { BrandAvatar } from "../brand/BrandShared";
-import { getTopBrands } from "../brand/services/BrandApi";
+import { useTopBrands } from "../brand/queries/brandQueries";
 import { mapBrandListItem } from "../brand/brandMapper";
-import { getBrandVerifications } from "../newOnboarding/services/NewOnboardingApi";
+import { useBrandVerifications } from "../newOnboarding/queries/onboardingReviewQueries";
 import { useAuthStore } from "../auth/store/authStore";
 import CommonEmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * Mock data — revenue/transactions/activity have no real endpoint yet, so
  * these stay hand-set and every widget using them carries a "Sample" tag.
  * Vendor counts, pending approvals, top brands and category mix are real —
- * see useBrands() and the fetches inside Dashboard().
+ * see useBrands() and the queries inside Dashboard().
  * ---------------------------------------------------------------------- */
 
 const WEEKLY_TREND = [
@@ -415,71 +417,43 @@ export default function Dashboard() {
   const activeVendors = brands.filter((b) => b.active).length;
 
   // Real pending-approval count/list — GET /brands/admin/verifications,
-  // same lifecycle rule the New Onboarding page uses.
-  const [pending, setPending] = useState([]);
-  const [pendingLoading, setPendingLoading] = useState(true);
+  // same lifecycle rule the New Onboarding page uses. The auto-refresh
+  // menu (below) sets its polling interval; brand reviews refresh it too.
+  const [refreshKey, setRefreshKey] = useState("off");
+  const refreshOption = REFRESH_OPTIONS.find((o) => o.key === refreshKey) || REFRESH_OPTIONS[0];
+  const pendingQuery = useBrandVerifications(
+    { page: 1, limit: 20 },
+    { refetchInterval: refreshOption.ms || false }
+  );
+  // A failed load shows as "no pending" (same as before), not an error.
+  const pending = useMemo(
+    () => (pendingQuery.data?.data?.data ?? []).filter((r) => PENDING_STATUSES.has(derivePendingStatus(r))),
+    [pendingQuery.data]
+  );
+  const pendingLoading = pendingQuery.isPending;
   const [refreshSpinning, setRefreshSpinning] = useState(false);
-
-  const fetchPending = React.useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setPendingLoading(true);
-    try {
-      const res = await getBrandVerifications({ page: 1, limit: 20 });
-      const rows = res?.data?.data ?? [];
-      const stillPending = rows.filter((r) => PENDING_STATUSES.has(derivePendingStatus(r)));
-      setPending(stillPending);
-    } catch {
-      setPending([]);
-    } finally {
-      if (!silent) setPendingLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPending();
-  }, [fetchPending]);
 
   // Real curated "Top Brands" — GET /brands/admin/top-brands, the same
   // list an admin builds via the Brand page's "Set as Top Brand" action
   // (updateTopBrand). Mapped through the same brandMapper the rest of the
   // app uses so the shape (followers, logo, brandName...) stays consistent.
-  const [topBrands, setTopBrands] = useState([]);
-  const [topBrandsLoading, setTopBrandsLoading] = useState(true);
-
-  const fetchTopBrands = React.useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setTopBrandsLoading(true);
-    try {
-      const res = await getTopBrands({ limit: 5 });
-      const rows = (res?.data?.data ?? res?.data ?? []).map(mapBrandListItem);
-      setTopBrands(rows);
-    } catch {
-      setTopBrands([]);
-    } finally {
-      if (!silent) setTopBrandsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTopBrands();
-  }, [fetchTopBrands]);
+  const topBrandsQuery = useTopBrands({ limit: 5 });
+  const topBrands = useMemo(() => {
+    const res = topBrandsQuery.data;
+    return (res?.data?.data ?? res?.data ?? []).map(mapBrandListItem);
+  }, [topBrandsQuery.data]);
+  const topBrandsLoading = topBrandsQuery.isPending;
 
   // Date range — controls how many months the Vendor Growth chart shows.
   const [dateRangeKey, setDateRangeKey] = useState("6M");
   const dateRange = DATE_RANGE_OPTIONS.find((o) => o.key === dateRangeKey) || DATE_RANGE_OPTIONS[1];
 
-  // Auto-refresh — periodically re-pulls pending approvals in the background.
-  const [refreshKey, setRefreshKey] = useState("off");
+  // Auto-refresh menu — the chosen interval polls pendingQuery (above).
   const [refreshMenuOpen, setRefreshMenuOpen] = useState(false);
-  const refreshOption = REFRESH_OPTIONS.find((o) => o.key === refreshKey) || REFRESH_OPTIONS[0];
-
-  useEffect(() => {
-    if (!refreshOption.ms) return;
-    const id = setInterval(() => fetchPending({ silent: true }), refreshOption.ms);
-    return () => clearInterval(id);
-  }, [refreshOption.ms, fetchPending]);
 
   const handleManualRefresh = async () => {
     setRefreshSpinning(true);
-    await Promise.all([fetchPending({ silent: true }), fetchTopBrands({ silent: true })]);
+    await Promise.all([pendingQuery.refetch(), topBrandsQuery.refetch()]);
     setTimeout(() => setRefreshSpinning(false), 500);
   };
 
@@ -976,12 +950,12 @@ export default function Dashboard() {
                             <BrandAvatar brand={b} size="sm" />
                             <div className="min-w-0">
                               <p className="truncate font-semibold text-neutral-800 dark:text-neutral-200">{b.brandName}</p>
-                              <p className="truncate text-[10.5px] text-neutral-400">{b.location}</p>
+                              <p className="truncate text-[10.5px] text-neutral-400"><ValueOr value={b.location} fallback={MISSING.location} /></p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-2 py-2.5 text-neutral-500">{b.category}</td>
-                        <td className="px-2 py-2.5 text-neutral-500">{b.subscriptionPlan}</td>
+                        <td className="px-2 py-2.5 text-neutral-500"><ValueOr value={b.category} fallback={MISSING.category} /></td>
+                        <td className="px-2 py-2.5 text-neutral-500"><ValueOr value={b.subscriptionPlan} fallback={MISSING.plan} /></td>
                         <td className="px-2 py-2.5 text-right font-medium text-neutral-700 dark:text-neutral-300">{b.followers}</td>
                         <td className="px-2 py-2.5 text-right">
                           <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${STATUS_PILLS[b.status] || STATUS_PILLS.Deactive}`}>

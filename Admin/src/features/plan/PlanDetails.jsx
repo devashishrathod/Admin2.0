@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import {
   ArrowLeft,
-  AlertTriangle,
+  RefreshCw,
   Star,
   ThumbsUp,
   ThumbsDown,
@@ -19,12 +19,14 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { getPlanById, getPlanFeatures } from "./services/planApi";
+import { usePlan, usePlanFeatures } from "./queries/planQueries";
+import EmptyState from "../../components/common/EmptyState";
 import { normalizePlan } from "./Plan";
 import { extractFeatures } from "./FeatureMaster";
 import { formatEntitlementValue } from "./PlanModals";
 import { RingStat } from "../brand/BrandShared";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
 
 const ENFORCED_KEYS = ["subBrands", "franchises", "vouchers", "showcase", "dealPack", "prioritySupport"];
 const ENFORCED_LABELS = {
@@ -102,7 +104,7 @@ function FeatureTile({ icon: Icon, label, value, available }) {
         <span className="truncate">{label}</span>
       </p>
       <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">
-        <span className="truncate">{value || "—"}</span>
+        <span className="truncate"><ValueOr value={value} fallback="Not set" /></span>
         {available ? (
           <CheckCircle2 size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
         ) : (
@@ -114,34 +116,17 @@ function FeatureTile({ icon: Icon, label, value, available }) {
 }
 
 export default function PlanDetails({ planId, onBack }) {
-  const [plan, setPlan] = useState(null);
-  const [masterFeatures, setMasterFeatures] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data: planRes, isPending: loading, error: planError, refetch: refetchPlan } = usePlan(planId);
+  const error = planError?.message ?? "";
+  const plan = useMemo(() => {
+    if (!planRes) return null;
+    return normalizePlan(planRes?.data?.plan ?? planRes?.data ?? planRes?.plan ?? planRes);
+  }, [planRes]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const res = await getPlanById(planId);
-        const raw = res?.data?.plan ?? res?.data ?? res?.plan ?? res;
-        if (!cancelled) setPlan(normalizePlan(raw));
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    // Labels for featureValues — the plan only stores key + value.
-    getPlanFeatures()
-      .then((res) => !cancelled && setMasterFeatures(extractFeatures(res)))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [planId]);
+  // Labels for featureValues — the plan only stores key + value. A failed
+  // load just leaves the fallback labels.
+  const { data: featuresRes } = usePlanFeatures();
+  const masterFeatures = useMemo(() => (featuresRes ? extractFeatures(featuresRes) : []), [featuresRes]);
 
   // Every feature the backend returns in featureValues (system limits and
   // display features, in feature-master order), plus any legacy free-text
@@ -238,9 +223,15 @@ export default function PlanDetails({ planId, onBack }) {
         )}
 
         {!loading && error && (
-          <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load plan: {error}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load this plan"
+              description={error}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchPlan() }}
+              secondaryAction={{ label: "Back to plans", onClick: onBack }}
+            />
           </div>
         )}
 
@@ -314,7 +305,7 @@ export default function PlanDetails({ planId, onBack }) {
                 <SummaryStat
                   icon={IndianRupee}
                   label="You Save"
-                  value={savings > 0 ? `₹${savings.toLocaleString("en-IN")}` : "—"}
+                  value={savings > 0 ? `₹${savings.toLocaleString("en-IN")}` : "No discount"}
                 />
               </div>
             </div>
@@ -430,7 +421,7 @@ export default function PlanDetails({ planId, onBack }) {
               {displayFeatures.length ? (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                   {displayFeatures.map((f) => (
-                    <FeatureTile key={f.id} icon={ListChecks} label={f.title || "—"} value={f.value} available={f.available} />
+                    <FeatureTile key={f.id} icon={ListChecks} label={f.title || "Untitled feature"} value={f.value} available={f.available} />
                   ))}
                 </div>
               ) : (

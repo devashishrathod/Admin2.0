@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Users,
   Tag,
@@ -47,9 +47,11 @@ import {
   LabelList,
 } from "recharts";
 import { useBrands } from "../brand/BrandContext";
-import { getPlans } from "../plan/services/planApi";
-import { getVouchers } from "../voucher/services/VoucherApi";
+import { usePlans } from "../plan/queries/planQueries";
+import { useVouchers } from "../voucher/queries/voucherQueries";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * Mock data
@@ -598,22 +600,13 @@ function OverviewTab() {
 
   // Real subscription-plan count — GET /subscriptions/get-all, no mock
   // fallback needed since Plan already has a confirmed real endpoint.
-  const [plansCount, setPlansCount] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await getPlans();
-        const list = res?.data?.data ?? res?.data ?? [];
-        if (!cancelled) setPlansCount(Array.isArray(list) ? list.length : 0);
-      } catch {
-        if (!cancelled) setPlansCount(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // null (shown as "No data") while loading or on error.
+  const plansQuery = usePlans();
+  const plansCount = useMemo(() => {
+    if (!plansQuery.data) return null;
+    const list = plansQuery.data?.data?.data ?? plansQuery.data?.data ?? [];
+    return Array.isArray(list) ? list.length : 0;
+  }, [plansQuery.data]);
 
   const latest = MONTHS.length - 1;
   const prev = latest - 1;
@@ -697,7 +690,7 @@ function OverviewTab() {
     {
       icon: Layers,
       label: "Subscription Plans",
-      value: plansCount != null ? formatNumber(plansCount) : "—",
+      value: plansCount != null ? formatNumber(plansCount) : "No data",
       tint: "pink",
     },
   ];
@@ -908,7 +901,7 @@ function OverviewTab() {
                   </span>
                   <div>
                     <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{b.brandName}</p>
-                    <p className="text-[11px] text-neutral-500">{b.category}</p>
+                    <p className="text-[11px] text-neutral-500"><ValueOr value={b.category} fallback={MISSING.category} /></p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -1008,7 +1001,7 @@ function BrandAnalyticsTab() {
                 >
                   <td className="px-4 py-3">
                     <p className="font-medium text-neutral-900 dark:text-neutral-50 capitalize">{b.name}</p>
-                    <p className="text-[11px] text-neutral-500">{b.category}</p>
+                    <p className="text-[11px] text-neutral-500"><ValueOr value={b.category} fallback={MISSING.category} /></p>
                   </td>
                   <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.customers)}</td>
                   <td className="px-4 py-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(b.vouchers)}</td>
@@ -1182,25 +1175,25 @@ function BrandFactsPanel({ brand }) {
           <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
             <CreditCard size={11} /> Plan Price
           </p>
-          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.planPrice}</p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={brand.planPrice} fallback={MISSING.amount} /></p>
         </div>
         <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
           <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
             <Calendar size={11} /> Plan Term
           </p>
-          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.subscriptionTerm}</p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={brand.subscriptionTerm} fallback={MISSING.plan} /></p>
         </div>
         <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
           <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
             <Calendar size={11} /> Live Since
           </p>
-          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.liveSince}</p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={brand.liveSince} fallback={MISSING.date} /></p>
         </div>
         <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
           <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
             <MapPin size={11} /> Location
           </p>
-          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{brand.location}</p>
+          <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={brand.location} fallback={MISSING.location} /></p>
         </div>
       </div>
     </div>
@@ -1508,25 +1501,10 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 
 function VouchersTab() {
   const [period, setPeriod] = useState("Month");
-  const [vouchers, setVouchers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await getVouchers({ page: 1, limit: 100 });
-        if (!cancelled) setVouchers(res?.data?.data ?? []);
-      } catch {
-        if (!cancelled) setVouchers([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // A failed load just shows no vouchers (empty charts), as before.
+  const vouchersQuery = useVouchers({ page: 1, limit: 100 });
+  const vouchers = useMemo(() => vouchersQuery.data?.data?.data ?? [], [vouchersQuery.data]);
+  const loading = vouchersQuery.isPending;
 
   // Real per-month counts, over the same Jan 2025 – Jul 2026 window the UI
   // already shows — 0 for any month with no real vouchers created in it,

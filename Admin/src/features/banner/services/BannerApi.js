@@ -30,7 +30,11 @@ function handleError(error) {
         error?.response?.data?.error ||
         error?.message ||
         'Something went wrong. Please try again.';
-    throw new Error(message);
+    const err = new Error(message);
+    // Kept so callers can fall back to multipart when presign is off (503)
+    // or storage isn't S3 (409) — super admin doc A-1.
+    err.status = error?.response?.status;
+    throw err;
 }
 
 // ── Banner media kind — FE-only, drives the type picker/UI (accept mime,

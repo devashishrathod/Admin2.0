@@ -73,7 +73,51 @@ export async function cancelSubscription(payload) {
     }
 }
 
+/* -------------------------------------------------------------------------
+ * One brand's live subscription — plan, dates, frozen entitlements, usage.
+ * GET {{base_url}}/subscribeds/get?brandId=   (doc #82; brandId required
+ * for admin). No active plan → subscription: null + lastSubscription.
+ * ---------------------------------------------------------------------- */
+export async function getBrandSubscription(brandId) {
+    try {
+        const { data } = await api.get('/subscribeds/get', { params: { brandId } });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * One brand's subscription history (grants, upgrades, expiries, cancels).
+ * GET {{base_url}}/subscribeds/history?brandId=&page=&limit=   (doc #83)
+ * ---------------------------------------------------------------------- */
+export async function getBrandSubscriptionHistory(brandId, { page = 1, limit = 50 } = {}) {
+    try {
+        const { data } = await api.get('/subscribeds/history', { params: { brandId, page, limit } });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * Repair tool — rebuilds the brand's cached subscription flags and usage
+ * counters from real rows. Safe: deletes nothing. Returns before / after.
+ * PUT {{base_url}}/subscribeds/admin/resync  body: { brandId }   (doc #81)
+ * ---------------------------------------------------------------------- */
+export async function resyncBrandSubscription(brandId) {
+    try {
+        const { data } = await api.put('/subscribeds/admin/resync', { brandId });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
     grantSubscription,
     cancelSubscription,
+    getBrandSubscription,
+    getBrandSubscriptionHistory,
+    resyncBrandSubscription,
 };

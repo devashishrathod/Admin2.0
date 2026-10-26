@@ -1,4 +1,5 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
+import useBackLayer from "../../lib/useBackLayer";
 
 /* -------------------------------------------------------------------------
  * Shared "are you sure?" gate for any update/status-change action that
@@ -21,6 +22,8 @@ export default function ConfirmActionModal({
   onConfirm,
   onClose,
 }) {
+  // Browser Back closes it (not while a save is running — onClose guards).
+  useBackLayer(open, () => !submitting && onClose?.());
   if (!open) return null;
 
   const toneCls =

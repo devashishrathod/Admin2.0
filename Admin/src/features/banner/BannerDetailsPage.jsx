@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -8,13 +8,16 @@ import {
   Image as ImageIcon,
   Link as LinkIcon,
   Pencil,
+  RefreshCw,
   Ruler,
   Trash2,
 } from "lucide-react";
 import { StatusBadge } from "../../components/common/Table";
 import EmptyState from "../../components/common/EmptyState";
-import { getBannerById, deleteBanner, BANNER_TYPES, REDIRECT_TYPES } from "./services/BannerApi";
-import { getCategories } from "../category/services/CategoryApi";
+import NotFoundPage from "../../components/common/NotFoundPage";
+import { deleteBanner, BANNER_TYPES, REDIRECT_TYPES } from "./services/BannerApi";
+import { useBanner } from "./queries/bannerQueries";
+import { useCategories } from "../category/queries/categoryQueries";
 import {
   apiToRow,
   bannerSizeError,
@@ -34,7 +37,7 @@ import Loader from "../../components/common/Loader";
  * ---------------------------------------------------------------------- */
 
 function formatBytes(bytes) {
-  if (!bytes) return "—";
+  if (!bytes) return "File size unknown";
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${Math.round(bytes / 1024)} KB`;
 }
@@ -60,37 +63,29 @@ export default function BannerDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [banner, setBanner] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [categories, setCategories] = useState([]);
   const [measured, setMeasured] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // A failed delete shows on the same error screen as a failed load.
+  const [deleteError, setDeleteError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const raw = await getBannerById(id);
-      setBanner(raw ? apiToRow(raw) : null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  // The service returns the banner object, or null when it doesn't exist.
+  const bannerQuery = useBanner(id);
+  const banner = useMemo(() => (bannerQuery.data ? apiToRow(bannerQuery.data) : null), [bannerQuery.data]);
+  // Also show the loader while "Try again" refetches after an error.
+  const loading = bannerQuery.isPending || (bannerQuery.isError && bannerQuery.isFetching);
+  const error = deleteError || bannerQuery.error?.message || "";
+  const load = () => {
+    setDeleteError("");
+    bannerQuery.refetch();
+  };
 
   // Category names for the "On tap" summary.
-  useEffect(() => {
-    getCategories({ page: 1, limit: 100 })
-      .then((res) => setCategories((res?.data?.data ?? []).map((c) => ({ id: c._id, name: c.name }))))
-      .catch(() => {});
-  }, []);
+  const categoriesQuery = useCategories({ page: 1, limit: 100 });
+  const categories = useMemo(
+    () => (categoriesQuery.data?.data?.data ?? []).map((c) => ({ id: c._id, name: c.name })),
+    [categoriesQuery.data]
+  );
 
   const goBack = () => {
     if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
@@ -103,7 +98,7 @@ export default function BannerDetailsPage() {
       await deleteBanner(banner.id);
       navigate("/banner", { replace: true });
     } catch (err) {
-      setError(err.message);
+      setDeleteError(err.message);
       setDeleting(false);
       setConfirmDelete(false);
     }
@@ -115,20 +110,28 @@ export default function BannerDetailsPage() {
     );
   }
 
-  if (error || !banner) {
+  if (error) {
     return (
       <EmptyState
         variant="page"
-        tone={error ? "error" : "default"}
-        icon={error ? "error" : "banner"}
-        title={error ? "Couldn't load this banner" : "Banner not found"}
-        description={
-          error
-            ? `${error} — check your connection and try again.`
-            : "We couldn't find a banner with this link. It may have been deleted, or the link is no longer valid."
-        }
-        action={{ label: "Back to Banners", icon: ArrowLeft, onClick: () => navigate("/banner") }}
-        secondaryAction={error ? { label: "Try again", onClick: load } : undefined}
+        tone="error"
+        icon="error"
+        title="Couldn't load this banner"
+        description={`${error} — check your connection and try again.`}
+        action={{ label: "Try again", icon: RefreshCw, onClick: load }}
+        secondaryAction={{ label: "Back to Banners", onClick: () => navigate("/banner") }}
+      />
+    );
+  }
+
+  if (!banner) {
+    return (
+      <NotFoundPage
+        title="Banner not found"
+        icon="banner"
+        description="We couldn't find a banner with this link. It may have been deleted, or the link is no longer valid."
+        backLabel="Back to Banners"
+        onBack={() => navigate("/banner")}
       />
     );
   }
@@ -291,7 +294,7 @@ export default function BannerDetailsPage() {
                 {banner.mediaMime && <span className="ml-1.5 font-normal text-neutral-500">{banner.mediaMime}</span>}
               </InfoRow>
               <InfoRow icon={Ruler} label="Size">
-                {size ? `${size.width} × ${size.height} px` : "—"}
+                {size ? `${size.width} × ${size.height} px` : "Dimensions unknown"}
                 <span className="ml-1.5 font-normal text-neutral-500">{formatBytes(banner.mediaSizeBytes)}</span>
               </InfoRow>
               <InfoRow icon={ImageIcon} label="Required">

@@ -74,7 +74,7 @@ export default function Sidebar({
         </div>
 
         {/* Nav */}
-        <nav className="no-scrollbar flex flex-1 flex-col gap-4 overflow-y-auto p-3">
+        <nav className=" flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="flex flex-col gap-0.5">
               <div
@@ -98,7 +98,7 @@ export default function Sidebar({
         </nav>
 
         {/* Foot */}
-        <div className="border-t border-white/70 p-3 dark:border-white/5">
+        {/* <div className="border-t border-white/70 p-3 dark:border-white/5">
           <div className="relative flex items-center gap-2.5 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-400 px-3 py-3 shadow-[0_10px_24px_-8px_rgba(16,185,129,0.6)]">
             <div className="pointer-events-none absolute -right-6 -top-8 h-20 w-20 rounded-full bg-white/25 blur-xl" />
             <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/25 text-xs font-bold text-white ring-1 ring-white/40">
@@ -117,7 +117,7 @@ export default function Sidebar({
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
       </aside>
 
       {mobileOpen && (

@@ -49,27 +49,46 @@ function buildParams(params = {}) {
  * ---------------------------------------------------------------------- */
 
 // ── Get All Settlements ("Mere payouts") ──────────────────────────
-// GET {{base_url}}/settlements?page=&limit=&status=&open=&from=&to=&brandId=
-// `brandId` (brand's Mongo _id) is used by a brand's detail page. It isn't
-// confirmed that the backend filters on it, so callers should still filter
-// the rows by `brandId` themselves (every settlement record carries it).
+// GET {{base_url}}/settlements?page=&limit=&status=&open=&needsAttention=
+//     &settlementNumber=&from=&to=&brandId=
+// `needsAttention=true` is the admin worklist (flagged / FAILED / ON_HOLD,
+// oldest first) per the super admin API doc. `brandId` is used by a
+// brand's detail page; callers still filter rows by it themselves.
 export async function getSettlements({
     page = 1,
     limit = 20,
     status,
     open,
+    needsAttention,
+    settlementNumber,
     from,
     to,
     brandId,
 } = {}) {
     try {
         const { data } = await api.get('/settlements', {
-            params: buildParams({ page, limit, status, open, from, to, brandId }),
+            params: buildParams({ page, limit, status, open, needsAttention, settlementNumber, from, to, brandId }),
         });
         return data;
     } catch (error) {
         handleError(error);
     }
+}
+
+// ── Get Every Settlement (all pages) ──────────────────────────────
+// Walks GET /settlements using the response's `totalPages`, so the
+// Settlements page's KPIs, filters and export cover every settlement.
+// Returns the same { data: { data, total } } shape.
+export async function getAllSettlements({ limit = 100, ...filters } = {}) {
+    const first = await getSettlements({ ...filters, page: 1, limit });
+    const totalPages = Number(first?.data?.totalPages) || 1;
+    const more = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) =>
+            getSettlements({ ...filters, page: i + 2, limit })
+        )
+    );
+    const rows = [first, ...more].flatMap((res) => res?.data?.data ?? (Array.isArray(res?.data) ? res.data : []));
+    return { ...first, data: { ...first?.data, data: rows, page: 1, totalPages: 1, limit: rows.length } };
 }
 
 // ── Get One Settlement ("Ek payout, iske saath") ──────────────────
@@ -101,13 +120,31 @@ export async function getSettlementTransactions(
     }
 }
 
-// ── Raise a ticket against a settlement ───────────────────────────
-// NOT CONFIRMED — no ticket-raising endpoint was shared for this feature
-// (only the 3 GET endpoints above). Left as an explicit "not available
-// yet" failure instead of silently faking a success response, so a
-// Create Ticket UI would fail honestly until a real endpoint is added.
-export async function raiseTicket() {
-    throw new Error("Raising a settlement ticket isn't available yet.");
+// Every statement line of one settlement (all pages), same shape back.
+export async function getAllSettlementTransactions(settlementId, { limit = 100 } = {}) {
+    const first = await getSettlementTransactions(settlementId, { page: 1, limit });
+    const totalPages = Number(first?.data?.totalPages) || 1;
+    const more = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) =>
+            getSettlementTransactions(settlementId, { page: i + 2, limit })
+        )
+    );
+    const rows = [first, ...more].flatMap((res) => res?.data?.data ?? (Array.isArray(res?.data) ? res.data : []));
+    return { ...first, data: { ...first?.data, data: rows, page: 1, totalPages: 1, limit: rows.length } };
+}
+
+// ── Payout health ("kuchh na hone jaise" failures) ────────────────
+// GET {{base_url}}/transactions/admin/health
+// Signals per the super admin API doc: unconfirmedPayouts (CRITICAL — a
+// leg with no UTR for 24h+), overdueSettlements (7d+ unpaid),
+// strandedDrafts (empty DRAFT 6h+ old). Also covers the refund jobs.
+export async function getPayoutHealth() {
+    try {
+        const { data } = await api.get('/transactions/admin/health');
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
 }
 
 /* -------------------------------------------------------------------------
@@ -149,11 +186,15 @@ export async function startSettlementPayout(settlementId) {
 
 // ── Confirm the payout landed ("Payout pahunch gaya — UTR ke saath")
 // — CONFIRMED ───────────────────────────────────────────────────────
-// PATCH {{base_url}}/settlements/admin/:id/confirm  body: { utr, mode, paidAt }
-export async function confirmSettlementPayout(settlementId, { utr, mode, paidAt } = {}) {
+// PATCH {{base_url}}/settlements/admin/:id/confirm
+// body: { utr, mode?, reference?, paidAt? } — `reference` defaults to the
+// UTR. The response carries `paidSoFar`, `remaining` and `settled`: a big
+// payout can go out in several legs and is PAID only once they add up.
+export async function confirmSettlementPayout(settlementId, { utr, mode, reference, paidAt } = {}) {
     try {
         if (!settlementId) throw new Error('settlementId is required');
-        const { data } = await api.patch(`/settlements/admin/${settlementId}/confirm`, { utr, mode, paidAt });
+        const body = buildParams({ utr, mode, reference, paidAt });
+        const { data } = await api.patch(`/settlements/admin/${settlementId}/confirm`, body);
         return data;
     } catch (error) {
         handleError(error);
@@ -184,24 +225,13 @@ export async function holdSettlement(settlementId, { reason } = {}) {
     }
 }
 
-// ── Take a settlement off hold ("Unhold karo") — NOT CONFIRMED ─────
-// PATCH {{base_url}}/settlements/admin/:id/unhold  body: { reason? }
-// Path assumed from the /hold pattern — no Postman request for it yet.
-// If the backend uses a different path (e.g. /release or /resume), change
-// it here only. Expected result: ON_HOLD → back to PENDING_APPROVAL.
-export async function unholdSettlement(settlementId, { reason } = {}) {
-    try {
-        if (!settlementId) throw new Error('settlementId is required');
-        const body = reason ? { reason } : {};
-        const { data } = await api.patch(`/settlements/admin/${settlementId}/unhold`, body);
-        return data;
-    } catch (error) {
-        handleError(error);
-    }
-}
+// There is no "unhold" endpoint — per the super admin API doc an ON_HOLD
+// settlement leaves hold through /rebuild (drops only the tainted rows)
+// or /cancel (every row to the next cycle).
 
 // ── Cancel a settlement ("Cancel karo") — CONFIRMED ────────────────
 // PATCH {{base_url}}/settlements/admin/:id/cancel  body: { reason }
+// ON_HOLD / APPROVED → CANCELLED; every row goes to the next cycle.
 export async function cancelSettlement(settlementId, { reason } = {}) {
     try {
         if (!settlementId) throw new Error('settlementId is required');
@@ -212,18 +242,14 @@ export async function cancelSettlement(settlementId, { reason } = {}) {
     }
 }
 
-/* ---- Below: same /settlements/admin/:id/<action> pattern as the
-   confirmed calls above, matched to the Postman sidebar's names — but
-   their exact request body / response wasn't shared yet. Confirm each
-   one's real shape before relying on it in production. ---- */
-
-// PATCH {{base_url}}/settlements/admin/:id/fail — "Payout fail hua"
-export async function failSettlementPayout(settlementId, { reason } = {}) {
+// ── Payout bounced ("Payout fail hua") ────────────────────────────
+// PATCH {{base_url}}/settlements/admin/:id/fail  body: { note } (required —
+// what the bank said). The bounced leg is kept; rows stay claimed so the
+// same settlement can be retried.
+export async function failSettlementPayout(settlementId, { note } = {}) {
     try {
         if (!settlementId) throw new Error('settlementId is required');
-        const body = {};
-        if (reason) body.reason = reason;
-        const { data } = await api.patch(`/settlements/admin/${settlementId}/fail`, body);
+        const { data } = await api.patch(`/settlements/admin/${settlementId}/fail`, { note });
         return data;
     } catch (error) {
         handleError(error);
@@ -231,6 +257,7 @@ export async function failSettlementPayout(settlementId, { reason } = {}) {
 }
 
 // PATCH {{base_url}}/settlements/admin/:id/retry — "Dobara koshish karo (retry)"
+// FAILED → APPROVED with a new leg and a fresh bankSnapshot; rows kept.
 export async function retrySettlementPayout(settlementId) {
     try {
         if (!settlementId) throw new Error('settlementId is required');
@@ -242,6 +269,8 @@ export async function retrySettlementPayout(settlementId) {
 }
 
 // PATCH {{base_url}}/settlements/admin/:id/abandon — "Chhod do (abandon)"
+// FAILED → ABANDONED; rows are released to the next cycle. The doc gives
+// no body — `note` is sent as the audit text (unconfirmed field name).
 export async function abandonSettlement(settlementId, { note } = {}) {
     try {
         if (!settlementId) throw new Error('settlementId is required');
@@ -255,6 +284,8 @@ export async function abandonSettlement(settlementId, { note } = {}) {
 }
 
 // PATCH {{base_url}}/settlements/admin/:id/rebuild — "Dobara banao (rebuild)"
+// ON_HOLD only: drops just the tainted rows; if nothing (or less than
+// minPayoutAmount) is left it becomes CARRIED_FORWARD.
 export async function rebuildSettlement(settlementId) {
     try {
         if (!settlementId) throw new Error('settlementId is required');
@@ -265,62 +296,44 @@ export async function rebuildSettlement(settlementId) {
     }
 }
 
-// GET {{base_url}}/settlements/admin/brands/:brandId/debt — "Is brand ka bakaya (debt)"
+// ── A brand's settlement debt ("Is brand ka bakaya") ──────────────
+// GET {{base_url}}/settlements/admin/debt/:brandId
+// netPayable <= 0 carries forward; once a brand stops selling that debt
+// just sits there — this shows it.
 export async function getBrandSettlementDebt(brandId) {
     try {
         if (!brandId) throw new Error('brandId is required');
-        const { data } = await api.get(`/settlements/admin/brands/${brandId}/debt`);
+        const { data } = await api.get(`/settlements/admin/debt/${brandId}`);
         return data;
     } catch (error) {
         handleError(error);
     }
 }
 
-// PATCH {{base_url}}/settlements/admin/brands/:brandId/debt/write-off — "Bakaya write off karo"
-export async function writeOffBrandDebt(brandId, { note } = {}) {
+// ── Write off a brand's debt ("Bakaya write off karo") ────────────
+// PATCH {{base_url}}/settlements/admin/debt/:brandId/write-off
+// body: { reason, olderThanDays } per the super admin API doc.
+export async function writeOffBrandDebt(brandId, { reason, olderThanDays } = {}) {
     try {
         if (!brandId) throw new Error('brandId is required');
-        const body = {};
-        if (note) body.note = note;
-        const { data } = await api.patch(`/settlements/admin/brands/${brandId}/debt/write-off`, body);
+        const body = buildParams({ reason, olderThanDays });
+        const { data } = await api.patch(`/settlements/admin/debt/${brandId}/write-off`, body);
         return data;
     } catch (error) {
         handleError(error);
     }
 }
 
-// GET {{base_url}}/settlements/admin/:id — "Doosre ki settlement — admin ke liye"
-// Same shape as getSettlementById, but through the admin-scoped route so
-// an admin can view any brand's settlement, not just their own.
-export async function getSettlementByIdAsAdmin(settlementId) {
-    try {
-        if (!settlementId) throw new Error('settlementId is required');
-        const { data } = await api.get(`/settlements/admin/${settlementId}`);
-        return data;
-    } catch (error) {
-        handleError(error);
-    }
-}
-
-// GET {{base_url}}/settlements/statement/:token — "Statement — token se, bina login"
-// Public/token-authenticated, so this deliberately calls axios directly
-// instead of the `api` instance above — "bina login" means no admin
-// Bearer token should be sent with it.
-export async function getSettlementStatementByToken(token) {
-    try {
-        if (!token) throw new Error('token is required');
-        const { data } = await axios.get(`${BASE_URL}/settlements/statement/${token}`);
-        return data;
-    } catch (error) {
-        handleError(error);
-    }
-}
+// No statement PDF yet — the doc lists the generator as "abhi nahi bana";
+// `documentUrl` / `documentToken` exist on the model only.
 
 export default {
     getSettlements,
+    getAllSettlements,
     getSettlementById,
     getSettlementTransactions,
-    raiseTicket,
+    getAllSettlementTransactions,
+    getPayoutHealth,
     approveSettlement,
     startSettlementPayout,
     confirmSettlementPayout,
@@ -333,6 +346,4 @@ export default {
     rebuildSettlement,
     getBrandSettlementDebt,
     writeOffBrandDebt,
-    getSettlementByIdAsAdmin,
-    getSettlementStatementByToken,
 };

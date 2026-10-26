@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -8,15 +8,15 @@ import {
   Image as ImageIcon,
   Link as LinkIcon,
   Pencil,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { StatusBadge } from "../../components/common/Table";
 import EmptyState from "../../components/common/EmptyState";
+import NotFoundPage from "../../components/common/NotFoundPage";
 import TickerDeleteConfirmModal from "./TickerDeleteConfirmModal";
-import {
-  deletePromotionalTicker,
-  getPromotionalTickerById,
-} from "./services/PromotionalTickerApi";
+import { deletePromotionalTicker } from "./services/PromotionalTickerApi";
+import { usePromotionalTicker } from "./queries/promotionalTickerQueries";
 import { apiToRow, formatDateTime, redirectSummary } from "./tickerUtils";
 import Loader from "../../components/common/Loader";
 
@@ -42,31 +42,17 @@ function InfoRow({ icon: Icon, label, children }) {
 export default function PromotionalTickerDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [ticker, setTicker] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const raw = await getPromotionalTickerById(id);
-      setTicker(raw ? apiToRow(raw) : null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    // Fetch the route's ticker into local page state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
+  // The service returns the ticker object, or null when it doesn't exist.
+  const tickerQuery = usePromotionalTicker(id);
+  const ticker = useMemo(() => (tickerQuery.data ? apiToRow(tickerQuery.data) : null), [tickerQuery.data]);
+  // Also show the loader while "Try again" refetches after an error.
+  const loading = tickerQuery.isPending || (tickerQuery.isError && tickerQuery.isFetching);
+  const error = tickerQuery.error?.message ?? "";
+  const load = () => tickerQuery.refetch();
 
   const goBack = () => {
     if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
@@ -91,20 +77,28 @@ export default function PromotionalTickerDetailsPage() {
     );
   }
 
-  if (error || !ticker) {
+  if (error) {
     return (
       <EmptyState
         variant="page"
-        tone={error ? "error" : "default"}
-        icon={error ? "error" : "ticker"}
-        title={error ? "Couldn't load this promotional ticker" : "Promotional ticker not found"}
-        description={
-          error
-            ? `${error} — check your connection and try again.`
-            : "We couldn't find a promotional ticker with this link. It may have been deleted, or the link is no longer valid."
-        }
-        action={{ label: "Back to Promotional Tickers", icon: ArrowLeft, onClick: () => navigate("/promotional-ticker") }}
-        secondaryAction={error ? { label: "Try again", onClick: load } : undefined}
+        tone="error"
+        icon="error"
+        title="Couldn't load this promotional ticker"
+        description={`${error} — check your connection and try again.`}
+        action={{ label: "Try again", icon: RefreshCw, onClick: load }}
+        secondaryAction={{ label: "Back to Promotional Tickers", onClick: () => navigate("/promotional-ticker") }}
+      />
+    );
+  }
+
+  if (!ticker) {
+    return (
+      <NotFoundPage
+        title="Promotional ticker not found"
+        icon="ticker"
+        description="We couldn't find a promotional ticker with this link. It may have been deleted, or the link is no longer valid."
+        backLabel="Back to Promotional Tickers"
+        onBack={() => navigate("/promotional-ticker")}
       />
     );
   }

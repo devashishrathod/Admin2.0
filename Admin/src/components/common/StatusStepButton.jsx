@@ -22,9 +22,11 @@ const TONES = {
   neutral: { pill: "bg-neutral-100 text-neutral-600 ring-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-neutral-700", hover: "hover:bg-neutral-700 hover:text-white hover:ring-neutral-700", dot: "bg-neutral-400" },
 };
 
-export default function StatusStepButton({ label, tone = "neutral", stepLabel, onClick, disabled = false }) {
+// `bare` drops the outline ring — for pills sitting on a photo (voucher
+// card cover), where the ring reads as a border.
+export default function StatusStepButton({ label, tone = "neutral", stepLabel, onClick, disabled = false, bare = false }) {
   const t = TONES[tone] || TONES.neutral;
-  const base = `inline-flex w-44 items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[11.5px] font-semibold ring-1 ${t.pill}`;
+  const base = `inline-flex w-28 items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[8.5px] font-semibold ${bare ? "ring-0" : "ring-1"} ${t.pill}`;
   const statusLabel = (
     <span className="flex min-w-0 items-center gap-1.5">
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${t.dot}`} />

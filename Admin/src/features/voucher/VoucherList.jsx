@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search,
   Trash2,
@@ -13,7 +14,6 @@ import {
   Star,
   Ticket,
   Clock,
-  CalendarDays,
   LayoutGrid,
   List,
   ChevronLeft,
@@ -26,7 +26,6 @@ import {
   X,
   PauseCircle,
   PlayCircle,
-  FlaskConical,
   Lock,
   Archive,
 } from "lucide-react";
@@ -48,10 +47,12 @@ import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
 import VoucherDetails from "./VoucherDetails";
 import { downloadCsv, printAsPdf } from "../../utils/exportTable";
-import { isNotFoundMessage, formatBatch } from "../../utils/helpers";
+import { isNotFoundMessage, formatBatch, orText, MISSING } from "../../utils/helpers";
+import ValueOr from "../../components/common/ValueOr";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../../lib/query";
+import { useAllVoucherVersions, useVoucher } from "./queries/voucherQueries";
 import {
-  getAllVoucherVersions,
-  getVoucherById,
   approveVoucher,
   rejectVoucher,
   publishVoucher,
@@ -66,6 +67,20 @@ import {
   VOUCHER_STATUSES,
 } from "./services/VoucherApi";
 import Loader from "../../components/common/Loader";
+import VoucherCard from "./components/VoucherCard";
+import { VoucherStatusBadge, BrandMark, DummyBadge } from "./components/VoucherBadges";
+import {
+  STATUS_LABELS,
+  STATUS_STYLES,
+  STATUS_HEX,
+  VOUCHER_TONES,
+  TONE_CLASSES,
+  getVoucherStep,
+  dateOnly,
+  validityOf,
+  apiVersionToRow,
+  apiVoucherDetailToRow,
+} from "./voucherUtils";
 
 /* -------------------------------------------------------------------------
  * Voucher lifecycle (per the backend's VOUCHER_STATUSES enum)
@@ -84,490 +99,18 @@ import Loader from "../../components/common/Loader";
  * truth for the workflow and is what drives every badge/filter/action here.
  * ---------------------------------------------------------------------- */
 
-const STATUS_LABELS = {
-  [VOUCHER_STATUSES.DRAFT]: "Draft",
-  [VOUCHER_STATUSES.UNDER_REVIEW]: "Under Review",
-  [VOUCHER_STATUSES.APPROVED]: "Approved",
-  [VOUCHER_STATUSES.PUBLISHED]: "Published",
-  [VOUCHER_STATUSES.REJECTED]: "Rejected",
-  [VOUCHER_STATUSES.EXPIRED]: "Expired",
-  [VOUCHER_STATUSES.PAUSED]: "Paused",
-  [VOUCHER_STATUSES.ARCHIVED]: "Archived",
-};
 
-const STATUS_STYLES = {
-  [VOUCHER_STATUSES.DRAFT]: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
-  [VOUCHER_STATUSES.UNDER_REVIEW]: { dot: "bg-amber-400", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-400/10" },
-  [VOUCHER_STATUSES.APPROVED]: { dot: "bg-sky-400", text: "text-sky-600 dark:text-sky-400", bg: "bg-sky-400/10" },
-  [VOUCHER_STATUSES.PUBLISHED]: { dot: "bg-emerald-400", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-400/10" },
-  [VOUCHER_STATUSES.REJECTED]: { dot: "bg-red-400", text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10" },
-  [VOUCHER_STATUSES.EXPIRED]: { dot: "bg-neutral-500", text: "text-neutral-500 dark:text-neutral-400", bg: "bg-neutral-200 dark:bg-neutral-700/40" },
-  [VOUCHER_STATUSES.PAUSED]: { dot: "bg-orange-400", text: "text-orange-600 dark:text-orange-400", bg: "bg-orange-400/10" },
-  [VOUCHER_STATUSES.ARCHIVED]: { dot: "bg-neutral-600", text: "text-neutral-500", bg: "bg-neutral-200 dark:bg-neutral-800" },
-};
 
-const STATUS_HEX = {
-  [VOUCHER_STATUSES.DRAFT]: "#737373",
-  [VOUCHER_STATUSES.UNDER_REVIEW]: "#FBBF24",
-  [VOUCHER_STATUSES.APPROVED]: "#38BDF8",
-  [VOUCHER_STATUSES.PUBLISHED]: "#2FDE8C",
-  [VOUCHER_STATUSES.REJECTED]: "#F87171",
-  [VOUCHER_STATUSES.EXPIRED]: "#A3A3A3",
-  [VOUCHER_STATUSES.PAUSED]: "#FB923C",
-  [VOUCHER_STATUSES.ARCHIVED]: "#525252",
-};
-
-export function VoucherStatusBadge({ status }) {
-  const s = STATUS_STYLES[status] || STATUS_STYLES[VOUCHER_STATUSES.DRAFT];
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${s.bg} ${s.text}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {STATUS_LABELS[status] || status}
-    </span>
-  );
-}
-
-// The mapped row's `approvalStatus` is already the real backend status —
-// kept as a named export/function (rather than inlining `v.approvalStatus`
-// everywhere) so VoucherDetails.jsx has one place to import from.
-export function computeStatus(v) {
-  return v.approvalStatus;
-}
 
 const STATUS_FILTERS = ["All", ...Object.values(VOUCHER_STATUSES)];
 
-/* ---- date helpers -------------------------------------------------------*/
-function formatDateTime(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-// Reconstructs a simple approval timeline from the version's own
-// timestamp fields (createdAt/submittedAt/reviewedAt/rejectedAt/
-// publishedAt/expiredAt/archivedAt) — the API doesn't return an explicit
-// audit-log array, so this is a best-effort chronological view.
-// Prefers a real name/uniqueId over a bare Mongo ID string when both a
-// populated user object and a raw id field are available for the same
-// actor (e.g. `rejectedByUser` vs `rejectedBy`).
-function personLabel(userObj, fallbackId) {
-  if (userObj) return userObj.name || userObj.uniqueId || fallbackId || null;
-  return fallbackId || null;
-}
-
-function buildTimeline(v) {
-  const entries = [];
-  if (v.createdAt) {
-    const brandName = v.brand?.brandName;
-    entries.push({
-      action: "Created",
-      date: v.createdAt,
-      by: personLabel(v.createdByUser, v.createdBy),
-      remarks: brandName ? `For brand ${brandName}.` : null,
-    });
-  }
-  if (v.submittedAt) {
-    entries.push({
-      action: "Submitted",
-      date: v.submittedAt,
-      by: personLabel(v.submittedByUser, v.submittedBy),
-      remarks: "Submitted for review.",
-    });
-  }
-  if (v.rejectedAt) {
-    entries.push({
-      action: "Rejected",
-      date: v.rejectedAt,
-      by: personLabel(v.rejectedByUser, v.rejectedBy),
-      remarks: v.rejectionReason,
-    });
-  } else if (v.reviewedAt) {
-    entries.push({
-      action: "Approved",
-      date: v.reviewedAt,
-      by: personLabel(v.reviewedByUser, v.reviewedBy),
-      remarks: "Approved by admin.",
-    });
-  }
-  if (v.publishedAt) {
-    entries.push({
-      action: "Published",
-      date: v.publishedAt,
-      by: personLabel(v.approvedByUser, v.approvedBy),
-      remarks: "Made live in the app.",
-    });
-  }
-  if (v.expiredAt) entries.push({ action: "Expired", date: v.expiredAt, by: null, remarks: null });
-  if (v.archivedAt) entries.push({ action: "Archived", date: v.archivedAt, by: null, remarks: null });
-  return entries
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .map((e) => ({ ...e, date: formatDateTime(e.date) }));
-}
-
-// Maps one API voucher-version object (as returned by GET
-// /vouchers/versions/get-all) into the flat shape this page's UI uses.
-function apiVersionToRow(v) {
-  const voucher = v.voucher || {};
-  const brand = v.brand || null;
-  const category = v.category || null;
-  const subCategory = v.subCategory || null;
-  const creatorUser = v.createdByUser || null;
-  const primaryOffer = v.offers?.[0];
-  return {
-    id: v._id, // version id — approve/reject/publish act on this
-    voucherId: v.voucherId || voucher._id, // parent voucher id — delete acts on this
-    versionCode: v.versionCode,
-    versionNumber: v.versionNumber,
-    voucherCode: voucher.voucherCode || "—",
-    title: v.name,
-    brandName: brand?.brandName || brand?.legalBusinessName || voucher.brandId || personLabel(v.createdByUser, null) || "—",
-    brand: brand
-      ? {
-        name: brand.brandName || "—",
-        legalName: brand.legalBusinessName || "—",
-        uniqueId: brand.uniqueId || "—",
-        merchantId: brand.merchantId || "—",
-        logo: brand.logo || "",
-        whatsappNumber: brand.whatsappNumber || "—",
-        onboardingStatus: brand.status || "—",
-        isApproved: Boolean(brand.isApproved),
-        isSubscribed: Boolean(brand.isSubscribed),
-        description: brand.description || "",
-        businessEntityType: brand.businessEntityType || "—",
-        businessRegistrationStatus: brand.businessRegistrationStatus || "—",
-        joinedDate: brand.joinedDate ? formatDateTime(brand.joinedDate) : "—",
-        isRevoked: Boolean(brand.isRevoked),
-        isReviewed: Boolean(brand.isReviewed),
-        followersCount: brand.followersCount ?? 0,
-        franchises: {
-          used: brand.franchisesUsed ?? 0,
-          limit: brand.franchisesLimit ?? 0,
-          unlimited: Boolean(brand.isFranchisesUnlimited),
-        },
-        subBrands: {
-          used: brand.subBrandsUsed ?? 0,
-          limit: brand.subBrandsLimit ?? 0,
-          unlimited: Boolean(brand.isSubBrandsUnlimited),
-        },
-        showcase: {
-          used: brand.showcaseUsed ?? 0,
-          limit: brand.showcaseLimit ?? 0,
-          unlimited: Boolean(brand.isShowcaseUnlimited),
-        },
-        vouchers: {
-          used: brand.vouchersUsed ?? 0,
-          limit: brand.vouchersLimit ?? 0,
-          unlimited: Boolean(brand.isVouchersUnlimited),
-        },
-      }
-      : null,
-    // The banner lives on the parent voucher (not any one version) — a
-    // separate approval gate from the version's own review/approve/publish
-    // workflow above. `pending` is the vendor's latest upload awaiting an
-    // admin decision; `current` is whatever's actually live right now.
-    banner: voucher.banner
-      ? {
-          current: voucher.banner.current || null,
-          pending: voucher.banner.pending || null,
-          status: voucher.banner.status || null,
-          rejectionReason: voucher.banner.rejectionReason || null,
-          reviewedBy: voucher.banner.reviewedBy || null,
-          reviewedAt: voucher.banner.reviewedAt ? formatDateTime(voucher.banner.reviewedAt) : null,
-        }
-      : null,
-    category: category?.name || "—",
-    subCategory: subCategory?.name || "—",
-    categoryDetails: category
-      ? { name: category.name || "—", description: category.description || "", image: category.image || "" }
-      : null,
-    subCategoryDetails: subCategory
-      ? { name: subCategory.name || "—", description: subCategory.description || "", image: subCategory.image || "" }
-      : null,
-    description: v.description || "",
-    tags: v.tags || [],
-    images: (v.images || [])
-      .slice()
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .map((img) => ({
-        // Image id — needed to save a new order (drag & drop on the details page).
-        id: img._id || null,
-        url: img.media?.url || img.url || null,
-        sortOrder: img.sortOrder,
-        provider: img.media?.storage?.provider || img.storage?.provider || null,
-      })),
-    offers: v.offers || [],
-    discount: primaryOffer?.title || "—",
-    minBillAmount: primaryOffer?.minBillAmount ?? 0,
-    maxDiscountAmount: primaryOffer?.maxDiscountAmount ?? 0,
-    attachedSubBrandsCount: v.attachedSubBrandsCount ?? 0,
-    // Admin curation — PUT /vouchers/admin/suggestions/:voucherId
-    isSuggested: Boolean(voucher.isSuggested ?? v.isSuggested),
-    suggestionOrder: voucher.suggestionOrder ?? v.suggestionOrder ?? null,
-    // Date + time (not just the date) — shown in both the table and the
-    // details page.
-    createdAt: v.createdAt || null,
-    createdAtDisplay: formatDateTime(v.createdAt),
-    updatedAtDisplay: formatDateTime(v.updatedAt),
-    // No fallback to createdAt here — a DRAFT/never-published version has
-    // no publishedAt at all, and showing createdAt in its place would
-    // falsely imply it went live.
-    publishedDate: v.publishedAt ? formatDateTime(v.publishedAt) : null,
-    startDate: formatDateTime(v.startAt),
-    endDate: formatDateTime(v.endAt),
-    // Raw ISO values — for the listing's validity chip ("Ends in 5 days").
-    startAt: v.startAt || null,
-    endAt: v.endAt || null,
-    // Who actually created this voucher — falls back to whoever submitted
-    // it when a separate creator isn't populated (older records only
-    // carry submittedBy/submittedByUser).
-    creator: {
-      name: personLabel(v.createdByUser, v.createdBy) || personLabel(v.submittedByUser, v.submittedBy) || "—",
-      role: v.createdByUser?.role || v.submittedByUser?.role || null,
-      whatsappNumber: v.createdByUser?.whatsappNumber || v.submittedByUser?.whatsappNumber || null,
-    },
-    // Full raw record of whoever created the version, for the "Created By"
-    // panel — separate from `creator` above (which is just a display label
-    // with a submittedBy fallback used elsewhere).
-    creatorUser: creatorUser
-      ? {
-        role: creatorUser.role || "—",
-        loginType: creatorUser.loginType || "—",
-        whatsappNumber: creatorUser.whatsappNumber || "—",
-        uniqueId: creatorUser.uniqueId || "—",
-        referralCode: creatorUser.referralCode || "—",
-        isEmailVerified: Boolean(creatorUser.isEmailVerified),
-        isMobileVerified: Boolean(creatorUser.isMobileVerified),
-        isOnBoardingCompleted: Boolean(creatorUser.isOnBoardingCompleted),
-        walletBalance: creatorUser.walletBalance ?? 0,
-        tCoinsBalance: creatorUser.tCoinsBalance ?? 0,
-        currentScreen: creatorUser.currentScreen || "—",
-      }
-      : null,
-    // The parent voucher record (as opposed to this version) — its own
-    // lifecycle/status/timestamps, distinct from the version's.
-    parentVoucher: v.voucher
-      ? {
-        normalizedName: voucher.normalizedName || "—",
-        timezone: voucher.timezone || "—",
-        currentVersion: voucher.currentVersion ?? "—",
-        status: voucher.status || "—",
-        isActive: Boolean(voucher.isActive),
-        isDeleted: Boolean(voucher.isDeleted),
-        createdAtDisplay: voucher.createdAt ? formatDateTime(voucher.createdAt) : "—",
-        updatedAtDisplay: voucher.updatedAt ? formatDateTime(voucher.updatedAt) : "—",
-      }
-      : null,
-    // The version's own `status` is the authoritative, up-to-date workflow
-    // state — the parent `voucher.status` can lag behind it (e.g. a
-    // version can show status "PUBLISHED" while `voucher.status` is still
-    // "APPROVED"), so prefer the version's status and only fall back to
-    // the parent's when the version itself doesn't have one.
-    approvalStatus: v.status || voucher.status || VOUCHER_STATUSES.DRAFT,
-    isActive: Boolean(v.isActive),
-    isDeleted: Boolean(v.isDeleted),
-    isImmutable: Boolean(v.isImmutable),
-    // Test/demo voucher (or one under a dummy brand) — shown only on
-    // Dummy Vouchers, kept out of every other voucher page.
-    isDummy: Boolean(v.isDummy ?? voucher.isDummy ?? brand?.isDummy),
-    // Seed batch, e.g. "CHENNAI-DUMMY-1" — from the voucher or its brand.
-    dummyBatch: v.dummyBatch || voucher.dummyBatch || brand?.dummyBatch || null,
-    rejectionReason: v.rejectionReason || null,
-    history: buildTimeline(v),
-  };
-}
-
-// Who did it, for the timeline below — real names/usernames for an admin
-// actor, role-only for a vendor one (that's all GET /vouchers/get/:id
-// populates for a vendor's createdBy/submittedBy/etc.).
-function actorLabel(actor) {
-  if (!actor) return null;
-  return actor.name || actor.username || actor.role || null;
-}
-
-// Confirmed shape (GET /vouchers/get/:voucherId) — richer per-version
-// timestamps + real populated actors, instead of guessing from raw ids.
-function buildTimelineFromVersion(v) {
-  const entries = [];
-  if (v.createdAt) entries.push({ action: "Created", date: v.createdAt, by: actorLabel(v.createdBy), remarks: null });
-  if (v.submittedAt) {
-    entries.push({ action: "Submitted", date: v.submittedAt, by: actorLabel(v.submittedBy), remarks: "Submitted for review." });
-  }
-  if (v.rejectedAt) {
-    entries.push({ action: "Rejected", date: v.rejectedAt, by: actorLabel(v.rejectedBy), remarks: v.rejectionReason });
-  } else if (v.reviewedAt) {
-    entries.push({
-      action: "Approved",
-      date: v.reviewedAt,
-      by: actorLabel(v.approvedBy || v.reviewedBy),
-      remarks: "Approved by admin.",
-    });
-  }
-  if (v.publishedAt) {
-    entries.push({ action: "Published", date: v.publishedAt, by: actorLabel(v.approvedBy), remarks: "Made live in the app." });
-  }
-  if (v.pausedAt) entries.push({ action: "Paused", date: v.pausedAt, by: actorLabel(v.pausedBy), remarks: v.pauseReason });
-  if (v.expiredAt) entries.push({ action: "Expired", date: v.expiredAt, by: null, remarks: null });
-  if (v.archivedAt) entries.push({ action: "Archived", date: v.archivedAt, by: null, remarks: null });
-  return entries
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .map((e) => ({ ...e, date: formatDateTime(e.date) }));
-}
-
-// Maps the confirmed GET /vouchers/get/:voucherId response — { voucher,
-// brand, currentVersion, publishedVersion, versions, versionCount, stats }
-// — into the details page's row shape. This endpoint is noticeably
-// slimmer than /vouchers/versions/get-all on some fields (brand has no
-// contact/subscription/limit info, category/subCategory have no
-// description, createdBy is role-only for a vendor) but adds real
-// claims/revenue stats, attached outlets, and full version history that
-// the list endpoint never had.
-function apiVoucherDetailToRow(payload) {
-  if (!payload) return null;
-  const voucher = payload.voucher || {};
-  const brand = payload.brand || null;
-  const cv = payload.currentVersion || {};
-
-  return {
-    id: cv._id || voucher.currentVersionId,
-    voucherId: voucher._id,
-    versionCode: cv.versionCode,
-    versionNumber: cv.versionNumber,
-    voucherCode: voucher.voucherCode || "—",
-    title: cv.name || voucher.name,
-    brandName: brand?.brandName || "—",
-    brand: brand
-      ? {
-          name: brand.brandName || "—",
-          legalName: brand.legalBusinessName || "—",
-          uniqueId: brand.uniqueId || "—",
-          merchantId: brand.merchantId || "—",
-          logo: brand.logo || "",
-          isApproved: Boolean(brand.isApproved),
-          isActive: Boolean(brand.isActive),
-        }
-      : null,
-    category: cv.category?.name || "—",
-    subCategory: cv.subCategory?.name || "—",
-    categoryDetails: cv.category ? { name: cv.category.name || "—", image: cv.category.image || "" } : null,
-    subCategoryDetails: cv.subCategory ? { name: cv.subCategory.name || "—", image: cv.subCategory.image || "" } : null,
-    description: cv.description || voucher.description || "",
-    tags: cv.tags || voucher.tags || [],
-    images: (cv.images || [])
-      .slice()
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .map((img) => ({ id: img._id || null, url: img.media?.url || null, sortOrder: img.sortOrder, provider: img.media?.provider || null })),
-    offers: cv.offers || [],
-    banner: voucher.banner
-      ? {
-          current: voucher.banner.current || null,
-          pending: voucher.banner.pending || null,
-          status: voucher.banner.status || null,
-          rejectionReason: voucher.banner.rejectionReason || null,
-          reviewedBy: voucher.banner.reviewedBy || null,
-          reviewedAt: voucher.banner.reviewedAt ? formatDateTime(voucher.banner.reviewedAt) : null,
-        }
-      : null,
-    createdAtDisplay: formatDateTime(cv.createdAt || voucher.createdAt),
-    updatedAtDisplay: formatDateTime(cv.updatedAt || voucher.updatedAt),
-    publishedDate: cv.publishedAt ? formatDateTime(cv.publishedAt) : null,
-    startDate: formatDateTime(cv.startAt),
-    endDate: formatDateTime(cv.endAt),
-    // Only `_id`/`role` are populated for a vendor actor — no name at all.
-    creator: { role: cv.createdBy?.role || voucher.createdBy?.role || null },
-    approvalStatus: cv.status || voucher.status || VOUCHER_STATUSES.DRAFT,
-    isActive: Boolean(cv.isActive ?? voucher.isActive),
-    isDeleted: Boolean(cv.isDeleted ?? voucher.isDeleted),
-    isImmutable: Boolean(cv.isImmutable),
-    rejectionReason: cv.rejectionReason || null,
-    history: buildTimelineFromVersion(cv),
-
-    // Parent voucher record — same card as before, minus normalizedName
-    // (this endpoint never returns it).
-    parentVoucher: {
-      timezone: voucher.timezone || "—",
-      currentVersionNumber: voucher.currentVersionNumber ?? "—",
-      status: voucher.status || "—",
-      isActive: Boolean(voucher.isActive),
-      isDeleted: Boolean(voucher.isDeleted),
-      createdAtDisplay: voucher.createdAt ? formatDateTime(voucher.createdAt) : "—",
-      updatedAtDisplay: voucher.updatedAt ? formatDateTime(voucher.updatedAt) : "—",
-    },
-
-    // ---- New sections this endpoint uniquely provides ----
-    stats: payload.stats || cv.stats || null,
-    outlets: (cv.outlets || []).map((o) => ({
-      id: o._id,
-      uniqueId: o.uniqueId,
-      storeId: o.storeId,
-      outletType: o.outletType,
-      description: o.description || "",
-      whatsappNumber: o.whatsappNumber,
-      isActive: Boolean(o.isActive),
-      address: o.location?.formattedAddress || [o.location?.city, o.location?.state].filter(Boolean).join(", "),
-    })),
-    outletCount: cv.outletCount ?? 0,
-    liveOutletCount: cv.liveOutletCount ?? 0,
-    totalBrandOutlets: cv.totalBrandOutlets ?? 0,
-    isAppliedOnAllOutlets: Boolean(cv.isAppliedOnAllOutlets),
-    versions: (payload.versions || []).map((v) => ({
-      id: v._id,
-      versionNumber: v.versionNumber,
-      versionCode: v.versionCode,
-      status: v.status,
-      startDate: formatDateTime(v.startAt),
-      endDate: formatDateTime(v.endAt),
-      claimCount: v.claimCount ?? 0,
-      customerPaid: v.customerPaid ?? 0,
-    })),
-    versionCount: payload.versionCount ?? 0,
-  };
-}
 
 /* -------------------------------------------------------------------------
  * Listing UI bits
  * ---------------------------------------------------------------------- */
 const cardClass = "rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20";
 
-// "01/02/2026, 10:30 am" -> "01/02/2026" — cards/table only need the date.
-const dateOnly = (display) => (display && display !== "—" ? display.split(",")[0] : "—");
 
-// Live validity state from the raw start/end — drives the card's chip.
-function validityOf(v) {
-  const now = Date.now();
-  const start = v.startAt ? new Date(v.startAt).getTime() : null;
-  const end = v.endAt ? new Date(v.endAt).getTime() : null;
-  if (end && end < now) return { label: "Ended", tone: "neutral" };
-  if (start && start > now) {
-    const days = Math.ceil((start - now) / 86400000);
-    return { label: `Starts in ${days}d`, tone: "sky" };
-  }
-  if (end) {
-    const days = Math.ceil((end - now) / 86400000);
-    return { label: days <= 1 ? "Ends today" : `Ends in ${days}d`, tone: days <= 7 ? "amber" : "emerald" };
-  }
-  return null;
-}
-
-const TONE_CLASSES = {
-  emerald: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
-  amber: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
-  sky: "bg-sky-400/10 text-sky-600 dark:text-sky-400",
-  neutral: "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
-};
-
-function BrandMark({ voucher, size = "sm" }) {
-  const box = size === "sm" ? "h-7 w-7 rounded-lg text-[11px]" : "h-9 w-9 rounded-xl text-[13px]";
-  return voucher.brand?.logo ? (
-    <div className={`flex shrink-0 items-center justify-center overflow-hidden bg-white p-0.5 ring-1 ring-neutral-200 dark:ring-neutral-800 ${box}`}>
-      <img src={voucher.brand.logo} alt={voucher.brandName} className="h-full w-full object-contain" />
-    </div>
-  ) : (
-    <div className={`flex shrink-0 items-center justify-center bg-orange-500 font-semibold text-white ${box}`}>
-      {voucher.brandName?.charAt(0)?.toUpperCase() || "?"}
-    </div>
-  );
-}
 
 function KpiTile({ icon: Icon, label, value, hint, tint, active, onClick }) {
   return (
@@ -589,187 +132,7 @@ function KpiTile({ icon: Icon, label, value, hint, tint, active, onClick }) {
   );
 }
 
-// Purple "Dummy" pill for test/demo vouchers (isDummy) — same look as the
-// Brand page's dummy badge.
-export function DummyBadge({ size = "md" }) {
-  const sm = size === "sm";
-  return (
-    <span
-      className={`flex shrink-0 items-center gap-1 rounded-full font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400 ${
-        sm ? "bg-violet-500/10 px-1.5 py-0.5 text-[9.5px]" : "bg-white px-2.5 py-1 text-[10.5px] shadow-sm dark:bg-neutral-900"
-      }`}
-    >
-      <FlaskConical size={sm ? 9 : 11} />
-      D
-    </span>
-  );
-}
 
-// Coupon-style card: image header, offer on a perforated "ticket" strip,
-// validity + actions in the footer.
-function VoucherCard({ voucher, onOpen, onToggleSuggested, onDelete, onStep, onApprove, onReject, showReviewActions, busy }) {
-  const cover = voucher.images?.[0]?.url;
-  const validity = validityOf(voucher);
-  const step = getVoucherStep(voucher);
-
-  return (
-    <div className={`group relative flex flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 ${cardClass}`}>
-      {/* Status pill = workflow button. Sits outside the cover <button>
-          (a button can't contain another button). */}
-      <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-1.5 pr-12">
-        {/* Dummy vouchers are view-only — plain status, no workflow step. */}
-        {voucher.isDummy || showReviewActions ? (
-          <VoucherStatusBadge status={voucher.approvalStatus} />
-        ) : (
-          <StatusStepButton
-            label={STATUS_LABELS[voucher.approvalStatus] || voucher.approvalStatus}
-            tone={VOUCHER_TONES[voucher.approvalStatus]}
-            stepLabel={onStep ? step?.label : null}
-            disabled={busy}
-            onClick={() => onStep(voucher, step)}
-          />
-        )}
-        {voucher.isDummy && <DummyBadge />}
-      </div>
-      <button onClick={() => onOpen(voucher)} className="relative block h-36 w-full overflow-hidden text-left">
-        {cover ? (
-          <img src={cover} alt={voucher.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-400/30 via-sky-400/20 to-violet-400/20">
-            <Ticket size={34} className="text-emerald-600/60 dark:text-emerald-400/60" />
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0" />
-        {voucher.images?.length > 1 && (
-          <span className="absolute bottom-2.5 right-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
-            +{voucher.images.length - 1} photos
-          </span>
-        )}
-        <span className="absolute bottom-2.5 left-3 max-w-[60%] truncate rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-neutral-700 backdrop-blur dark:bg-neutral-900/80 dark:text-neutral-200">
-          {voucher.category}
-        </span>
-      </button>
-
-      {voucher.isDummy ? (
-        <span
-          title="D voucher — view only"
-          aria-label="View only"
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-violet-600 backdrop-blur dark:bg-neutral-900/80 dark:text-violet-400"
-        >
-          <Lock size={14} />
-        </span>
-      ) : (
-      <button
-        onClick={() => onToggleSuggested(voucher)}
-        disabled={busy}
-        aria-label={voucher.isSuggested ? `Remove ${voucher.title} from suggestions` : `Suggest ${voucher.title}`}
-        title={voucher.isSuggested ? "Remove from Suggested" : "Mark as Suggested"}
-        className={`absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur transition-colors disabled:opacity-40 ${
-          voucher.isSuggested ? "bg-amber-400 text-neutral-950" : "bg-white/85 text-neutral-500 hover:text-amber-500 dark:bg-neutral-900/80"
-        }`}
-      >
-        <Star size={14} fill={voucher.isSuggested ? "currentColor" : "none"} />
-      </button>
-      )}
-
-      <div className="flex flex-1 flex-col p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <BrandMark voucher={voucher} />
-          <div className="min-w-0">
-            <p className="truncate text-[11.5px] font-medium text-neutral-500">{voucher.brandName}</p>
-            <button
-              onClick={() => onOpen(voucher)}
-              className="block max-w-full truncate text-left text-[14px] font-semibold leading-tight text-neutral-900 hover:text-emerald-600 dark:text-neutral-50 dark:hover:text-emerald-400"
-            >
-              {voucher.title}
-            </button>
-          </div>
-        </div>
-
-        {/* Perforated ticket strip — the offer is the hero of a voucher */}
-        <div className="relative mb-3 rounded-xl border border-dashed border-emerald-400/50 bg-emerald-400/[0.06] px-3.5 py-2.5">
-          <span className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-dashed border-emerald-400/50 bg-white dark:bg-neutral-900" />
-          <span className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-dashed border-emerald-400/50 bg-white dark:bg-neutral-900" />
-          <p className="line-clamp-1 text-[13.5px] font-bold text-emerald-700 dark:text-emerald-400">{voucher.discount}</p>
-          <p className="mt-0.5 text-[10.5px] text-neutral-500">
-            {voucher.minBillAmount ? `Min bill ₹${Number(voucher.minBillAmount).toLocaleString("en-IN")}` : "No minimum bill"}
-            {voucher.maxDiscountAmount ? ` · Up to ₹${Number(voucher.maxDiscountAmount).toLocaleString("en-IN")} off` : ""}
-            {voucher.offers.length > 1 ? ` · +${voucher.offers.length - 1} more` : ""}
-          </p>
-        </div>
-
-        <div className="mb-3.5 flex items-center justify-between gap-2 text-[11px] text-neutral-500">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <CalendarDays size={12} className="shrink-0" />
-            <span className="truncate">
-              {dateOnly(voucher.startDate)} – {dateOnly(voucher.endDate)}
-            </span>
-          </span>
-          {validity && (
-            <span className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${TONE_CLASSES[validity.tone]}`}>
-              <Clock size={10} /> {validity.label}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-auto flex items-center gap-2">
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate font-mono text-[10.5px] text-neutral-400">
-            <Tag size={10} className="shrink-0" /> {voucher.versionCode}
-          </span>
-          {!voucher.isDummy && (
-            <button
-              onClick={() => onDelete(voucher)}
-              disabled={busy}
-              aria-label={`Delete ${voucher.title}`}
-              title="Delete"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
-          <button
-            onClick={() => onOpen(voucher)}
-            className="flex items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1.5 text-[11.5px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/15 dark:text-emerald-400"
-          >
-            {voucher.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW ? "Review" : "View"} <ChevronRight size={12} />
-          </button>
-        </div>
-        {showReviewActions && !voucher.isDummy && voucher.approvalStatus === VOUCHER_STATUSES.APPROVED && (
-          <div className="mt-3 flex gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
-            <button
-              onClick={() => onStep(voucher, step)}
-              disabled={busy}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-3 py-2 text-[12px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:opacity-50"
-            >
-              <Rocket size={14} />
-              Publish
-            </button>
-          </div>
-        )}
-        {showReviewActions && !voucher.isDummy && voucher.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW && (
-          <div className="mt-3 flex gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
-            <button
-              onClick={() => onApprove(voucher)}
-              disabled={busy}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-400 px-3 py-2 text-[12px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:opacity-50"
-            >
-              <CheckCircle2 size={14} />
-              Approve
-            </button>
-            <button
-              onClick={() => onReject(voucher)}
-              disabled={busy}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-[12px] font-semibold text-red-600 transition-colors hover:bg-red-500/5 disabled:opacity-50 dark:text-red-400"
-            >
-              <XCircle size={14} />
-              Reject
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // "Showing X to Y of Z" is always shown (even on a single page) so the
 // total is visible; the page buttons only appear for 2+ pages.
@@ -836,7 +199,7 @@ const SCOPES = {
     title: "Live Vouchers",
     subtitle: "Vouchers published and currently available in the app.",
     match: null,
-    defaultView: "table",
+    defaultView: "grid",
   },
   waiting: {
     title: "Voucher Waiting",
@@ -949,29 +312,6 @@ function RejectReasonDialog({ title, subject, busy, onCancel, onConfirm }) {
   );
 }
 
-/* Voucher workflow from the table's status pill:
-     Under Review → Approve → Approved → Publish → Published.
-   The banner has its own gate: Banner Pending → Approve Banner. */
-const VOUCHER_TONES = {
-  [VOUCHER_STATUSES.DRAFT]: "neutral",
-  [VOUCHER_STATUSES.UNDER_REVIEW]: "amber",
-  [VOUCHER_STATUSES.APPROVED]: "sky",
-  [VOUCHER_STATUSES.PUBLISHED]: "emerald",
-  [VOUCHER_STATUSES.REJECTED]: "red",
-  [VOUCHER_STATUSES.EXPIRED]: "neutral",
-  [VOUCHER_STATUSES.PAUSED]: "orange",
-  [VOUCHER_STATUSES.ARCHIVED]: "neutral",
-};
-
-// The status pill's next step. Live vouchers can be paused (API doc #57a)
-// and paused ones resumed (#57b) — both act on the version.
-function getVoucherStep(v) {
-  if (v.approvalStatus === VOUCHER_STATUSES.UNDER_REVIEW) return { kind: "approve", label: "Approve" };
-  if (v.approvalStatus === VOUCHER_STATUSES.APPROVED) return { kind: "publish", label: "Publish" };
-  if (v.approvalStatus === VOUCHER_STATUSES.PUBLISHED) return { kind: "pause", label: "Pause" };
-  if (v.approvalStatus === VOUCHER_STATUSES.PAUSED) return { kind: "resume", label: "Resume" };
-  return null;
-}
 
 // Copy + look for each confirm. `points` spell out what will happen;
 // `reason` adds an optional note field (pause → internal note, max 1000;
@@ -1166,8 +506,22 @@ function RejectIconButton({ busy, onClick, label }) {
 export default function VoucherListing({ scope = "all" }) {
   const scopeConfig = SCOPES[scope] || SCOPES.all;
   const isScoped = Boolean(scopeConfig.match);
+  const queryClient = useQueryClient();
+  // Every page — one call caps at 100 versions.
+  const {
+    data: rawVersions,
+    isPending: listPending,
+    error: listError,
+    refetch: refetchList,
+  } = useAllVoucherVersions();
+  // A "not found" answer just means there are no vouchers yet.
+  const listNotFound = Boolean(listError && isNotFoundMessage(listError.message));
+  const loadError = listError && !listNotFound ? listError.message : "";
   // Full list from the API; `vouchers` below is this page's slice of it.
-  const [allVouchers, setVouchers] = useState([]);
+  const allVouchers = useMemo(
+    () => (listNotFound ? [] : (rawVersions ?? []).map(apiVersionToRow)),
+    [rawVersions, listNotFound]
+  );
   // Dummy vouchers only ever show on the Dummy Vouchers page. Live Vouchers
   // keeps every non-dummy version that has no page of its own (Live, Paused,
   // Rejected, Archived) and opens filtered to Live — see `defaultStatusFilter`.
@@ -1181,8 +535,15 @@ export default function VoucherListing({ scope = "all" }) {
   const [rejecting, setRejecting] = useState(null);
   // Row whose status pill was clicked — { row, kind: "approve" | "publish" | "banner" }.
   const [stepping, setStepping] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  // The Refresh / Retry buttons swap the list for the loader while they run
+  // (background refetches after an action keep it on screen).
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const loading = listPending || manualRefreshing;
+  const reloadList = async () => {
+    setManualRefreshing(true);
+    await refetchList();
+    setManualRefreshing(false);
+  };
 
   const [search, setSearch] = useState("");
   // "Now" captured once when the page opens, for the KPI tiles' age counts
@@ -1190,41 +551,31 @@ export default function VoucherListing({ scope = "all" }) {
   const [openedAt] = useState(() => Date.now());
   const [statusFilter, setStatusFilter] = useState(defaultStatusFilter);
   const [view, setView] = useState(scopeConfig.defaultView || "grid");
-  const [selectedId, setSelectedId] = useState(null);
+  // `?open=<versionId>` opens that voucher straight away — used by a
+  // brand's Voucher tab — and stays open across a refresh.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openParam = searchParams.get("open");
+  const navigate = useNavigate();
+  const [selectedId, setSelectedId] = useState(() => openParam || null);
   const [page, setPage] = useState(1);
+
+  // Back from the details page: opened from another page → go back there
+  // (e.g. the brand's Voucher tab); otherwise back to this list.
+  const closeDetails = () => {
+    if (openParam) {
+      if ((window.history.state?.idx ?? 0) > 0) {
+        navigate(-1);
+        return;
+      }
+      setSearchParams({}, { replace: true });
+    }
+    setSelectedId(null);
+  };
   const pageSize = view === "grid" ? 9 : 10;
 
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  // Fresh single-voucher fetch for the details page — the list row from
-  // getVouchers() is shown immediately (no blank flash on open), then
-  // overlaid with whatever this returns once it resolves.
-  const [voucherDetail, setVoucherDetail] = useState(null);
-
-  // `silent` = background refresh after an action — keeps the list on
-  // screen instead of swapping it for the loading state.
-  const fetchList = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    setLoadError("");
-    try {
-      // Every page — one call caps at 100 versions.
-      const raw = await getAllVoucherVersions();
-      setVouchers(raw.map(apiVersionToRow));
-    } catch (err) {
-      if (isNotFoundMessage(err.message)) {
-        setVouchers([]);
-      } else {
-        setLoadError(err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchList();
-  }, [fetchList]);
 
   const filtered = useMemo(() => {
     return vouchers.filter((v) => {
@@ -1249,45 +600,30 @@ export default function VoucherListing({ scope = "all" }) {
   // Voucher Waiting).
   const selectedListRow = allVouchers.find((v) => v.id === selectedId) || null;
 
-  // GET /vouchers/get/:voucherId — fetches the fresher single-voucher
-  // detail once a row is opened. Ids that drive approve/reject/publish/
-  // banner actions always come from the list row, never from this fetch,
-  // since its exact response shape isn't confirmed yet.
-  // `detailReloadKey` is bumped after every approve/reject/publish/banner
-  // action — without it this only ran once per opened voucher, so the
-  // stale detail (spread over the refreshed list row below) kept the old
-  // status and the old action buttons on screen after an approve.
-  const [detailReloadKey, setDetailReloadKey] = useState(0);
+  // GET /vouchers/get/:voucherId — the fresher single-voucher detail once a
+  // row is opened. The list row is shown immediately (no blank flash on
+  // open), then overlaid with this once it resolves. Ids that drive
+  // approve/reject/publish/banner actions always come from the list row,
+  // never from this fetch, since its exact response shape isn't confirmed yet.
+  const { data: detailRes, error: detailError } = useVoucher(selectedListRow?.voucherId);
+  const voucherDetail = useMemo(
+    () => (selectedListRow && detailRes ? apiVoucherDetailToRow(detailRes?.data) : null),
+    [selectedListRow, detailRes]
+  );
+  // The list row covers the UI, so a failure here shouldn't surface as a
+  // page-level error — just a note for debugging while the shape of
+  // GET /vouchers/get/:voucherId gets confirmed.
   useEffect(() => {
-    if (!selectedListRow) {
-      setVoucherDetail(null);
-      return;
-    }
-    let cancelled = false;
-    getVoucherById(selectedListRow.voucherId)
-      .then((res) => {
-        if (!cancelled) setVoucherDetail(apiVoucherDetailToRow(res?.data));
-      })
-      .catch((err) => {
-        // The list row (already showing) covers the UI — this fetch is a
-        // refresh on top of it, so a failure here shouldn't surface as a
-        // page-level error, just a note for debugging while the shape of
-        // GET /vouchers/get/:voucherId gets confirmed.
-        if (!cancelled) console.error("[VoucherList] GET /vouchers/get/:voucherId failed:", err.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedListRow?.voucherId, detailReloadKey]);
+    if (detailError) console.error("[VoucherList] GET /vouchers/get/:voucherId failed:", detailError.message);
+  }, [detailError]);
 
-  // After a workflow action: drop the now-stale detail (so the freshly
-  // fetched list row's status shows immediately), refetch the list, then
-  // trigger a detail refetch.
-  const refreshAfterAction = async () => {
-    setVoucherDetail(null);
-    await fetchList({ silent: true });
-    setDetailReloadKey((k) => k + 1);
-  };
+  // After a workflow action the interceptor has already started refetching
+  // the list and the opened detail (both under ["vouchers"]). This only
+  // waits for those refetches — cancelRefetch: false joins the in-flight
+  // request instead of sending another — so the busy state lasts until the
+  // new status and action buttons are on screen.
+  const refreshAfterAction = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.vouchers.all }, { cancelRefetch: false });
 
   const selectedVoucher = selectedListRow
     ? { ...selectedListRow, ...(voucherDetail || {}), id: selectedListRow.id, voucherId: selectedListRow.voucherId }
@@ -1353,7 +689,7 @@ export default function VoucherListing({ scope = "all" }) {
     if (kind === "delete") {
       await deleteVoucher(row.voucherId, reason); // parent voucher id
       if (selectedId === row.id) setSelectedId(null);
-      await fetchList({ silent: true });
+      await refreshAfterAction();
       return;
     }
     if (kind === "pause") await pauseVoucher(row.id, reason); // version id
@@ -1468,7 +804,7 @@ export default function VoucherListing({ scope = "all" }) {
         isSuggested: !voucher.isSuggested,
         suggestionOrder: 1,
       });
-      await fetchList({ silent: true });
+      await refreshAfterAction();
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -1477,12 +813,16 @@ export default function VoucherListing({ scope = "all" }) {
   };
 
   /* ---- Detail view --------------------------------------------------- */
+  // Opened via ?open= — wait for the list instead of flashing it first.
+  if (openParam && selectedId && !selectedVoucher && listPending) {
+    return <Loader variant="page" label="Loading voucher…" />;
+  }
   if (selectedVoucher) {
     return (
       <>
       <VoucherDetails
         voucher={selectedVoucher}
-        onBack={() => setSelectedId(null)}
+        onBack={closeDetails}
         onApprove={() => handleApprove(selectedVoucher)}
         onReject={(reason) => handleReject(selectedVoucher, reason)}
         onPublish={() => handlePublish(selectedVoucher)}
@@ -1620,7 +960,7 @@ export default function VoucherListing({ scope = "all" }) {
               {row.isDummy && <DummyBadge size="sm" />}
             </p>
             <p className="mt-0.5 flex items-center gap-1 whitespace-nowrap font-mono text-[10.5px] text-neutral-400">
-              <Tag size={10} className="shrink-0" /> {row.versionCode}
+              <Tag size={10} className="shrink-0" /> {orText(row.versionCode, "No code")}
             </p>
             {row.isDummy && row.dummyBatch && (
               <p className="mt-0.5 whitespace-nowrap font-mono text-[10.5px] text-violet-600 dark:text-violet-400">
@@ -1638,8 +978,8 @@ export default function VoucherListing({ scope = "all" }) {
         <div className="flex items-center gap-2">
           <BrandMark voucher={row} />
           <div className="min-w-0">
-            <p className="truncate font-medium text-neutral-800 dark:text-neutral-200">{row.brandName}</p>
-            <p className="truncate text-[10.5px] text-neutral-400">{row.category}</p>
+            <p className="truncate font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={row.brandName} fallback="No brand" /></p>
+            <p className="truncate text-[10.5px] text-neutral-400">{orText(row.category, MISSING.category)}</p>
           </div>
         </div>
       ),
@@ -1651,7 +991,7 @@ export default function VoucherListing({ scope = "all" }) {
       render: (row) => (
         <div>
           <span className="inline-block rounded-lg border border-dashed border-emerald-400/50 bg-emerald-400/[0.06] px-2 py-1 text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
-            {row.discount}
+            {orText(row.discount, "No offer")}
           </span>
           {row.offers.length > 1 && <p className="mt-1 text-[10.5px] text-neutral-500">+{row.offers.length - 1} more offers</p>}
         </div>
@@ -1665,7 +1005,7 @@ export default function VoucherListing({ scope = "all" }) {
         return (
           <div>
             <p className="whitespace-nowrap text-[12px] text-neutral-600 dark:text-neutral-300">
-              {dateOnly(row.startDate)} – {dateOnly(row.endDate)}
+              {dateOnly(row.startDate)} – {dateOnly(row.endDate, "No end date")}
             </p>
             {validity && (
               <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${TONE_CLASSES[validity.tone]}`}>
@@ -1891,7 +1231,7 @@ export default function VoucherListing({ scope = "all" }) {
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <button
-              onClick={fetchList}
+              onClick={reloadList}
               aria-label="Refresh"
               title="Refresh"
               className="flex h-9.5 w-9.5 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
@@ -2189,9 +1529,14 @@ export default function VoucherListing({ scope = "all" }) {
         )}
 
         {!loading && loadError && (
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <span className="flex items-center gap-2"><AlertTriangle size={14} /> Failed to load vouchers: {loadError}</span>
-            <button onClick={fetchList} className="font-semibold underline underline-offset-2">Retry</button>
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load vouchers"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: reloadList }}
+            />
           </div>
         )}
 

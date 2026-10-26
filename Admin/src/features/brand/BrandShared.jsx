@@ -8,10 +8,37 @@ import {
   MessageSquareWarning,
   FileText,
   Power,
+  BadgeCheck,
+  BadgeX,
+  IdCard,
+  Eye,
+  Briefcase,
+  Phone,
+  ShieldCheck,
+  Receipt,
+  Landmark,
+  Scale,
+  MessageSquareText,
+  Copy,
+  History,
+  HandCoins,
+  Clock,
+  XCircle,
+  Undo2,
+  ArrowLeftRight,
+  Ticket,
+  KeyRound,
+  Crown,
+  Store,
+  Gauge,
+  LineChart,
+  LayoutGrid,
 } from "lucide-react";
 import { StatusBadge } from "../../components/common/Table";
 import { REJECTION_REASONS } from "./data/BrandData";
 import CommonEmptyState from "../../components/common/EmptyState";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * BrandShared.jsx
@@ -41,38 +68,21 @@ export function BrandAvatar({ brand, size = "md", className = "" }) {
   );
 }
 
-export function ToggleSwitch({ checked, onChange, title }) {
-  // `title` lets a caller show a hover tooltip naming the action the click
-  // will perform (e.g. "Deactivate" while on, "Activate" while off) —
-  // optional, so existing toggles (Reviewed, push-enable...) are unaffected.
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      aria-pressed={checked}
-      aria-label={title || "Toggle brand active state"}
-      title={title}
-      className={`relative h-7 w-16 shrink-0 rounded-full transition-colors ${
-        checked ? "bg-emerald-400" : "bg-neutral-300 dark:bg-neutral-700"
-      }`}
-    >
-      <span
-        className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-2" : "translate-x-[-22px]"
-        }`}
-      />
-    </button>
-  );
-}
+// One switch for the whole panel — brand pages use the same compact
+// common ToggleSwitch as every other page.
+export { default as ToggleSwitch } from "../../components/common/ToggleSwitch";
 
-export function InfoRow({ icon: Icon, label, value }) {
+// `empty` = what to say when the value is missing (default "Not available").
+export function InfoRow({ icon: Icon, label, value, empty = MISSING.generic }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
-      <span className="flex items-center gap-2 text-[12.5px] text-neutral-500">
-        {Icon && <Icon size={13} />}
+    <div className="flex items-center justify-between gap-4 border-b border-neutral-200/60 py-2.5 last:border-0 dark:border-white/5">
+      <span className="flex shrink-0 items-center gap-2 text-[12.5px] text-neutral-500">
+        {Icon && <Icon size={13} className="text-neutral-400" />}
         {label}
       </span>
-      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
+      <span className="min-w-0 truncate text-right text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">
+        <ValueOr value={value} fallback={empty} />
+      </span>
     </div>
   );
 }
@@ -80,35 +90,100 @@ export function InfoRow({ icon: Icon, label, value }) {
 /* Small bento tile for a single label/value pair — used instead of a
    divide-y line list wherever a detail dump (PAN/GST/Bank...) needs a
    borderless, line-free card grid look. */
-export function DetailTile({ icon: Icon, label, value }) {
+// Plan-usage meter: green < 70%, amber 70–90%, red > 90%; unlimited plans
+// show a full muted bar and "used / ∞". Shared by the brand card and the
+// brand details Overview.
+export function UsageBar({ label, item }) {
+  const used = item?.used ?? 0;
+  const unlimited = Boolean(item?.isUnlimited);
+  const limit = item?.limit ?? 0;
+  const pct = unlimited ? 100 : limit > 0 ? Math.min(100, (used / limit) * 100) : used > 0 ? 100 : 0;
+  const tone = unlimited
+    ? "bg-sky-400/50"
+    : pct > 90
+    ? "bg-red-500"
+    : pct >= 70
+    ? "bg-amber-500"
+    : "bg-emerald-500";
   return (
-    <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-      <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
-        {Icon && <Icon size={11} className="shrink-0" />}
-        <span className="truncate">{label}</span>
-      </p>
-      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2 text-[11px]">
+        <span className="truncate text-neutral-500 dark:text-neutral-400">{label}</span>
+        <span className="shrink-0 font-semibold tabular-nums text-neutral-800 dark:text-neutral-200">
+          {used}/{unlimited ? "∞" : limit}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
 
-export function VerificationRow({ icon: Icon, label, value, verified }) {
+export function DetailTile({ icon: Icon, label, value, empty = MISSING.generic }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="flex items-center gap-2.5">
-        <Icon size={15} className="text-neutral-500" />
-        <div>
+    <div className="rounded-2xl bg-white/70 p-3 ring-1 ring-neutral-200/60 dark:bg-neutral-950/50 dark:ring-white/5">
+      <p className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-neutral-400">
+        {Icon && <Icon size={11} className="shrink-0" />}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">
+        <ValueOr value={value} fallback={empty} />
+      </p>
+    </div>
+  );
+}
+
+/* Verified / not-verified mark — used for PAN, GST, bank, phone and email.
+   Icon only by default; `showText` makes it a chip with the word. */
+export function VerifiedMark({ verified, showText = false, size = 14, className = "" }) {
+  const Icon = verified ? BadgeCheck : BadgeX;
+  const tone = verified ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400";
+  const text = verified ? "Verified" : "Not verified";
+  if (!showText) {
+    return (
+      <span title={text} aria-label={text} role="img" className={`inline-flex shrink-0 ${tone} ${className}`}>
+        <Icon size={size} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+        verified ? "bg-emerald-400/10" : "bg-red-500/10"
+      } ${tone} ${className}`}
+    >
+      <Icon size={12} />
+      {text}
+    </span>
+  );
+}
+
+// Value with a verified mark right after it (phone / email rows).
+export function WithVerified({ verified, children }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {children}
+      <VerifiedMark verified={verified} />
+    </span>
+  );
+}
+
+export function VerificationRow({ icon: Icon, label, value, verified, empty = MISSING.text }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/70 px-3.5 py-2.5 ring-1 ring-neutral-200/60 dark:bg-neutral-950/50 dark:ring-white/5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${verified ? SECTION_TINTS.emerald : SECTION_TINTS.red}`}>
+          <Icon size={14} />
+        </span>
+        <div className="min-w-0">
           <p className="text-[11px] text-neutral-500">{label}</p>
-          <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+          <p className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+            <ValueOr value={value} fallback={empty} />
+          </p>
         </div>
       </div>
-      <span
-        className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-          verified ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"
-        }`}
-      >
-        {verified ? "Verified" : "Unverified"}
-      </span>
+      <VerifiedMark verified={verified} showText />
     </div>
   );
 }
@@ -116,8 +191,8 @@ export function VerificationRow({ icon: Icon, label, value, verified }) {
 export function MerchantTokenCard({ token }) {
   return (
     <SectionCard title="Merchant Token">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
-        <p className="truncate font-mono text-[12.5px] text-neutral-700 dark:text-neutral-300">{token || "—"}</p>
+      <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/70 px-3.5 py-2.5 ring-1 ring-neutral-200/60 dark:bg-neutral-950/50 dark:ring-white/5">
+        <p className="truncate font-mono text-[12.5px] normal-case text-neutral-700 dark:text-neutral-300"><ValueOr value={token} fallback="No merchant token yet" /></p>
         <button
           type="button"
           onClick={() => token && navigator.clipboard?.writeText(token)}
@@ -130,14 +205,74 @@ export function MerchantTokenCard({ token }) {
   );
 }
 
-export function SectionCard({ title, icon: Icon, children, className = "" }) {
+/* ---- Bento / glass section cards (same look as the dashboard) ---------- */
+
+// Frosted glass card — translucent white, blur, hairline edge (light + dark).
+const GLASS_CARD =
+  "rounded-3xl border border-white/80 bg-white/65 shadow-[0_8px_30px_rgba(16,185,129,0.07)] backdrop-blur-xl dark:border-white/5 dark:bg-neutral-900/60 dark:shadow-black/30";
+
+const SECTION_TINTS = {
+  emerald: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
+  amber: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
+  sky: "bg-sky-400/10 text-sky-600 dark:text-sky-400",
+  violet: "bg-violet-400/10 text-violet-600 dark:text-violet-400",
+  red: "bg-red-500/10 text-red-600 dark:text-red-400",
+  neutral: "bg-neutral-200/70 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
+};
+
+// Icon + tint picked from the section title, so every card gets a matching
+// header chip without each tab wiring one up. First match wins.
+const SECTION_ICON_RULES = [
+  [/merchant|token/i, KeyRound, "violet"],
+  [/match/i, Scale, "sky"],
+  [/duplicate/i, Copy, "amber"],
+  [/remark/i, MessageSquareText, "neutral"],
+  [/trail|history|timeline/i, History, "neutral"],
+  [/trust|flag|verification|verified/i, ShieldCheck, "emerald"],
+  [/pan/i, IdCard, "sky"],
+  [/gst/i, Receipt, "amber"],
+  [/bank/i, Landmark, "violet"],
+  [/identity/i, IdCard, "emerald"],
+  [/status|visibility/i, Eye, "sky"],
+  [/business/i, Briefcase, "amber"],
+  [/contact|owner/i, Phone, "violet"],
+  [/failed|rejected/i, XCircle, "red"],
+  [/pending|open/i, Clock, "amber"],
+  [/refund/i, Undo2, "violet"],
+  [/transaction|collected/i, ArrowLeftRight, "sky"],
+  [/settlement|paid|payout/i, HandCoins, "emerald"],
+  [/voucher|published/i, Ticket, "emerald"],
+  [/amount|over time/i, LineChart, "sky"],
+  [/usage/i, Gauge, "sky"],
+  [/subscription|plan/i, Crown, "amber"],
+  [/outlet/i, Store, "emerald"],
+];
+
+function sectionIcon(title, Icon, tint) {
+  if (Icon) return [Icon, tint || "emerald"];
+  const rule = SECTION_ICON_RULES.find(([re]) => re.test(String(title || "")));
+  return rule ? [rule[1], tint || rule[2]] : [LayoutGrid, tint || "neutral"];
+}
+
+function SectionHeading({ title, icon, tint }) {
+  const [Icon, t] = sectionIcon(title, icon, tint);
   return (
-    <div className={`rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
+    <span className="flex min-w-0 items-center gap-2.5">
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${SECTION_TINTS[t] || SECTION_TINTS.neutral}`}>
+        <Icon size={15} />
+      </span>
+      <span className="truncate text-[13.5px] font-bold text-neutral-900 dark:text-neutral-50">{title}</span>
+    </span>
+  );
+}
+
+export function SectionCard({ title, icon, tint, children, className = "" }) {
+  return (
+    <div className={`${GLASS_CARD} p-5 ${className}`}>
       {title && (
-        <p className="mb-3 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">
-          {Icon && <Icon size={13} className="text-neutral-400 dark:text-neutral-500" />}
-          {title}
-        </p>
+        <div className="mb-4">
+          <SectionHeading title={title} icon={icon} tint={tint} />
+        </div>
       )}
       {children}
     </div>
@@ -148,21 +283,29 @@ export function SectionCard({ title, icon: Icon, children, className = "" }) {
    header is clicked open — collapsed by default so long detail dumps
    (PAN/GST/Bank records, subscription breakdowns...) don't dominate the
    tab on first render. */
-export function CollapsibleSectionCard({ title, children, defaultOpen = false, className = "" }) {
+// `summary` (optional) sits next to the arrow, so a closed card still says
+// what's inside (e.g. "9 entries · latest Upgraded").
+export function CollapsibleSectionCard({ title, icon, tint, children, defaultOpen = false, className = "", summary }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={`rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${className}`}>
+    <div className={`${GLASS_CARD} ${className}`}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
       >
-        <p className="text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{title}</p>
-        <ChevronDown
-          size={15}
-          className={`shrink-0 text-neutral-400 transition-transform duration-200 dark:text-neutral-500 ${open ? "rotate-180" : ""}`}
-        />
+        <SectionHeading title={title} icon={icon} tint={tint} />
+        <span className="flex min-w-0 items-center gap-2">
+          {summary && !open && <span className="hidden truncate text-[11.5px] text-neutral-500 sm:inline">{summary}</span>}
+          <span
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
+              open ? "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300" : "text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-neutral-800"
+            }`}
+          >
+            <ChevronDown size={15} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          </span>
+        </span>
       </button>
       {open && <div className="px-5 pb-5">{children}</div>}
     </div>
@@ -502,7 +645,9 @@ export function ApprovalDropdown({ brand, onDecision, size = "md" }) {
  * ---------------------------------------------------------------------- */
 
 export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfirm }) {
-  const [hideFromCustomers, setHideFromCustomers] = useState(false);
+  // Starts from the brand's current visibility, so deactivating a hidden
+  // brand doesn't quietly make it visible again.
+  const [hideFromCustomers, setHideFromCustomers] = useState(Boolean(brand.hiddenFromCustomers));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

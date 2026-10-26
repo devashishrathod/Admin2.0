@@ -74,7 +74,8 @@ const WORK_HOURS_DAYS = [
 ];
 
 function mapWorkHours(workHours) {
-  if (!workHours) return null;
+  // Unpopulated refs come through as an id string — nothing to show.
+  if (!workHours || typeof workHours !== 'object') return null;
   return WORK_HOURS_DAYS.map(([key, label]) => ({
     day: label,
     isOpen: workHours[key]?.isOpen ?? false,
@@ -141,25 +142,44 @@ function mapOutlet(raw, outlet) {
    fields other tabs already rely on). */
 function mapSubscriptionDetail(subscribed) {
   if (!subscribed) return null;
+  // Term: the API sends durationValue + durationUnit + termDays (doc #71
+  // note 6 — durationInDays is no longer returned). Old rows may still
+  // carry durationInDays, so it stays as a fallback.
+  const unit = String(subscribed.durationUnit || '').toLowerCase();
+  const durationLabel =
+    subscribed.durationLabel ||
+    (subscribed.durationValue && unit
+      ? `${subscribed.durationValue} ${unit}${subscribed.durationValue > 1 ? 's' : ''}`
+      : subscribed.durationInDays
+      ? `${subscribed.durationInDays} days`
+      : null);
   return {
     id: subscribed._id,
     transactionId: subscribed.transactionId || '—',
-    subscriptionId: subscribed.subscriptionId || '—',
-    durationInDays: subscribed.durationInDays ?? '—',
+    subscriptionId: subscribed.subscriptionId?._id ?? subscribed.subscriptionId ?? '—',
+    durationLabel,
+    termDays: subscribed.termDays ?? subscribed.durationInDays ?? null,
+    tier: subscribed.tier ?? null,
     startDateDisplay: formatDateTime(subscribed.startDate),
     endDateDisplay: formatDateTime(subscribed.endDate),
-    price: subscribed.price ?? 0,
-    discount: subscribed.discount ?? 0,
+    price: subscribed.price ?? subscribed.pricing?.listPrice ?? 0,
+    discount: subscribed.discount ?? subscribed.pricing?.discountAmount ?? 0,
     paidAmount: subscribed.paidAmount ?? 0,
     dueAmount: subscribed.dueAmount ?? 0,
     status: subscribed.status || '—',
     source: subscribed.source || '—',
     isFreeGrant: Boolean(subscribed.isFreeGrant),
     activatedAtDisplay: formatDateTime(subscribed.activatedAt),
-    numberOfUpgrade: subscribed.numberOfUpgrade ?? 0,
-    forfeitedDays: subscribed.forfeitedDays ?? 0,
-    forfeitedValue: subscribed.forfeitedValue ?? 0,
-    remindersSentCount: subscribed.remindersSent?.length ?? 0,
+    // Admin grant / cancel trail (doc #76 / #77).
+    grantNote: subscribed.grantNote || '',
+    cancelReason: subscribed.cancelReason || '',
+    cancelledAtDisplay: subscribed.cancelledAt ? formatDateTime(subscribed.cancelledAt) : null,
+    // Counters only some payloads carry — undefined means "not sent", so
+    // the UI can tell it apart from a real 0.
+    numberOfUpgrade: subscribed.numberOfUpgrade,
+    forfeitedDays: subscribed.forfeitedDays,
+    forfeitedValue: subscribed.forfeitedValue,
+    remindersSentCount: Array.isArray(subscribed.remindersSent) ? subscribed.remindersSent.length : subscribed.remindersSentCount,
     isExpired: Boolean(subscribed.isExpired),
     isUpgraded: Boolean(subscribed.isUpgraded),
     isActive: Boolean(subscribed.isActive),
@@ -244,10 +264,15 @@ function deriveBrandStatus(raw) {
  * List item mapper — GET /brands/admin/get-all → data.data[i]
  * ---------------------------------------------------------------------- */
 export function mapBrandListItem(raw) {
-  const outletsUsed = raw?.usage?.franchises?.used ?? raw?.outletCount ?? 0;
-  const outletsLimit = raw?.usage?.franchises?.isUnlimited
-    ? '∞'
-    : raw?.usage?.franchises?.limit ?? outletsUsed;
+  // Outlets = sub-brands + franchises (each its own plan pool). The list's
+  // `outletCount` is the real total; otherwise add both pools' usage.
+  const subPool = raw?.usage?.subBrands;
+  const franchisePool = raw?.usage?.franchises;
+  const outletsUsed = raw?.outletCount ?? (subPool?.used ?? 0) + (franchisePool?.used ?? 0);
+  const outletsLimit =
+    subPool?.isUnlimited || franchisePool?.isUnlimited
+      ? '∞'
+      : (subPool?.limit ?? 0) + (franchisePool?.limit ?? 0) || outletsUsed;
 
   const status = deriveBrandStatus(raw);
 
@@ -275,7 +300,15 @@ export function mapBrandListItem(raw) {
     category: raw.category?.name || raw.subCategory?.name || '—',
     liveSince: raw.joinedDate ? new Date(raw.joinedDate).getFullYear().toString() : '—',
     joinedDate: raw.joinedDate || null,
-    active: status === 'Active',
+    // The server's own on/off switch (set by PUT /brands/admin/:id/status),
+    // not derived from the plan — an expired brand can still be active or
+    // deactivated. Falls back to the status only when the flag is absent.
+    active:
+      typeof raw.isActive === 'boolean'
+        ? raw.isActive
+        : typeof raw.isAccountActive === 'boolean'
+        ? raw.isAccountActive
+        : status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
     // The API field reports whether onboarding is completed. New Onboarding
@@ -288,6 +321,8 @@ export function mapBrandListItem(raw) {
     onboardingFlags: raw.onboarding || {},
     // Screen the vendor is on in the onboarding flow, e.g. "PAN_VERIFICATION".
     onboardingScreen: raw.currentScreen || raw.vendor?.currentScreen || '',
+    // Keep the API workflow status distinct from the derived brand status.
+    onboardingStatus: raw.status || raw.vendor?.status || '',
     // Extra list fields for the Live Brand table.
     subCategory: raw.subCategory?.name || '',
     // Plan usage: { subBrands, franchises, vouchers, showcase } → { used, limit, isUnlimited }.
@@ -318,6 +353,11 @@ export function mapBrandListItem(raw) {
       : 0,
 
     ownerName: raw.legalBusinessName || raw.brandName,
+    legalBusinessName: raw.legalBusinessName || null,
+    // "Coming soon" on a real brand (PUT /brands/admin/real-dummy/:id).
+    isRealDummy: Boolean(raw.isRealDummy),
+    realDummyNote: raw.realDummyNote || null,
+    realDummyUpdatedAt: raw.realDummyUpdatedAt || null,
     // The actual person behind the vendor account (list payload's `vendor`).
     vendorName: raw.vendor?.name || null,
     // "Hide from customers" switch — separate from active/inactive.
@@ -393,7 +433,9 @@ export function mapBrandDetail(raw) {
     status,
     rejectionReason: raw.rejectionReason || '',
 
-    subBrandCount: outlet ? '1/1' : '0/0',
+    // The detail payload only carries the first outlet, so it can't count
+    // them — null keeps the list's real "used/limit" (mergeKnown).
+    subBrandCount: null,
     outlets: mappedOutlet ? [mappedOutlet] : [],
 
     contactPhone: raw.user?.whatsappNumber ? `+91 ${raw.user.whatsappNumber}` : '—',
@@ -419,16 +461,52 @@ export function mapBrandDetail(raw) {
         }
       : null,
 
+    // Weekly hours — the API nests them under `user`; older payloads put
+    // them on the brand or only on the first outlet.
+    workHours: mapWorkHours(raw.user?.workHours || raw.workHours || outlet?.workHours),
+
+    // Raw approval/lifecycle flags + timestamps (Brand Info → Account record).
+    record: {
+      status: raw.status || null,
+      verificationAttemptCount: raw.verificationAttemptCount ?? null,
+      isApprovalAcknowledged: raw.isApprovalAcknowledged ?? null,
+      isReviewed: raw.isReviewed ?? null,
+      isApproved: raw.isApproved ?? null,
+      isRejected: raw.isRejected ?? null,
+      isRevoked: raw.isRevoked ?? null,
+      isSubscribed: raw.isSubscribed ?? null,
+      isActive: raw.isActive ?? null,
+      isDeleted: raw.isDeleted ?? null,
+      topAddedAt: raw.topAddedAt || null,
+      joinedDate: raw.joinedDate || null,
+      createdAt: raw.createdAt || null,
+      updatedAt: raw.updatedAt || null,
+    },
+
     planPrice: subscribed?.price != null ? formatCurrency(subscribed.price) : '—',
-    planType: subscribed?.durationInDays === 365 ? 'Annual' : 'Custom',
+    planType:
+      String(subscribed?.durationUnit).toUpperCase() === 'YEAR' || subscribed?.durationInDays === 365 ? 'Annual' : 'Custom',
     // plan name isn't populated on this endpoint yet (only subscriptionId) —
     // swap this for raw.subscribed?.plan?.name once the backend populates it.
-    subscriptionPlan: raw.subscribed?.plan?.name || '—',
-    subscriptionTerm: subscribed?.durationInDays ? formatDurationTerm(subscribed.durationInDays) : '—',
+    subscriptionPlan: raw.subscribed?.plan?.name || raw.subscribed?.subscriptionId?.name || '—',
+    // durationValue + durationUnit (current API) → "1 year"; old rows
+    // with durationInDays, or just the dates, still work.
+    subscriptionTerm: (() => {
+      const detail = mapSubscriptionDetail(subscribed);
+      if (detail?.durationLabel) return detail.durationLabel;
+      const days = subscribed?.termDays ?? subscribed?.durationInDays ?? daysBetween(subscribed?.startDate, subscribed?.endDate);
+      return days ? formatDurationTerm(days) : '—';
+    })(),
     expiredInDays: subscribed?.endDate ? daysUntil(subscribed.endDate) : 0,
     remainderPercent: computeRemainderPercentFromDates(subscribed?.startDate, subscribed?.endDate),
 
     ownerName: raw.pan?.fullName || raw.legalBusinessName || raw.brandName,
+    // null (not a default) when missing, so mergeKnown keeps the list's value.
+    legalBusinessName: raw.legalBusinessName || null,
+    // "Coming soon" on a real brand — admin gets these keys on #26 too.
+    isRealDummy: typeof raw.isRealDummy === 'boolean' ? raw.isRealDummy : null,
+    realDummyNote: raw.realDummyNote || null,
+    realDummyUpdatedAt: raw.realDummyUpdatedAt || null,
     gstNumber: raw.gst?.gstNumber || '—',
     gstVerified: raw.gst?.isVerified ?? false,
     panNumber: raw.pan?.pan || '—',

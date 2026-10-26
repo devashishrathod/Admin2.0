@@ -35,14 +35,14 @@ export const PLAN_IMPACT_LABELS = {
 
 // Renders a limit/flag value the way the plan form shows it.
 export function formatEntitlementValue(value) {
-  if (value == null) return "—";
+  if (value == null) return "Not set";
   if (typeof value !== "object") return String(value);
   if ("isEnabled" in value) return value.isEnabled ? "Enabled" : "Disabled";
   if (value.isUnlimited) return "Unlimited";
   if ("limit" in value) return String(value.limit ?? 0);
   if ("number" in value) return String(value.number);
-  if ("text" in value) return value.text || "—";
-  return "—";
+  if ("text" in value) return value.text || "Not set";
+  return "Not set";
 }
 
 function ModalShell({ children, maxWidth = "max-w-md", onClose }) {
@@ -310,7 +310,7 @@ export function ApplyTermsModal({ plan, labels = ENTITLEMENT_LABELS, onClose }) 
                       <td className="px-3 py-2 text-neutral-500">
                         {(c.from || [])
                           .map((f) => `${formatEntitlementValue(f.value)} (${f.count})`)
-                          .join(", ") || "—"}
+                          .join(", ") || "None"}
                       </td>
                       <td className="px-3 py-2 font-semibold text-neutral-800 dark:text-neutral-200">
                         {formatEntitlementValue(c.to)}

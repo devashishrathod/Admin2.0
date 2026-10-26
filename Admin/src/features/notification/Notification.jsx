@@ -21,7 +21,8 @@ import {
   BatteryFull,
 } from "lucide-react";
 import { broadcastNotification } from "./services/NotificationApi";
-import { getAllCustomers } from "../customer/services/CustomerApi";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useCustomers } from "../customer/queries/customerQueries";
 import { isNotFoundMessage } from "../../utils/helpers";
 import { registerDeviceToken, unregisterDeviceToken } from "./services/DeviceTokenApi";
 import { getPushToken, getBrowserDeviceId, FCM_TOKEN_STORAGE_KEY } from "../../config/firebaseMessaging";
@@ -50,6 +51,12 @@ function toUserOption(raw) {
     // Email + number + id in one line — also what the local search matches on.
     detail: [raw.email || account.email, phone, raw.uniqueId].filter(Boolean).join(" · "),
   };
+}
+
+// get-all response → picker options.
+function rowsOf(res) {
+  const list = res?.data?.data ?? res?.data?.customers ?? res?.data ?? [];
+  return Array.isArray(list) ? list.map(toUserOption).filter((u) => u.id) : [];
 }
 
 const inputClass =
@@ -194,16 +201,6 @@ function PushSetupCard() {
           </button>
         </div>
 
-        {registered && !isReal && (
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-3.5 py-2.5 text-[12.5px] text-amber-600 dark:text-amber-400">
-            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-            No VAPID key set yet, so this registered with a placeholder token (not a real FCM token). The API
-            call works and shows up in the backend, but push won't actually deliver here until{" "}
-            <code className="rounded bg-neutral-200 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">VITE_FIREBASE_VAPID_KEY</code> is
-            set and this is re-enabled.
-          </div>
-        )}
-
         {error && (
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/[0.06] px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={13} className="mt-0.5 shrink-0" />
@@ -214,7 +211,7 @@ function PushSetupCard() {
 
       <BentoFact icon={Radio} label="Status" value={registered ? "Registered" : "Not Registered"} />
       <BentoFact icon={Globe} label="Browser" value={browserLabel} />
-      <BentoFact icon={ShieldCheck} label="Token Type" value={registered ? (isReal ? "Real FCM" : "Placeholder") : "—"} />
+      <BentoFact icon={ShieldCheck} label="Token Type" value={registered ? (isReal ? "Real FCM" : "Placeholder") : "No token"} />
       <BentoFact icon={Users} label="Device ID" value={deviceId.replace("web_", "").slice(0, 13)} />
     </div>
   );
@@ -280,63 +277,31 @@ function RolePicker({ roles, onChange }) {
 function UserPicker({ selected, onChange }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  // Base list — the same call the Customers page makes (first 100, no
-  // search), loaded once and filtered locally as the admin types.
-  const [baseList, setBaseList] = useState([]);
-  // Extra matches from the server-side search, for customers past the first 100.
-  const [searchHits, setSearchHits] = useState([]);
-  const [loadingBase, setLoadingBase] = useState(true);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
+  // Base list — the same call (and cache entry) the Customers page uses
+  // (first 100, no search), filtered locally as the admin types.
+  const baseQuery = useCustomers({ page: 1, limit: 100 });
+  const baseList = useMemo(() => rowsOf(baseQuery.data), [baseQuery.data]);
+  const loadingBase = baseQuery.isPending;
+  // "No customers found" is just an empty platform, not an error.
+  const searchError =
+    baseQuery.error && !isNotFoundMessage(baseQuery.error.message) ? baseQuery.error.message : "";
 
-  const rowsOf = (res) => {
-    const list = res?.data?.data ?? res?.data?.customers ?? res?.data ?? [];
-    return Array.isArray(list) ? list.map(toUserOption).filter((u) => u.id) : [];
-  };
-
+  // Extra matches from the server-side search, for customers past the
+  // first 100 — debounced 300ms.
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   useEffect(() => {
-    let cancelled = false;
-    getAllCustomers({ page: 1, limit: 100 })
-      .then((res) => {
-        if (cancelled) return;
-        const rows = rowsOf(res);
-        console.log(`[Notifications] customers loaded for picker: ${rows.length}`, res);
-        setBaseList(rows);
-      })
-      .catch((err) => {
-        if (!cancelled && !isNotFoundMessage(err.message)) setSearchError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingBase(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const q = query.trim();
-    // Empty query → `results` ignores searchHits, so nothing to fetch.
-    if (!q) return undefined;
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await getAllCustomers({ page: 1, limit: 20, search: q });
-        if (!cancelled) setSearchHits(rowsOf(res));
-      } catch {
-        // A miss here ("No customers found" 404, unsupported search, …) is
-        // fine — the locally filtered base list still shows.
-        if (!cancelled) setSearchHits([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(t);
   }, [query]);
+  // Empty query → `results` ignores searchHits, so nothing to fetch. A miss
+  // ("No customers found" 404, unsupported search, …) is fine — the locally
+  // filtered base list still shows — so it isn't retried.
+  const searchQuery = useCustomers(
+    { page: 1, limit: 20, search: debouncedQuery },
+    { enabled: Boolean(debouncedQuery), retry: false, placeholderData: keepPreviousData }
+  );
+  const searchHits = useMemo(() => rowsOf(searchQuery.data), [searchQuery.data]);
+  const searching = searchQuery.isFetching;
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();

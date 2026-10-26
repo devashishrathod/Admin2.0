@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -19,18 +20,22 @@ import {
   Percent,
   ListChecks,
 } from "lucide-react";
-import { getRefundWorklist, approveRefund, rejectRefund, payRefund, payToBank, confirmBankPayout } from "./services/RefundApi";
+import { approveRefund, rejectRefund, payRefund, payToBank, confirmBankPayout } from "./services/RefundApi";
+import { useAllRefunds } from "./queries/refundQueries";
+import { queryKeys } from "../../lib/query";
 import BulkActionModal from "../../components/common/BulkActionModal";
 import BulkSelectBar from "../../components/common/BulkSelectBar";
 import StatusStepButton from "../../components/common/StatusStepButton";
-import { canAdminDecide } from "./refundUtils";
+import { canAdminDecide, needsOverrideReason, isAdminApproved, approvedPatch, refundMethodLabel } from "./refundUtils";
 import { formatDate, fmtTime, inr, todayStr } from "../transaction/transactionUtils";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
 import { downloadCsv } from "../../utils/exportTable";
 import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
-import { pctChange, weekOverWeek } from "../../utils/overviewStats";
+import { pctChange, weekOverWeek, localDateStr } from "../../utils/overviewStats";
 import EmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING, orText } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * Shared Table — mirrors Transaction.jsx's local table so this page keeps
@@ -127,18 +132,23 @@ function humanizeEnum(value) {
 function bucketRefundStatus(status) {
   switch (status) {
     case "APPROVED":
-    case "VENDOR_APPROVED":
     case "ADMIN_APPROVED":
+    case "ADMIN_OVERRIDE":
     case "COMPLETED":
       return "approved";
     case "REJECTED":
     case "ADMIN_REJECTED":
+      return "rejected";
+    // The customer took it back — nobody rejected it, so it stays out of
+    // the Rejected tab and the approval rate.
     case "CANCELLED":
     case "WITHDRAWN":
-      return "rejected";
+      return "withdrawn";
     // FAILED stays isOpen ("Refund failed — we are on it") and needs the
     // admin to retry, so it lives in Pending — refundTone still colours
-    // its pill red.
+    // its pill red. VENDOR_APPROVED / VENDOR_REJECTED / VENDOR_TIMEOUT all
+    // still wait on the admin (release, override or reject), so they stay
+    // Pending too — the vendor's yes is not the refund's approval.
     default:
       return "pending";
   }
@@ -147,15 +157,15 @@ function bucketRefundStatus(status) {
 // Refund status → pill colour for StatusStepButton.
 function refundTone(status) {
   if (status === "FAILED") return "red";
-  if (status === "ADMIN_APPROVED") return "sky";
+  if (isAdminApproved(status)) return "sky";
   if (status === "PROCESSING") return "violet";
-  return { approved: "emerald", rejected: "red", pending: "amber" }[bucketRefundStatus(status)];
+  return { approved: "emerald", rejected: "red", pending: "amber", withdrawn: "neutral" }[bucketRefundStatus(status)];
 }
 
 function normalizeRefundRow(raw) {
+  // No usable timestamp → no date (shown as "—"), never "today".
   const ts = raw.createdAt || null;
-  const d = ts ? new Date(ts) : null;
-  const dateStr = d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : todayStr();
+  const dateStr = localDateStr(ts);
   const status = String(raw.status || "PENDING").toUpperCase();
   const split = raw.split || {};
 
@@ -168,7 +178,7 @@ function normalizeRefundRow(raw) {
     subBrandId: raw.subBrandId || "",
     customerId: raw.customerId || "—",
     date: dateStr,
-    time: d && !Number.isNaN(d.getTime()) ? fmtTime(ts) : "—",
+    time: dateStr ? fmtTime(ts) : "—",
     requestedAmount: Number(raw.requestedAmount) || 0,
     approvedAmount: raw.approvedAmount != null ? Number(raw.approvedAmount) : null,
     isFullRefund: Boolean(split.isFullRefund),
@@ -179,22 +189,23 @@ function normalizeRefundRow(raw) {
     statusLabel: raw.statusLabel || humanizeEnum(status),
     statusBucket: bucketRefundStatus(status),
     isOpen: Boolean(raw.isOpen),
-    canDecide: canAdminDecide({ canDecide: raw.canDecide, isOpen: raw.isOpen, status }),
+    canDecide: canAdminDecide({ isOpen: raw.isOpen, status }),
+    needsOverride: needsOverrideReason(status),
     canWithdraw: Boolean(raw.canWithdraw),
     // Not real API flags — inferred from status + method, the same rules
     // RefundDetails uses for its action buttons:
-    //  - gateway refund, approved (or failed) → /pay
+    //  - gateway refund, approved/overridden (or failed) → /pay
     //  - manual-bank refund, approved or bank details on file → /pay-to-bank
     //  - manual-bank refund with an open payout leg (PROCESSING) → confirm UTR
-    canPay: raw.isOpen !== false && raw.method !== "MANUAL_BANK" && (status === "ADMIN_APPROVED" || status === "FAILED"),
+    canPay: raw.isOpen !== false && raw.method !== "MANUAL_BANK" && (isAdminApproved(status) || status === "FAILED"),
     canPayToBank:
       raw.method === "MANUAL_BANK" &&
       raw.isOpen !== false &&
       !["PROCESSING", "COMPLETED"].includes(status) &&
-      bucketRefundStatus(status) !== "rejected" &&
-      (status === "ADMIN_APPROVED" || Boolean(raw.customerBankAccountId)),
+      !["rejected", "withdrawn"].includes(bucketRefundStatus(status)) &&
+      (isAdminApproved(status) || Boolean(raw.customerBankAccountId)),
     canConfirmBankPayout: status === "PROCESSING" && raw.method === "MANUAL_BANK",
-    canRequestBankDetails: status === "ADMIN_APPROVED",
+    canRequestBankDetails: isAdminApproved(status),
     razorpayRefundId: raw.razorpayRefundId || "—",
     completedAt: raw.completedAt || null,
     adminDecisionAt: raw.adminDecisionAt || null,
@@ -220,17 +231,22 @@ const getRequestedAmount = (r) => r.requestedAmount;
 const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
 
+// Over a vendor's "no" or silence the approve is an override: the text
+// is sent as the required `overrideReason` instead of an optional note.
 function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
   const [note, setNote] = useState("");
+  const override = refund.needsOverride;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Approve Refund</h2>
+            <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
+              {override ? "Override & Approve Refund" : "Approve Refund"}
+            </h2>
             <p className="mt-1 text-[12.5px] text-neutral-500">
-              Claim <span className="font-mono text-neutral-700 dark:text-neutral-300">{refund.claimCode}</span> · Requested{" "}
+              Claim <span className="font-mono text-neutral-700 dark:text-neutral-300">{orText(refund.claimCode, MISSING.id)}</span> · Requested{" "}
               {inr(refund.requestedAmount)}
             </p>
           </div>
@@ -243,9 +259,23 @@ function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
           </button>
         </div>
 
+        {override && (
+          <p className="mb-3 rounded-xl bg-amber-400/10 px-3.5 py-2.5 text-[12.5px] text-amber-700 dark:text-amber-400">
+            {refund.status === "VENDOR_TIMEOUT"
+              ? "The outlet never answered. Say why you are approving it yourself."
+              : "The outlet rejected this refund. Say why you are overruling it."}
+          </p>
+        )}
+
         <label className="block">
           <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-            Note (optional)
+            {override ? (
+              <>
+                Override reason<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
+              </>
+            ) : (
+              "Note (optional)"
+            )}
           </span>
           <textarea
             value={note}
@@ -272,11 +302,11 @@ function ApproveRefundModal({ refund, onClose, onSubmit, submitting, error }) {
           </button>
           <button
             onClick={() => onSubmit(note.trim())}
-            disabled={submitting}
+            disabled={submitting || (override && !note.trim())}
             className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            Approve
+            {override ? "Override & Approve" : "Approve"}
           </button>
         </div>
       </div>
@@ -291,9 +321,11 @@ function PayRefundModal({ refund, onClose, onSubmit, submitting, error }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-        <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Pay refund?</h2>
+        <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
+          {refund.status === "FAILED" ? "Retry refund payment?" : "Pay refund?"}
+        </h2>
         <p className="mt-1 text-[12.5px] text-neutral-500">
-          Claim <span className="font-mono text-neutral-700 dark:text-neutral-300">{refund.claimCode}</span> ·{" "}
+          Claim <span className="font-mono text-neutral-700 dark:text-neutral-300">{orText(refund.claimCode, MISSING.id)}</span> ·{" "}
           {inr(refund.approvedAmount ?? refund.requestedAmount)} will be refunded to the customer through the payment gateway.
         </p>
 
@@ -339,7 +371,7 @@ function RejectRefundModal({ refund, onClose, onSubmit, submitting, error }) {
           <div>
             <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Reject Refund</h2>
             <p className="mt-1 text-[12.5px] text-neutral-500">
-              Claim <span className="font-mono text-neutral-700 dark:text-neutral-300">{refund.claimCode}</span> · Requested{" "}
+              Claim <span className="font-mono text-neutral-700 dark:text-neutral-300">{orText(refund.claimCode, MISSING.id)}</span> · Requested{" "}
               {inr(refund.requestedAmount)}
             </p>
           </div>
@@ -354,7 +386,7 @@ function RejectRefundModal({ refund, onClose, onSubmit, submitting, error }) {
 
         <label className="block">
           <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-            Note (optional)
+            Reason<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
           </span>
           <textarea
             value={note}
@@ -381,7 +413,7 @@ function RejectRefundModal({ refund, onClose, onSubmit, submitting, error }) {
           </button>
           <button
             onClick={() => onSubmit(note.trim())}
-            disabled={submitting}
+            disabled={submitting || !note.trim()}
             className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
@@ -402,6 +434,7 @@ const TABS = [
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
   { key: "rejected", label: "Rejected" },
+  { key: "withdrawn", label: "Withdrawn" },
 ];
 
 function matchesTab(row, tab) {
@@ -413,11 +446,32 @@ function matchesTab(row, tab) {
  * Main page
  * ---------------------------------------------------------------------- */
 
+// Every page of refunds; tabs, filters and pagination are client-side.
+const WORKLIST_PARAMS = {};
+
 export default function Refund() {
   const navigate = useNavigate();
-  const [refunds, setRefunds] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const queryClient = useQueryClient();
+  const {
+    data: worklistRes,
+    isPending: loading,
+    isFetching,
+    error,
+    refetch,
+  } = useAllRefunds(WORKLIST_PARAMS);
+  const loadError = error?.message ?? "";
+  const refunds = useMemo(
+    () =>
+      (worklistRes?.data?.data ?? []).map((raw) => {
+        const row = normalizeRefundRow(raw);
+        // `_patch` = optimistic overrides from patchRefund; the refetch the
+        // write triggers replaces the raw row, dropping it.
+        return raw._patch
+          ? { ...row, ...raw._patch, statusBucket: bucketRefundStatus(raw._patch.status ?? row.status) }
+          : row;
+      }),
+    [worklistRes]
+  );
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -428,45 +482,39 @@ export default function Refund() {
   const [approveTarget, setApproveTarget] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [payTarget, setPayTarget] = useState(null);
-  // Instant local update of one row after an action succeeds (the silent
-  // refetch that follows then brings the server's real values).
+  // Instant update of one row after an action succeeds. The flags are
+  // derived (not raw API fields), so they ride on the cached raw row as
+  // `_patch`; the refetch the interceptor already started brings the
+  // server's real values.
   const patchRefund = (id, patch) =>
-    setRefunds((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...patch, statusBucket: bucketRefundStatus(patch.status ?? r.status) } : r))
+    queryClient.setQueryData(queryKeys.refunds.view("all", WORKLIST_PARAMS), (prev) =>
+      prev?.data?.data
+        ? {
+            ...prev,
+            data: {
+              ...prev.data,
+              data: prev.data.data.map((raw) =>
+                raw._id === id ? { ...raw, _patch: { ...raw._patch, ...patch } } : raw
+              ),
+            },
+          }
+        : prev
     );
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
-
-  // `silent` = background refresh after an action — keeps the table on
-  // screen instead of swapping it for the loading state.
-  const fetchRefunds = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getRefundWorklist({ page: 1, limit: 100 });
-      const rows = (res?.data?.data ?? []).map(normalizeRefundRow);
-      setRefunds(rows);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRefunds();
-  }, [fetchRefunds]);
 
   const stats = useMemo(() => {
     const pending = refunds.filter((r) => r.statusBucket === "pending");
     const approved = refunds.filter((r) => r.statusBucket === "approved");
     const rejected = refunds.filter((r) => r.statusBucket === "rejected");
+    const withdrawn = refunds.filter((r) => r.statusBucket === "withdrawn");
     const sum = (rows) => rows.reduce((s, r) => s + r.requestedAmount, 0);
     return {
       all: { amount: sum(refunds), count: refunds.length },
       pending: { amount: sum(pending), count: pending.length },
       approved: { amount: sum(approved), count: approved.length },
       rejected: { amount: sum(rejected), count: rejected.length },
+      withdrawn: { amount: sum(withdrawn), count: withdrawn.length },
     };
   }, [refunds]);
 
@@ -475,7 +523,8 @@ export default function Refund() {
   const kpis = useMemo(() => {
     const summarize = (rows) => {
       const approved = rows.filter((r) => r.statusBucket === "approved");
-      const decided = rows.filter((r) => r.statusBucket !== "pending");
+      // Decided = approved or rejected; withdrawn requests were never decided.
+      const decided = rows.filter((r) => r.statusBucket === "approved" || r.statusBucket === "rejected");
       return {
         requested: rows.reduce((s, r) => s + r.requestedAmount, 0),
         count: rows.length,
@@ -502,7 +551,7 @@ export default function Refund() {
   const reasonBreakdown = useMemo(() => {
     const map = new Map();
     refunds.forEach((r) => {
-      const key = r.reason || "Unspecified";
+      const key = orText(r.reason, "Unspecified");
       map.set(key, (map.get(key) || 0) + 1);
     });
     const rows = Array.from(map, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
@@ -532,7 +581,10 @@ export default function Refund() {
   }, [refunds, activeTab, search, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
-  const pageRows = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  // An action can move rows out of the tab and shrink the list — never
+  // stay on a page past the end.
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   /* ---- Multi-select + bulk actions ----------------------------------- */
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -546,6 +598,12 @@ export default function Refund() {
       return next;
     });
   const clearSelection = () => setSelectedIds(new Set());
+  // Changing the tab, search or dates starts over on page 1 and drops the
+  // selection, so bulk actions never touch rows that are no longer shown.
+  const resetView = () => {
+    setPage(1);
+    clearSelection();
+  };
   const selectedRows = refunds.filter((r) => selectedIds.has(r.id));
 
   // One entry per bulk action: who it applies to, what to fill in, the API
@@ -553,9 +611,16 @@ export default function Refund() {
   const BULK = {
     approve: {
       label: "Approve", title: "Approve refunds", icon: Check, input: "note",
-      eligible: (r) => r.canDecide,
+      eligible: (r) => r.canDecide && !r.needsOverride,
       run: (r, p) => approveRefund(r.id, { note: p.text }),
-      result: { status: "ADMIN_APPROVED", statusLabel: "Admin Approved", canDecide: false },
+      result: (r) => approvedPatch(r, false),
+    },
+    // Vendor rejected / timed out — needs a written override reason each.
+    override: {
+      label: "Override & Approve", title: "Override vendor and approve", icon: Check, input: "reason",
+      eligible: (r) => r.canDecide && r.needsOverride,
+      run: (r, p) => approveRefund(r.id, { overrideReason: p.text }),
+      result: (r) => approvedPatch(r, true),
     },
     reject: {
       label: "Reject", title: "Reject refunds", icon: Ban, input: "reason", tone: "red",
@@ -591,13 +656,13 @@ export default function Refund() {
   const bulkRows = bulkKind ? selectedRows.filter(BULK[bulkKind].eligible) : [];
 
   const runBulkOne = async (row, payload) => {
-    await BULK[bulkKind].run(row, payload);
-    patchRefund(row.id, BULK[bulkKind].result);
+    const { run, result } = BULK[bulkKind];
+    await run(row, payload);
+    patchRefund(row.id, typeof result === "function" ? result(row) : result);
   };
   const closeBulk = () => {
     setBulkKind(null);
     clearSelection();
-    fetchRefunds({ silent: true });
   };
 
   // Every scalar field on the normalized row, including the split ledger —
@@ -653,15 +718,15 @@ export default function Refund() {
     ], filtered);
   };
 
-  const handleApprove = async (note) => {
+  const handleApprove = async (text) => {
     setActionSubmitting(true);
     setActionError("");
     try {
-      await approveRefund(approveTarget.id, { note });
-      // Flip the pill at once (Approved → next step Pay), then refresh quietly.
-      patchRefund(approveTarget.id, { status: "ADMIN_APPROVED", statusLabel: "Admin Approved", canDecide: false, canPay: true });
+      const override = approveTarget.needsOverride;
+      await approveRefund(approveTarget.id, override ? { overrideReason: text } : { note: text });
+      // Flip the pill at once (Approved → next step Pay); the list refetches by itself.
+      patchRefund(approveTarget.id, approvedPatch(approveTarget, override));
       setApproveTarget(null);
-      fetchRefunds({ silent: true });
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -676,7 +741,6 @@ export default function Refund() {
       await rejectRefund(rejectTarget.id, { note });
       patchRefund(rejectTarget.id, { status: "ADMIN_REJECTED", statusLabel: "Admin Rejected", canDecide: false, canPay: false });
       setRejectTarget(null);
-      fetchRefunds({ silent: true });
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -691,7 +755,6 @@ export default function Refund() {
       await payRefund(payTarget.id);
       patchRefund(payTarget.id, { status: "PROCESSING", statusLabel: "Processing", canPay: false });
       setPayTarget(null);
-      fetchRefunds({ silent: true });
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -736,7 +799,7 @@ export default function Refund() {
           onClick={() => navigate(`/refund/${r.id}`)}
           className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
         >
-          {r.claimCode}
+          <ValueOr value={r.claimCode} fallback={MISSING.id} />
         </button>
       ),
     },
@@ -745,18 +808,18 @@ export default function Refund() {
       label: "Brand",
       render: (r) => (
         <div className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400">
-          <p>{r.brandId}</p>
+          <p><ValueOr value={r.brandId} fallback="No brand" /></p>
           {r.subBrandId && <p className="mt-0.5 text-[11px] text-neutral-400">Sub · {r.subBrandId}</p>}
         </div>
       ),
     },
-    { key: "customerId", label: "Customer", render: (r) => <span className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400">{r.customerId}</span> },
+    { key: "customerId", label: "Customer", render: (r) => <span className="font-mono text-[12px] text-neutral-500 dark:text-neutral-400"><ValueOr value={r.customerId} fallback="No customer" /></span> },
     {
       key: "reason",
       label: "Reason",
       render: (r) => (
         <div className="max-w-48">
-          <p className="text-neutral-800 dark:text-neutral-100">{r.reason}</p>
+          <p className="text-neutral-800 dark:text-neutral-100"><ValueOr value={r.reason} fallback={MISSING.reason} /></p>
           {r.reasonNote && (
             <p className="mt-0.5 truncate text-[11.5px] text-neutral-500" title={r.reasonNote}>
               {r.reasonNote}
@@ -765,7 +828,7 @@ export default function Refund() {
         </div>
       ),
     },
-    { key: "method", label: "Method", render: (r) => humanizeEnum(r.method) },
+    { key: "method", label: "Method", render: (r) => <ValueOr value={refundMethodLabel(r.method)} fallback={MISSING.method} /> },
     {
       key: "vendorDecision",
       label: "Vendor Decision",
@@ -773,7 +836,7 @@ export default function Refund() {
         r.vendorDecisionAt ? (
           <div className="max-w-48">
             <p className="text-[12px] text-neutral-500">
-              {formatDate(r.vendorDecisionAt.slice(0, 10))} · {fmtTime(r.vendorDecisionAt)}
+              {formatDate(localDateStr(r.vendorDecisionAt))} · {fmtTime(r.vendorDecisionAt)}
             </p>
             {r.vendorNote && (
               <p className="mt-0.5 truncate text-[11.5px] text-neutral-700 dark:text-neutral-300" title={r.vendorNote}>
@@ -783,18 +846,20 @@ export default function Refund() {
           </div>
         ) : r.vendorRespondBy ? (
           <span className="text-[12px] text-amber-600 dark:text-amber-400">
-            Respond by {formatDate(r.vendorRespondBy.slice(0, 10))} · {fmtTime(r.vendorRespondBy)}
+            Respond by {formatDate(localDateStr(r.vendorRespondBy))} · {fmtTime(r.vendorRespondBy)}
           </span>
         ) : (
-          <span className="text-neutral-400">—</span>
+          <span className="text-neutral-400">No response</span>
         ),
     },
     {
       key: "date",
       label: "Date",
-      render: (r) => (
+      render: (r) => !r.date ? (
+        <ValueOr value={null} fallback={MISSING.date} />
+      ) : (
         <span>
-          {formatDate(r.date)} <span className="ml-1 text-neutral-500">· {r.time}</span>
+          {formatDate(r.date)} <span className="ml-1 text-neutral-500">· {orText(r.time, "Time not recorded")}</span>
         </span>
       ),
     },
@@ -819,26 +884,40 @@ export default function Refund() {
       align: "right",
       render: (r) => (
         <span className={r.approvedAmount != null ? "font-medium text-emerald-600 dark:text-emerald-400" : "text-neutral-400"}>
-          {r.approvedAmount != null ? inr(r.approvedAmount) : "—"}
+          {r.approvedAmount != null ? inr(r.approvedAmount) : r.statusBucket === "pending" ? "Not yet" : "Not approved"}
         </span>
       ),
     },
     {
       key: "status",
       label: "Status",
-      // Status pill doubles as the workflow button: Approve → Pay Refund.
-      render: (r) => (
-        <StatusStepButton
-          label={r.statusLabel || r.status}
-          tone={refundTone(r.status)}
-          stepLabel={r.canDecide ? "Approve" : r.canPay ? "Pay Refund" : null}
-          onClick={() => {
-            setActionError("");
-            if (r.canDecide) setApproveTarget(r);
-            else setPayTarget(r);
-          }}
-        />
-      ),
+      // Status pill doubles as the workflow button: Approve → Pay Refund
+      // (gateway), or Pay to Bank → Confirm Payout (manual bank — those
+      // steps need the details page's forms, so the pill opens it).
+      render: (r) => {
+        const step = r.canDecide
+          ? r.needsOverride ? "Override" : "Approve"
+          : r.canPay
+          ? r.status === "FAILED" ? "Retry Pay" : "Pay Refund"
+          : r.canPayToBank
+          ? "Pay to Bank"
+          : r.canConfirmBankPayout
+          ? "Confirm Payout"
+          : null;
+        return (
+          <StatusStepButton
+            label={r.statusLabel || r.status}
+            tone={refundTone(r.status)}
+            stepLabel={step}
+            onClick={() => {
+              setActionError("");
+              if (r.canDecide) setApproveTarget(r);
+              else if (r.canPay) setPayTarget(r);
+              else navigate(`/refund/${r.id}`);
+            }}
+          />
+        );
+      },
     },
     {
       key: "actions",
@@ -883,11 +962,11 @@ export default function Refund() {
             </p>
           </div>
           <button
-            onClick={fetchRefunds}
-            disabled={loading}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
             Refresh
           </button>
         </div>
@@ -934,7 +1013,7 @@ export default function Refund() {
           active={activeTab}
           onChange={(key) => {
             setActiveTab(key);
-            setPage(1);
+            resetView();
           }}
         />
 
@@ -947,9 +1026,9 @@ export default function Refund() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                setPage(1);
+                resetView();
               }}
-              placeholder="Search claim code, vendor, customer, outlet..."
+              placeholder="Search claim code, brand ID, customer ID, reason..."
               className="w-44 bg-transparent text-[13px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200 sm:w-64"
             />
           </div>
@@ -958,16 +1037,16 @@ export default function Refund() {
             endDate={dateTo}
             onStartChange={(v) => {
               setDateFrom(v);
-              setPage(1);
+              resetView();
             }}
             onEndChange={(v) => {
               setDateTo(v);
-              setPage(1);
+              resetView();
             }}
             onClear={() => {
               setDateFrom("");
               setDateTo("");
-              setPage(1);
+              resetView();
             }}
           />
           <button
@@ -990,7 +1069,7 @@ export default function Refund() {
               icon="error"
               title="Couldn't load refunds"
               description={`${loadError} — check your connection and try again.`}
-              action={{ label: "Try again", onClick: () => fetchRefunds() }}
+              action={{ label: "Try again", onClick: () => refetch() }}
             />
           </div>
         ) : (
@@ -1046,7 +1125,7 @@ export default function Refund() {
                 key={n}
                 onClick={() => setPage(n)}
                 className={`flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-medium ${
-                  page === n
+                  currentPage === n
                     ? "bg-emerald-400 text-neutral-950"
                     : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 }`}
@@ -1080,7 +1159,7 @@ export default function Refund() {
           rows={bulkRows}
           getRef={(r) => r.claimCode !== "—" ? r.claimCode : r.id}
           getAmount={(r) => r.approvedAmount ?? r.requestedAmount}
-          getSubtitle={(r) => r.reason}
+          getSubtitle={(r) => orText(r.reason, MISSING.reason)}
           onRun={runBulkOne}
           onClose={closeBulk}
         />

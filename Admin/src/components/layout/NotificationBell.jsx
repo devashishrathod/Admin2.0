@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   BellOff,
@@ -11,10 +12,12 @@ import {
   RefreshCw,
   ChevronRight,
 } from "lucide-react";
+import { markNotificationsRead } from "../../features/notification/services/NotificationApi";
 import {
-  getAdminNotifications,
-  markNotificationsRead,
-} from "../../features/notification/services/NotificationApi";
+  useAdminNotificationsFeed,
+  useAdminUnreadCount,
+} from "../../features/notification/queries/notificationQueries";
+import { queryKeys } from "../../lib/query";
 import EmptyState from "../common/EmptyState";
 import Loader from "../common/Loader";
 
@@ -77,68 +80,70 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 }
 
+// Cache patchers for the optimistic mark-read updates (raw API shapes).
+function withUnreadCount(res, fn) {
+  return res ? { ...res, data: { ...res.data, unreadCount: fn(res.data?.unreadCount ?? 0) } } : res;
+}
+function mapFeedRows(feed, fn) {
+  return feed
+    ? { ...feed, pages: feed.pages.map((p) => ({ ...p, data: { ...p?.data, data: fn(p?.data?.data ?? []) } })) }
+    : feed;
+}
+
 export default function NotificationBell({ buttonClass }) {
   const navigate = useNavigate();
   const wrapRef = useRef(null);
 
+  const queryClient = useQueryClient();
+
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("all"); // "all" | "unread"
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
+  // Mark-all failures show in the list's error state, like load errors.
+  const [actionError, setActionError] = useState("");
   const [markingAll, setMarkingAll] = useState(false);
 
-  // Badge only — one tiny request for the fresh unreadCount.
-  const refreshCount = useCallback(async () => {
-    try {
-      const res = await getAdminNotifications({ page: 1, limit: 1 });
-      setUnreadCount(res?.data?.unreadCount ?? 0);
-    } catch {
-      /* keep the last known count */
-    }
-  }, []);
+  // Badge on mount + polling while the panel is closed. On error the last
+  // known count stays (the query keeps its previous data).
+  const countQuery = useAdminUnreadCount({
+    select: (res) => res?.data?.unreadCount ?? 0,
+    refetchInterval: open ? false : POLL_MS,
+  });
+  const unreadCount = countQuery.data ?? 0;
+  const countKey = queryKeys.notifications.view("unread-count");
 
-  const loadPage = useCallback(
-    async (nextPage = 1) => {
-      const first = nextPage === 1;
-      first ? setLoading(true) : setLoadingMore(true);
-      setError("");
-      try {
-        const res = await getAdminNotifications({
-          page: nextPage,
-          limit: PAGE_SIZE,
-          isRead: tab === "unread" ? false : undefined,
-        });
-        const rows = res?.data?.data ?? [];
-        setItems((prev) => (first ? rows : [...prev, ...rows]));
-        setTotal(res?.data?.total ?? rows.length);
-        setUnreadCount(res?.data?.unreadCount ?? 0);
-        setPage(nextPage);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        first ? setLoading(false) : setLoadingMore(false);
-      }
-    },
-    [tab]
+  // The list, fetched only while the panel is open. staleTime 0: (re)load
+  // whenever the panel opens or the tab changes, as before.
+  const feedParams = { limit: PAGE_SIZE, isRead: tab === "unread" ? false : undefined };
+  const feedKey = queryKeys.notifications.view("feed", feedParams);
+  const feedQuery = useAdminNotificationsFeed(feedParams, { enabled: open, staleTime: 0 });
+  const items = useMemo(
+    () => (feedQuery.data?.pages ?? []).flatMap((p) => p?.data?.data ?? []),
+    [feedQuery.data]
   );
+  const lastPage = feedQuery.data?.pages.at(-1);
+  const total = lastPage?.data?.total ?? items.length;
+  const loading = feedQuery.isPending;
+  const refreshing = feedQuery.isFetching && !feedQuery.isFetchingNextPage;
+  const loadingMore = feedQuery.isFetchingNextPage;
+  const error = actionError || feedQuery.error?.message || "";
 
-  // Badge on mount + polling while the panel is closed.
-  useEffect(() => {
-    refreshCount();
-    if (open) return;
-    const id = setInterval(refreshCount, POLL_MS);
-    return () => clearInterval(id);
-  }, [open, refreshCount]);
+  // Refresh / Try again: back to a fresh page 1 (loader shown), as before.
+  const reload = () => {
+    setActionError("");
+    queryClient.resetQueries({ queryKey: feedKey });
+  };
 
-  // (Re)load the list whenever the panel opens or the tab changes.
-  useEffect(() => {
-    if (open) loadPage(1);
-  }, [open, loadPage]);
+  const togglePanel = () => {
+    setOpen((o) => !o);
+    setActionError("");
+    // Fresh badge count on every open/close, as before.
+    countQuery.refetch();
+  };
+
+  const selectTab = (key) => {
+    setTab(key);
+    setActionError("");
+  };
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -157,16 +162,22 @@ export default function NotificationBell({ buttonClass }) {
 
   const markOneRead = async (n) => {
     if (n.isRead) return;
-    // Optimistic — flip it locally, then sync the server's count.
-    setItems((prev) =>
-      tab === "unread" ? prev.filter((x) => x._id !== n._id) : prev.map((x) => (x._id === n._id ? { ...x, isRead: true } : x))
+    // Optimistic — flip it in the cache, then sync the server's count.
+    // (The interceptor also refetches ["notifications"] after the write.)
+    queryClient.setQueryData(feedKey, (feed) =>
+      mapFeedRows(feed, (rows) =>
+        tab === "unread" ? rows.filter((x) => x._id !== n._id) : rows.map((x) => (x._id === n._id ? { ...x, isRead: true } : x))
+      )
     );
-    setUnreadCount((c) => Math.max(0, c - 1));
+    queryClient.setQueryData(countKey, (res) => withUnreadCount(res, (c) => Math.max(0, c - 1)));
     try {
       const res = await markNotificationsRead({ notificationIds: [n._id] });
-      if (res?.data?.unreadCount != null) setUnreadCount(res.data.unreadCount);
+      if (res?.data?.unreadCount != null) {
+        queryClient.setQueryData(countKey, (old) => withUnreadCount(old, () => res.data.unreadCount));
+      }
     } catch {
-      refreshCount();
+      // Revert to the server's real state.
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
     }
   };
 
@@ -183,10 +194,13 @@ export default function NotificationBell({ buttonClass }) {
     setMarkingAll(true);
     try {
       const res = await markNotificationsRead({ markAll: true });
-      setUnreadCount(res?.data?.unreadCount ?? 0);
-      setItems((prev) => (tab === "unread" ? [] : prev.map((x) => ({ ...x, isRead: true }))));
+      // Show it at once; the interceptor's refetch then confirms it.
+      queryClient.setQueryData(countKey, (old) => withUnreadCount(old, () => res?.data?.unreadCount ?? 0));
+      queryClient.setQueryData(feedKey, (feed) =>
+        mapFeedRows(feed, (rows) => (tab === "unread" ? [] : rows.map((x) => ({ ...x, isRead: true }))))
+      );
     } catch (err) {
-      setError(err.message);
+      setActionError(err.message);
     } finally {
       setMarkingAll(false);
     }
@@ -200,7 +214,7 @@ export default function NotificationBell({ buttonClass }) {
         aria-label={`Notifications${unreadCount ? ` (${unreadCount} unread)` : ""}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={togglePanel}
         className={`${buttonClass} ${open ? "bg-white/80 text-emerald-700 dark:bg-neutral-800 dark:text-neutral-50" : ""}`}
       >
         <Bell size={18} />
@@ -229,13 +243,13 @@ export default function NotificationBell({ buttonClass }) {
               </div>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => loadPage(1)}
-                  disabled={loading}
+                  onClick={reload}
+                  disabled={refreshing}
                   aria-label="Refresh"
                   title="Refresh"
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 transition-colors hover:bg-white/30 disabled:opacity-60"
                 >
-                  <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+                  <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
                 </button>
                 <button
                   onClick={markAllRead}
@@ -256,7 +270,7 @@ export default function NotificationBell({ buttonClass }) {
               ].map(([key, label]) => (
                 <button
                   key={key}
-                  onClick={() => setTab(key)}
+                  onClick={() => selectTab(key)}
                   className={`flex-1 rounded-full py-1 text-[11.5px] font-semibold transition-colors ${
                     tab === key ? "bg-white text-emerald-700 shadow-sm" : "text-white/90 hover:bg-white/10"
                   }`}
@@ -278,7 +292,7 @@ export default function NotificationBell({ buttonClass }) {
                 icon="error"
                 title="Couldn't load notifications"
                 description={error}
-                action={{ label: "Try again", onClick: () => loadPage(1) }}
+                action={{ label: "Try again", onClick: reload }}
               />
             ) : items.length === 0 ? (
               <EmptyState
@@ -343,7 +357,7 @@ export default function NotificationBell({ buttonClass }) {
 
                 {hasMore && (
                   <button
-                    onClick={() => loadPage(page + 1)}
+                    onClick={() => feedQuery.fetchNextPage()}
                     disabled={loadingMore}
                     className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
                   >

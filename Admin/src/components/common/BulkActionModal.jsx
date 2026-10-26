@@ -235,7 +235,7 @@ export default function BulkActionModal({
                     <td className="px-3 py-2 text-right tabular-nums">{inr(getAmount(r))}</td>
                     {input !== "none" && (
                       <td className="max-w-56 truncate px-3 py-2 text-neutral-500">
-                        {input === "utr" ? (payload ? `${payload.utr} · ${payload.mode}` : "—") : payload?.text || "—"}
+                        {input === "utr" ? (payload ? `${payload.utr} · ${payload.mode}` : "No UTR") : payload?.text || (input === "reason" ? "No reason given" : "No note")}
                       </td>
                     )}
                     <td className="px-3 py-2 text-right">

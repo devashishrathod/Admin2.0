@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
 import { CheckCircle2, CircleDashed, MinusCircle, Pencil, Clock3 } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Note, KeyValue } from "../ui";
 import { useStepAction } from "../useStepAction";
-import { submitOnboarding, getProfileStrength } from "../services/onboardingApi";
+import { submitOnboarding } from "../services/onboardingApi";
+import { useProfileStrength } from "../queries/onboardingQueries";
 import { buildStepper } from "../onboardingFlow";
 
 const STATE_ICON = {
@@ -11,20 +11,6 @@ const STATE_ICON = {
   CURRENT: <CircleDashed size={16} className="text-[#1F4FB8]" />,
   UPCOMING: <CircleDashed size={16} className="text-[#9AA0A9]" />,
 };
-
-function useProfileStrength(brandId) {
-  const [strength, setStrength] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    getProfileStrength(brandId)
-      .then((res) => !cancelled && setStrength(res?.data ?? res))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
-  return strength;
-}
 
 function StrengthBar({ strength }) {
   if (!strength || strength.score == null) return null;
@@ -45,7 +31,9 @@ function StrengthBar({ strength }) {
 /* ---- 15 · ONBOARDING_REVIEW --------------------------------------- */
 // POST /brands/onboarding/submit → UNDER_REVIEW. 422 lists what's missing.
 export function ReviewScreen({ brandId, brand, status, eyebrow, onAdvance, onBack, onGoTo }) {
-  const strength = useProfileStrength(brandId);
+  // Optional extra — a failed load just hides the bar.
+  const { data: strengthRes } = useProfileStrength(brandId);
+  const strength = strengthRes ? strengthRes.data ?? strengthRes : null;
   const { run, busy, error } = useStepAction(onAdvance);
   const rows = buildStepper(status, "ONBOARDING_REVIEW").filter((r) => r.key !== "ONBOARDING_REVIEW");
   const skipped = rows.filter((r) => r.state === "SKIPPED");

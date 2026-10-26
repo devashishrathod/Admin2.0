@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, RefreshCw } from "lucide-react";
-import { createOnboardingBrand, getOnboardingStatus, getOnboardingBrand } from "./services/onboardingApi";
+import { createOnboardingBrand } from "./services/onboardingApi";
+import { useOnboardingStatus, useOnboardingBrand } from "./queries/onboardingQueries";
 import { normalizeStatus, buildStepper, screenMeta, laneScreens, AFTER_SUBMIT, errorText, WHATSAPP_RE } from "./onboardingFlow";
 import { ScreenShell, Field, Note, PrimaryButton, inputCls } from "./ui";
 import { BusinessNameScreen, BusinessCategoryScreen, RegistrationStatusScreen, EntityTypeScreen } from "./screens/IdentityScreens";
@@ -10,6 +11,7 @@ import { DeedScreen, SubscribePlanScreen } from "./screens/AgreementScreens";
 import { BrandBasicsScreen, ProfessionalScreen, OutletsScreen } from "./screens/BrandSetupScreens";
 import { ReviewScreen, UnderReviewScreen } from "./screens/ReviewScreens";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 
 /* -------------------------------------------------------------------------
  * Admin · Add brand (Onboarding v2)
@@ -166,47 +168,39 @@ function Stepper({ rows, onPick }) {
 /* ---- Wizard -------------------------------------------------------- */
 function OnboardingWizard({ brandId }) {
   const navigate = useNavigate();
-  const [status, setStatus] = useState(null);
-  const [brand, setBrand] = useState(null);
-  const [viewing, setViewing] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  // The screen being shown; null = follow the server's currentScreen.
+  const [picked, setPicked] = useState(null);
   const [version, setVersion] = useState(0); // remounts the screen after each reload
 
-  // Status + brand together; resolves to { status, brand } or { error }.
-  const fetchAll = useCallback(async () => {
-    try {
-      const [s, b] = await Promise.all([getOnboardingStatus(brandId), getOnboardingBrand(brandId).catch(() => null)]);
-      const bd = b?.data ?? b;
-      return { status: normalizeStatus(s), brand: bd?.brand ?? bd ?? null };
-    } catch (err) {
-      return { error: errorText(err) };
-    }
-  }, [brandId]);
+  // No refetch on window focus: a server-side screen change would swap the
+  // screen (and drop what the admin is typing). Screens prefill their forms
+  // once on mount, so brand updates after a background refetch are safe.
+  const statusQuery = useOnboardingStatus(brandId, { refetchOnWindowFocus: false });
+  // The brand is optional extra detail — the wizard still works without it.
+  const brandQuery = useOnboardingBrand(brandId, { refetchOnWindowFocus: false });
+  const status = useMemo(() => (statusQuery.data ? normalizeStatus(statusQuery.data) : null), [statusQuery.data]);
+  const brand = useMemo(() => {
+    const bd = brandQuery.data?.data ?? brandQuery.data;
+    return bd?.brand ?? bd ?? null;
+  }, [brandQuery.data]);
+  const loadError = statusQuery.error ? errorText(statusQuery.error) : "";
+  const viewing = picked ?? status?.currentScreen ?? null;
 
-  const apply = useCallback((res) => {
-    if (res.error) {
-      setLoadError(res.error);
-    } else {
-      setLoadError("");
-      setStatus(res.status);
-      setBrand(res.brand);
-      setViewing(res.status.currentScreen);
+  // After every save the next screen comes from the server's fresh status,
+  // so wait for it here. The interceptor has already started that refetch
+  // (onboarding writes are under /brands); cancelRefetch: false joins it.
+  const load = async () => {
+    const [s] = await Promise.all([
+      statusQuery.refetch({ cancelRefetch: false }),
+      brandQuery.refetch({ cancelRefetch: false }),
+    ]);
+    if (s.isSuccess) {
+      setPicked(normalizeStatus(s.data).currentScreen);
       setVersion((v) => v + 1);
     }
-    setLoading(false);
-  }, []);
+  };
 
-  const load = useCallback(async () => apply(await fetchAll()), [apply, fetchAll]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchAll().then((res) => !cancelled && apply(res));
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchAll, apply]);
-
+  const loading = statusQuery.isPending || brandQuery.isPending || (!status && statusQuery.isFetching);
   if (loading) {
     return (
       <Loader variant="page" label="Loading onboarding…" />
@@ -214,10 +208,13 @@ function OnboardingWizard({ brandId }) {
   }
   if (!status) {
     return (
-      <div className="mx-auto flex max-w-[560px] flex-col gap-3">
-        <Note tone="error">{loadError || "Couldn't load this brand's onboarding."}</Note>
-        <PrimaryButton onClick={() => { setLoading(true); load(); }}><RefreshCw size={14} /> Try again</PrimaryButton>
-      </div>
+      <EmptyState
+        tone="error"
+        icon="error"
+        title="Couldn't load this brand's onboarding"
+        description={loadError}
+        action={{ label: "Try again", icon: RefreshCw, onClick: load }}
+      />
     );
   }
 
@@ -259,7 +256,7 @@ function OnboardingWizard({ brandId }) {
       {loadError && <Note tone="error">{loadError}</Note>}
 
       <div className="grid items-start gap-5 lg:grid-cols-[280px_1fr]">
-        <Stepper rows={rows} onPick={setViewing} />
+        <Stepper rows={rows} onPick={setPicked} />
         <div className="min-w-0">
           {afterSubmit ? (
             <UnderReviewScreen status={status} onOpenBrand={() => navigate(`/brands/${brandId}`)} onOpenWaiting={() => navigate("/brand-waiting")} />
@@ -271,8 +268,8 @@ function OnboardingWizard({ brandId }) {
               status={status}
               eyebrow={eyebrow}
               onAdvance={load}
-              onBack={canGoBack ? () => setViewing(prevKey) : undefined}
-              onGoTo={setViewing}
+              onBack={canGoBack ? () => setPicked(prevKey) : undefined}
+              onGoTo={setPicked}
             />
           ) : (
             <Note tone="warn">Unknown screen “{viewing}” from the server.</Note>

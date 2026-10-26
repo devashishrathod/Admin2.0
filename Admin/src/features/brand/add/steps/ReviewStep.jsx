@@ -1,10 +1,12 @@
 import { Pencil } from "lucide-react";
 import { FileThumb } from "../components/FormControls";
 import { DAYS, ENTITY_TYPES, REGISTRATION_STATUSES, ACCOUNT_TYPES, isRegisteredBusiness } from "../brandFormConfig";
+import { MISSING } from "../../../../utils/helpers";
 
-const labelOf = (options, value) => options.find((o) => o.value === value)?.label || value || "—";
-const maskAccount = (n) => (n ? `•••• ${n.slice(-4)}` : "—");
-const fmt = (v) => (String(v ?? "").trim() ? v : "—");
+const labelOf = (options, value) => options.find((o) => o.value === value)?.label || value || "Not selected";
+const maskAccount = (n) => (n ? `•••• ${n.slice(-4)}` : "Not added");
+// Display-only: the value, or a short phrase saying it's missing.
+const fmt = (v, empty = "Not added") => (String(v ?? "").trim() ? v : empty);
 
 function ReviewCard({ title, onEdit, children }) {
   return (
@@ -50,7 +52,7 @@ export default function ReviewStep({ form, onEdit }) {
         <Rows
           items={[
             ["Owner WhatsApp", `+91 ${owner.whatsappNumber}`],
-            ["Brand name", fmt(basicDetails.brandName)],
+            ["Brand name", fmt(basicDetails.brandName, MISSING.name)],
             ["Legal name", fmt(basicDetails.legalBusinessName)],
             ["Entity type", labelOf(ENTITY_TYPES, basicDetails.businessEntityType)],
             ["Registration", labelOf(REGISTRATION_STATUSES, basicDetails.businessRegistrationStatus)],
@@ -85,10 +87,10 @@ export default function ReviewStep({ form, onEdit }) {
         </div>
         <Rows
           items={[
-            ["Email", fmt(brandDetails.email)],
+            ["Email", fmt(brandDetails.email, MISSING.email)],
             ["Mobile", `+91 ${brandDetails.mobile}`],
-            ["Category", fmt(brandDetails.categoryName)],
-            ["Sub-category", fmt(brandDetails.subCategoryName)],
+            ["Category", fmt(brandDetails.categoryName, MISSING.category)],
+            ["Sub-category", fmt(brandDetails.subCategoryName, MISSING.none)],
           ]}
         />
       </ReviewCard>
@@ -101,7 +103,7 @@ export default function ReviewStep({ form, onEdit }) {
           ]}
         />
         <p className="mt-2.5 text-[11px] text-neutral-400">Address</p>
-        <p className="text-[13px] text-neutral-800 dark:text-neutral-200">{address || "—"}</p>
+        <p className="text-[13px] text-neutral-800 dark:text-neutral-200">{address || MISSING.location}</p>
       </ReviewCard>
 
       <ReviewCard title="Working hours" onEdit={() => onEdit("hours")}>

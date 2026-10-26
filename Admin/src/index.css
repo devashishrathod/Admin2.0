@@ -229,3 +229,42 @@ html[data-bg-solid] .app-glow-2,
 html[data-bg-solid] .app-glow-3 {
   display: none;
 }
+
+/* Storefront outlet cards (Sub-Brand grid) — same look as the Vendor
+   Panel's outlet cards: striped canopy + scalloped edge, colored by outlet
+   type via --awning-a/-b. */
+.awning-own { --awning-a: #059669; --awning-b: #ECFDF5; }
+.awning-franchise { --awning-a: #D97706; --awning-b: #FFF7E8; }
+.awning-closed { --awning-a: #9CA3AF; --awning-b: #F3F4F6; }
+html.dark .awning-own { --awning-a: #047857; --awning-b: #0b3b2e; }
+html.dark .awning-franchise { --awning-a: #B45309; --awning-b: #3b2a10; }
+html.dark .awning-closed { --awning-a: #4B5563; --awning-b: #1f2937; }
+.awning-stripes {
+  background: repeating-linear-gradient(90deg, var(--awning-a) 0 28px, var(--awning-b) 28px 56px);
+}
+.awning-scallops {
+  height: 14px;
+  background:
+    radial-gradient(circle at 14px 0, var(--awning-a) 13.5px, transparent 14px) 0 0 / 56px 14px repeat-x,
+    radial-gradient(circle at 42px 0, var(--awning-b) 13.5px, transparent 14px) 0 0 / 56px 14px repeat-x;
+}
+
+/* Faint street-map grid behind an outlet's address tile. */
+.map-grid-bg {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(4, 120, 87, 0.06) 0 1px, transparent 1px 18px),
+    repeating-linear-gradient(90deg, rgba(4, 120, 87, 0.06) 0 1px, transparent 1px 18px);
+}
+
+/* Hanging OPEN/CLOSED shop sign — sways gently from its nail. */
+@keyframes sign-swing {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50% { transform: rotate(2.5deg); }
+}
+.sign-swing {
+  transform-origin: top center;
+  animation: sign-swing 3.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sign-swing { animation: none; }
+}

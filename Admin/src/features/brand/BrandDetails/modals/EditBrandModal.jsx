@@ -4,6 +4,7 @@ import { BUSINESS_STATUSES, BUSINESS_TYPES } from "../../data/BrandData";
 import { Field, FileField, inputClass } from "../../BrandShared";
 import { updateBrand } from "../../services/BrandApi";
 import { useBrands } from "../../BrandContext";
+import useBackLayer from "../../../../lib/useBackLayer";
 
 /* -------------------------------------------------------------------------
  * Edit Brand Details — lets a super admin update the brand-info fields
@@ -11,6 +12,7 @@ import { useBrands } from "../../BrandContext";
  * ---------------------------------------------------------------------- */
 
 export default function EditBrandModal({ brand, onClose, onSave }) {
+  useBackLayer(true, onClose); // browser Back closes it
   const [form, setForm] = useState({
     brandName: brand.brandName || "",
     shortName: brand.shortName || "",

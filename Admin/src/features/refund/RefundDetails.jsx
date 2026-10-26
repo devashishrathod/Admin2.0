@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import EmptyState from "../../components/common/EmptyState";
-import { ArrowLeft, Loader2, AlertTriangle, Check, Ban, History, Wallet, Landmark, CheckCircle2, XCircle, Copy } from "lucide-react";
+import NotFoundPage from "../../components/common/NotFoundPage";
+import { ArrowLeft, Loader2, AlertTriangle, Check, Ban, History, Wallet, Landmark, CheckCircle2, XCircle, Copy, RefreshCw } from "lucide-react";
 import { useRefund } from "./queries/refundQueries";
 import {
   approveRefund,
@@ -472,20 +473,28 @@ export default function RefundDetails() {
     );
   }
 
-  if (error || !details?.refund) {
+  if (error) {
     return (
       <EmptyState
         variant="page"
-        tone={error ? "error" : "default"}
-        icon={error ? "error" : "refund"}
-        title={error ? "Couldn't load this refund" : "Refund not found"}
-        description={
-          error
-            ? `${error} — check your connection and try again.`
-            : "We couldn't find a refund request with this link. It may have been removed, or the link is no longer valid."
-        }
-        action={{ label: "Back to Refunds", icon: ArrowLeft, onClick: () => navigate("/refund") }}
-        secondaryAction={error ? { label: "Try again", onClick: () => refetch() } : undefined}
+        tone="error"
+        icon="error"
+        title="Couldn't load this refund"
+        description={`${error} — check your connection and try again.`}
+        action={{ label: "Try again", icon: RefreshCw, onClick: () => refetch() }}
+        secondaryAction={{ label: "Back to Refunds", onClick: () => navigate("/refund") }}
+      />
+    );
+  }
+
+  if (!details?.refund) {
+    return (
+      <NotFoundPage
+        title="Refund not found"
+        icon="refund"
+        description="We couldn't find a refund request with this link. It may have been removed, or the link is no longer valid."
+        backLabel="Back to Refunds"
+        onBack={() => navigate("/refund")}
       />
     );
   }

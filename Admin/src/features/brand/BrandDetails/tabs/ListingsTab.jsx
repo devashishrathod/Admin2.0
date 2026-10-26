@@ -2,10 +2,11 @@ import {
   Calendar,
   BadgeCheck,
   Tag,
-  AlertTriangle,
   Store,
+  RefreshCw,
 } from "lucide-react";
 import { EmptyState } from "../../BrandShared";
+import CommonEmptyState from "../../../../components/common/EmptyState";
 import Loader from "../../../../components/common/Loader";
 import VoucherStatusPill from "../components/VoucherStatusPill";
 import { formatShortDate, useBrandVoucherList } from "../detailsUtils";
@@ -16,7 +17,7 @@ import { MISSING, orText } from "../../../../utils/helpers";
    live from GET /vouchers/versions/get-all?brandId=... rather than the
    unused `brand.listings` mock field (no listings endpoint exists yet). */
 export default function ListingsTab({ brand }) {
-  const { vouchers, loading, error } = useBrandVoucherList(brand.id);
+  const { vouchers, loading, error, refetch } = useBrandVoucherList(brand.id);
 
   if (loading) {
     return (
@@ -26,10 +27,14 @@ export default function ListingsTab({ brand }) {
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-        <AlertTriangle size={14} className="shrink-0" />
-        Failed to load vouchers: {error}
-      </div>
+      <CommonEmptyState
+        variant="compact"
+        tone="error"
+        icon="error"
+        title="Couldn't load vouchers"
+        description={error}
+        action={{ label: "Try again", icon: RefreshCw, onClick: () => refetch() }}
+      />
     );
   }
 

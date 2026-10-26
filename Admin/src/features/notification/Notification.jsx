@@ -201,16 +201,6 @@ function PushSetupCard() {
           </button>
         </div>
 
-        {registered && !isReal && (
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-3.5 py-2.5 text-[12.5px] text-amber-600 dark:text-amber-400">
-            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-            No VAPID key set yet, so this registered with a placeholder token (not a real FCM token). The API
-            call works and shows up in the backend, but push won't actually deliver here until{" "}
-            <code className="rounded bg-neutral-200 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">VITE_FIREBASE_VAPID_KEY</code> is
-            set and this is re-enabled.
-          </div>
-        )}
-
         {error && (
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/[0.06] px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={13} className="mt-0.5 shrink-0" />

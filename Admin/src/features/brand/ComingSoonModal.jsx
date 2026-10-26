@@ -1,4 +1,5 @@
 import { useState } from "react";
+import useBackLayer from "../../lib/useBackLayer";
 import { Hourglass, X, Loader2, AlertTriangle, EyeOff, Ban, CheckCircle2 } from "lucide-react";
 
 const NOTE_MAX = 500;
@@ -18,6 +19,7 @@ export default function ComingSoonModal({ brand, onClose, onSubmit }) {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  useBackLayer(true, () => !submitting && onClose()); // browser Back closes it
 
   const approved = brand.status !== "Pending" && brand.status !== "Rejected" && brand.status !== "Revoked";
   const noteOk = note.trim().length > 0 && note.trim().length <= NOTE_MAX;
@@ -56,7 +58,7 @@ export default function ComingSoonModal({ brand, onClose, onSubmit }) {
             </span>
             <div>
               <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">
-                {turningOn ? "Show as “Coming soon”?" : "Remove “Coming soon”?"}
+                {turningOn ? "Mark as RD brand?" : "Remove RD brand?"}
               </h2>
               <p className="mt-0.5 text-[12.5px] text-neutral-500">
                 <span className="font-medium capitalize text-neutral-700 dark:text-neutral-300">{brand.brandName}</span>
@@ -95,7 +97,7 @@ export default function ComingSoonModal({ brand, onClose, onSubmit }) {
             {!approved && (
               <p className="mb-3 flex items-start gap-2 rounded-xl bg-amber-400/10 px-3.5 py-2.5 text-[12.5px] text-amber-700 dark:text-amber-400">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                Only an approved brand can be shown as coming soon.
+                Only an approved brand can be marked as RD brand.
               </p>
             )}
 
@@ -124,7 +126,7 @@ export default function ComingSoonModal({ brand, onClose, onSubmit }) {
               <p className="text-[10.5px] font-semibold uppercase tracking-wider text-neutral-500">Current note</p>
               <p className="mt-1 text-[13px] text-neutral-700 dark:text-neutral-300">{brand.realDummyNote}</p>
               {brand.realDummyUpdatedAt && <p className="mt-1 text-[11px] text-neutral-400">Set {fmt(brand.realDummyUpdatedAt)}</p>}
-              <p className="mt-2 text-[11px] text-neutral-500">The note is cleared when you remove “Coming soon”.</p>
+              <p className="mt-2 text-[11px] text-neutral-500">The note is cleared when you remove RD brand.</p>
             </div>
           )
         )}
@@ -152,7 +154,7 @@ export default function ComingSoonModal({ brand, onClose, onSubmit }) {
             }`}
           >
             {submitting && <Loader2 size={14} className="animate-spin" />}
-            {turningOn ? "Show as Coming soon" : "Remove Coming soon"}
+            {turningOn ? "Mark as RD brand" : "Remove RD brand"}
           </button>
         </div>
       </div>

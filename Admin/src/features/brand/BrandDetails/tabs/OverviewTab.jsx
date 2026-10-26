@@ -18,11 +18,13 @@ import {
   Eye,
   EyeOff,
   Hourglass,
+  StickyNote,
 } from "lucide-react";
 import { ONBOARDING_STEPS } from "../../data/BrandData";
 import { UsageBar, VerifiedMark } from "../../BrandShared";
 import { ONBOARDING_FLAG_LABELS, brandCardFacts } from "../../brandCardUtils";
 import { CardHeader, CopyButton } from "../components/Bento";
+import { VerificationHistory } from "../../BrandAdminExtras";
 import { cardClass, heroClass, innerTile, tints, has } from "../components/bentoStyles";
 import ValueOr from "../../../../components/common/ValueOr";
 import { MISSING, orText } from "../../../../utils/helpers";
@@ -33,6 +35,8 @@ import { MISSING, orText } from "../../../../utils/helpers";
  * tinted icon chips. 12 columns on wide screens:
  *   row 1: Subscription (5) · Plan usage (4) · Contact (3)
  *   row 2: Onboarding (5)   · Business & KYC (4) · Listing (3)
+ *   top:   RD brand banner (full width)
+ *   row 3: Verification history (full width)
  * Followers, avoided, outlets, merchant ID and joined date are in the page
  * header, so they aren't repeated here.
  * ---------------------------------------------------------------------- */
@@ -302,7 +306,7 @@ function ListingCard({ brand }) {
       value: brand.hiddenFromCustomers ? "Hidden" : "Visible",
       tone: brand.hiddenFromCustomers ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
     },
-    brand.isRealDummy && { icon: Hourglass, label: "RD", value: "Coming soon", tone: "text-violet-600 dark:text-violet-400" },
+    brand.isRealDummy && { icon: Hourglass, label: "RD", value: "RD brand", tone: "text-violet-600 dark:text-violet-400" },
   ].filter(Boolean);
 
   return (
@@ -332,6 +336,90 @@ function ListingCard({ brand }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ---------------------------- RD banner (top) -------------------------- */
+
+const fmtDateTime = (iso) =>
+  iso
+    ? new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "";
+
+// RD brand: a real brand shown to customers like a dummy until launch.
+// Same data as the header's RD pill (isRealDummy, realDummyNote,
+// realDummyUpdatedAt); the button opens the same ComingSoonModal. A slim
+// full-width banner at the top of the tab.
+function RdBrandBanner({ brand, readOnly, onComingSoon }) {
+  const on = Boolean(brand.isRealDummy);
+  const note = brand.realDummyNote?.trim();
+  const setAt = fmtDateTime(brand.realDummyUpdatedAt);
+
+  return (
+    <div
+      className={`flex flex-col gap-3 rounded-3xl border p-4 backdrop-blur-xl sm:flex-row sm:items-center ${
+        on
+          ? "border-violet-400/30 bg-violet-500/[0.06]"
+          : "border-white/80 bg-white/65 dark:border-white/5 dark:bg-neutral-900/60"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-3 sm:w-64 sm:shrink-0">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${on ? tints.violet : tints.neutral}`}>
+          <Hourglass size={16} />
+        </span>
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-[13.5px] font-bold text-neutral-900 dark:text-neutral-50">
+            RD brand
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider ${on ? tints.violet : tints.neutral}`}>
+              {on ? "ON" : "OFF"}
+            </span>
+          </p>
+          <p className="truncate text-[11.5px] text-neutral-500">{on ? "Marked as RD brand" : "Shown as a normal live brand"}</p>
+        </div>
+      </div>
+
+      {/* Note (when on) */}
+      <div className="min-w-0 flex-1">
+        {on ? (
+          <div className={`${innerTile} px-3 py-2`}>
+            <p className="mb-0.5 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+              <span className="flex items-center gap-1.5">
+                <StickyNote size={11} /> Internal note
+              </span>
+              {setAt && <span className="font-medium normal-case tracking-normal text-neutral-400">{setAt}</span>}
+            </p>
+            {note ? (
+              <p className="line-clamp-2 whitespace-pre-wrap break-words text-[12.5px] normal-case text-neutral-700 dark:text-neutral-300" title={note}>
+                {note}
+              </p>
+            ) : (
+              <p className="text-[12.5px] italic text-neutral-400">No note added.</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-[12px] text-neutral-500">
+            Mark a real brand as RD brand until it launches. An internal note is required — only admins see it.
+          </p>
+        )}
+      </div>
+
+      {readOnly ? (
+        <p className="shrink-0 text-[11px] text-neutral-400">View only — dummy brands can't be marked RD.</p>
+      ) : (
+        <button
+          type="button"
+          onClick={onComingSoon}
+          className={`flex shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-[12.5px] font-semibold transition-colors ${
+            on
+              ? "border border-neutral-200 bg-white/70 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-transparent dark:text-neutral-200 dark:hover:bg-neutral-800"
+              : "bg-violet-500 text-white hover:bg-violet-400"
+          }`}
+        >
+          <Hourglass size={13} />
+          {on ? "Remove RD brand" : "Mark as RD brand"}
+        </button>
+      )}
     </div>
   );
 }
@@ -390,11 +478,14 @@ function IncompleteAlert({ brand }) {
 
 /* ---------------------------- Tab -------------------------------------- */
 
-export default function OverviewTab({ brand }) {
+export default function OverviewTab({ brand, readOnly = false, onComingSoon }) {
   const incomplete = brand.onboardingComplete === false;
 
   return (
     <div className="space-y-4">
+      {/* RD brand — first thing on the tab */}
+      <RdBrandBanner brand={brand} readOnly={readOnly} onComingSoon={onComingSoon} />
+
       {brand.status === "Rejected" && brand.rejectionReason && <RejectedAlert reason={brand.rejectionReason} />}
       {incomplete && <IncompleteAlert brand={brand} />}
 
@@ -422,6 +513,12 @@ export default function OverviewTab({ brand }) {
         <div className="lg:col-span-3">
           <ListingCard brand={brand} />
         </div>
+      </div>
+
+      {/* Row 3 — verification event log (VerificationHistory brings its
+          own top margin; space-y already spaces it). */}
+      <div className="[&>div]:!mt-0">
+        <VerificationHistory brandId={brand.id} />
       </div>
     </div>
   );

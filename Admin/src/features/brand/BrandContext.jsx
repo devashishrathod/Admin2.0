@@ -335,7 +335,7 @@ export function BrandProvider({ children }) {
      ON needs an internal note; OFF clears it. Applies the server's answer,
      then refreshes; throws so the modal can show the error. */
   const setComingSoon = useCallback(async (brand, { isRealDummy, note }) => {
-    if (brand?.isDummy) throw new Error("This is a dummy brand. Coming soon applies only to real brands.");
+    if (brand?.isDummy) throw new Error("This is a dummy brand. Only real brands can be marked as RD brand.");
     const before = { isRealDummy: brand.isRealDummy, realDummyNote: brand.realDummyNote, realDummyUpdatedAt: brand.realDummyUpdatedAt };
     patchBrand(brand.id, { isRealDummy, realDummyNote: isRealDummy ? note.trim() : null });
     try {

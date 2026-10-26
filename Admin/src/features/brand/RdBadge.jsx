@@ -85,7 +85,7 @@ export default function RdBadge({ brand, className = "", iconSize = 11 }) {
               <p className="text-[12.5px] italic text-neutral-400">No note added.</p>
             )}
             <p className="mt-2.5 border-t border-neutral-100 pt-2 text-[10.5px] text-neutral-400 dark:border-neutral-800">
-              Shown to customers as “Coming soon” · admins only see this note
+              RD brand · only admins see this note
             </p>
           </div>,
           document.body

@@ -45,6 +45,7 @@ import ComingSoonModal from "../ComingSoonModal";
 import RdBadge from "../RdBadge";
 import EditBrandModal from "./modals/EditBrandModal";
 import TopBrandModal from "./modals/TopBrandModal";
+import { CopyButton } from "./components/Bento";
 import OverviewTab from "./tabs/OverviewTab";
 import BrandInfoTab from "./tabs/BrandInfoTab";
 import AmbienceTab from "./tabs/AmbienceTab";
@@ -216,12 +217,18 @@ export default function BrandDetails({
   onSetTopBrand,
 }) {
   // The open tab lives in the URL (?tab=Voucher), so it survives a page
-  // refresh and coming back from a voucher opened in that tab. `replace`
-  // keeps tab clicks out of the browser history.
+  // refresh and coming back from a voucher opened in that tab. Each tab
+  // switch is its own history entry, so Back (browser or the page's Back
+  // button, which uses history) steps through the tabs one by one before
+  // leaving the page. Clicking the tab that's already open adds nothing.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const tab = DETAIL_TABS.includes(tabParam) ? tabParam : "Overview";
-  const setTab = (next) => setSearchParams({ tab: next }, { replace: true });
+  const setTab = (next) => {
+    if (next === tab) return;
+    // Only the tab — a tab's own view params (e.g. ?showcase=) start fresh.
+    setSearchParams({ tab: next });
+  };
   // The Brand list's logo-hover "Edit" opens this page with { openEdit: true }.
   const location = useLocation();
   // Dummy (isDummy) brands are view-only: no edit, delete, top-brand,
@@ -235,7 +242,7 @@ export default function BrandDetails({
   const { setComingSoon } = useBrands();
 
   const tabContent = {
-    Overview: <OverviewTab brand={brand} />,
+    Overview: <OverviewTab brand={brand} readOnly={readOnly} onComingSoon={() => setShowComingSoonModal(true)} />,
     "Brand Info": <BrandInfoTab brand={brand} />,
     "Showcase Media": <AmbienceTab brand={brand} readOnly={readOnly} />,
     "Listing Features": <ListingFeaturesTab brand={brand} readOnly={readOnly} />,
@@ -316,7 +323,7 @@ export default function BrandDetails({
             {/* "Coming soon" (PUT /brands/admin/real-dummy/:id) — own modal */}
             <button
               onClick={() => setShowComingSoonModal(true)}
-              title={brand.isRealDummy ? brand.realDummyNote || "Shown as coming soon" : "Show this brand as coming soon"}
+              title={brand.isRealDummy ? brand.realDummyNote || "Marked as RD brand" : "Mark this brand as RD brand"}
               className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${
                 brand.isRealDummy
                   ? "border-violet-400/40 bg-violet-500/10 text-violet-600 dark:text-violet-400"
@@ -444,6 +451,10 @@ export default function BrandDetails({
                     <span title="Merchant ID" className="flex items-center gap-1 font-mono text-[11px] normal-case">
                       <IdCard size={11} className="shrink-0 text-neutral-400" />
                       {brand.merchantToken}
+                      {/* negative margin keeps the 28px button from growing the meta row */}
+                      <span className="-my-2 -ml-1">
+                        <CopyButton value={brand.merchantToken} label="merchant ID" />
+                      </span>
                     </span>
                   )}
                   {brand.brandId && (

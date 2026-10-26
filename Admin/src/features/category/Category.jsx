@@ -12,6 +12,7 @@ import {
   Loader2,
   PieChart as PieChartIcon,
   BarChart3,
+  RefreshCw,
 } from "lucide-react";
 import {
   PieChart,
@@ -33,6 +34,7 @@ import {
 import { useCategories, useCategory } from "./queries/categoryQueries";
 import { queryKeys } from "../../lib/query";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
 import {
   LimitedField,
@@ -631,10 +633,15 @@ export default function Category() {
 
         {/* Overview charts — follow the search / status filters */}
         {chartsError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={13} className="shrink-0" />
-            Couldn't load chart data: {chartsError}
-          </div>
+          <EmptyState
+            variant="compact"
+            tone="error"
+            icon="error"
+            title="Couldn't load chart data"
+            description={chartsError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => allCategoriesQuery.refetch() }}
+            className="mb-4"
+          />
         )}
         <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
           <div className="flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -739,8 +746,14 @@ export default function Category() {
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load categories: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load categories"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => categoriesQuery.refetch() }}
+            />
           </div>
         )}
 

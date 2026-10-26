@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X, Power, FileText, Eye, Calendar, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X, Power, FileText, Eye, Calendar, Clock, RefreshCw } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
+import EmptyState from "../../components/common/EmptyState";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
 import ConfirmActionModal from "../../components/common/ConfirmActionModal";
 import { termsAndConditionsApi, privacyPoliciesApi } from "./services/LegalApi";
 import { useLegalDoc, useLegalDocs } from "./queries/legalQueries";
 import Loader from "../../components/common/Loader";
-import { MISSING, orText } from "../../utils/helpers";
+import { MISSING, orText, isNotFoundMessage } from "../../utils/helpers";
 
 const TYPE_OPTIONS = ["CUSTOMER", "VENDOR"];
 const PAGE_SIZE = 10;
@@ -267,7 +268,11 @@ export default function LegalDocsPanel({ kind }) {
     [docsQuery.data]
   );
   const loading = docsQuery.isPending;
-  const loadError = docsQuery.error?.message ?? "";
+  // A "not found" reply just means there are no documents yet — that's the
+  // table's empty state, not an error.
+  const rawLoadError = docsQuery.error?.message ?? "";
+  const loadError = isNotFoundMessage(rawLoadError) ? "" : rawLoadError;
+  const searching = search.trim().length > 0;
 
   const filtered = docs.filter((d) => d.title.toLowerCase().includes(search.trim().toLowerCase()));
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -406,17 +411,24 @@ export default function LegalDocsPanel({ kind }) {
       {loading ? (
         <Loader label={`Loading ${label.toLowerCase()}…`} />
       ) : loadError ? (
-        <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-          <AlertTriangle size={14} className="shrink-0" />
-          Failed to load {label.toLowerCase()}: {loadError}
-        </div>
+        <EmptyState
+          tone="error"
+          icon="error"
+          title={`Couldn't load ${label}`}
+          description={loadError}
+          action={{ label: "Try again", icon: RefreshCw, onClick: () => docsQuery.refetch() }}
+        />
       ) : (
         <Table
           columns={columns}
           data={pageRows}
-          emptyTitle={`No ${label.toLowerCase()} documents yet`}
-          emptyDescription="Documents you add here are shown to users in the app's legal section."
-          emptyIcon="document"
+          emptyTitle={searching ? "No matching documents" : `No ${label.toLowerCase()} documents yet`}
+          emptyDescription={
+            searching
+              ? `Nothing in ${label} matches “${search.trim()}”.`
+              : "Documents you add here are shown to users in the app's legal section."
+          }
+          emptyIcon={searching ? "search" : "document"}
           page={page}
           totalPages={totalPages}
           onPageChange={setPage}

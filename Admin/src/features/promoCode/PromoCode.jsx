@@ -21,6 +21,7 @@ import {
   Layers,
   Calendar,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 import {
   BarChart,
@@ -56,7 +57,8 @@ import { useBrandsPage } from "../brand/queries/brandQueries";
 import { useCategories } from "../category/queries/categoryQueries";
 import { usePlans } from "../plan/queries/planQueries";
 import Loader from "../../components/common/Loader";
-import { orText, MISSING } from "../../utils/helpers";
+import EmptyState from "../../components/common/EmptyState";
+import { orText, MISSING, isNotFoundMessage } from "../../utils/helpers";
 
 const STATUS_FILTERS = ["All", PROMO_STATUSES.LIVE, PROMO_STATUSES.SCHEDULED, PROMO_STATUSES.EXPIRED];
 const STATUS_LABELS = { All: "All", LIVE: "Live", SCHEDULED: "Scheduled", EXPIRED: "Expired" };
@@ -950,6 +952,7 @@ export default function PromoCode() {
     data: promoRes,
     isPending: loading,
     error: promoError,
+    refetch: refetchPromoCodes,
   } = usePromoCodes(
     {
       page,
@@ -961,7 +964,9 @@ export default function PromoCode() {
     },
     { placeholderData: keepPreviousData }
   );
-  const loadError = promoError?.message ?? "";
+  // A "not found" reply just means no promo codes yet — the table's empty
+  // state, not an error.
+  const loadError = isNotFoundMessage(promoError?.message) ? "" : promoError?.message ?? "";
   const promoCodes = useMemo(() => (promoRes?.data?.data ?? []).map(apiToRow), [promoRes]);
   const totalPages = promoRes?.data?.totalPages ?? 1;
   const total = promoRes?.data?.total ?? promoCodes.length;
@@ -1369,8 +1374,14 @@ export default function PromoCode() {
             )}
 
             {!loading && loadError && (
-              <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-                Failed to load promo codes: {loadError}
+              <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <EmptyState
+                  tone="error"
+                  icon="error"
+                  title="Couldn't load promo codes"
+                  description={loadError}
+                  action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchPromoCodes() }}
+                />
               </div>
             )}
 
@@ -1450,7 +1461,7 @@ export default function PromoCode() {
                   </button>
                 </>
               ) : (
-                <p className="text-[12.5px] text-neutral-500">No codes to rank yet.</p>
+                <EmptyState variant="compact" icon="promo" title="No codes to rank yet" />
               )}
               <p className="mt-2 text-[10.5px] text-neutral-500">Most redeemed among the codes currently shown.</p>
             </div>
@@ -1477,7 +1488,7 @@ export default function PromoCode() {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="py-8 text-center text-[12.5px] text-neutral-500">No redemptions yet.</p>
+                <EmptyState variant="compact" icon="report" title="No redemptions yet" description="The top codes show here once they're used." />
               )}
             </div>
 
@@ -1511,7 +1522,7 @@ export default function PromoCode() {
                   </div>
                 </>
               ) : (
-                <p className="py-8 text-center text-[12.5px] text-neutral-500">No redemptions yet.</p>
+                <EmptyState variant="compact" icon="promo" title="No redemptions yet" description="The discount-type split shows here once codes are used." />
               )}
             </div>
           </div>

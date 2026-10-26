@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, GripVertical, Loader2, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, GripVertical, Loader2, Lock, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import {
   createPlanFeature,
   deletePlanFeature,
@@ -11,6 +11,7 @@ import { queryKeys } from "../../lib/query";
 import { usePlanFeatures } from "./queries/planQueries";
 import { ImpactConfirmModal } from "./PlanModals";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 import ValueOr from "../../components/common/ValueOr";
 
 /* -------------------------------------------------------------------------
@@ -475,7 +476,7 @@ export default function FeatureMaster() {
   // Every write here is a /subscriptions call, so the interceptor also
   // refreshes the plans list (its cards show feature values).
   const queryClient = useQueryClient();
-  const { data: featuresRes, isPending: loading, error: queryError } = usePlanFeatures();
+  const { data: featuresRes, isPending: loading, error: queryError, refetch: refetchFeatures } = usePlanFeatures();
   const features = useMemo(() => (featuresRes ? extractFeatures(featuresRes) : []), [featuresRes]);
   const error = queryError?.message ?? "";
   const [actionError, setActionError] = useState("");
@@ -570,8 +571,14 @@ export default function FeatureMaster() {
       )}
 
       {!loading && error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-          Failed to load features: {error}
+        <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <EmptyState
+            tone="error"
+            icon="error"
+            title="Couldn't load features"
+            description={error}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchFeatures() }}
+          />
         </div>
       )}
 

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertTriangle,
   ArrowLeftRight,
   Undo2,
   ChevronRight,
@@ -11,8 +10,10 @@ import {
   XCircle,
   Receipt,
   CalendarDays,
+  RefreshCw,
 } from "lucide-react";
 import { EmptyState, SectionCard } from "./BrandShared";
+import CommonEmptyState from "../../components/common/EmptyState";
 import { glassClass, heroClass, tints } from "./BrandDetails/components/bentoStyles";
 import StatusStepButton from "../../components/common/StatusStepButton";
 import { useVoucherClaimPayments } from "../transaction/queries/transactionQueries";
@@ -62,16 +63,21 @@ function useBrandRecords(query, brand, belongsToBrand, map) {
   return { rows, loading: query.isPending, error: isNotFoundMessage(loadError) ? "" : loadError };
 }
 
-function TabState({ loading, error, label }) {
+function TabState({ loading, error, label, onRetry }) {
   if (loading) {
     return (
       <Loader label={`Loading ${label}…`} />
     );
   }
   return (
-    <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-      <AlertTriangle size={14} className="shrink-0" /> Failed to load {label}: {error}
-    </div>
+    <CommonEmptyState
+      variant="compact"
+      tone="error"
+      icon="error"
+      title={`Couldn't load ${label}`}
+      description={error}
+      action={onRetry ? { label: "Try again", icon: RefreshCw, onClick: () => onRetry() } : undefined}
+    />
   );
 }
 
@@ -159,7 +165,7 @@ export function TransactionsTab({ brand }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
 
-  if (loading || error) return <TabState loading={loading} error={error} label="transactions" />;
+  if (loading || error) return <TabState loading={loading} error={error} label="transactions" onRetry={paymentsQuery.refetch} />;
   if (!rows.length) return <EmptyState label="No transactions for this brand yet." />;
 
   const total = (list) => list.reduce((s, r) => s + r.amount, 0);
@@ -355,7 +361,7 @@ export function RefundsTab({ brand }) {
   const refundsQuery = useRefundWorklist(recordParams(brand), recordOptions(brand));
   const { rows, loading, error } = useBrandRecords(refundsQuery, brand, belongsToBrandRefund, mapRefund);
 
-  if (loading || error) return <TabState loading={loading} error={error} label="refunds" />;
+  if (loading || error) return <TabState loading={loading} error={error} label="refunds" onRetry={refundsQuery.refetch} />;
   if (!rows.length) return <EmptyState label="No refunds for this brand yet." />;
 
   const sum = (list, key) => list.reduce((s, r) => s + (r[key] || 0), 0);

@@ -19,8 +19,8 @@ import {
   Phone,
   Mail,
   Star,
-  AlertTriangle,
   Lock,
+  RefreshCw,
 } from "lucide-react";
 import Table, { StatusBadge } from "../../components/common/Table";
 import { useVouchers } from "./queries/voucherQueries";
@@ -946,7 +946,12 @@ function normalizeRealVoucher(v) {
 
 export default function Voucher() {
   const [mockByType, setMockByType] = useState(INITIAL_DATA);
-  const { data: vouchersRes, isPending: voucherLoading, error: vouchersError } = useVouchers({ page: 1, limit: 100 });
+  const {
+    data: vouchersRes,
+    isPending: voucherLoading,
+    error: vouchersError,
+    refetch: refetchVouchers,
+  } = useVouchers({ page: 1, limit: 100 });
   const voucherError = vouchersError?.message ?? "";
 
   // Approve / reject / top suggestion / edit / delete on this page are still
@@ -1233,9 +1238,14 @@ export default function Voucher() {
         {activeType === "Voucher" && voucherLoading ? (
           <Loader label="Loading vouchers…" />
         ) : activeType === "Voucher" && voucherError ? (
-          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load vouchers: {voucherError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <CommonEmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load vouchers"
+              description={voucherError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchVouchers() }}
+            />
           </div>
         ) : (
           <Table

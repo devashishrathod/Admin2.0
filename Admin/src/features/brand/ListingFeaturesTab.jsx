@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Lock,
   CalendarDays,
   Eye,
   Image as ImageIcon,
@@ -24,6 +26,8 @@ import {
   LISTING_FEATURE_LIMITS,
 } from "./services/listingFeaturesApi";
 import { useListingFeatures } from "./queries/listingFeatureQueries";
+import { getBrandSubscription } from "./services/subscriptionApi";
+import { queryKeys } from "../../lib/query";
 import Loader from "../../components/common/Loader";
 import { ToggleSwitch } from "./BrandShared";
 
@@ -31,7 +35,9 @@ import { ToggleSwitch } from "./BrandShared";
  * Listing Features tab (Brand Details) — the amenities shown on a brand's
  * listing (Dine-In, Free Wi-Fi, …). Admin can add, view, edit and delete
  * them, same fields as the VenderPanel's Add Listing Feature modal: title,
- * description, icon (image or video) and Active. Dummy brands are view-only.
+ * description, icon (image or GIF — older video icons still display) and
+ * Active. Adding stops at the plan's listing-feature limit. Dummy brands
+ * are view-only.
  * ---------------------------------------------------------------------- */
 
 const VIDEO_URL = /\.(mp4|webm|mov|ogg|m4v)(\?|$)/i;
@@ -48,6 +54,21 @@ function toFeature(f) {
     createdAt: f.createdAt,
     updatedAt: f.updatedAt,
   };
+}
+
+// New icons: still images or GIFs only (older video icons still display).
+const isAllowedIcon = (file) => file.type.startsWith("image/");
+
+// Listing-feature allowance from GET /subscribeds/get. The bucket name isn't
+// documented yet, so the likely keys are tried — live usage first, then the
+// plan's frozen entitlements. null = no limit sent, nothing is blocked.
+const FEATURE_POOL_KEYS = ["listingFeatures", "brandFeatures", "features", "listings"];
+function featureAllowance(subData) {
+  const pick = (obj) => FEATURE_POOL_KEYS.map((k) => obj?.[k]).find((v) => v && typeof v === "object");
+  const pool = pick(subData?.usage) || pick(subData?.subscription?.entitlements);
+  if (!pool) return null;
+  if (pool.isUnlimited) return { limit: Infinity };
+  return pool.limit != null ? { limit: Number(pool.limit) } : null;
 }
 
 const fmtDate = (iso) =>
@@ -118,8 +139,8 @@ function FeatureFormModal({ feature, onClose, onSubmit }) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      setError("Icon must be an image or a video.");
+    if (!isAllowedIcon(file)) {
+      setError("Icon must be an image or a GIF.");
       return;
     }
     setError("");
@@ -130,7 +151,7 @@ function FeatureFormModal({ feature, onClose, onSubmit }) {
   const submit = async (e) => {
     e.preventDefault();
     if (!title.trim()) return setError("Title is required.");
-    if (!isEdit && !iconFile) return setError("Please choose an icon image or video.");
+    if (!isEdit && !iconFile) return setError("Please choose an icon image or GIF.");
     setSubmitting(true);
     setError("");
     try {
@@ -203,7 +224,7 @@ function FeatureFormModal({ feature, onClose, onSubmit }) {
 
           <div>
             <p className="mb-1.5 text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Icon (image or video)
+              Icon (image or GIF)
               {isEdit && <span className="font-normal text-neutral-400"> — leave it to keep the current one</span>}
             </p>
             <div className="flex items-center gap-3">
@@ -211,7 +232,7 @@ function FeatureFormModal({ feature, onClose, onSubmit }) {
               <label className="flex h-20 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-[12px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
                 <UploadCloud size={16} />
                 <span className="max-w-full truncate px-2">{iconFile ? iconFile.name : shownSrc ? "Change icon" : "Choose file"}</span>
-                <input type="file" accept="image/*,video/*" onChange={pickFile} className="hidden" />
+                <input type="file" accept="image/*" onChange={pickFile} className="hidden" />
               </label>
             </div>
           </div>
@@ -408,6 +429,19 @@ export default function ListingFeaturesTab({ brand, readOnly = false }) {
   const error = featuresQuery.error?.message ?? "";
   const reload = () => featuresQuery.refetch();
 
+  // Same cache entry as the Subscription tab's live plan panel.
+  const subQuery = useQuery({
+    queryKey: queryKeys.subscribeds.view("brand", { brandId }),
+    queryFn: () => getBrandSubscription(brandId),
+    enabled: Boolean(brandId) && !readOnly,
+  });
+  const allowance = featureAllowance(subQuery.data?.data);
+  const limit = allowance?.limit ?? null;
+  const atLimit = limit != null && limit !== Infinity && features.length >= limit;
+  const limitMessage = atLimit
+    ? `Plan limit reached — ${features.length}/${limit} listing features used. Upgrade the subscription or delete a feature to add more.`
+    : "";
+
   const [formTarget, setFormTarget] = useState(null); // null = closed, "new" = add, feature = edit
   const [viewing, setViewing] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -496,12 +530,30 @@ export default function ListingFeaturesTab({ brand, readOnly = false }) {
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </button>
           {!readOnly && (
-            <button
-              onClick={() => setFormTarget("new")}
-              className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 shadow-sm transition-colors hover:bg-emerald-300"
-            >
-              <Plus size={15} /> Add Feature
-            </button>
+            // Wrapper carries the hover — a disabled button gets no mouse events.
+            <div className="group relative" tabIndex={atLimit ? 0 : undefined} aria-describedby={atLimit ? "lf-limit-tip" : undefined}>
+              <button
+                onClick={() => setFormTarget("new")}
+                disabled={atLimit}
+                className="flex h-9 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 shadow-sm transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-400"
+              >
+                {atLimit ? <Lock size={14} /> : <Plus size={15} />} Add Feature
+                {limit != null && limit !== Infinity && (
+                  <span className="rounded-md bg-black/10 px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums dark:bg-white/10">
+                    {features.length}/{limit}
+                  </span>
+                )}
+              </button>
+              {atLimit && (
+                <div
+                  id="lf-limit-tip"
+                  role="tooltip"
+                  className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-64 rounded-xl bg-neutral-900 px-3 py-2 text-[11.5px] leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus:opacity-100 dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  {limitMessage}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -549,10 +601,14 @@ export default function ListingFeaturesTab({ brand, readOnly = false }) {
       {loading && features.length === 0 ? (
         <Loader label="Loading listing features…" />
       ) : error ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
-          <span className="flex items-center gap-2"><AlertTriangle size={14} /> Couldn't load listing features: {error}</span>
-          <button onClick={reload} className="font-semibold underline underline-offset-2">Retry</button>
-        </div>
+        <CommonEmptyState
+          variant="compact"
+          tone="error"
+          icon="error"
+          title="Couldn't load listing features"
+          description={error}
+          action={{ label: "Try again", icon: RefreshCw, onClick: reload }}
+        />
       ) : features.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-emerald-200/70 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
           <CommonEmptyState
@@ -560,7 +616,7 @@ export default function ListingFeaturesTab({ brand, readOnly = false }) {
             icon={Sparkles}
             title="No listing features yet"
             description={readOnly ? "This brand hasn't added any listing features." : "Add amenities like Dine-In, Free Wi-Fi or Valet Parking."}
-            action={readOnly ? undefined : { label: "Add Feature", onClick: () => setFormTarget("new"), icon: Plus }}
+            action={readOnly || atLimit ? undefined : { label: "Add Feature", onClick: () => setFormTarget("new"), icon: Plus }}
           />
         </div>
       ) : shown.length === 0 ? (
@@ -582,7 +638,8 @@ export default function ListingFeaturesTab({ brand, readOnly = false }) {
         </div>
       )}
 
-      {formTarget && (
+      {/* Never open "new" past the limit, whatever triggered it. */}
+      {formTarget && !(formTarget === "new" && atLimit) && (
         <FeatureFormModal
           key={formTarget === "new" ? "new" : formTarget.id}
           feature={formTarget === "new" ? null : formTarget}

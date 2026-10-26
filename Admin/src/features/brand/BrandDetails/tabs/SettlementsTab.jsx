@@ -12,8 +12,10 @@ import {
   Receipt,
   CheckCircle2,
   Hash,
+  RefreshCw,
 } from "lucide-react";
 import { EmptyState } from "../../BrandShared";
+import CommonEmptyState from "../../../../components/common/EmptyState";
 import { useSettlements } from "../../../settlement/queries/settlementQueries";
 import { retryUnlessNotFound } from "../../queries/brandQueries";
 import { mapSettlementStatus, SETTLEMENT_TONES } from "../../../settlement/settlementUtils";
@@ -22,13 +24,13 @@ import { isNotFoundMessage, MISSING } from "../../../../utils/helpers";
 import ValueOr from "../../../../components/common/ValueOr";
 import Loader from "../../../../components/common/Loader";
 import { inrAmount, shortDate } from "../detailsUtils";
-import { CardHeader, CopyButton } from "../components/Bento";
-import { glassClass, cardClass, heroClass, innerTile, tints, has } from "../components/bentoStyles";
+import { CopyButton } from "../components/Bento";
+import { glassClass, heroClass, innerTile, tints, has } from "../components/bentoStyles";
 
 /* -------------------------------------------------------------------------
  * Settlements tab — this brand's payouts (GET /settlements?brandId=…),
  * bento style:
- *   row 1: Paid-out hero (5) · Money flow across all settlements (7)
+ *   row 1: Paid-out hero (5) · small stat boxes across all settlements (7)
  *   row 2: filter tabs + expandable settlement cards (breakup, bank,
  *          failure note, document)
  * Rows are also filtered by brandId here, since it isn't confirmed the
@@ -165,21 +167,48 @@ function FlowLines({ breakup, compact = false }) {
   );
 }
 
-function MoneyFlowCard({ rows }) {
+// Small stat box: tinted icon, label, value, one-line note.
+function StatBox({ icon: Icon, tint, label, value, note }) {
+  return (
+    <div className={`${glassClass} flex flex-col gap-2 p-3.5`}>
+      <div className="flex items-center gap-2">
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tints[tint]}`}>
+          <Icon size={13} />
+        </span>
+        <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
+      </div>
+      <p className="truncate text-[18px] font-bold leading-none tabular-nums text-neutral-900 dark:text-neutral-50">{value}</p>
+      {note && <p className="truncate text-[11px] text-neutral-500">{note}</p>}
+    </div>
+  );
+}
+
+// Totals across every settlement of this brand, as small boxes.
+function SettlementStats({ rows, pending, attention }) {
   const totals = rows.reduce((acc, r) => {
     for (const k of Object.keys(r.breakup)) acc[k] = (acc[k] || 0) + r.breakup[k];
     return acc;
   }, {});
-  const deductions = totals.grossCollected - totals.netPayable;
+  const sum = (list) => list.reduce((s, r) => s + r.amount, 0);
+  const deductions = Math.max(0, totals.grossCollected - totals.netPayable);
+  const commission = totals.commissionAmount + totals.commissionTax + totals.commissionDeduction;
+  const txns = rows.reduce((s, r) => s + r.transactionCount, 0);
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
   return (
-    <div className={cardClass}>
-      <CardHeader
-        icon={TrendingDown}
-        tint="violet"
-        title="Money flow"
-        subtitle={`All ${rows.length} settlement${rows.length === 1 ? "" : "s"} · ${inrAmount(Math.max(0, deductions))} deducted`}
+    <div className="grid h-full grid-cols-2 gap-3 sm:grid-cols-3">
+      <StatBox icon={Wallet} tint="emerald" label="Gross collected" value={inrAmount(totals.grossCollected)} note={`From ${plural(rows.length, "settlement")}`} />
+      <StatBox icon={TrendingDown} tint="violet" label="Deductions" value={inrAmount(deductions)} note={`Commission ${inrAmount(commission)}`} />
+      <StatBox icon={CheckCircle2} tint="sky" label="Net payable" value={inrAmount(totals.netPayable)} note="After all deductions" />
+      <StatBox icon={Clock} tint="amber" label="Pending" value={inrAmount(sum(pending))} note={plural(pending.length, "settlement")} />
+      <StatBox
+        icon={AlertTriangle}
+        tint={attention.length ? "red" : "neutral"}
+        label="Attention"
+        value={attention.length}
+        note={attention.length ? inrAmount(sum(attention)) : "All clear"}
       />
-      <FlowLines breakup={totals} />
+      <StatBox icon={Receipt} tint="neutral" label="Transactions" value={txns} note="Across all settlements" />
     </div>
   );
 }
@@ -323,9 +352,14 @@ export default function SettlementsTab({ brand }) {
   if (loading) return <Loader label="Loading settlements…" />;
   if (error) {
     return (
-      <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-        <AlertTriangle size={14} className="shrink-0" /> Failed to load settlements: {error}
-      </div>
+      <CommonEmptyState
+        variant="compact"
+        tone="error"
+        icon="error"
+        title="Couldn't load settlements"
+        description={error}
+        action={{ label: "Try again", icon: RefreshCw, onClick: () => settlementsQuery.refetch() }}
+      />
     );
   }
   if (!rows.length) return <EmptyState label="No settlements for this brand yet." />;
@@ -346,13 +380,13 @@ export default function SettlementsTab({ brand }) {
 
   return (
     <div className="space-y-4">
-      {/* Hero + money flow */}
+      {/* Hero + small stat boxes */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <PaidOutHero rows={rows} paid={paid} pendingAmount={sum(pending)} />
         </div>
         <div className="lg:col-span-7">
-          <MoneyFlowCard rows={rows} />
+          <SettlementStats rows={rows} pending={pending} attention={attention} />
         </div>
       </div>
 

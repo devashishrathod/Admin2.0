@@ -8,11 +8,13 @@ import {
   Image as ImageIcon,
   Link as LinkIcon,
   Pencil,
+  RefreshCw,
   Ruler,
   Trash2,
 } from "lucide-react";
 import { StatusBadge } from "../../components/common/Table";
 import EmptyState from "../../components/common/EmptyState";
+import NotFoundPage from "../../components/common/NotFoundPage";
 import { deleteBanner, BANNER_TYPES, REDIRECT_TYPES } from "./services/BannerApi";
 import { useBanner } from "./queries/bannerQueries";
 import { useCategories } from "../category/queries/categoryQueries";
@@ -108,20 +110,28 @@ export default function BannerDetailsPage() {
     );
   }
 
-  if (error || !banner) {
+  if (error) {
     return (
       <EmptyState
         variant="page"
-        tone={error ? "error" : "default"}
-        icon={error ? "error" : "banner"}
-        title={error ? "Couldn't load this banner" : "Banner not found"}
-        description={
-          error
-            ? `${error} — check your connection and try again.`
-            : "We couldn't find a banner with this link. It may have been deleted, or the link is no longer valid."
-        }
-        action={{ label: "Back to Banners", icon: ArrowLeft, onClick: () => navigate("/banner") }}
-        secondaryAction={error ? { label: "Try again", onClick: load } : undefined}
+        tone="error"
+        icon="error"
+        title="Couldn't load this banner"
+        description={`${error} — check your connection and try again.`}
+        action={{ label: "Try again", icon: RefreshCw, onClick: load }}
+        secondaryAction={{ label: "Back to Banners", onClick: () => navigate("/banner") }}
+      />
+    );
+  }
+
+  if (!banner) {
+    return (
+      <NotFoundPage
+        title="Banner not found"
+        icon="banner"
+        description="We couldn't find a banner with this link. It may have been deleted, or the link is no longer valid."
+        backLabel="Back to Banners"
+        onBack={() => navigate("/banner")}
       />
     );
   }

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Check, Lock, X } from "lucide-react";
+import { Check, Lock, RefreshCw, X } from "lucide-react";
 import { usePlanComparison } from "./queries/planQueries";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 
 /* -------------------------------------------------------------------------
  * Plan comparison (#75e) — the same grid vendors see. `columns[]` are the
@@ -31,7 +32,7 @@ function CellValue({ cell }) {
 export default function PlanCompare() {
   const [includeInactive, setIncludeInactive] = useState(true);
   // Keep the grid on screen while the other "include inactive" variant loads.
-  const { data: res, isPending: loading, error: queryError } = usePlanComparison(includeInactive, {
+  const { data: res, isPending: loading, error: queryError, refetch: refetchComparison } = usePlanComparison(includeInactive, {
     placeholderData: keepPreviousData,
   });
   const data = res?.data ?? res;
@@ -80,8 +81,14 @@ export default function PlanCompare() {
       )}
 
       {!loading && error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-          Failed to load comparison: {error}
+        <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <EmptyState
+            tone="error"
+            icon="error"
+            title="Couldn't load the comparison"
+            description={error}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchComparison() }}
+          />
         </div>
       )}
 

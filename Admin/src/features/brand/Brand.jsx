@@ -684,9 +684,9 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
               <Layers size={11} className="shrink-0" /> {formatBatch(brand.dummyBatch)}
             </p>
           )}
-          <p className="mt-2.5 line-clamp-1 text-[13px] font-medium text-neutral-800 dark:text-neutral-100">
+          {/* <p className="mt-2.5 line-clamp-1 text-[13px] font-medium text-neutral-800 dark:text-neutral-100">
             {brand.tagline || "No description added yet"}
-          </p>
+          </p> */}
 
           {/* Audience + reach */}
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -1063,7 +1063,7 @@ export default function Brand({ scope = "live" }) {
     ? {
         icon: "brand",
         title: "No real dummy brands",
-        description: "Brands you mark as “Coming soon” (from a brand's ⋮ menu or its details page) show up here.",
+        description: "Brands you mark as RD brand (from a brand's ⋮ menu or its details page) show up here.",
       }
     : isExpiredScope
     ? {
@@ -1324,7 +1324,7 @@ export default function Brand({ scope = "live" }) {
               {isDummyScope
                 ? "Test / demo brands — kept separate from Live Brands."
                 : isRealDummyScope
-                ? "Real, approved brands shown to customers as “Coming soon” until launch."
+                ? "Real, approved brands marked as RD brand until launch."
                 : isExpiredScope
                 ? "Approved brands whose plan has expired — they need a renewal to go live again."
                 : "Approved brands that are live on the platform — open one to see its full profile."}
@@ -1348,9 +1348,9 @@ export default function Brand({ scope = "live" }) {
           <div className={`mb-4 grid grid-cols-2 gap-3 ${isRealDummyScope ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
             <StatTile
               icon={isRealDummyScope ? Hourglass : Store}
-              label={isRealDummyScope ? "Coming Soon" : "Total D Brands"}
+              label={isRealDummyScope ? "RD Brands" : "Total D Brands"}
               value={tabCount("All")}
-              hint={isRealDummyScope ? "Shown as coming soon" : "Test / demo brands"}
+              hint={isRealDummyScope ? "Marked as RD brand" : "Test / demo brands"}
               tint="emerald"
               active={statusTab === "All"}
               onClick={() => setStatusTabAndReset("All")}

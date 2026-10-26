@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import useBackLayer from "../../lib/useBackLayer";
 import { DragDropProvider } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { move } from "@dnd-kit/helpers";
@@ -20,9 +22,15 @@ import {
   Images,
   ChevronDown,
   ChevronUp,
+  RotateCcw,
+  RefreshCw,
+  Eye,
+  Lock,
+  Layers,
 } from "lucide-react";
 import ShowcaseGallery from "./ShowcaseGallery";
 import { EmptyState, inputClass } from "./BrandShared";
+import CommonEmptyState from "../../components/common/EmptyState";
 import { queryKeys } from "../../lib/query";
 import { useBrandShowcase } from "./queries/showcaseQueries";
 import {
@@ -36,6 +44,7 @@ import {
   reorderShowcaseMedia,
   isVideoFile,
 } from "./services/showcaseApi";
+import { getBrandSubscription } from "./services/subscriptionApi";
 import { mergeRefs, dragSensors, useClickWithoutDrag } from "./utils/dndHelpers";
 import Loader from "../../components/common/Loader";
 
@@ -91,6 +100,10 @@ function notLiveLabel(section) {
 
 // Tiles shown inline per album before "+N more" (opens the gallery).
 const PREVIEW_LIMIT = 8;
+// Section cards view: 4 tiles per card, the 4th becomes "+N".
+const SECTION_CARD_TILES = 4;
+// Top switch: Collections (default) / Gallery / Albums.
+const SHOWCASE_VIEWS = ["sections", "gallery", "albums"];
 // Albums shown at first, and added per "Show more".
 const ALBUMS_STEP = 2;
 
@@ -112,23 +125,26 @@ function ModalPortal({ children }) {
 // Preview of a not-yet-uploaded file. The object URL is created and set
 // inside the effect (not useMemo) so StrictMode's mount → cleanup → mount
 // makes a fresh URL instead of leaving a revoked one on the element.
-function LocalFileThumb({ file }) {
+// `contain` = large preview (whole frame visible, video gets controls).
+function LocalFileThumb({ file, contain = false }) {
   const ref = useRef(null);
   const isVideo = file.type.startsWith("video/");
+  const fit = contain ? "object-contain" : "object-cover";
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
-    if (ref.current) ref.current.src = url;
+    // #t=0.1 makes the browser paint a real frame instead of a black box.
+    if (ref.current) ref.current.src = isVideo && !contain ? `${url}#t=0.1` : url;
     return () => URL.revokeObjectURL(url);
-  }, [file]);
+  }, [file, isVideo, contain]);
 
   return isVideo ? (
     <>
-      <video ref={ref} className="h-full w-full object-cover" muted playsInline preload="metadata" />
-      <FileVideo size={12} className="absolute bottom-1 right-1 text-white drop-shadow" />
+      <video ref={ref} className={`h-full w-full ${fit}`} muted playsInline preload="metadata" controls={contain} />
+      {!contain && <FileVideo size={12} className="absolute bottom-1 right-1 text-white drop-shadow" />}
     </>
   ) : (
-    <img ref={ref} alt="" className="h-full w-full object-cover" />
+    <img ref={ref} alt="" className={`h-full w-full ${fit}`} />
   );
 }
 
@@ -152,12 +168,18 @@ function VideoPosterFields({ files, posters, onChange, disabled }) {
       </p>
       {videoIndexes.map((i) => (
         <div key={`${files[i].name}-${i}`} className="flex items-center gap-3 rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950">
-          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
-            {posters[i] ? <LocalFileThumb file={posters[i]} /> : <FileVideo size={14} className="m-auto mt-3 text-neutral-500" />}
+          {/* The video itself, so it's clear which one this poster is for. */}
+          <div className="relative h-10 w-14 shrink-0 overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
+            <LocalFileThumb file={files[i]} />
           </div>
           <span className="min-w-0 flex-1 truncate text-[12px] text-neutral-600 dark:text-neutral-400" title={files[i].name}>
             {files[i].name}
           </span>
+          {posters[i] && (
+            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg ring-2 ring-emerald-400/60" title="Poster">
+              <LocalFileThumb file={posters[i]} />
+            </div>
+          )}
           <label
             className={`flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-dashed px-3 text-[12px] font-medium transition-colors ${
               posters[i]
@@ -192,11 +214,75 @@ const missingPoster = (files, posters) => files.some((f, i) => isVideoFile(f) &&
  * anything is actually sent to the server. `mode="replace"` reuses it to
  * collect a poster when a video replaces an existing item.
  * ---------------------------------------------------------------------- */
-function UploadMediaModal({ files, uploading, progress, error, onClose, onConfirm, mode = "add" }) {
+// Full-size look at a picked file before it's uploaded.
+function LocalFileViewer({ file, onClose }) {
+  useBackLayer(true, onClose);
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm" onClick={onClose}>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close preview"
+        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <X size={16} />
+      </button>
+      <div onClick={(e) => e.stopPropagation()} className="relative flex h-[75vh] w-full max-w-3xl items-center justify-center">
+        <LocalFileThumb file={file} contain />
+      </div>
+      <p className="absolute bottom-4 left-1/2 max-w-[90vw] -translate-x-1/2 truncate text-[12px] text-white/70">{file.name}</p>
+    </div>
+  );
+}
+
+const tileBtn =
+  "flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-black/90";
+
+function UploadMediaModal({ files: initialFiles, uploading, progress, error, onClose, onConfirm, mode = "add" }) {
   const [isShowInVideoClips, setIsShowInVideoClips] = useState(false);
+  // Files are kept here (not in the parent) so View / Replace / Remove can
+  // change the batch while `posters[i]` stays paired with `files[i]`.
+  const [files, setFiles] = useState(initialFiles);
   const [posters, setPosters] = useState([]);
+  const [viewing, setViewing] = useState(null);
+  const replaceInputRef = useRef(null);
+  const replaceIndexRef = useRef(null);
+  const addMoreInputRef = useRef(null);
   const hasVideo = files.some(isVideoFile);
+  useBackLayer(true, () => !uploading && onClose());
+
+  // New files go on the end, so existing posters keep their positions.
+  const handleAddMore = (e) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (picked.length) setFiles((cur) => [...cur, ...picked]);
+  };
   const blocked = missingPoster(files, posters);
+
+  const removeFile = (index) => {
+    if (files.length === 1) return onClose(); // nothing left to upload
+    setFiles((cur) => cur.filter((_, i) => i !== index));
+    setPosters((cur) => cur.filter((_, i) => i !== index));
+  };
+
+  const startReplace = (index) => {
+    replaceIndexRef.current = index;
+    replaceInputRef.current?.click();
+  };
+
+  const handleReplacePick = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    const index = replaceIndexRef.current;
+    if (!file || index == null) return;
+    setFiles((cur) => cur.map((f, i) => (i === index ? file : f)));
+    // The old poster belonged to the old file.
+    setPosters((cur) => {
+      const next = [...cur];
+      next[index] = undefined;
+      return next;
+    });
+  };
 
   return (
     <ModalPortal>
@@ -230,18 +316,67 @@ function UploadMediaModal({ files, uploading, progress, error, onClose, onConfir
           <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-5">
             {files.map((file, i) => (
               <div
-                key={`${file.name}-${i}`}
+                key={`${file.name}-${file.lastModified}-${i}`}
                 title={file.name}
-                className="relative flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-neutral-100 text-neutral-500 dark:bg-neutral-800"
+                className="group relative flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-neutral-100 text-neutral-500 dark:bg-neutral-800"
               >
                 {file.type.startsWith("video/") || file.type.startsWith("image/") ? (
                   <LocalFileThumb file={file} />
                 ) : (
                   <ImageIcon size={18} />
                 )}
+                {!uploading && (
+                  <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                    <button type="button" onClick={() => setViewing(file)} aria-label="View" title="View" className={tileBtn}>
+                      <Eye size={12} />
+                    </button>
+                    <button type="button" onClick={() => startReplace(i)} aria-label="Replace" title="Replace" className={tileBtn}>
+                      <RefreshCw size={12} />
+                    </button>
+                    {mode === "add" && (
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        aria-label="Remove"
+                        title="Remove"
+                        className={`${tileBtn} hover:bg-red-600`}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
+            {mode === "add" && (
+              <button
+                type="button"
+                onClick={() => addMoreInputRef.current?.click()}
+                disabled={uploading}
+                title="Add more photos or videos"
+                className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-neutral-300 text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400"
+              >
+                <Plus size={16} />
+                <span className="text-[10.5px] font-medium">Add more</span>
+              </button>
+            )}
           </div>
+          <input
+            ref={addMoreInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            onChange={handleAddMore}
+            className="hidden"
+          />
+          <input
+            ref={replaceInputRef}
+            type="file"
+            accept="image/*,video/*"
+            onChange={handleReplacePick}
+            className="hidden"
+          />
+          {viewing && <LocalFileViewer file={viewing} onClose={() => setViewing(null)} />}
 
           <VideoPosterFields files={files} posters={posters} onChange={setPosters} disabled={uploading} />
 
@@ -282,7 +417,7 @@ function UploadMediaModal({ files, uploading, progress, error, onClose, onConfir
             </button>
             <button
               type="button"
-              onClick={() => onConfirm({ isShowInVideoClips: hasVideo && isShowInVideoClips, posters })}
+              onClick={() => onConfirm({ files, isShowInVideoClips: hasVideo && isShowInVideoClips, posters })}
               disabled={uploading || blocked}
               title={blocked ? "Add a poster for every video first" : undefined}
               className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
@@ -306,6 +441,7 @@ function AddShowcaseSectionModal({ submitting, progress, error, onClose, onConfi
   const [isShowInVideoClips, setIsShowInVideoClips] = useState(false);
   const fileInputRef = useRef(null);
   const blocked = missingPoster(files, posters);
+  useBackLayer(true, () => !submitting && onClose());
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -451,40 +587,54 @@ function AddShowcaseSectionModal({ submitting, progress, error, onClose, onConfi
 
 // Edits one media item's own metadata (title/alt text/active) via the
 // confirmed PATCH .../media/update/:mediaId — opened either from a tile's
-// hover icon or from inside the click-to-preview modal.
-function EditMediaModal({ media, submitting, error, onClose, onSave }) {
+// hover icon or from inside the click-to-preview modal. The file itself
+// can be swapped too: Replace only stages the new file (with Undo) and it
+// is uploaded on Save; Remove deletes the item after a confirm.
+function EditMediaModal({ media, submitting, removing, error, onClose, onSave, onRemove }) {
   const [title, setTitle] = useState(media.title || "");
   const [altText, setAltText] = useState(media.altText || "");
   const [isActive, setIsActive] = useState(media.isActive !== false);
   const [thumbnailFile, setThumbnailFile] = useState(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState(media.thumbnail || "");
+  const [replacement, setReplacement] = useState(null);
   const thumbInputRef = useRef(null);
+  const replaceInputRef = useRef(null);
+  const busy = submitting || removing;
+  useBackLayer(true, () => !busy && onClose());
 
-  // Revoke the object URL for a newly-picked thumbnail on unmount — the
-  // existing thumbnail (a real https URL) is left alone, revoking it
-  // would be a no-op anyway since it was never created via createObjectURL.
-  useEffect(() => {
-    return () => {
-      if (thumbnailFile) URL.revokeObjectURL(thumbnailPreview);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // The poster follows whichever file will be live after Save. A video
+  // replacement needs its own poster (doc A-4); photos never take one.
+  const isVideo = replacement ? isVideoFile(replacement) : media.isVideo;
+  const existingThumb = replacement ? "" : media.thumbnail;
+  const posterMissing = Boolean(replacement) && isVideo && !thumbnailFile;
 
   const handleThumbnailPick = (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
+    if (file) setThumbnailFile(file);
+  };
+
+  const handleReplacePick = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    setThumbnailFile(file);
-    setThumbnailPreview(URL.createObjectURL(file));
+    setReplacement(file);
+    setThumbnailFile(null); // the old poster belonged to the old file
+  };
+
+  const undoReplace = () => {
+    setReplacement(null);
+    setThumbnailFile(null);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (posterMissing) return;
     onSave({
       title: title.trim(),
       altText: altText.trim(),
       isActive,
-      ...(thumbnailFile ? { thumbnail: thumbnailFile } : {}),
+      ...(replacement ? { replacement, poster: isVideo ? thumbnailFile : null } : {}),
+      ...(!replacement && thumbnailFile ? { thumbnail: thumbnailFile } : {}),
     });
   };
 
@@ -492,14 +642,14 @@ function EditMediaModal({ media, submitting, error, onClose, onSave }) {
     <ModalPortal>
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={submitting ? undefined : onClose}
+      onClick={busy ? undefined : onClose}
     >
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900">
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
           <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Edit Media</h2>
           <button
             onClick={onClose}
-            disabled={submitting}
+            disabled={busy}
             aria-label="Close"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
@@ -510,12 +660,70 @@ function EditMediaModal({ media, submitting, error, onClose, onSave }) {
           {/* Shows whichever media is actually being edited — image or
               video, so there's never any doubt which item these fields
               belong to. */}
-          <div className="mb-4 flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-950">
-            {media.isVideo ? (
+          <div className="relative mb-2 flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl bg-neutral-950">
+            {replacement ? (
+              <LocalFileThumb file={replacement} contain />
+            ) : media.isVideo ? (
               <video src={media.url} className="h-full w-full object-contain" controls muted playsInline preload="metadata" />
             ) : (
               <img src={media.url} alt={media.altText || ""} className="h-full w-full object-contain" />
             )}
+            {replacement && (
+              <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-emerald-400 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-950">
+                New — replaces on Save
+              </span>
+            )}
+          </div>
+
+          {/* Replace / Remove — a staged replacement can be undone until Save. */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {replacement ? (
+              <>
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-neutral-500" title={replacement.name}>
+                  {replacement.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => replaceInputRef.current?.click()}
+                  disabled={busy}
+                  className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  <Upload size={12} />
+                  Pick another
+                </button>
+                <button
+                  type="button"
+                  onClick={undoReplace}
+                  disabled={busy}
+                  className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-medium text-amber-600 transition-colors hover:bg-amber-400/10 disabled:opacity-50 dark:text-amber-400"
+                >
+                  <RotateCcw size={12} />
+                  Undo
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => replaceInputRef.current?.click()}
+                  disabled={busy || !media.hasId}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 px-3 text-[12px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
+                >
+                  <Upload size={12} />
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  disabled={busy || !media.hasId}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 px-3 text-[12px] font-medium text-red-600 transition-colors hover:border-red-400/60 hover:bg-red-500/5 disabled:opacity-50 dark:border-neutral-800 dark:text-red-400"
+                >
+                  {removing ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                  {removing ? "Removing…" : "Remove"}
+                </button>
+              </>
+            )}
+            <input ref={replaceInputRef} type="file" accept="image/*,video/*" onChange={handleReplacePick} className="hidden" />
           </div>
 
           <div className="mb-4">
@@ -538,15 +746,20 @@ function EditMediaModal({ media, submitting, error, onClose, onSave }) {
           </div>
 
           {/* Poster is video-only — a photo with a thumbnail is a 422 (doc A-9). */}
-          {media.isVideo && (
+          {isVideo && (
           <div className="mb-4">
             <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Poster <span className="font-normal text-neutral-500">(optional)</span>
+              Poster{" "}
+              <span className={`font-normal ${posterMissing ? "text-red-500" : "text-neutral-500"}`}>
+                ({replacement ? "required for the new video" : "optional"})
+              </span>
             </label>
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-                {thumbnailPreview ? (
-                  <img src={thumbnailPreview} alt="Thumbnail preview" className="h-full w-full object-cover" />
+              <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
+                {thumbnailFile ? (
+                  <LocalFileThumb file={thumbnailFile} />
+                ) : existingThumb ? (
+                  <img src={existingThumb} alt="Thumbnail preview" className="h-full w-full object-cover" />
                 ) : (
                   <ImageIcon size={18} className="text-neutral-500" />
                 )}
@@ -554,10 +767,11 @@ function EditMediaModal({ media, submitting, error, onClose, onSave }) {
               <button
                 type="button"
                 onClick={() => thumbInputRef.current?.click()}
-                className="flex h-9 items-center gap-1.5 rounded-xl border border-dashed border-neutral-300 px-3.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400"
+                disabled={busy}
+                className="flex h-9 items-center gap-1.5 rounded-xl border border-dashed border-neutral-300 px-3.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400"
               >
                 <Upload size={13} />
-                {thumbnailPreview ? "Change" : "Upload"} poster
+                {thumbnailFile || existingThumb ? "Change" : "Upload"} poster
               </button>
               <input ref={thumbInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleThumbnailPick} className="hidden" />
             </div>
@@ -580,18 +794,19 @@ function EditMediaModal({ media, submitting, error, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              disabled={submitting}
+              disabled={busy}
               className="flex h-10 items-center rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={busy || posterMissing}
+              title={posterMissing ? "Add a poster for the new video first" : undefined}
               className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting && <Loader2 size={14} className="animate-spin" />}
-              {submitting ? "Saving…" : "Save"}
+              {submitting ? (replacement ? "Replacing…" : "Saving…") : replacement ? "Replace & Save" : "Save"}
             </button>
           </div>
         </form>
@@ -642,8 +857,24 @@ function ShowcaseMediaTile({ media, index, onPreview, onEdit, onDelete, deleting
           Inactive
         </span>
       )}
-      {!readOnly && (
       <div className="absolute right-1.5 top-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        {media.url && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPreview(media);
+            }}
+            aria-label="View media"
+            title="View"
+            className="flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm hover:bg-black/90"
+          >
+            <Eye size={11} />
+          </button>
+        )}
+        {!readOnly && (
+        <>
         <button
           type="button"
           onClick={(e) => {
@@ -651,6 +882,7 @@ function ShowcaseMediaTile({ media, index, onPreview, onEdit, onDelete, deleting
             onEdit(media);
           }}
           aria-label="Edit media"
+          title="Edit"
           className="flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm hover:bg-black/90"
         >
           <Pencil size={11} />
@@ -667,8 +899,9 @@ function ShowcaseMediaTile({ media, index, onPreview, onEdit, onDelete, deleting
         >
           {deleting ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
         </button>
+        </>
+        )}
       </div>
-      )}
     </div>
   );
 }
@@ -758,13 +991,14 @@ function ShowcaseSectionCard({ brand, section, index, readOnly = false }) {
     if (files.length) setPendingFiles(files);
   };
 
-  const handleConfirmUpload = async ({ isShowInVideoClips, posters }) => {
-    if (!pendingFiles?.length) return;
+  // `files` is the batch as edited in the modal (removed / replaced items).
+  const handleConfirmUpload = async ({ files, isShowInVideoClips, posters }) => {
+    if (!files?.length) return;
     setUploading(true);
     setUploadProgress(0);
     setError("");
     try {
-      await addShowcaseMedia(section._id, pendingFiles, { isShowInVideoClips, posters }, setUploadProgress);
+      await addShowcaseMedia(section._id, files, { isShowInVideoClips, posters }, setUploadProgress);
       setPendingFiles(null);    } catch (err) {
       setError(err.message);
     } finally {
@@ -844,17 +1078,41 @@ function ShowcaseSectionCard({ brand, section, index, readOnly = false }) {
     }
   };
 
-  const handleUpdateMedia = async (patch) => {
+  // A staged replacement goes up first (PUT .../media/replace), then the
+  // title / alt text / active flags are saved on the same item.
+  const handleUpdateMedia = async ({ replacement, poster, ...patch }) => {
     if (!editingMedia) return;
     setEditSubmitting(true);
     setEditError("");
     try {
-      await updateShowcaseMedia(section._id, editingMedia.id, patch);
+      let mediaId = editingMedia.id;
+      if (replacement) {
+        const res = await replaceShowcaseMedia(section._id, mediaId, { file: replacement, poster });
+        // In case the server answers with a new record id.
+        mediaId = res?.data?._id ?? mediaId;
+      }
+      await updateShowcaseMedia(section._id, mediaId, patch);
       setEditingMedia(null);
     } catch (err) {
       setEditError(err.message);
     } finally {
       setEditSubmitting(false);
+    }
+  };
+
+  // Remove from inside the Edit modal — same soft delete as the tile's ×.
+  const handleRemoveFromEdit = async () => {
+    if (!editingMedia?.hasId) return;
+    if (!window.confirm(`Remove this ${editingMedia.isVideo ? "video" : "photo"} from "${sectionTitle}"?`)) return;
+    setDeletingId(editingMedia.id);
+    setEditError("");
+    try {
+      await deleteShowcaseMedia(section._id, editingMedia.id, brand.id);
+      setEditingMedia(null);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -1018,13 +1276,19 @@ function ShowcaseSectionCard({ brand, section, index, readOnly = false }) {
                   onClick={() => setGallery({ mode: "grid", index: 0 })}
                   className="group relative aspect-video overflow-hidden rounded-xl bg-neutral-900"
                 >
-                  {media[visibleMedia.length]?.url && !media[visibleMedia.length].isVideo && (
-                    <img
-                      src={media[visibleMedia.length].url}
-                      alt=""
-                      className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-[2px] transition-transform duration-300 group-hover:scale-125"
-                    />
-                  )}
+                  {/* The 4th item itself, blurred behind "+N" — a video
+                      uses its poster image. */}
+                  {(() => {
+                    const next = media[visibleMedia.length];
+                    const src = next?.isVideo ? next.thumbnail : next?.url;
+                    return src ? (
+                      <img
+                        src={src}
+                        alt=""
+                        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-[2px] transition-transform duration-300 group-hover:scale-125"
+                      />
+                    ) : null;
+                  })()}
                   <span className="relative flex h-full w-full flex-col items-center justify-center bg-black/40 text-white">
                     <span className="text-[20px] font-bold leading-none">+{hiddenCount}</span>
                     <span className="mt-1 text-[11px] font-medium text-white/80">View all</span>
@@ -1068,7 +1332,7 @@ function ShowcaseSectionCard({ brand, section, index, readOnly = false }) {
             setReplaceTarget(null);
             setError("");
           }}
-          onConfirm={({ posters }) => runReplace(replaceTarget.mediaId, replaceTarget.file, posters[0])}
+          onConfirm={({ files, posters }) => runReplace(replaceTarget.mediaId, files[0], posters[0])}
         />
       )}
 
@@ -1092,13 +1356,15 @@ function ShowcaseSectionCard({ brand, section, index, readOnly = false }) {
         <EditMediaModal
           media={editingMedia}
           submitting={editSubmitting}
+          removing={deletingId === editingMedia.id}
           error={editError}
           onClose={() => {
-            if (editSubmitting) return;
+            if (editSubmitting || deletingId === editingMedia.id) return;
             setEditingMedia(null);
             setEditError("");
           }}
           onSave={handleUpdateMedia}
+          onRemove={handleRemoveFromEdit}
         />
       )}
     </div>
@@ -1111,6 +1377,99 @@ function ShowcaseSectionCard({ brand, section, index, readOnly = false }) {
  * reorderable (sections AND media) via drag-and-drop, and editable via the
  * add-media/replace-media/delete-media/delete-section endpoints.
  * ---------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+ * Collections view — one card per album: title + counts and a 2×2 of its
+ * first 4 items. With more than 4, the 4th tile shows that item blurred
+ * under "+N" (the rest of the album). Clicking a tile opens the album's
+ * gallery on it; "+N" / the header open the album's full grid. View only —
+ * editing stays in the Albums view.
+ * ---------------------------------------------------------------------- */
+function SectionCard({ section, onOpen }) {
+  const media = (section.medias ?? []).map(normalizeShowcaseMediaItem);
+  const title = section.title?.trim() || "Untitled album";
+  const photos = media.filter((m) => !m.isVideo).length;
+  const videos = media.length - photos;
+  const overflow = media.length > SECTION_CARD_TILES;
+  const tiles = media.slice(0, SECTION_CARD_TILES);
+  const moreCount = media.length - (SECTION_CARD_TILES - 1);
+  const notLive = notLiveLabel(section);
+
+  return (
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-white/80 bg-white/65 shadow-[0_6px_20px_rgba(16,185,129,0.06)] backdrop-blur-xl dark:border-white/5 dark:bg-neutral-900/60 dark:shadow-black/30">
+      <button type="button" onClick={() => onOpen(section, "grid", 0)} className="flex items-center justify-between gap-2 p-2.5 pb-2 text-left">
+        <div className="min-w-0">
+          <p className={`truncate text-[12.5px] font-bold ${section.title?.trim() ? "text-neutral-900 dark:text-neutral-50" : "italic text-neutral-400"}`}>{title}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-400/10 px-1.5 py-px text-[10px] font-semibold text-sky-600 dark:text-sky-400">
+              <ImageIcon size={9} /> {photos}
+            </span>
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-400/10 px-1.5 py-px text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+              <FileVideo size={9} /> {videos}
+            </span>
+            {notLive && (
+              <span title={notLive} className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            )}
+          </div>
+        </div>
+        {media.length > 0 && (
+          <span title="View all" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+            <LayoutGrid size={11} />
+          </span>
+        )}
+      </button>
+
+      {media.length ? (
+        <div className="grid grid-cols-2 gap-1 px-2.5 pb-2.5">
+          {tiles.map((m, i) => {
+            const isMore = overflow && i === SECTION_CARD_TILES - 1;
+            const src = m.isVideo ? m.thumbnail : m.url;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => (isMore ? onOpen(section, "grid", 0) : onOpen(section, "viewer", i))}
+                className="group relative aspect-square overflow-hidden rounded-lg bg-neutral-950 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+              >
+                {src ? (
+                  <img
+                    src={src}
+                    alt={m.altText}
+                    loading="lazy"
+                    className={`h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 ${isMore ? "scale-110 opacity-50 blur-[2px]" : ""}`}
+                  />
+                ) : m.isVideo && m.url ? (
+                  <video src={`${m.url}#t=0.1`} muted playsInline preload="metadata" className={`h-full w-full object-cover ${isMore ? "opacity-50 blur-[2px]" : ""}`} />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-neutral-500">
+                    {m.isVideo ? <FileVideo size={16} /> : <ImageIcon size={16} />}
+                  </span>
+                )}
+                {isMore ? (
+                  <span className="absolute inset-0 flex flex-col items-center justify-center bg-black/45 text-white">
+                    <span className="text-[17px] font-bold leading-none">+{moreCount}</span>
+                    <span className="mt-0.5 text-[10px] font-medium text-white/80">View all</span>
+                  </span>
+                ) : (
+                  m.isVideo && (
+                    <span className="pointer-events-none absolute bottom-1 left-1 flex items-center rounded bg-black/70 p-0.5 text-white">
+                      <FileVideo size={9} />
+                    </span>
+                  )
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mx-2.5 mb-2.5 flex flex-1 flex-col items-center justify-center gap-1.5 rounded-xl bg-neutral-50 py-8 dark:bg-neutral-950/60">
+          <ImageIcon size={18} className="text-neutral-400" />
+          <p className="text-[12px] text-neutral-500">No media yet</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // readOnly (dummy brands): albums and media are view-only — no add, upload,
 // edit, replace, delete or reorder.
 export default function ShowcaseAlbums({ brand, readOnly = false }) {
@@ -1128,6 +1487,48 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
   const [visibleAlbums, setVisibleAlbums] = useState(ALBUMS_STEP);
   const shownSections = sections.slice(0, visibleAlbums);
   const remainingAlbums = Math.max(0, sections.length - shownSections.length);
+
+  // "sections" (default, shown as "Collections") = one small card per album; "gallery" = every
+  // album's media in one grid; "albums" = full editable album cards.
+  // The view lives in the URL (?showcase=gallery) as its own history entry,
+  // so Back steps through Collections / Gallery / Albums one by one. Other
+  // params (e.g. the brand page's ?tab=) are kept.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewParam = searchParams.get("showcase");
+  const view = SHOWCASE_VIEWS.includes(viewParam) ? viewParam : "sections";
+  const setView = (next) => {
+    if (next === view) return;
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("showcase", next);
+      return params;
+    });
+  };
+  const [galleryIndex, setGalleryIndex] = useState(null);
+  const closeAllGallery = useCallback(() => setGalleryIndex(null), []);
+  // Sections view: one album's gallery { section, mode, index }.
+  const [sectionGallery, setSectionGallery] = useState(null);
+  const closeSectionGallery = useCallback(() => setSectionGallery(null), []);
+  // Ids are prefixed with the album id so keys stay unique across albums.
+  const allMedia = sections.flatMap((s) =>
+    (s.medias ?? []).map((item, i) => ({
+      ...normalizeShowcaseMediaItem(item, i),
+      id: `${s._id}:${item?._id ?? item?.id ?? i}`,
+      album: s.title?.trim() || "Untitled album",
+    }))
+  );
+
+  // Plan limit on albums: usage.showcase { used, limit, isUnlimited } from
+  // GET /subscribeds/get (same cache entry as the Subscription tab). No
+  // plan / no bucket = nothing is blocked.
+  const subQuery = useQuery({
+    queryKey: queryKeys.subscribeds.view("brand", { brandId: brand.id }),
+    queryFn: () => getBrandSubscription(brand.id),
+    enabled: Boolean(brand.id) && !readOnly,
+  });
+  const showcasePool = subQuery.data?.data?.usage?.showcase;
+  const albumLimit = showcasePool && !showcasePool.isUnlimited && showcasePool.limit != null ? Number(showcasePool.limit) : null;
+  const atAlbumLimit = albumLimit != null && sections.length >= albumLimit;
 
   const [addingSection, setAddingSection] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -1204,20 +1605,63 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
               <p className="truncate text-[12px] text-neutral-500">Ambience, menu and event albums shown on this brand's profile.</p>
             </div>
           </div>
-          {!readOnly && (
-          <button
-            type="button"
-            onClick={() => {
-              setCreateError("");
-              setCreateNotice("");
-              setAddingSection(true);
-            }}
-            className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-2 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/20 dark:text-emerald-400"
-          >
-            <Plus size={13} />
-            Add Album
-          </button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {sections.length > 0 && (
+              <div className="flex items-center rounded-full bg-neutral-100 p-0.5 dark:bg-neutral-800">
+                {[
+                  ["sections", Layers, "Collections"],
+                  ["gallery", LayoutGrid, "Gallery"],
+                  ["albums", Images, "Albums"],
+                ].map(([key, Icon, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setView(key)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                      view === key
+                        ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-950 dark:text-neutral-50"
+                        : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                    }`}
+                  >
+                    <Icon size={12} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!readOnly && (
+            // Wrapper carries the hover — a disabled button gets no mouse events.
+            <div className="group relative" tabIndex={atAlbumLimit ? 0 : undefined} aria-describedby={atAlbumLimit ? "showcase-limit-tip" : undefined}>
+              <button
+                type="button"
+                disabled={atAlbumLimit}
+                onClick={() => {
+                  setCreateError("");
+                  setCreateNotice("");
+                  setAddingSection(true);
+                }}
+                className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-2 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:text-emerald-400 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-500"
+              >
+                {atAlbumLimit ? <Lock size={12} /> : <Plus size={13} />}
+                Add Album
+                {albumLimit != null && (
+                  <span className="rounded-md bg-black/5 px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums dark:bg-white/10">
+                    {sections.length}/{albumLimit}
+                  </span>
+                )}
+              </button>
+              {atAlbumLimit && (
+                <div
+                  id="showcase-limit-tip"
+                  role="tooltip"
+                  className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-64 rounded-xl bg-neutral-900 px-3 py-2 text-[11.5px] leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus:opacity-100 dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  Plan limit reached — {sections.length}/{albumLimit} showcase albums used. Upgrade the subscription or delete an album to add more.
+                </div>
+              )}
+            </div>
+            )}
+          </div>
         </div>
 
         {createNotice && (
@@ -1238,10 +1682,75 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
         {loading ? (
           <Loader label="Loading showcase…" />
         ) : loadError ? (
-          <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={13} className="shrink-0" />
-            Couldn't load showcase: {loadError}
+          <CommonEmptyState
+            variant="compact"
+            tone="error"
+            icon="error"
+            title="Couldn't load showcase"
+            description={loadError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => showcaseQuery.refetch() }}
+          />
+        ) : sections.length && view === "sections" ? (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            {sections.map((s) => (
+              <SectionCard key={s._id} section={s} onOpen={(section, mode, index) => setSectionGallery({ section, mode, index })} />
+            ))}
           </div>
+        ) : sections.length && view === "gallery" ? (
+          // Gallery — all albums' media in one grid, not split by section.
+          // View-only here; editing stays in the Albums view.
+          allMedia.length ? (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+              {allMedia.map((m, i) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => m.url && setGalleryIndex(i)}
+                  title={m.album}
+                  className="group relative aspect-square overflow-hidden rounded-xl bg-neutral-950 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                >
+                  {!m.url ? (
+                    <span className="flex h-full w-full items-center justify-center text-neutral-500">
+                      {m.isVideo ? <FileVideo size={16} /> : <ImageIcon size={16} />}
+                    </span>
+                  ) : m.isVideo ? (
+                    <video
+                      src={`${m.url}#t=0.1`}
+                      poster={m.thumbnail || undefined}
+                      className="h-full w-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img
+                      src={m.url}
+                      alt={m.altText}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                  )}
+                  {m.isVideo && (
+                    <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      <FileVideo size={9} />
+                      {formatMediaDuration(m.duration) || "Video"}
+                    </span>
+                  )}
+                  {!m.isActive && (
+                    <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+                      Inactive
+                    </span>
+                  )}
+                  {/* Which album it's from, on hover */}
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[10.5px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    {m.album}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState label="No photos or videos in any album yet." />
+          )
         ) : sections.length ? (
           <DragDropProvider sensors={dragSensors} onDragEnd={handleSectionDragEnd}>
             <div className="space-y-3">
@@ -1297,7 +1806,29 @@ export default function ShowcaseAlbums({ brand, readOnly = false }) {
           <EmptyState label="No showcase albums yet. Add one to upload photos or videos." />
         )}
       </div>
-      {addingSection && (
+      {sectionGallery && (
+        <ShowcaseGallery
+          title={sectionGallery.section.title?.trim() || "Untitled album"}
+          media={(sectionGallery.section.medias ?? []).map(normalizeShowcaseMediaItem)}
+          startIndex={sectionGallery.index}
+          startMode={sectionGallery.mode}
+          readOnly
+          busy={{}}
+          onClose={closeSectionGallery}
+        />
+      )}
+      {galleryIndex != null && (
+        <ShowcaseGallery
+          title="All media"
+          media={allMedia}
+          startIndex={galleryIndex}
+          startMode="viewer"
+          readOnly
+          busy={{}}
+          onClose={closeAllGallery}
+        />
+      )}
+      {addingSection && !atAlbumLimit && (
         <AddShowcaseSectionModal
           submitting={creating}
           progress={createProgress}

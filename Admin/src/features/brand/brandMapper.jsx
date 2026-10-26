@@ -74,7 +74,8 @@ const WORK_HOURS_DAYS = [
 ];
 
 function mapWorkHours(workHours) {
-  if (!workHours) return null;
+  // Unpopulated refs come through as an id string — nothing to show.
+  if (!workHours || typeof workHours !== 'object') return null;
   return WORK_HOURS_DAYS.map(([key, label]) => ({
     day: label,
     isOpen: workHours[key]?.isOpen ?? false,
@@ -459,6 +460,28 @@ export function mapBrandDetail(raw) {
           currentScreen: raw.user.currentScreen || '—',
         }
       : null,
+
+    // Weekly hours — the API nests them under `user`; older payloads put
+    // them on the brand or only on the first outlet.
+    workHours: mapWorkHours(raw.user?.workHours || raw.workHours || outlet?.workHours),
+
+    // Raw approval/lifecycle flags + timestamps (Brand Info → Account record).
+    record: {
+      status: raw.status || null,
+      verificationAttemptCount: raw.verificationAttemptCount ?? null,
+      isApprovalAcknowledged: raw.isApprovalAcknowledged ?? null,
+      isReviewed: raw.isReviewed ?? null,
+      isApproved: raw.isApproved ?? null,
+      isRejected: raw.isRejected ?? null,
+      isRevoked: raw.isRevoked ?? null,
+      isSubscribed: raw.isSubscribed ?? null,
+      isActive: raw.isActive ?? null,
+      isDeleted: raw.isDeleted ?? null,
+      topAddedAt: raw.topAddedAt || null,
+      joinedDate: raw.joinedDate || null,
+      createdAt: raw.createdAt || null,
+      updatedAt: raw.updatedAt || null,
+    },
 
     planPrice: subscribed?.price != null ? formatCurrency(subscribed.price) : '—',
     planType:

@@ -20,6 +20,7 @@ import {
   CalendarDays,
   LayoutGrid,
   List,
+  RefreshCw,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import Table from "../../components/common/Table";
@@ -1259,10 +1260,15 @@ export default function Banner() {
 
         {/* Charts */}
         {chartsError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={13} className="shrink-0" />
-            Couldn't load chart data: {chartsError}
-          </div>
+          <EmptyState
+            variant="compact"
+            tone="error"
+            icon="error"
+            title="Couldn't load chart data"
+            description={chartsError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => allBannersQuery.refetch() }}
+            className="mb-4"
+          />
         )}
         {allBanners.length > 0 && (
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1364,8 +1370,14 @@ export default function Banner() {
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load banners: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load banners"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => bannersQuery.refetch() }}
+            />
           </div>
         )}
 

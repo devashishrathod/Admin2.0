@@ -13,7 +13,6 @@ import {
   Clock,
   XCircle,
   Loader2,
-  AlertTriangle,
   Gift,
   Wallet,
   Target,
@@ -38,6 +37,7 @@ import {
   REPORT_GROUP_BY_LABELS,
 } from "./promoCodeEnums";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 import { MISSING } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
@@ -309,9 +309,14 @@ export default function PromoCodeReports() {
         )}
 
         {!loading && loadError && (
-          <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load report: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load the report"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchReport() }}
+            />
           </div>
         )}
 
@@ -380,9 +385,7 @@ export default function PromoCodeReports() {
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-55 items-center justify-center text-[12.5px] text-neutral-500">
-                    No usage in this period yet.
-                  </div>
+                  <EmptyState variant="compact" icon="report" title="No usage in this period yet" description="Try a wider date range." />
                 )}
               </div>
 
@@ -413,7 +416,7 @@ export default function PromoCodeReports() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex h-35 items-center justify-center text-[12.5px] text-neutral-500">No action data yet.</div>
+                  <EmptyState variant="compact" icon="report" title="No action data yet" />
                 )}
               </div>
             </div>

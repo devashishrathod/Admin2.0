@@ -66,6 +66,7 @@ import { todayStr } from "../transaction/transactionUtils";
 import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
 import { pctChange, weekOverWeek, localDateStr } from "../../utils/overviewStats";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 import ValueOr from "../../components/common/ValueOr";
 import { MISSING, orText } from "../../utils/helpers";
 
@@ -2257,9 +2258,14 @@ export default function Settlement() {
         {loading ? (
           <Loader label="Loading settlements…" />
         ) : loadError ? (
-          <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load settlements: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load settlements"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => refetch() }}
+            />
           </div>
         ) : (
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">

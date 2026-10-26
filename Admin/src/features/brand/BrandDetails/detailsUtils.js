@@ -33,5 +33,11 @@ export function useBrandVoucherList(brandId) {
   const loadError = query.error?.message ?? "";
   // Server total (may be more than the 50 loaded).
   const total = query.data?.data?.total ?? vouchers.length;
-  return { vouchers, total, loading: query.isPending, error: isNotFoundMessage(loadError) ? "" : loadError };
+  return {
+    vouchers,
+    total,
+    loading: query.isPending,
+    error: isNotFoundMessage(loadError) ? "" : loadError,
+    refetch: query.refetch,
+  };
 }

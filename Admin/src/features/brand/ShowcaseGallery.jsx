@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import useBackLayer from "../../lib/useBackLayer";
 import {
   X,
   ChevronLeft,
@@ -22,7 +23,8 @@ import {
  *   • viewer — one item large, ‹ › (or ← →) to move, thumbnail strip below,
  *              Edit / Replace / Video clips / Delete for the current item
  * Reads the live `media` list, so edits/deletes show as soon as the
- * showcase cache refreshes. Esc goes viewer → grid → closed.
+ * showcase cache refreshes. Esc (and browser Back) goes viewer → grid →
+ * closed.
  * ---------------------------------------------------------------------- */
 
 // Thumbnails per grid page (3 rows of 8 on wide screens).
@@ -111,6 +113,11 @@ export default function ShowcaseGallery({
   useEffect(() => {
     if (!media.length) onClose();
   }, [media.length, onClose]);
+
+  // Browser Back steps out one level at a time, same as Esc: an item opened
+  // from the grid → back to the grid; then → closes the gallery.
+  useBackLayer(true, onClose);
+  useBackLayer(mode === "viewer" && startMode === "grid", showGrid);
 
   // Keyboard: ← → in the viewer; Esc steps back.
   useEffect(() => {

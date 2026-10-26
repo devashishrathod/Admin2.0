@@ -22,9 +22,11 @@ import {
   List,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, LabelList } from "recharts";
 import PlanDetails from "./PlanDetails";
+import EmptyState from "../../components/common/EmptyState";
 import Table, { StatusBadge } from "../../components/common/Table";
 import FeatureMaster, {
   FEATURE_KINDS,
@@ -1085,7 +1087,7 @@ export default function Plan() {
   const [planStatusFilter, setPlanStatusFilter] = useState("All");
   const [planPage, setPlanPage] = useState(1);
 
-  const { data: plansRes, isPending: loading, error: plansError } = usePlans();
+  const { data: plansRes, isPending: loading, error: plansError, refetch: refetchPlans } = usePlans();
   const loadError = plansError?.message ?? "";
   // `popular` isn't persisted by the API — remember the admin's choice per
   // plan here so a refetch doesn't drop it.
@@ -1618,8 +1620,14 @@ export default function Plan() {
             )}
 
             {!loading && loadError && (
-              <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-                Failed to load plans: {loadError}
+              <div className="mb-8 rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <EmptyState
+                  tone="error"
+                  icon="error"
+                  title="Couldn't load plans"
+                  description={loadError}
+                  action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchPlans() }}
+                />
               </div>
             )}
 

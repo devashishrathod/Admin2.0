@@ -8,10 +8,12 @@ import {
   Image as ImageIcon,
   Link as LinkIcon,
   Pencil,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { StatusBadge } from "../../components/common/Table";
 import EmptyState from "../../components/common/EmptyState";
+import NotFoundPage from "../../components/common/NotFoundPage";
 import TickerDeleteConfirmModal from "./TickerDeleteConfirmModal";
 import { deletePromotionalTicker } from "./services/PromotionalTickerApi";
 import { usePromotionalTicker } from "./queries/promotionalTickerQueries";
@@ -75,20 +77,28 @@ export default function PromotionalTickerDetailsPage() {
     );
   }
 
-  if (error || !ticker) {
+  if (error) {
     return (
       <EmptyState
         variant="page"
-        tone={error ? "error" : "default"}
-        icon={error ? "error" : "ticker"}
-        title={error ? "Couldn't load this promotional ticker" : "Promotional ticker not found"}
-        description={
-          error
-            ? `${error} — check your connection and try again.`
-            : "We couldn't find a promotional ticker with this link. It may have been deleted, or the link is no longer valid."
-        }
-        action={{ label: "Back to Promotional Tickers", icon: ArrowLeft, onClick: () => navigate("/promotional-ticker") }}
-        secondaryAction={error ? { label: "Try again", onClick: load } : undefined}
+        tone="error"
+        icon="error"
+        title="Couldn't load this promotional ticker"
+        description={`${error} — check your connection and try again.`}
+        action={{ label: "Try again", icon: RefreshCw, onClick: load }}
+        secondaryAction={{ label: "Back to Promotional Tickers", onClick: () => navigate("/promotional-ticker") }}
+      />
+    );
+  }
+
+  if (!ticker) {
+    return (
+      <NotFoundPage
+        title="Promotional ticker not found"
+        icon="ticker"
+        description="We couldn't find a promotional ticker with this link. It may have been deleted, or the link is no longer valid."
+        backLabel="Back to Promotional Tickers"
+        onBack={() => navigate("/promotional-ticker")}
       />
     );
   }

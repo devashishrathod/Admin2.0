@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import {
   ArrowLeft,
-  AlertTriangle,
+  RefreshCw,
   Star,
   ThumbsUp,
   ThumbsDown,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { usePlan, usePlanFeatures } from "./queries/planQueries";
+import EmptyState from "../../components/common/EmptyState";
 import { normalizePlan } from "./Plan";
 import { extractFeatures } from "./FeatureMaster";
 import { formatEntitlementValue } from "./PlanModals";
@@ -115,7 +116,7 @@ function FeatureTile({ icon: Icon, label, value, available }) {
 }
 
 export default function PlanDetails({ planId, onBack }) {
-  const { data: planRes, isPending: loading, error: planError } = usePlan(planId);
+  const { data: planRes, isPending: loading, error: planError, refetch: refetchPlan } = usePlan(planId);
   const error = planError?.message ?? "";
   const plan = useMemo(() => {
     if (!planRes) return null;
@@ -222,9 +223,15 @@ export default function PlanDetails({ planId, onBack }) {
         )}
 
         {!loading && error && (
-          <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load plan: {error}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load this plan"
+              description={error}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchPlan() }}
+              secondaryAction={{ label: "Back to plans", onClick: onBack }}
+            />
           </div>
         )}
 

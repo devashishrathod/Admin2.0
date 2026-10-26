@@ -21,8 +21,10 @@ import {
   Calendar,
   X,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 import { BrandAvatar, StatusBadge, SectionCard, EmptyState, ToggleSwitch, StatChip, RingStat } from "../brand/BrandShared";
+import CommonEmptyState from "../../components/common/EmptyState";
 import { REJECTION_REASONS } from "../brand/data/BrandData";
 import { useBrandDetails } from "../brand/queries/brandQueries";
 import { mapBrandDetail } from "../brand/brandMapper";
@@ -589,9 +591,14 @@ export default function VerificationDetails({
               {vouchersLoading ? (
                 <Loader variant="inline" center className="py-6" label="Loading listings…" />
               ) : vouchersError ? (
-                <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
-                  <AlertTriangle size={13} className="shrink-0" /> Failed to load listings: {vouchersError}
-                </div>
+                <CommonEmptyState
+                  variant="compact"
+                  tone="error"
+                  icon="error"
+                  title="Couldn't load listings"
+                  description={vouchersError}
+                  action={{ label: "Try again", icon: RefreshCw, onClick: () => vouchersQuery.refetch() }}
+                />
               ) : vouchers.length ? (
                 <div className="space-y-2">
                   {vouchers.map((v) => (
@@ -703,9 +710,14 @@ export default function VerificationDetails({
               {historyLoading ? (
                 <Loader variant="inline" center className="py-8" label="Loading timeline…" />
               ) : historyError ? (
-                <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
-                  <AlertTriangle size={13} className="shrink-0" /> Failed to load timeline: {historyError}
-                </div>
+                <CommonEmptyState
+                  variant="compact"
+                  tone="error"
+                  icon="error"
+                  title="Couldn't load timeline"
+                  description={historyError}
+                  action={{ label: "Try again", icon: RefreshCw, onClick: () => historyQuery.refetch() }}
+                />
               ) : currentAttemptHistory.length ? (
                 <>
                   <div className="px-1">
@@ -936,9 +948,14 @@ export default function VerificationDetails({
               {brandDetailLoading ? (
                 <Loader variant="inline" center className="py-6" label="Loading plan…" />
               ) : brandDetailError ? (
-                <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
-                  <AlertTriangle size={13} className="shrink-0" /> Failed to load plan: {brandDetailError}
-                </div>
+                <CommonEmptyState
+                  variant="compact"
+                  tone="error"
+                  icon="error"
+                  title="Couldn't load plan"
+                  description={brandDetailError}
+                  action={{ label: "Try again", icon: RefreshCw, onClick: () => brandDetailQuery.refetch() }}
+                />
               ) : brandDetail ? (
                 <div className="grid grid-cols-2 gap-2.5">
                   <StatChip icon={BadgeCheck} label="Plan" value={brandDetail.subscriptionPlan} tint="emerald" />
@@ -958,9 +975,14 @@ export default function VerificationDetails({
               {brandDetailLoading ? (
                 <Loader variant="inline" center className="py-6" label="Loading subscription…" />
               ) : brandDetailError ? (
-                <div className="flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-3 text-[12.5px] text-red-600 dark:text-red-400">
-                  <AlertTriangle size={13} className="shrink-0" /> Failed to load subscription: {brandDetailError}
-                </div>
+                <CommonEmptyState
+                  variant="compact"
+                  tone="error"
+                  icon="error"
+                  title="Couldn't load subscription"
+                  description={brandDetailError}
+                  action={{ label: "Try again", icon: RefreshCw, onClick: () => brandDetailQuery.refetch() }}
+                />
               ) : brandDetail?.subscriptionDetail ? (
                 <>
                   {/* Payment summary — gradient card, matching the reference's transaction card */}

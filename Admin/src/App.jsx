@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import LoginPage from './features/auth/components/LoginPage'
 
 import Layout from './components/layout/Layout'
@@ -38,6 +38,7 @@ import PromoCode from './features/promoCode/PromoCode'
 import PromoCodeReports from './features/promoCode/PromoCodeReports'
 import Notification from './features/notification/Notification'
 import Subscriptions from './features/subscriptions/Subscriptions'
+import NotFoundPage from './components/common/NotFoundPage'
 import Faq from './features/faq/Faq'
 // import LoginPage from './features/auth/components/LoginPage'
 
@@ -461,8 +462,16 @@ function App() {
 
 
 
-        {/* koi bhi unknown route → Login pe bhejo */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* koi bhi unknown route → common "Page not found" (Layout sends a
+            logged-out user to login first) */}
+        <Route
+          path="*"
+          element={
+            <Layout>
+              <NotFoundPage />
+            </Layout>
+          }
+        />
       </Routes>
       </BrandProvider>
     </BrowserRouter>

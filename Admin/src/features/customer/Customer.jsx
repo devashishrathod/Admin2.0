@@ -25,8 +25,8 @@ import {
   ArrowDownCircle,
   Sparkles,
   Loader2,
-  AlertTriangle,
   ChevronLeft,
+  RefreshCw,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
 import { useCustomers, useCustomer } from "./queries/customerQueries";
@@ -718,7 +718,7 @@ export default function Customer() {
 
   const [selectedId, setSelectedId] = useState(null);
 
-  const { data: listRes, isPending: loading, error } = useCustomers(CUSTOMER_LIST_PARAMS);
+  const { data: listRes, isPending: loading, error, refetch: refetchCustomers } = useCustomers(CUSTOMER_LIST_PARAMS);
   const loadError = error?.message ?? "";
 
   // List rows are lightweight — pull the fully-populated customer once the
@@ -876,9 +876,14 @@ export default function Customer() {
             {loading ? (
               <Loader label="Loading customers…" />
             ) : loadError ? (
-              <div className="flex items-center gap-2 rounded-2xl bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-                <AlertTriangle size={14} className="shrink-0" />
-                Failed to load customers: {loadError}
+              <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+                <EmptyState
+                  tone="error"
+                  icon="error"
+                  title="Couldn't load customers"
+                  description={loadError}
+                  action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchCustomers() }}
+                />
               </div>
             ) : filtered.length === 0 ? (
               <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, X, Sparkles, Loader2 } from "lucide-react";
 import { ToggleSwitch, Field, inputClass } from "../../BrandShared";
+import useBackLayer from "../../../../lib/useBackLayer";
 
 /* -------------------------------------------------------------------------
  * Top Brand Modal
@@ -15,6 +16,7 @@ export default function TopBrandModal({ brand, onClose, onSubmit }) {
   const [topOrder, setTopOrder] = useState(brand.topOrder ?? 0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  useBackLayer(true, () => !submitting && onClose()); // browser Back closes it
 
   const handleSubmit = async (e) => {
     e.preventDefault();

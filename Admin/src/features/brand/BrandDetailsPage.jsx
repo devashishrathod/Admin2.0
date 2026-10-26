@@ -1,10 +1,10 @@
 import React, { useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useBrands } from "./BrandContext";
 import { useConfirmDelete } from "./BrandShared";
 import BrandDetails from "./BrandDetails/BrandDetails";
-import EmptyState from "../../components/common/EmptyState";
+import NotFoundPage from "../../components/common/NotFoundPage";
 import Loader from "../../components/common/Loader";
 
 export default function BrandDetailsPage() {
@@ -55,13 +55,12 @@ export default function BrandDetailsPage() {
 
   if (!brand) {
     return (
-      <EmptyState
-        variant="page"
-        icon="brand"
+      <NotFoundPage
         title="Brand not found"
+        icon="brand"
         description="We couldn't find a brand with this link. It may have been deleted, or the link is no longer valid."
-        action={{ label: "Back to Brands", icon: ArrowLeft, onClick: goBack }}
-        secondaryAction={{ label: "Brand Waiting", onClick: () => navigate("/brand-waiting") }}
+        backLabel="Back to Brands"
+        onBack={goBack}
       />
     );
   }

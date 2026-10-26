@@ -22,12 +22,22 @@ import {
   ShieldCheck,
   LogIn,
   FileText,
+  List,
+  LayoutGrid,
+  MessageCircle,
+  Check,
+  ArrowRight,
 } from "lucide-react";
-import { EmptyState, VerifiedMark, inputClass } from "../../BrandShared";
+import { StoreAwning, OpenSign, StoreTile } from "../components/Storefront";
+
+// Awning color: green own outlet, amber franchise, grey when inactive.
+const awningVariant = (o) => (o?.isActive === false ? "closed" : o?.outletType === "FRANCHISE" ? "franchise" : "own");
+import { EmptyState, VerifiedMark, inputClass, ToggleSwitch } from "../../BrandShared";
 import { ChangeNumberModal, Modal, ModalActions, Notice } from "../../BrandAdminExtras";
-import { getBrandOutlets, getLocation, resendOutletOtp, verifyOutletOtp } from "../../services/BrandApi";
+import { getBrandOutlets, getLocation, resendOutletOtp, updateOutlet, verifyOutletOtp } from "../../services/BrandApi";
 import { queryKeys } from "../../../../lib/query";
 import Loader from "../../../../components/common/Loader";
+import ConfirmActionModal from "../../../../components/common/ConfirmActionModal";
 import { CopyButton } from "../components/Bento";
 import { glassClass, innerTile, tints, has } from "../components/bentoStyles";
 import ValueOr from "../../../../components/common/ValueOr";
@@ -43,7 +53,8 @@ import { isMissing, MISSING } from "../../../../utils/helpers";
  *   Work hours have no admin GET; they come with the brand detail's main
  *   outlet only, so they show on that card.
  * Outlets carry no photos in the API — brand photos live in Showcase Media.
- * Actions: Edit (#30), Change number (#28a), Resend code (#28).
+ * Actions: Active/Inactive switch (#30 isActive), Change number (#28a),
+ * Resend code (#28).
  * ---------------------------------------------------------------------- */
 
 const humanize = (v) =>
@@ -327,7 +338,7 @@ function VerifyOutletModal({ brandId, outlet, sentMessage, onClose, onSaved }) {
 
 /* ---- Outlet card ------------------------------------------------------ */
 
-function OutletCard({ outlet, mainOutlet, index, readOnly, expanded, onToggle, onVerify, onChangeNumber, onResend }) {
+function OutletCard({ outlet, mainOutlet, index, readOnly, expanded, onToggle, onVerify, onChangeNumber, onResend, statusBusy, onToggleActive }) {
   const verified = outlet.manager?.isWhatsappVerified === true;
   const loginOff = outlet.manager?.isActive === false;
   const hidden = outlet.isActive === false;
@@ -337,8 +348,10 @@ function OutletCard({ outlet, mainOutlet, index, readOnly, expanded, onToggle, o
 
   return (
     <div className={`${glassClass} overflow-hidden transition-shadow ${expanded ? "!bg-white/80 dark:!bg-neutral-900/80" : ""} ${hidden ? "opacity-85" : ""}`}>
-      {/* Header — always visible, click to expand */}
-      <button type="button" onClick={onToggle} aria-expanded={expanded} className="flex w-full items-center gap-3 p-4 text-left">
+      {/* Header — always visible, click to expand. The status switch sits
+          outside the expand button (no button inside a button). */}
+      <div className="flex items-center pr-4">
+      <button type="button" onClick={onToggle} aria-expanded={expanded} className="flex min-w-0 flex-1 items-center gap-3 p-4 text-left">
         <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isFranchise ? tints.violet : tints.emerald}`}>
           {isFranchise ? <Building2 size={18} /> : <Store size={18} />}
         </span>
@@ -358,8 +371,27 @@ function OutletCard({ outlet, mainOutlet, index, readOnly, expanded, onToggle, o
           <p className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300"><ValueOr value={outlet.whatsappNumber ? `+91 ${outlet.whatsappNumber}` : null} fallback={MISSING.phone} /></p>
           <p className="text-[11px] text-neutral-400">{isMissing(joined) ? "Join date not set" : `Joined ${joined}`}</p>
         </div>
-        <ChevronDown size={16} className={`shrink-0 text-neutral-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
       </button>
+      {!readOnly && outlet._id && (
+        <div className="mr-2 flex shrink-0 items-center gap-2 border-l border-neutral-200/70 pl-3 dark:border-white/10">
+          <span className={`hidden text-[11px] font-semibold sm:inline ${hidden ? "text-neutral-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+            {statusBusy ? "Saving…" : hidden ? "Inactive" : "Active"}
+          </span>
+          {statusBusy ? (
+            <Loader2 size={14} className="animate-spin text-neutral-400" />
+          ) : (
+            <ToggleSwitch
+              checked={!hidden}
+              onChange={onToggleActive}
+              title={hidden ? "Click to make this outlet Active" : "Click to make this outlet Inactive"}
+            />
+          )}
+        </div>
+      )}
+      <button type="button" onClick={onToggle} aria-label={expanded ? "Collapse" : "Expand"} className="shrink-0 p-1">
+        <ChevronDown size={16} className={`text-neutral-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      </div>
 
       {/* Details */}
       {expanded && (
@@ -469,6 +501,167 @@ function OutletCard({ outlet, mainOutlet, index, readOnly, expanded, onToggle, o
   );
 }
 
+/* ---- Grid card (storefront) ------------------------------------------- */
+
+// One-line address for a grid card. Same query key as AddressBlock, so
+// opening the card afterwards reuses the fetched row.
+function useOutletAddressLine(outlet, mainOutlet) {
+  const known = mainOutlet?.location ? toAddress(mainOutlet.location, mainOutlet.geo) : null;
+  const query = useQuery({
+    queryKey: queryKeys.subBrands.view("location", { id: outlet.locationId }),
+    queryFn: () => getLocation(outlet.locationId),
+    enabled: !known && Boolean(outlet.locationId),
+    staleTime: 5 * 60 * 1000,
+  });
+  const addr = known || toAddress(query.data);
+  if (!known && outlet.locationId && query.isPending) return { loading: true };
+  if (!addr) return { text: "" };
+  return {
+    text:
+      (has(addr.formatted) && addr.formatted) ||
+      [addr.line1, addr.line2, addr.city, addr.state, addr.zipcode].filter(has).map(titleCase).join(", "),
+  };
+}
+
+// Grid tile in the Vendor Panel's storefront style: awning colored by
+// outlet type (grey when inactive), a hanging OPEN/CLOSED sign, store ID
+// signboard, WhatsApp + joined tiles, a map-style address tile and a
+// counter footer with the active switch + "Explore details".
+function OutletGridCard({ outlet, mainOutlet, readOnly, onOpen, statusBusy, onToggleActive }) {
+  const verified = outlet.manager?.isWhatsappVerified === true;
+  const loginOff = outlet.manager?.isActive === false;
+  const isActive = outlet.isActive !== false;
+  const isFranchise = outlet.outletType === "FRANCHISE";
+  const variant = awningVariant(outlet);
+  const storeId = outlet.storeId || outlet.uniqueId;
+  const joined = fmtDate(outlet.joinedDate || outlet.createdAt);
+  const address = useOutletAddressLine(outlet, mainOutlet);
+
+  return (
+    <article className="relative flex flex-col overflow-hidden rounded-2xl border border-emerald-100/80 bg-white shadow-[0_8px_24px_rgba(4,120,87,0.07)] transition-transform duration-200 hover:-translate-y-0.5 dark:border-white/5 dark:bg-neutral-900 dark:shadow-none">
+      <StoreAwning variant={variant} height="h-9">
+        <span
+          className={`absolute left-3 top-[7px] rounded-full bg-white px-2.5 py-0.5 text-[10.5px] font-bold shadow dark:bg-neutral-900 ${
+            variant === "closed"
+              ? "text-neutral-600 dark:text-neutral-300"
+              : isFranchise
+              ? "text-amber-700 dark:text-amber-400"
+              : "text-emerald-700 dark:text-emerald-400"
+          }`}
+        >
+          {isFranchise ? "Franchise" : "Own Outlet"}
+        </span>
+        {mainOutlet && (
+          <span className="absolute left-[100px] top-[7px] flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10.5px] font-bold text-amber-600 shadow dark:bg-neutral-900 dark:text-amber-400">
+            <Star size={9} fill="currentColor" /> Main
+          </span>
+        )}
+      </StoreAwning>
+
+      <OpenSign open={isActive} className="absolute right-4 top-[40px] z-10" />
+
+      <div className="flex flex-1 flex-col gap-2.5 px-3.5 pb-3 pt-2.5">
+        {/* Signboard: store icon + store id */}
+        <div className="flex items-center gap-2.5 pr-[64px]">
+          <StoreTile variant={variant} />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold tracking-[0.12em] text-neutral-500 dark:text-neutral-400">STORE ID</p>
+            <div className="flex items-center gap-1">
+              <span className="truncate font-mono text-[13px] font-semibold normal-case text-neutral-900 dark:text-neutral-100">
+                {storeId ? `#${storeId}` : "Not set"}
+              </span>
+              {storeId && (
+                <span className="-my-1">
+                  <CopyButton value={storeId} label="store ID" />
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Contact tiles */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex min-w-0 flex-col gap-0.5 rounded-xl bg-emerald-50/60 px-2.5 py-1.5 dark:bg-white/5">
+            <span className="flex items-center gap-1 text-[10.5px] font-semibold text-neutral-600 dark:text-neutral-400">
+              <MessageCircle size={11} className="text-emerald-700 dark:text-emerald-400" />
+              WhatsApp
+            </span>
+            <span className="flex min-w-0 items-center gap-1 text-[12px] font-bold text-neutral-900 dark:text-neutral-100">
+              <span className="truncate">{outlet.whatsappNumber || "—"}</span>
+              {outlet.whatsappNumber &&
+                (verified ? (
+                  <span title="WhatsApp number verified" className="text-emerald-600 dark:text-emerald-400">
+                    <Check size={12} strokeWidth={3} />
+                  </span>
+                ) : (
+                  <span title="Manager hasn't verified yet" className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                ))}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5 rounded-xl bg-emerald-50/60 px-2.5 py-1.5 dark:bg-white/5">
+            <span className="flex items-center gap-1 text-[10.5px] font-semibold text-neutral-600 dark:text-neutral-400">
+              <CalendarDays size={11} className="text-emerald-700 dark:text-emerald-400" />
+              Joined
+            </span>
+            <span className="truncate text-[12px] font-bold text-neutral-900 dark:text-neutral-100">{isMissing(joined) ? "—" : joined}</span>
+          </div>
+        </div>
+
+        {/* Address — a little street-map tile */}
+        <div className="map-grid-bg flex items-start gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/30 px-2.5 py-2 dark:border-white/10 dark:bg-neutral-950/40">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-[0_0_0_4px_rgba(4,120,87,0.12)] dark:bg-emerald-600">
+            <MapPin size={13} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[9.5px] font-bold tracking-[0.12em] text-neutral-500 dark:text-neutral-400">ADDRESS</p>
+            <p className="line-clamp-2 text-[12px] font-medium capitalize leading-snug text-neutral-800 dark:text-neutral-200">
+              {address.loading ? "Loading address…" : address.text || "No location saved yet"}
+            </p>
+          </div>
+        </div>
+
+        {loginOff && (
+          <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-red-600 dark:text-red-400">
+            <LogIn size={12} /> Manager login is off
+          </p>
+        )}
+      </div>
+
+      {/* Counter: active switch + details */}
+      <div className="mt-auto flex items-center gap-2 border-t-[1.5px] border-dashed border-emerald-100 bg-emerald-50/20 px-3.5 py-2.5 dark:border-white/10 dark:bg-neutral-950/30">
+        {!readOnly && outlet._id ? (
+          <div className="flex items-center gap-2">
+            {statusBusy ? (
+              <Loader2 size={16} className="animate-spin text-neutral-400" />
+            ) : (
+              <ToggleSwitch
+                checked={isActive}
+                onChange={onToggleActive}
+                title={isActive ? "Click to make this outlet Inactive" : "Click to make this outlet Active"}
+              />
+            )}
+            <span className={`text-[12px] font-semibold ${isActive ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-500 dark:text-neutral-400"}`}>
+              {statusBusy ? "Saving…" : isActive ? "Active" : "Inactive"}
+            </span>
+          </div>
+        ) : (
+          <span className={`text-[12px] font-semibold ${isActive ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-500"}`}>
+            {isActive ? "Active" : "Inactive"}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="group ml-auto flex h-8 shrink-0 items-center gap-1 rounded-lg bg-emerald-700 px-3 text-[12px] font-bold text-white transition-colors hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+        >
+          Details
+          <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+        </button>
+      </div>
+    </article>
+  );
+}
+
 /* ---- Tab -------------------------------------------------------------- */
 
 const FILTERS = [
@@ -499,6 +692,7 @@ export default function SubBrandTab({ brand, readOnly = false }) {
   const outlets = useMemo(() => query.data ?? [], [query.data]);
   const main = brand.outlets?.[0];
 
+  const [view, setView] = useState("grid"); // "grid" | "list"
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [openIds, setOpenIds] = useState(() => new Set());
@@ -530,6 +724,37 @@ export default function SubBrandTab({ brand, readOnly = false }) {
     query.refetch();
   };
 
+  // Active / Inactive switch — PUT /subBrands/update/:id { isActive } (#30).
+  // The switch only opens a confirmation; the save runs from the modal.
+  const [statusBusyId, setStatusBusyId] = useState(null);
+  const [statusTarget, setStatusTarget] = useState(null); // outlet awaiting confirmation
+  const [statusError, setStatusError] = useState("");
+  const toggleActive = (o) => {
+    if (statusBusyId) return;
+    setStatusError("");
+    setStatusTarget(o);
+  };
+  const confirmStatus = async () => {
+    const o = statusTarget;
+    if (!o) return;
+    const makeActive = o.isActive === false;
+    const name = o.storeId || o.uniqueId || "This outlet";
+    setStatusBusyId(o._id);
+    setStatusError("");
+    setMessage(null);
+    try {
+      await updateOutlet(o._id, { isActive: makeActive });
+      setStatusTarget(null);
+      done(`${name} is now ${makeActive ? "active" : "inactive"}.`);
+    } catch (err) {
+      setStatusError(err.message || "Couldn't change the outlet status.");
+    } finally {
+      setStatusBusyId(null);
+    }
+  };
+  const statusMakeActive = statusTarget?.isActive === false;
+  const statusName = statusTarget ? statusTarget.storeId || statusTarget.uniqueId || "this outlet" : "";
+
   return (
     <div>
       {/* Header */}
@@ -543,16 +768,42 @@ export default function SubBrandTab({ brand, readOnly = false }) {
             <p className="text-[12px] text-neutral-500">Tap an outlet to see its full details</p>
           </div>
         </div>
-        {shown.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setOpenIds(allOpen ? new Set() : new Set(shown.map((o) => o._id)))}
-            className={`${glassClass} flex h-9 w-fit items-center gap-1.5 !rounded-full px-3.5 text-[12px] font-semibold text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white`}
-          >
-            <ChevronDown size={13} className={allOpen ? "rotate-180" : ""} />
-            {allOpen ? "Collapse all" : "Expand all"}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {outlets.length > 0 && (
+            <div className={`${glassClass} flex items-center gap-0.5 !rounded-full p-1`}>
+              {[
+                ["grid", LayoutGrid, "Grid"],
+                ["list", List, "List"],
+              ].map(([key, Icon, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setView(key);
+                    setOpenIds(new Set()); // start each view collapsed
+                  }}
+                  aria-pressed={view === key}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
+                    view === key ? "bg-emerald-400 text-neutral-950 shadow-sm" : "text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+                  }`}
+                >
+                  <Icon size={12} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {shown.length > 0 && view === "list" && (
+            <button
+              type="button"
+              onClick={() => setOpenIds(allOpen ? new Set() : new Set(shown.map((o) => o._id)))}
+              className={`${glassClass} flex h-9 w-fit items-center gap-1.5 !rounded-full px-3.5 text-[12px] font-semibold text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white`}
+            >
+              <ChevronDown size={13} className={allOpen ? "rotate-180" : ""} />
+              {allOpen ? "Collapse all" : "Expand all"}
+            </button>
+          )}
+        </div>
       </div>
 
       {query.isPending ? (
@@ -614,6 +865,40 @@ export default function SubBrandTab({ brand, readOnly = false }) {
 
           {shown.length === 0 ? (
             <div className={`${glassClass} py-12 text-center text-[12.5px] text-neutral-500`}>No outlets match this filter.</div>
+          ) : view === "grid" ? (
+            // Grid — compact tiles; an opened outlet spans the full row.
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+              {shown.map((o, i) => {
+                const mainOutlet = main && has(main.uniqueId) && main.uniqueId === o.uniqueId ? main : null;
+                return openIds.has(o._id) ? (
+                  <div key={o._id || i} className="col-span-full">
+                    <OutletCard
+                      outlet={o}
+                      index={i}
+                      mainOutlet={mainOutlet}
+                      readOnly={readOnly}
+                      expanded
+                      onToggle={() => toggle(o._id)}
+                      onVerify={() => setModal({ kind: "verify", outlet: o })}
+                      onResend={() => setModal({ kind: "resend", outlet: o })}
+                      onChangeNumber={() => setModal({ kind: "number", outlet: o })}
+                      statusBusy={statusBusyId === o._id}
+                      onToggleActive={() => toggleActive(o)}
+                    />
+                  </div>
+                ) : (
+                  <OutletGridCard
+                    key={o._id || i}
+                    outlet={o}
+                    mainOutlet={mainOutlet}
+                    readOnly={readOnly}
+                    onOpen={() => toggle(o._id)}
+                    statusBusy={statusBusyId === o._id}
+                    onToggleActive={() => toggleActive(o)}
+                  />
+                );
+              })}
+            </div>
           ) : (
             <div className="space-y-3">
               {shown.map((o, i) => (
@@ -628,12 +913,35 @@ export default function SubBrandTab({ brand, readOnly = false }) {
                   onVerify={() => setModal({ kind: "verify", outlet: o })}
                   onResend={() => setModal({ kind: "resend", outlet: o })}
                   onChangeNumber={() => setModal({ kind: "number", outlet: o })}
+                  statusBusy={statusBusyId === o._id}
+                  onToggleActive={() => toggleActive(o)}
                 />
               ))}
             </div>
           )}
         </>
       )}
+
+      <ConfirmActionModal
+        open={Boolean(statusTarget)}
+        tone={statusMakeActive ? "neutral" : "danger"}
+        icon={statusMakeActive ? CheckCircle2 : EyeOff}
+        title={statusMakeActive ? "Activate this outlet?" : "Deactivate this outlet?"}
+        description={
+          statusMakeActive
+            ? `${statusName} will be visible to customers again.`
+            : `${statusName} will be hidden from customers until it's turned back on.`
+        }
+        confirmLabel={statusMakeActive ? "Activate" : "Deactivate"}
+        submitting={Boolean(statusBusyId)}
+        error={statusError}
+        onConfirm={confirmStatus}
+        onClose={() => {
+          if (statusBusyId) return;
+          setStatusTarget(null);
+          setStatusError("");
+        }}
+      />
 
       {/* Edit outlet modal — commented out with its button.
       {modal?.kind === "edit" && <EditOutletModal outlet={modal.outlet} onClose={() => setModal(null)} onSaved={done} />} */}

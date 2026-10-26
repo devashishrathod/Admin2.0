@@ -10,30 +10,19 @@ import {
   Receipt,
   UserCog,
   ExternalLink,
-  Wallet,
-  ShieldCheck,
-  Clock3,
-  IndianRupee,
   Hash,
   Calendar,
-  Tag,
   FlaskConical,
+  RefreshCw,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  XAxis,
-  Tooltip,
-} from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import Table from "../../components/common/Table";
 import { useAllSubscriptionPages } from "./queries/subscriptionsQueries";
-import { formatBatch, MISSING } from "../../utils/helpers";
+import { formatBatch, MISSING, isNotFoundMessage } from "../../utils/helpers";
+import EmptyState from "../../components/common/EmptyState";
 import ValueOr from "../../components/common/ValueOr";
 import Loader from "../../components/common/Loader";
+import SubscriptionsOverview from "./SubscriptionsOverview";
 
 const PRICING_COLORS = { list: "#22c55e", discount: "#f59e0b", gst: "#38bdf8", payable: "#a78bfa" };
 
@@ -81,25 +70,6 @@ function formatDateTime(iso) {
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-// Revenue trend — bucketed from the currently-loaded page's real rows (no
-// dedicated time-series endpoint exists yet), grouped by the month each
-// subscription was created.
-function buildRevenueTrend(rows) {
-  const buckets = new Map();
-  rows.forEach((r) => {
-    if (!r.createdAt) return;
-    const d = new Date(r.createdAt);
-    if (Number.isNaN(d.getTime())) return;
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    const label = d.toLocaleDateString("en-IN", { month: "short" });
-    const entry = buckets.get(key) || { key, label, paid: 0, due: 0, order: d.getFullYear() * 12 + d.getMonth() };
-    entry.paid += r.paidAmount || 0;
-    entry.due += r.dueAmount || 0;
-    buckets.set(key, entry);
-  });
-  return Array.from(buckets.values()).sort((a, b) => a.order - b.order);
-}
-
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
@@ -110,27 +80,6 @@ function ChartTooltip({ active, payload, label }) {
           {p.name}: {formatCurrency(p.value)}
         </div>
       ))}
-    </div>
-  );
-}
-
-const STAT_TINTS = {
-  emerald: "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400",
-  amber: "bg-amber-400/10 text-amber-600 dark:text-amber-400",
-  sky: "bg-sky-400/10 text-sky-600 dark:text-sky-400",
-  violet: "bg-violet-400/10 text-violet-600 dark:text-violet-400",
-};
-
-function StatCardMini({ icon: Icon, label, value, tint = "emerald" }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${STAT_TINTS[tint]}`}>
-        <Icon size={16} />
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-[16px] font-bold leading-tight text-neutral-900 dark:text-neutral-50">{value}</p>
-        <p className="truncate text-[11px] text-neutral-500">{label}</p>
-      </div>
     </div>
   );
 }
@@ -428,7 +377,9 @@ export default function Subscriptions({ scope = "all" }) {
   const {
     data: allRows = [],
     isPending: loading,
+    isFetching,
     error,
+    refetch,
   } = useAllSubscriptionPages(
     {
       search: debouncedSearch,
@@ -437,7 +388,10 @@ export default function Subscriptions({ scope = "all" }) {
     },
     { placeholderData: keepPreviousData }
   );
-  const loadError = error?.message ?? "";
+  // A "not found" reply just means nothing matches — the table's empty
+  // state, not an error.
+  const rawLoadError = error?.message ?? "";
+  const loadError = isNotFoundMessage(rawLoadError) ? "" : rawLoadError;
 
   const scopedRows = useMemo(
     () => allRows.filter((r) => isDummySubscription(r) === isDummyScope),
@@ -567,50 +521,6 @@ export default function Subscriptions({ scope = "all" }) {
 
   const tableRows = rows.map((r) => ({ ...r, id: r._id }));
 
-  const activeCount = rows.filter((r) => r.status === "ACTIVE" && !r.isLapsed).length;
-  const expiringSoon = rows.filter((r) => !r.isLapsed && r.daysRemaining != null && r.daysRemaining <= 7).length;
-  const paidTotal = rows.reduce((s, r) => s + (r.paidAmount || 0), 0);
-  const dueTotal = rows.reduce((s, r) => s + (r.dueAmount || 0), 0);
-  const revenueTrend = buildRevenueTrend(rows);
-  const topPlanEntry = (() => {
-    const counts = {};
-    rows.forEach((r) => {
-      const name = r.plan?.name;
-      if (!name) return;
-      counts[name] = (counts[name] || 0) + 1;
-    });
-    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    if (!top) return null;
-    const total = Object.values(counts).reduce((s, n) => s + n, 0);
-    return {
-      name: top[0],
-      count: top[1],
-      mix: [
-        { name: top[0], value: top[1] },
-        { name: "Others", value: total - top[1] },
-      ].filter((d) => d.value > 0),
-    };
-  })();
-  const topSourceEntry = (() => {
-    const counts = {};
-    rows.forEach((r) => {
-      const source = r.source;
-      if (!source) return;
-      counts[source] = (counts[source] || 0) + 1;
-    });
-    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    if (!top) return null;
-    const total = Object.values(counts).reduce((s, n) => s + n, 0);
-    return {
-      name: top[0],
-      count: top[1],
-      mix: [
-        { name: top[0], value: top[1] },
-        { name: "Others", value: total - top[1] },
-      ].filter((d) => d.value > 0),
-    };
-  })();
-
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="w-full">
@@ -630,109 +540,9 @@ export default function Subscriptions({ scope = "all" }) {
           </div>
         </div>
 
-        {/* Stat row */}
-        <div className="mb-4 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-          <StatCardMini icon={ShieldCheck} tint="emerald" label="Active (this page)" value={activeCount} />
-          <StatCardMini icon={Clock3} tint="amber" label="Expiring ≤ 7 days" value={expiringSoon} />
-          <StatCardMini icon={IndianRupee} tint="sky" label="Paid (this page)" value={formatCurrency(paidTotal)} />
-          <StatCardMini icon={Wallet} tint="violet" label="Due (this page)" value={formatCurrency(dueTotal)} />
-        </div>
-
-        {/* Plan hero card + top source card + revenue trend */}
-        <div className="mb-5 grid grid-cols-1 gap-3.5 lg:grid-cols-[0.8fr_0.8fr_1.6fr]">
-          <div className="relative flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-4 text-white">
-            <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
-            <div className="relative min-w-0 flex-1">
-              <p className="text-[10.5px] font-medium uppercase tracking-wider text-emerald-100">Most Subscribed Plan</p>
-              {topPlanEntry ? (
-                <>
-                  <p className="mt-2 truncate text-[17px] font-bold leading-tight">{topPlanEntry.name}</p>
-                  <p className="mt-1 text-[11.5px] text-emerald-100">
-                    {topPlanEntry.count} of {rows.length} on this page
-                  </p>
-                </>
-              ) : (
-                <p className="mt-2 text-[12.5px] text-emerald-100">No plan data on this page.</p>
-              )}
-            </div>
-            {topPlanEntry && topPlanEntry.mix.length > 1 ? (
-              <div className="relative h-16 w-16 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={topPlanEntry.mix} dataKey="value" innerRadius={20} outerRadius={30} paddingAngle={2} stroke="none">
-                      <Cell fill="#ffffff" />
-                      <Cell fill="#ffffff" opacity={0.25} />
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold">
-                  {Math.round((topPlanEntry.count / rows.length) * 100)}%
-                </div>
-              </div>
-            ) : (
-              <CreditCard size={22} className="relative shrink-0 text-emerald-100" />
-            )}
-          </div>
-
-          <div className="relative flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 to-sky-800 p-4 text-white">
-            <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
-            <div className="relative min-w-0 flex-1">
-              <p className="text-[10.5px] font-medium uppercase tracking-wider text-sky-100">Top Source</p>
-              {topSourceEntry ? (
-                <>
-                  <p className="mt-2 truncate text-[17px] font-bold leading-tight">{topSourceEntry.name}</p>
-                  <p className="mt-1 text-[11.5px] text-sky-100">
-                    {topSourceEntry.count} of {rows.length} on this page
-                  </p>
-                </>
-              ) : (
-                <p className="mt-2 text-[12.5px] text-sky-100">No source data on this page.</p>
-              )}
-            </div>
-            {topSourceEntry && topSourceEntry.mix.length > 1 ? (
-              <div className="relative h-16 w-16 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={topSourceEntry.mix} dataKey="value" innerRadius={20} outerRadius={30} paddingAngle={2} stroke="none">
-                      <Cell fill="#ffffff" />
-                      <Cell fill="#ffffff" opacity={0.25} />
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold">
-                  {Math.round((topSourceEntry.count / rows.length) * 100)}%
-                </div>
-              </div>
-            ) : (
-              <Tag size={22} className="relative shrink-0 text-sky-100" />
-            )}
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-[13px] font-bold text-neutral-900 dark:text-neutral-50">Revenue Trend</p>
-              <span className="text-[11px] text-neutral-500">This page's rows, by month created</span>
-            </div>
-            {revenueTrend.length ? (
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={revenueTrend} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="paidFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#22c55e" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="label" tick={{ fill: "#8C9A91", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Area type="monotone" dataKey="paid" name="Paid" stroke="#22c55e" strokeWidth={2.4} fill="url(#paidFill)" />
-                  <Area type="monotone" dataKey="due" name="Due" stroke="#f59e0b" strokeWidth={2} fill="none" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-40 items-center justify-center text-[12.5px] text-neutral-500">No data yet.</div>
-            )}
-          </div>
-        </div>
+        {/* Overview — every subscription matching the filters below (status,
+            source, search), across all pages, not just the table page. */}
+        <SubscriptionsOverview rows={scopedRows} loading={isFetching} />
 
         {/* Filters */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -783,9 +593,13 @@ export default function Subscriptions({ scope = "all" }) {
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load subscriptions: {loadError}
-          </div>
+          <EmptyState
+            tone="error"
+            icon="error"
+            title="Couldn't load subscriptions"
+            description={loadError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => refetch() }}
+          />
         )}
 
         {!loading && !loadError && (

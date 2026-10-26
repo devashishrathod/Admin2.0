@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import EmptyState from "../../components/common/EmptyState";
+import NotFoundPage from "../../components/common/NotFoundPage";
 import {
   ArrowLeft,
+  RefreshCw,
   ShieldCheck,
   ShieldAlert,
   FileDown,
@@ -302,20 +304,28 @@ export default function TransactionDetails() {
     );
   }
 
-  if (error || !details?.payment) {
+  if (error) {
     return (
       <EmptyState
         variant="page"
-        tone={error ? "error" : "default"}
-        icon={error ? "error" : "transaction"}
-        title={error ? "Couldn't load this claim" : "Claim not found"}
-        description={
-          error
-            ? `${error} — check your connection and try again.`
-            : "We couldn't find a voucher claim with this link. It may have been removed, or the link is no longer valid."
-        }
-        action={{ label: "Back to Transactions", icon: ArrowLeft, onClick: () => navigate("/transaction") }}
-        secondaryAction={error ? { label: "Try again", onClick: () => refetch() } : undefined}
+        tone="error"
+        icon="error"
+        title="Couldn't load this claim"
+        description={`${error} — check your connection and try again.`}
+        action={{ label: "Try again", icon: RefreshCw, onClick: () => refetch() }}
+        secondaryAction={{ label: "Back to Transactions", onClick: () => navigate("/transaction") }}
+      />
+    );
+  }
+
+  if (!details?.payment) {
+    return (
+      <NotFoundPage
+        title="Claim not found"
+        icon="transaction"
+        description="We couldn't find a voucher claim with this link. It may have been removed, or the link is no longer valid."
+        backLabel="Back to Transactions"
+        onBack={() => navigate("/transaction")}
       />
     );
   }

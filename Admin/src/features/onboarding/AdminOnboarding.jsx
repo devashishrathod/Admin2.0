@@ -11,6 +11,7 @@ import { DeedScreen, SubscribePlanScreen } from "./screens/AgreementScreens";
 import { BrandBasicsScreen, ProfessionalScreen, OutletsScreen } from "./screens/BrandSetupScreens";
 import { ReviewScreen, UnderReviewScreen } from "./screens/ReviewScreens";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 
 /* -------------------------------------------------------------------------
  * Admin · Add brand (Onboarding v2)
@@ -207,10 +208,13 @@ function OnboardingWizard({ brandId }) {
   }
   if (!status) {
     return (
-      <div className="mx-auto flex max-w-[560px] flex-col gap-3">
-        <Note tone="error">{loadError || "Couldn't load this brand's onboarding."}</Note>
-        <PrimaryButton onClick={load}><RefreshCw size={14} /> Try again</PrimaryButton>
-      </div>
+      <EmptyState
+        tone="error"
+        icon="error"
+        title="Couldn't load this brand's onboarding"
+        description={loadError}
+        action={{ label: "Try again", icon: RefreshCw, onClick: load }}
+      />
     );
   }
 

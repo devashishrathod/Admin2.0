@@ -8,6 +8,7 @@ import { getVerificationHistory } from "../newOnboarding/services/NewOnboardingA
 import { queryKeys } from "../../lib/query";
 import { isNotFoundMessage, MISSING } from "../../utils/helpers";
 import Loader from "../../components/common/Loader";
+import useBackLayer from "../../lib/useBackLayer";
 
 /* -------------------------------------------------------------------------
  * Brand detail add-ons for super admin API doc endpoints the page didn't
@@ -73,6 +74,7 @@ export function Notice({ tone, children }) {
 }
 
 export function Modal({ title, subtitle, onClose, children }) {
+  useBackLayer(true, onClose); // browser Back closes the modal first
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl dark:bg-neutral-900">

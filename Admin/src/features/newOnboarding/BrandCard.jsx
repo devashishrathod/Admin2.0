@@ -63,7 +63,7 @@ export default function BrandCard({ verification, onOpen }) {
                 {brand.brandName}
               </h3>
               <p className="mt-0.5 line-clamp-1 text-[11px] text-neutral-500">
-                {brand.legalBusinessName || "—"}
+                {brand.legalBusinessName || "No legal name"}
               </p>
             </div>
           </div>

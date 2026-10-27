@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Search,
@@ -19,23 +20,23 @@ import {
   CalendarDays,
   LayoutGrid,
   List,
+  RefreshCw,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import Table from "../../components/common/Table";
 import {
   createBanner,
-  getBanners,
   updateBanner,
   deleteBanner,
-  getBannerById,
   buildRedirectPayload,
   presignUploadAndConfirm,
   BANNER_TYPES,
   BANNER_UPLOAD_PURPOSE,
   REDIRECT_TYPES,
 } from "./services/BannerApi";
-import { getCategories } from "../category/services/CategoryApi";
-import { getAllBrands } from "../brand/services/BrandApi";
+import { bannerQueryOptions, useBanners } from "./queries/bannerQueries";
+import { useCategories } from "../category/queries/categoryQueries";
+import { useBrandsPage } from "../brand/queries/brandQueries";
 import StatusStepButton from "../../components/common/StatusStepButton";
 import EmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
@@ -130,9 +131,9 @@ function localInputToIso(local) {
   return d.toISOString();
 }
 export function formatDateTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return "Not set";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "Not set";
   return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -723,8 +724,8 @@ export const TYPE_BADGE = {
   [BANNER_TYPES.VIDEO]: { label: "Video", icon: Video },
   [BANNER_TYPES.GIF]: { label: "GIF", icon: Film },
 };
-const shortDate = (iso) =>
-  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const shortDate = (iso, fallback = "Not set") =>
+  iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : fallback;
 
 // "x days left" / "Starts in x days" / "Expired" chip for the Schedule column.
 export function scheduleChip(row) {
@@ -949,17 +950,7 @@ function rowToFormDraft(row) {
  * ---------------------------------------------------------------------- */
 
 export default function Banner() {
-  const [banners, setBanners] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
-  // Unpaginated snapshot used only to power the summary charts above the
-  // table — never build a summary from a single paginated page of rows.
-  const [allBanners, setAllBanners] = useState([]);
-  const [chartsError, setChartsError] = useState("");
-
-  const [categories, setCategories] = useState([]);
-  const [brands, setBrands] = useState([]);
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -976,7 +967,6 @@ export default function Banner() {
       // not remembered — fine
     }
   };
-  const [totalPages, setTotalPages] = useState(1);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState(null);
@@ -991,56 +981,46 @@ export default function Banner() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Categories power the redirect-target picker when type is CATEGORY —
-  // fetched once from the existing Category API.
-  useEffect(() => {
-    getCategories({ page: 1, limit: 100 })
-      .then((res) => {
-        const rows = (res?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name }));
-        setCategories(rows);
-      })
-      .catch(() => {});
-    // Brands for the BRAND redirect picker — real brands only (isDummy skipped).
-    getAllBrands({ page: 1, limit: 100 })
-      .then((res) => {
-        const rows = (res?.data?.data ?? res?.data ?? [])
-          .filter((b) => !b.isDummy)
-          .map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.uniqueId || b._id }));
-        setBrands(rows);
-      })
-      .catch(() => {});
-  }, []);
+  // Categories power the redirect-target picker when type is CATEGORY.
+  // A failure just leaves the picker empty.
+  const categoriesQuery = useCategories({ page: 1, limit: 100 });
+  const categories = useMemo(
+    () => (categoriesQuery.data?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name })),
+    [categoriesQuery.data]
+  );
+  // Brands for the BRAND redirect picker — real brands only (isDummy skipped).
+  const brandsQuery = useBrandsPage({ page: 1, limit: 100 });
+  const brands = useMemo(
+    () =>
+      (brandsQuery.data?.data?.data ?? brandsQuery.data?.data ?? [])
+        .filter((b) => !b.isDummy)
+        .map((b) => ({ id: b._id ?? b.id, name: b.brandName || b.uniqueId || b._id })),
+    [brandsQuery.data]
+  );
 
-  const fetchBanners = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getBanners({ page, limit, search: debouncedSearch });
-      const rows = (res?.data?.data ?? []).map(apiToRow);
-      setBanners(rows);
-      setTotalPages(res?.data?.totalPages ?? 1);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, debouncedSearch]);
+  // One fetch per page / page size / search change.
+  const bannersQuery = useBanners(
+    { page, limit, search: debouncedSearch },
+    { placeholderData: keepPreviousData }
+  );
+  const banners = useMemo(
+    () => (bannersQuery.data?.data?.data ?? []).map(apiToRow),
+    [bannersQuery.data]
+  );
+  const totalPages = bannersQuery.data?.data?.totalPages ?? 1;
+  const loading = bannersQuery.isPending;
+  const loadError = bannersQuery.error?.message ?? "";
 
-  const fetchAllBanners = useCallback(async () => {
-    setChartsError("");
-    try {
-      const res = await getBanners({ page: 1, limit: 100 });
-      setAllBanners((res?.data?.data ?? []).map(apiToRow));
-    } catch (err) {
-      // Table above still works even if this fails — just surface why the
-      // chart row is missing instead of silently leaving it blank.
-      setChartsError(err.message);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAllBanners();
-  }, [fetchAllBanners]);
+  // Unpaginated snapshot used only to power the summary charts above the
+  // table — never build a summary from a single paginated page of rows.
+  // Table above still works even if this fails — chartsError surfaces why
+  // the chart row is missing instead of silently leaving it blank.
+  const allBannersQuery = useBanners({ page: 1, limit: 100 });
+  const allBanners = useMemo(
+    () => (allBannersQuery.data?.data?.data ?? []).map(apiToRow),
+    [allBannersQuery.data]
+  );
+  const chartsError = allBannersQuery.error?.message ?? "";
 
   // Debounce search so we don't hit the API on every keystroke; a new
   // search goes back to page 1.
@@ -1052,11 +1032,6 @@ export default function Banner() {
     }, 400);
     return () => clearTimeout(t);
   }, [search, debouncedSearch]);
-
-  // One fetch per page / page size / search change.
-  useEffect(() => {
-    fetchBanners();
-  }, [fetchBanners]);
 
   const handleAddClick = () => {
     setEditingBanner(null);
@@ -1077,7 +1052,10 @@ export default function Banner() {
   useEffect(() => {
     if (!editIdFromDetails) return;
     navigate(location.pathname, { replace: true, state: null });
-    getBannerById(editIdFromDetails)
+    // Through the cache: the details page just loaded this banner, so this
+    // is usually instant (no request while it's still fresh).
+    queryClient
+      .query(bannerQueryOptions(editIdFromDetails))
       .then((b) => {
         if (b) handleEdit(apiToRow(b));
       })
@@ -1129,8 +1107,7 @@ export default function Banner() {
       }
       setModalOpen(false);
       setEditingBanner(null);
-      fetchBanners();
-      fetchAllBanners();
+      // No manual reload — the write interceptor refreshes ["banners"].
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -1143,8 +1120,6 @@ export default function Banner() {
     try {
       await deleteBanner(deleteTarget.id);
       setDeleteTarget(null);
-      fetchBanners();
-      fetchAllBanners();
     } catch (err) {
       console.error("Failed to delete banner:", err.message);
     } finally {
@@ -1228,7 +1203,7 @@ export default function Banner() {
         return (
           <div>
             <p className="whitespace-nowrap text-[12px] text-neutral-600 dark:text-neutral-300">
-              {shortDate(row.startDate)} – {shortDate(row.endDate)}
+              {shortDate(row.startDate)} – {shortDate(row.endDate, "No end date")}
             </p>
             <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
               <Clock3 size={10} /> {chip.label}
@@ -1285,10 +1260,15 @@ export default function Banner() {
 
         {/* Charts */}
         {chartsError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={13} className="shrink-0" />
-            Couldn't load chart data: {chartsError}
-          </div>
+          <EmptyState
+            variant="compact"
+            tone="error"
+            icon="error"
+            title="Couldn't load chart data"
+            description={chartsError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => allBannersQuery.refetch() }}
+            className="mb-4"
+          />
         )}
         {allBanners.length > 0 && (
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1390,8 +1370,14 @@ export default function Banner() {
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load banners: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load banners"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => bannersQuery.refetch() }}
+            />
           </div>
         )}
 

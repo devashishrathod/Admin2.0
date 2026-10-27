@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -14,10 +14,11 @@ import {
   Receipt,
   BarChart3,
   CreditCard,
+  Undo2,
 } from "lucide-react";
-import { getVoucherClaimPayments } from "./services/TransactionApi";
+import { useAllVoucherClaimPayments } from "./queries/transactionQueries";
 import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
-import { pctChange, weekOverWeek } from "../../utils/overviewStats";
+import { pctChange, weekOverWeek, localDateStr } from "../../utils/overviewStats";
 import {
   todayStr,
   formatDate,
@@ -31,6 +32,8 @@ import SelectDropdown from "../../components/common/SelectDropdown";
 import { downloadCsv } from "../../utils/exportTable";
 import EmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING, orText } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * Shared Table component (same as provided) — kept in this file so the
@@ -139,8 +142,6 @@ export function Table({
  * Real data — GET /voucher-claims/payments (see ./services/TransactionApi)
  * ---------------------------------------------------------------------- */
 
-const PAYMENT_METHODS = ["UPI", "Debit Card", "Credit Card", "Net Banking", "Wallet"];
-
 // Normalizes one real voucher-claim payment record (GET
 // /voucher-claims/payments) into the flat row shape this page's table/
 // stats expect.
@@ -153,17 +154,19 @@ const PAYMENT_METHODS = ["UPI", "Debit Card", "Credit Card", "Net Banking", "Wal
 // itself for a flatter shape. This is what was making most cells show "—"
 // — the old code only ever read straight off the list item.
 //
-// `customerId` is only ever a raw id — the platform's users have no `name`
-// field (WhatsApp-OTP login only), so "Customer" shows the id rather than
-// a fabricated name.
+// On an admin token every row carries a `customer` block (fullName,
+// uniqueId, email, mobile, whatsappNumber). Unset keys are omitted, not
+// null, so "Customer" falls back to the raw `customerId` when there's no name.
 function normalizeClaimPayment(item) {
   const payment = item?.payment ?? item ?? {};
   const claim = item?.claim ?? {};
   const brand = item?.brand ?? payment?.brand ?? {};
+  const customerInfo = item?.customer ?? payment?.customer ?? {};
+  const customerId = payment.customerId || claim.customerId || "—";
 
+  // No usable timestamp → no date (shown as "—"), never "today".
   const ts = payment.createdAt || payment.verifiedAt || null;
-  const d = ts ? new Date(ts) : null;
-  const dateStr = d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : todayStr();
+  const dateStr = localDateStr(ts);
 
   const status = normalizeClaimStatus(payment.status);
 
@@ -172,9 +175,12 @@ function normalizeClaimPayment(item) {
     claimId: claim._id || payment.claimId || item?.voucher?.claimId || item?._id || payment._id || "—",
     razorpayPaymentId: payment.razorpayPaymentId || "—",
     vendor: brand.brandName || "—",
-    customer: payment.customerId || claim.customerId || "—",
+    customer: customerInfo.fullName || customerId,
+    customerId,
+    customerUniqueId: customerInfo.uniqueId || "—",
+    customerPhone: customerInfo.mobile || customerInfo.whatsappNumber || "—",
     date: dateStr,
-    time: d && !Number.isNaN(d.getTime()) ? fmtTime(ts) : "—",
+    time: dateStr ? fmtTime(ts) : "—",
     amount: Number(payment.amount) || 0,
     method: formatPaymentMethod(payment.paymentMethod),
     status,
@@ -202,6 +208,10 @@ export function TxnStatusBadge({ status }) {
       cls: "bg-red-400/10 text-red-600 ring-red-400/30 dark:text-red-400",
       icon: XCircle,
     },
+    Refunded: {
+      cls: "bg-violet-400/10 text-violet-600 ring-violet-400/30 dark:text-violet-400",
+      icon: Undo2,
+    },
   };
   const cfg = map[status] || map.Pending;
   const Icon = cfg.icon;
@@ -225,6 +235,7 @@ const TABS = [
   { key: "pending", label: "Pending" },
   { key: "success", label: "Success" },
   { key: "failed", label: "Failed" },
+  { key: "refunded", label: "Refunded" },
 ];
 
 const getTxnAmount = (t) => t.amount;
@@ -239,6 +250,8 @@ function matchesTab(row, tab) {
       return row.status === "Success";
     case "failed":
       return row.status === "Failed";
+    case "refunded":
+      return row.status === "Refunded";
     default:
       return true;
   }
@@ -250,9 +263,6 @@ function matchesTab(row, tab) {
 
 export default function Transaction() {
   const navigate = useNavigate();
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [methodFilter, setMethodFilter] = useState("All");
@@ -261,29 +271,27 @@ export default function Transaction() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
-  const fetchTransactions = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getVoucherClaimPayments({ page: 1, limit: 100 });
-      const rows = (res?.data?.data ?? []).map(normalizeClaimPayment);
-      setTransactions(rows);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+  // Every page of payments (the endpoint only filters by outlet), so tabs,
+  // filters, KPIs and export below run client-side over the full set.
+  const {
+    data: paymentsRes,
+    isPending: loading,
+    isFetching,
+    error,
+    refetch,
+  } = useAllVoucherClaimPayments();
+  const loadError = error?.message ?? "";
+  const transactions = useMemo(
+    () => (paymentsRes?.data?.data ?? []).map(normalizeClaimPayment),
+    [paymentsRes]
+  );
 
   const stats = useMemo(() => {
     const today = transactions.filter((t) => t.isToday);
     const pending = transactions.filter((t) => t.status === "Pending");
     const success = transactions.filter((t) => t.status === "Success");
     const failed = transactions.filter((t) => t.status === "Failed");
+    const refunded = transactions.filter((t) => t.status === "Refunded");
     const sum = (rows) => rows.reduce((s, r) => s + r.amount, 0);
     return {
       total: { amount: sum(transactions), count: transactions.length },
@@ -291,6 +299,7 @@ export default function Transaction() {
       pending: { amount: sum(pending), count: pending.length },
       success: { amount: sum(success), count: success.length },
       failed: { amount: sum(failed), count: failed.length },
+      refunded: { amount: sum(refunded), count: refunded.length },
     };
   }, [transactions]);
 
@@ -322,21 +331,29 @@ export default function Transaction() {
   const methodMix = useMemo(() => {
     const counts = {};
     transactions.forEach((t) => {
-      counts[t.method] = (counts[t.method] || 0) + 1;
+      const method = orText(t.method, MISSING.method);
+      counts[method] = (counts[method] || 0) + 1;
     });
     return Object.entries(counts).map(([name, count]) => ({ name, count }));
   }, [transactions]);
+
+  // Filter options come from the methods actually present in the data, so
+  // every option matches at least one row.
+  const methodOptions = useMemo(() => ["All", ...methodMix.map((m) => m.name).sort()], [methodMix]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return transactions.filter((t) => {
       const inTab = matchesTab(t, activeTab);
-      const inMethod = methodFilter === "All" || t.method === methodFilter;
+      const inMethod = methodFilter === "All" || orText(t.method, MISSING.method) === methodFilter;
       const inSearch =
         !q ||
         t.razorpayPaymentId.toLowerCase().includes(q) ||
         t.vendor.toLowerCase().includes(q) ||
         t.customer.toLowerCase().includes(q) ||
+        t.customerId.toLowerCase().includes(q) ||
+        t.customerUniqueId.toLowerCase().includes(q) ||
+        t.customerPhone.includes(q) ||
         t.reference.toLowerCase().includes(q);
       const inDateFrom = !dateFrom || t.date >= dateFrom;
       const inDateTo = !dateTo || t.date <= dateTo;
@@ -358,6 +375,9 @@ export default function Transaction() {
       { label: "Razorpay Payment Id", key: "razorpayPaymentId" },
       { label: "Vendor", key: "vendor" },
       { label: "Customer", key: "customer" },
+      { label: "Customer Id", key: "customerId" },
+      { label: "Customer Unique Id", key: "customerUniqueId" },
+      { label: "Customer Phone", key: "customerPhone" },
       { label: "Date", key: "date" },
       { label: "Time", key: "time" },
       { label: "Amount", key: "amount" },
@@ -375,15 +395,17 @@ export default function Transaction() {
         onClick={() => navigate(`/transaction/${r.claimId}`)}
         className="font-medium text-emerald-600 hover:underline dark:text-emerald-400"
       >
-        {r.razorpayPaymentId}
+        <ValueOr value={r.razorpayPaymentId} fallback={MISSING.id} />
       </button>
     ) },
-    { key: "vendor", label: "Vendor" },
-    { key: "customer", label: "Customer" },
+    { key: "vendor", label: "Vendor", render: (r) => <ValueOr value={r.vendor} fallback="No brand" /> },
+    { key: "customer", label: "Customer", render: (r) => <ValueOr value={r.customer} fallback={MISSING.name} /> },
     {
       key: "date",
       label: "Date",
-      render: (r) => (
+      render: (r) => !r.date ? (
+        <ValueOr value={null} fallback={MISSING.date} />
+      ) : (
         <span>
           {formatDate(r.date)}{" "}
           {r.isToday && (
@@ -391,11 +413,11 @@ export default function Transaction() {
               Today
             </span>
           )}
-          <span className="ml-1 text-neutral-500">· {r.time}</span>
+          <span className="ml-1 text-neutral-500">· {orText(r.time, "Time not recorded")}</span>
         </span>
       ),
     },
-    { key: "method", label: "Method" },
+    { key: "method", label: "Method", render: (r) => <ValueOr value={r.method} fallback={MISSING.method} /> },
     {
       key: "amount",
       label: "Amount",
@@ -413,7 +435,7 @@ export default function Transaction() {
       key: "reference",
       label: "Reference",
       render: (r) => (
-        <span className="text-neutral-500">{r.reference}</span>
+        <span className="text-neutral-500"><ValueOr value={r.reference} fallback="No reference" /></span>
       ),
     },
     {
@@ -456,11 +478,11 @@ export default function Transaction() {
               Export CSV
             </button>
             <button
-              onClick={fetchTransactions}
-              disabled={loading}
+              onClick={() => refetch()}
+              disabled={isFetching}
               className="flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[13.5px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
-              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
               Refresh
             </button>
           </div>
@@ -529,7 +551,7 @@ export default function Transaction() {
           </div>
           <SelectDropdown
             value={methodFilter}
-            options={["All", ...PAYMENT_METHODS]}
+            options={methodOptions}
             icon={Filter}
             onChange={(m) => {
               setMethodFilter(m);
@@ -565,7 +587,7 @@ export default function Transaction() {
               icon="error"
               title="Couldn't load transactions"
               description={`${loadError} — check your connection and try again.`}
-              action={{ label: "Try again", onClick: fetchTransactions }}
+              action={{ label: "Try again", onClick: () => refetch() }}
             />
           </div>
         ) : (

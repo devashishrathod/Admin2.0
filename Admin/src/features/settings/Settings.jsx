@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  SlidersHorizontal,
   Loader2,
   Save,
   X,
@@ -16,19 +16,21 @@ import {
   Scale,
   HardDrive,
   Palette,
+  RefreshCw,
 } from "lucide-react";
-import { getSettings, updateSettings } from "./services/SettingsApi";
+import { updateSettings } from "./services/SettingsApi";
+import { settingsQueryOptions, useSettings } from "./queries/settingsQueries";
 import LegalDocsPanel from "../legal/LegalDocsPanel";
 import AppearanceThemePicker from "./components/AppearanceThemePicker";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 
 /* -------------------------------------------------------------------------
  * Sidebar tree — confirmed against the real GET /settings/get response.
  * Each top-level group (Vendor/Customer/Security/Admin/App) nests its own
- * real sub-sections; General stays a single top-level leaf like before.
+ * real sub-sections. Appearance is the first leaf and opens by default.
  * ---------------------------------------------------------------------- */
 const SECTIONS = [
-  { id: "general", label: "General Setting", icon: SlidersHorizontal },
   // Per-device look (ThemeContext + localStorage), not a field on the
   // settings document — no Save button; see isLocalOnlySection below.
   { id: "appearance", label: "Appearance", icon: Palette },
@@ -240,13 +242,6 @@ const EMPTY_STORAGE = {
   delivery: { signedUrlTtlMinutes: 5 },
 };
 
-function formatDateTime(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 function apiToForm(settings) {
   const vendor = settings?.vendor || {};
   const customer = settings?.customer || {};
@@ -311,7 +306,6 @@ function apiToForm(settings) {
 // real PUT yet, so they group App's own real keys defensively; tighten
 // this once the actual update contract for `app` is confirmed.
 function buildSavePayload(sectionId, form) {
-  if (sectionId === "general") return { isActive: form.isActive };
 
   // These notification fields live inside the real vendor.subscription
   // sub-object (there's no separate vendor.notification path in the API) —
@@ -583,33 +577,26 @@ function Card({ title, right, children }) {
  * ---------------------------------------------------------------------- */
 
 export default function Settings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useSettings();
   const [form, setForm] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const loading = settingsQuery.isPending;
+  const loadError = settingsQuery.error?.message ?? "";
 
-  const [activeSection, setActiveSection] = useState("general");
+  // Prefill the form ONCE, when the settings first arrive (set during
+  // render, React's "adjust state on new data" pattern). Background
+  // refetches — window focus, the interceptor after any settings write —
+  // must not overwrite what the admin is typing.
+  if (settingsQuery.data && form === null) {
+    setForm(apiToForm(settingsQuery.data?.data ?? settingsQuery.data));
+  }
+
+  const [activeSection, setActiveSection] = useState("appearance");
   const [expandedGroup, setExpandedGroup] = useState(null);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedSection, setSavedSection] = useState("");
-
-  const fetchSettings = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getSettings();
-      setForm(apiToForm(res?.data ?? res));
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
 
   const setVendorField = (section, field, value) =>
     setForm((prev) => ({ ...prev, vendor: { ...prev.vendor, [section]: { ...prev.vendor[section], [field]: value } } }));
@@ -647,7 +634,14 @@ export default function Settings() {
     try {
       await updateSettings(buildSavePayload(activeSection, form));
       setSavedSection(activeSection);
-      fetchSettings();
+      // Re-sync the form with the server's saved copy, as before. The
+      // interceptor already invalidated ["settings"], so this joins that
+      // refetch rather than sending a second request. If it fails, the
+      // admin's own (just saved) values simply stay on screen.
+      queryClient
+        .query(settingsQueryOptions())
+        .then((res) => setForm(apiToForm(res?.data ?? res)))
+        .catch(() => {});
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -682,8 +676,14 @@ export default function Settings() {
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load settings: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load settings"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => settingsQuery.refetch() }}
+            />
           </div>
         )}
 
@@ -791,36 +791,6 @@ export default function Settings() {
               {/* ---------------- Legal ---------------- */}
               {activeSection === "legal.terms" && <LegalDocsPanel kind="terms" />}
               {activeSection === "legal.privacy" && <LegalDocsPanel kind="privacy" />}
-
-              {/* ---------------- General ---------------- */}
-              {activeSection === "general" && (
-                <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                  <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Settings Active</label>
-                  <div className="flex gap-2">
-                    {[
-                      { label: "Active", value: true },
-                      { label: "Inactive", value: false },
-                    ].map((s) => (
-                      <button
-                        type="button"
-                        key={s.label}
-                        onClick={() => setForm((prev) => ({ ...prev, isActive: s.value }))}
-                        className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors sm:flex-none sm:px-6 ${
-                          form.isActive === s.value
-                            ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                            : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-4 text-[11.5px] text-neutral-600">
-                    Last updated {formatDateTime(form.updatedAt)}
-                    {form.updatedBy ? ` by ${form.updatedBy}` : ""}
-                  </p>
-                </div>
-              )}
 
               {/* ---------------- Vendor > Voucher ---------------- */}
               {activeSection === "vendor.voucher" && (

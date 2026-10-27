@@ -77,6 +77,22 @@ export async function getVoucherClaimPayments({ page = 1, limit = 20, outletId, 
     }
 }
 
+// ── Get Every Voucher Claim Payment (all pages) ───────────────────
+// Walks GET /voucher-claims/payments using the response's `totalPages`, so
+// the Transactions page's stats, filters and export cover every record —
+// not just the first page. Returns the same { data: { data, total } } shape.
+export async function getAllVoucherClaimPayments({ limit = 100, ...filters } = {}) {
+    const first = await getVoucherClaimPayments({ ...filters, page: 1, limit });
+    const totalPages = Number(first?.data?.totalPages) || 1;
+    const more = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) =>
+            getVoucherClaimPayments({ ...filters, page: i + 2, limit })
+        )
+    );
+    const rows = [first, ...more].flatMap((res) => res?.data?.data ?? []);
+    return { ...first, data: { ...first?.data, data: rows, page: 1, totalPages: 1, limit: rows.length } };
+}
+
 // ── Get One Voucher Claim Payment ─────────────────────────────────
 // GET {{base_url}}/voucher-claims/payments/:claimTransactionId
 export async function getVoucherClaimPaymentById(claimTransactionId) {
@@ -113,9 +129,26 @@ export async function getVoucherClaimByCode(claimCode) {
     }
 }
 
+// ── Release a payment's settlement hold ───────────────────────────
+// PATCH {{base_url}}/transactions/admin/:transactionId/release-hold
+// body: { reason } (required). A hold no one releases keeps the vendor's
+// money out of every settlement, silently. Refused while a refund is open
+// or a chargeback is unresolved (super admin API doc).
+export async function releaseTransactionHold(transactionId, { reason } = {}) {
+    try {
+        if (!transactionId) throw new Error('transactionId is required');
+        const { data } = await api.patch(`/transactions/admin/${transactionId}/release-hold`, { reason });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
+    releaseTransactionHold,
     getVoucherClaims,
     getVoucherClaimPayments,
+    getAllVoucherClaimPayments,
     getVoucherClaimPaymentById,
     getVoucherClaimById,
     getVoucherClaimByCode,

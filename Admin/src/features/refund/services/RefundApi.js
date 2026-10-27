@@ -55,6 +55,22 @@ export async function getRefundWorklist({ open, page = 1, limit = 20, outletId, 
     }
 }
 
+// ── Get Every Refund (all pages) ──────────────────────────────────
+// Walks GET /refunds using the response's `totalPages`, so the Refunds
+// page's stats, filters and export cover every request, not just page 1.
+// Returns the same { data: { data, total } } shape.
+export async function getAllRefunds({ limit = 100, ...filters } = {}) {
+    const first = await getRefundWorklist({ ...filters, page: 1, limit });
+    const totalPages = Number(first?.data?.totalPages) || 1;
+    const more = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) =>
+            getRefundWorklist({ ...filters, page: i + 2, limit })
+        )
+    );
+    const rows = [first, ...more].flatMap((res) => res?.data?.data ?? []);
+    return { ...first, data: { ...first?.data, data: rows, page: 1, totalPages: 1, limit: rows.length } };
+}
+
 // ── Get One Refund — full timeline (refund + claim + brand + outlet) ─────
 // GET {{base_url}}/refunds/:refundRequestId
 export async function getRefundById(refundRequestId) {
@@ -75,15 +91,17 @@ export async function getRefundById(refundRequestId) {
  * ---------------------------------------------------------------------- */
 
 // ── Approve a Refund ──────────────────────────────────────────────
-// PATCH {{base_url}}/refunds/admin/:refundRequestId/approve  body: { note? }
-// Matches the confirmed Postman request exactly — no approvedAmount field;
-// the endpoint decides the amount itself (echoed back as "amount" in the
-// response).
-export async function approveRefund(refundRequestId, { note } = {}) {
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/approve
+// body: { note?, overrideReason? } — no approvedAmount field; the endpoint
+// decides the amount itself (echoed back as "amount" in the response).
+// `overrideReason` is required from VENDOR_REJECTED / VENDOR_TIMEOUT
+// (→ ADMIN_OVERRIDE), per the super admin API doc.
+export async function approveRefund(refundRequestId, { note, overrideReason } = {}) {
     try {
         if (!refundRequestId) throw new Error('refundRequestId is required');
         const body = {};
         if (note) body.note = note;
+        if (overrideReason) body.overrideReason = overrideReason;
         const { data } = await api.patch(`/refunds/admin/${refundRequestId}/approve`, body);
         return data;
     } catch (error) {
@@ -92,7 +110,8 @@ export async function approveRefund(refundRequestId, { note } = {}) {
 }
 
 // ── Reject a Refund ───────────────────────────────────────────────
-// PATCH {{base_url}}/refunds/admin/:refundRequestId/reject  body: { note? }
+// PATCH {{base_url}}/refunds/admin/:refundRequestId/reject  body: { note }
+// `note` is required per the super admin API doc.
 export async function rejectRefund(refundRequestId, { note } = {}) {
     try {
         if (!refundRequestId) throw new Error('refundRequestId is required');
@@ -189,6 +208,7 @@ export async function failBankPayout(refundRequestId, { reason } = {}) {
 
 export default {
     getRefundWorklist,
+    getAllRefunds,
     getRefundById,
     approveRefund,
     rejectRefund,

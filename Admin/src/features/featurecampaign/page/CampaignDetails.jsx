@@ -23,6 +23,7 @@ import {
   getAdAccountChecklist,
   isAdAccountComplete,
 } from "./FeatureCampaign";
+import ValueOr from "../../../components/common/ValueOr";
 
 /* -------------------------------------------------------------------------
  * Reasons a Super Admin can pick from (or override) when rejecting a
@@ -52,25 +53,25 @@ function SectionCard({ title, icon: Icon, children, className = "" }) {
   );
 }
 
-function InfoRow({ label, value }) {
+function InfoRow({ label, value, fallback = "Not added" }) {
   return (
     <div className="flex items-center justify-between py-2.5">
       <span className="text-[12.5px] text-neutral-500">{label}</span>
-      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200">{value || "—"}</span>
+      <span className="text-[13.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></span>
     </div>
   );
 }
 
 // Bento-tile variant of InfoRow, used only where a group of fields is
 // displayed as a tile grid instead of the plain divider-row list above.
-function DetailTile({ icon: Icon, label, value }) {
+function DetailTile({ icon: Icon, label, value, fallback = "Not added" }) {
   return (
     <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
       <p className="flex items-center gap-1.5 text-[10.5px] text-neutral-500">
         {Icon && <Icon size={11} className="shrink-0" />}
         <span className="truncate">{label}</span>
       </p>
-      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{value || "—"}</p>
+      <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></p>
     </div>
   );
 }

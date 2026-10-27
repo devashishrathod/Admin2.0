@@ -11,6 +11,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
+import ValueOr from "../../components/common/ValueOr";
 
 /* -------------------------------------------------------------------------
  * Feature matrix definition (rows of the comparison table)
@@ -322,7 +323,7 @@ function ComparisonTable({ plans, featureList, onToggleFeature, onEditFeatureTex
                           onClick={() => setEditingCell(cellId)}
                           className="rounded-md px-2 py-1 text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                         >
-                          {value || "—"}
+                          <ValueOr value={value} fallback="Not set" />
                         </button>
                       )}
                     </td>

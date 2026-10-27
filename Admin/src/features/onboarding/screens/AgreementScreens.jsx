@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Upload, FileText, CheckCircle2 } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
-import { recordOfflineDeed, getBillingAddress, saveBillingAddress, grantPlan } from "../services/onboardingApi";
+import { recordOfflineDeed, saveBillingAddress, grantPlan } from "../services/onboardingApi";
+import { useBillingAddress } from "../queries/onboardingQueries";
 import { INDIAN_STATES, PIN_RE, errorText } from "../onboardingFlow";
-import { getPlans } from "../../plan/services/planApi";
+import { usePlans } from "../../plan/queries/planQueries";
 import Loader from "../../../components/common/Loader";
 
 const payload = (res) => res?.data ?? res ?? {};
@@ -39,7 +40,7 @@ export function DeedScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
     >
       {deed && (deed.acceptedAt || deed.acceptedByType) && (
         <Note tone="ok">
-          Deed accepted by {deed.acceptedByType || "—"} ({deed.mode || "—"}) {deed.acceptedAt ? `on ${new Date(deed.acceptedAt).toLocaleDateString("en-IN")}` : ""}
+          Deed accepted by {deed.acceptedByType || "Unknown"} ({deed.mode || "Not recorded"}) {deed.acceptedAt ? `on ${new Date(deed.acceptedAt).toLocaleDateString("en-IN")}` : ""}
           {deed.version ? ` · v${deed.version}` : ""}. Recording again replaces the proof.
         </Note>
       )}
@@ -80,46 +81,42 @@ function toForm(a) {
 
 const planPrice = (p) => p.discountedPrice ?? p.price ?? 0;
 
-export function SubscribePlanScreen({ brandId, eyebrow, onAdvance, onBack }) {
-  const [billing, setBilling] = useState(null); // GET response
-  const [form, setForm] = useState(EMPTY_ADDRESS);
+// Loads the billing address + plans, then mounts the form. Either load may
+// fail without blocking the screen: no prefill / "No active plans found".
+export function SubscribePlanScreen(props) {
+  const billingQuery = useBillingAddress(props.brandId);
+  const plansQuery = usePlans();
+  const billing = billingQuery.data ? payload(billingQuery.data) : null;
+  const plans = useMemo(() => {
+    const p = plansQuery.data;
+    const raw = p?.data?.data ?? p?.data?.plans ?? p?.data ?? p ?? [];
+    return (Array.isArray(raw) ? raw : []).filter((x) => x.isActive !== false);
+  }, [plansQuery.data]);
+
+  if (billingQuery.isPending || plansQuery.isPending) {
+    return (
+      <ScreenShell eyebrow={props.eyebrow} title="Plan & billing">
+        <Loader variant="inline" label="Loading billing address and plans…" />
+      </ScreenShell>
+    );
+  }
+  return <SubscribePlanForm {...props} billing={billing} plans={plans} />;
+}
+
+function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans }) {
+  // Prefilled once, on mount — a later billing refetch (e.g. after saving
+  // it) must not overwrite what the admin has typed.
+  const [form, setForm] = useState(() => toForm(billing?.billingAddress) || toForm(billing?.suggestedAddress) || EMPTY_ADDRESS);
   const [sameAsGst, setSameAsGst] = useState(false);
-  const [savedBilling, setSavedBilling] = useState(false);
-  const [plans, setPlans] = useState([]);
+  const [savedBilling, setSavedBilling] = useState(() => Boolean(billing?.billingAddress));
   const [planId, setPlanId] = useState("");
   const [mode, setMode] = useState("FREE");
   const [amount, setAmount] = useState("");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
-  const [loading, setLoading] = useState(true);
   const [billingBusy, setBillingBusy] = useState(false);
   const [billingError, setBillingError] = useState("");
   const { run, busy, error } = useStepAction(onAdvance);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [b, p] = await Promise.allSettled([getBillingAddress(brandId), getPlans()]);
-        if (cancelled) return;
-        if (b.status === "fulfilled") {
-          const data = payload(b.value);
-          setBilling(data);
-          setForm(toForm(data.billingAddress) || toForm(data.suggestedAddress) || EMPTY_ADDRESS);
-          setSavedBilling(Boolean(data.billingAddress));
-        }
-        if (p.status === "fulfilled") {
-          const raw = p.value?.data?.data ?? p.value?.data?.plans ?? p.value?.data ?? p.value ?? [];
-          setPlans((Array.isArray(raw) ? raw : []).filter((x) => x.isActive !== false));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
 
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -170,14 +167,6 @@ export function SubscribePlanScreen({ brandId, eyebrow, onAdvance, onBack }) {
         ...(offline ? { paymentMode: mode, collectedAmount: Number(amount), referenceNumber: reference.trim() } : { paymentMode: "FREE" }),
       })
     );
-
-  if (loading) {
-    return (
-      <ScreenShell eyebrow={eyebrow} title="Plan & billing">
-        <Loader variant="inline" label="Loading billing address and plans…" />
-      </ScreenShell>
-    );
-  }
 
   return (
     <ScreenShell

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { loginOrSignUpWithWhatsapp, verifyOtpWhatsapp } from '../services/authApi';
 import { broadcastLogout } from '../tabSession';
+import { queryClient } from '../../../lib/query';
 
 // 10-digit Indian mobile number, same shape WhatsApp numbers take here.
 const WHATSAPP_RE = /^[6-9]\d{9}$/;
@@ -211,6 +212,9 @@ export const useAuthStore = create(
                     modalOpen: false,
                 });
                 syncTokenToStorage(null);
+                // Drop every cached server response, so nothing from this
+                // session can show up for whoever logs in next.
+                queryClient.clear();
                 if (fromOtherTab) return;
                 broadcastLogout();
                 unregisterDeviceForPush(); // fire-and-forget — never blocks logout

@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { addBasicDetails } from "../services/onboardingApi";
 import { ENTITY_TYPES } from "../onboardingFlow";
-import { getSubCategories } from "../../subcategory/services/SubCategoryApi";
+import { useSubCategories } from "../../subcategory/queries/subCategoryQueries";
 import Loader from "../../../components/common/Loader";
+
+const SUB_CATEGORY_PARAMS = { page: 1, limit: 200, isActive: true };
 
 /* Design 02–05: business name, category, registration status, entity type.
    All four save through add-basic-details with `step` = this screen. */
@@ -47,30 +49,15 @@ export function BusinessNameScreen({ brandId, brand, eyebrow, onAdvance, onBack 
 
 /* ---- 03 · BUSINESS_CATEGORY --------------------------------------- */
 export function BusinessCategoryScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
-  const [subs, setSubs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const { data: subsRes, isPending: loading, error: subsError } = useSubCategories(SUB_CATEGORY_PARAMS);
+  const loadError = subsError?.message ?? "";
+  const subs = useMemo(() => {
+    const list = subsRes?.data?.data ?? subsRes?.data ?? [];
+    return Array.isArray(list) ? list : [];
+  }, [subsRes]);
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState(brand?.subCategory?._id || brand?.subCategoryId || "");
   const { run, busy, error } = useStepAction(onAdvance);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await getSubCategories({ page: 1, limit: 200, isActive: true });
-        const list = res?.data?.data ?? res?.data ?? [];
-        if (!cancelled) setSubs(Array.isArray(list) ? list : []);
-      } catch (err) {
-        if (!cancelled) setLoadError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Grouped by parent category; category is worked out by the server from the subcategory.
   const groups = useMemo(() => {

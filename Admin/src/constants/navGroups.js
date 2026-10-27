@@ -16,7 +16,7 @@ import {
   CreditCard,
   Repeat,
   Gift,
-  Ticket,
+  // Ticket,
   ArrowLeftRight,
   Undo2,
   HandCoins,
@@ -25,9 +25,10 @@ import {
   MonitorPlay,
   Percent,
   Bell,
-  HelpCircle,
+  // HelpCircle,
   TrendingUp,
   FlaskConical,
+  Rocket,
 } from "lucide-react";
 
 // Grouped nav — each group renders with an uppercase label (hidden when
@@ -64,8 +65,10 @@ export const NAV_GROUPS = [
       { id: "new-onboarding", label: "New Onboarding", icon: UserPlus, path: "/new-onboarding" },
       { id: "brand-waiting", label: "Brand Waiting", icon: Hourglass, path: "/brand-waiting" },
       { id: "brand", label: "Live Brands", icon: BadgeCheck, path: "/brand" },
+      { id: "brand-real-dummy", label: "RD Brands", icon: Rocket, path: "/brand/real-dummy" },
       { id: "brand-expired", label: "Expired Brands", icon: CalendarX, path: "/brand/expired" },
       { id: "brand-dummy", label: "D Brands", icon: FlaskConical, path: "/brand/dummy" },
+
     ],
   },
   {
@@ -119,8 +122,8 @@ export const NAV_GROUPS = [
     label: "System",
     items: [
       { id: "notifications", label: "Notifications", icon: Bell, path: "/notifications" },
-      { id: "faq", label: "FAQ", icon: HelpCircle, path: "/faq" },
-      { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
+      // { id: "faq", label: "FAQ", icon: HelpCircle, path: "/faq" },
+      // { id: "accessibility", label: "Accessibility", icon: Ticket, path: "/assebility" },
       { id: "app-settings", label: "Settings", icon: Settings, path: "/settings" },
     ],
   },

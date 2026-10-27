@@ -1,12 +1,23 @@
 // Date-window helpers shared by the finance overview widgets
 // (Transactions / Settlement / Refund). Rows carry a "YYYY-MM-DD" date
-// string built with toISOString().slice(0, 10), so window bounds use the
-// same UTC slice and plain string comparison lines up.
+// string built with localDateStr, so window bounds use the same local day
+// and plain string comparison lines up.
+
+// "YYYY-MM-DD" in the browser's local time zone (IST for admins). Not
+// toISOString(), which is UTC and puts 12:00–5:30 AM IST on the previous
+// day. Returns null for a missing or invalid date.
+export function localDateStr(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export function dayKey(daysAgo) {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 // Rows whose date falls within [fromDaysAgo .. toDaysAgo], inclusive.

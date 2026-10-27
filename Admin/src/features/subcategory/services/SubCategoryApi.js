@@ -40,7 +40,9 @@ function buildFormData({ name, description, image, isActive }) {
     const fd = new FormData();
     fd.append('name', name ?? '');
     fd.append('description', description ?? '');
-    fd.append('isActive', String(Boolean(isActive)));
+    // Sent only when the caller sets it — an edit that leaves status alone
+    // must not overwrite it (the API sets whatever value it receives).
+    if (typeof isActive === 'boolean') fd.append('isActive', String(isActive));
     // Only attach `image` when a new File was actually selected —
     // on update, omit it entirely to keep the existing image.
     if (image instanceof File) {
@@ -91,7 +93,7 @@ export async function getSubCategories({
         const params = { page, limit };
         if (search) params.search = search;
         if (categoryId) params.categoryId = categoryId;
-        if (isActive !== undefined) params.isActive = isActive;
+        if (typeof isActive === 'boolean') params.isActive = isActive;
         if (type) params.type = type;
         if (sortBy) params.sortBy = sortBy;
         if (sortOrder) params.sortOrder = sortOrder;
@@ -104,11 +106,11 @@ export async function getSubCategories({
 }
 
 // ── Get Single Sub-Category (for View) ──────────────────────────
-// GET {{TryDood2.0BaseUrl}}/subCategories/:id
-// NOTE: adjust path if your real "get one" endpoint differs.
+// GET {{TryDood2.0BaseUrl}}/subCategories/get/:id   (doc #68; the old
+// /subCategories/:id path 404'd — known issue A-10)
 export async function getSubCategoryById(id) {
     try {
-        const { data } = await api.get(`/subCategories/${id}`);
+        const { data } = await api.get(`/subCategories/get/${id}`);
         return data;
     } catch (error) {
         handleError(error);
@@ -117,9 +119,10 @@ export async function getSubCategoryById(id) {
 
 // ── Update Sub-Category ───────────────────────────────────────
 // PUT {{TryDood2.0BaseUrl}}/subCategories/update/:id
-// form-data: { name, description, image? (file, optional), isActive }
-// NOTE: adjust method (PUT/PATCH) and path to match your real endpoint.
-export async function updateSubCategory(id, { name, description, image, isActive = true }) {
+// form-data: { name, description, image? (file, optional), isActive? }
+// `isActive` is sent only when passed (the status toggle) — editing the
+// name / icon leaves the status as it is.
+export async function updateSubCategory(id, { name, description, image, isActive }) {
     try {
         const fd = buildFormData({ name, description, image, isActive });
         const { data } = await api.put(`/subCategories/update/${id}`, fd, {

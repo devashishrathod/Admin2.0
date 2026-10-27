@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React from "react";
 import {
   ArrowLeft,
   Tag,
@@ -10,11 +10,16 @@ import {
   Clock,
   RotateCcw,
   Gift,
+  RefreshCw,
 } from "lucide-react";
 import Table from "../../components/common/Table";
-import { getPromoCodeById } from "./services/PromoCodeApi";
+import { usePromoCode } from "./queries/promoCodeQueries";
 import { PROMO_DISCOUNT_TYPES as DISCOUNT_TYPES } from "./promoCodeEnums";
 import Loader from "../../components/common/Loader";
+import ValueOr from "../../components/common/ValueOr";
+import EmptyState from "../../components/common/EmptyState";
+import NotFoundPage from "../../components/common/NotFoundPage";
+import { MISSING, isNotFoundMessage } from "../../utils/helpers";
 
 function formatDateTime(iso) {
   if (!iso) return "—";
@@ -55,26 +60,12 @@ function UsageStatusBadge({ status }) {
  * ---------------------------------------------------------------------- */
 
 export default function PromoCodeDetails({ id, onBack }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
-  const fetchDetails = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getPromoCodeById(id);
-      setData(res?.data ?? null);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    fetchDetails();
-  }, [fetchDetails]);
+  const { data: res, isPending: loading, error, refetch } = usePromoCode(id);
+  const data = res?.data ?? null;
+  const loadError = error?.message ?? "";
+  // A "not found" reply (or a reply with no code in it) = this code doesn't
+  // exist — the common "not found" page, not a raw error.
+  const notFound = !loading && (isNotFoundMessage(loadError) || (!loadError && !data?.promoCode));
 
   const promo = data?.promoCode;
   const usage = data?.usage || {};
@@ -90,8 +81,8 @@ export default function PromoCodeDetails({ id, onBack }) {
             <Store size={13} />
           </span>
           <div>
-            <p className="font-medium text-neutral-800 dark:text-neutral-200">{row.brandId?.brandName || "—"}</p>
-            <p className="text-[11px] text-neutral-500">{row.brandId?.merchantId || "—"}</p>
+            <p className="font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={row.brandId?.brandName} fallback="No brand" /></p>
+            <p className="text-[11px] text-neutral-500"><ValueOr value={row.brandId?.merchantId} fallback={MISSING.id} /></p>
           </div>
         </div>
       ),
@@ -113,14 +104,14 @@ export default function PromoCodeDetails({ id, onBack }) {
       render: (row) => (
         <span className="flex items-center gap-1 font-mono text-[11.5px] text-neutral-500 dark:text-neutral-400">
           <Hash size={10} />
-          {row.transactionId || "—"}
+          <ValueOr value={row.transactionId} fallback="No transaction" />
         </span>
       ),
     },
     {
       key: "consumedAt",
       label: "Consumed At",
-      render: (row) => <span className="text-neutral-500 dark:text-neutral-400">{formatDateTime(row.consumedAt)}</span>,
+      render: (row) => <span className="text-neutral-500 dark:text-neutral-400"><ValueOr value={formatDateTime(row.consumedAt)} fallback="Not consumed" /></span>,
     },
   ];
 
@@ -160,10 +151,19 @@ export default function PromoCodeDetails({ id, onBack }) {
           <Loader label="Loading promo code details…" />
         )}
 
-        {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load promo code details: {loadError}
-          </div>
+        {notFound && (
+          <NotFoundPage title="Promo code not found" icon="promo" backLabel="Back to Promo Codes" onBack={onBack} />
+        )}
+
+        {!loading && loadError && !notFound && (
+          <EmptyState
+            tone="error"
+            icon="error"
+            title="Couldn't load this promo code"
+            description={loadError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => refetch() }}
+            secondaryAction={{ label: "Back to Promo Codes", onClick: onBack }}
+          />
         )}
 
         {!loading && !loadError && promo && (

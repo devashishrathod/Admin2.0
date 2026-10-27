@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
 import Table from "../../components/common/Table";
@@ -7,7 +7,8 @@ import { Search, Plus, AlertTriangle, LayoutGrid, List } from "lucide-react";
 import { useBrands } from "../brand/BrandContext";
 import Loader from "../../components/common/Loader";
 import VerificationDetails from "./VerificationDetails";
-import { fetchAllVerifications, latestByBrand, mapVerification } from "./verificationData";
+import { latestByBrand, mapVerification } from "./verificationData";
+import { useAllBrandVerifications } from "./queries/onboardingReviewQueries";
 import OnboardingCard from "./OnboardingCard";
 import { ONBOARDING_STEPS, doneStepCount, isUnderReview as hasUnderReviewStatus, onboardingTableColumns } from "./onboardingBrand";
 
@@ -30,6 +31,8 @@ function verificationFromBrand(b) {
  * Approve / Reject happen on Brand Waiting.
  * ---------------------------------------------------------------------- */
 
+
+const NO_VERIFICATIONS = new Map();
 
 const isRejected = (b) => b.status === "Rejected";
 const isIncomplete = (b) => b.isOnboarding === false;
@@ -58,19 +61,15 @@ export default function NewOnboarding() {
 
   // Opening a brand shows the same details page as Brand Waiting (view only).
   // Its verification record, if the vendor has submitted, comes from the
-  // verifications list — loaded once in the background.
+  // verifications list — loaded in the background (same cache entry as
+  // Brand Waiting's unsearched list).
   const [selectedBrand, setSelectedBrand] = useState(null);
-  const [verificationsByBrand, setVerificationsByBrand] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetchAllVerifications()
-      .then((list) => !cancelled && setVerificationsByBrand(latestByBrand(list)))
-      // No record to show — the details page falls back to the brand's own data.
-      .catch(() => !cancelled && setVerificationsByBrand(new Map()));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: latestVerifications, isError: verificationsFailed } = useAllBrandVerifications("", {
+    select: latestByBrand,
+  });
+  // null while loading. On failure there's no record to show — the details
+  // page falls back to the brand's own data.
+  const verificationsByBrand = latestVerifications ?? (verificationsFailed ? NO_VERIFICATIONS : null);
 
   // Dummy brands live only on the Dummy Brands page.
   // Rejected and under-review brands are handled on Brand Waiting.

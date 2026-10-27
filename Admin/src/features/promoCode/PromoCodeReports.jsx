@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   ArrowLeft,
   TrendingUp,
@@ -12,7 +13,6 @@ import {
   Clock,
   XCircle,
   Loader2,
-  AlertTriangle,
   Gift,
   Wallet,
   Target,
@@ -29,7 +29,7 @@ import {
   Tooltip,
 } from "recharts";
 import Table from "../../components/common/Table";
-import { getPromoCodeReports, getPromoCodes } from "./services/PromoCodeApi";
+import { usePromoCodeReport, usePromoCodes } from "./queries/promoCodeQueries";
 import {
   PROMO_AUDIENCE,
   AUDIENCE_LABELS,
@@ -37,6 +37,8 @@ import {
   REPORT_GROUP_BY_LABELS,
 } from "./promoCodeEnums";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
+import { MISSING } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * Promo Code Campaign Report — GET /promoCodes/reports
@@ -71,7 +73,7 @@ function toTitleCase(key) {
 }
 
 function displayValue(v) {
-  if (v == null) return "—";
+  if (v == null) return MISSING.generic;
   if (typeof v === "number") return v.toLocaleString("en-IN");
   if (typeof v === "object") return v.name || v.brandName || v.code || v.planName || v._id || JSON.stringify(v);
   return String(v);
@@ -131,8 +133,9 @@ function KpiTile({ icon: Icon, label, value, caption, tint = "bg-emerald-400/10 
 export default function PromoCodeReports() {
   const navigate = useNavigate();
 
-  const [codes, setCodes] = useState([]);
-  const [codesLoading, setCodesLoading] = useState(true);
+  // Codes for the filter dropdown — a failed load just leaves "All Codes".
+  const { data: codesRes, isPending: codesLoading } = usePromoCodes({ page: 1, limit: 100 });
+  const codes = codesRes?.data?.data ?? EMPTY_ARRAY;
 
   const [codeFilter, setCodeFilter] = useState("");
   const [audience, setAudience] = useState("");
@@ -144,40 +147,32 @@ export default function PromoCodeReports() {
   });
   const [to, setTo] = useState(() => formatDateInput(new Date()));
 
-  const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  // The filters above only take effect on "Apply" — the report is keyed on
+  // this snapshot of them, not on the live inputs.
+  const currentFilters = () => ({
+    code: codeFilter || undefined,
+    from: from || undefined,
+    to: to || undefined,
+    groupBy,
+    audience: audience || undefined,
+  });
+  const [appliedFilters, setAppliedFilters] = useState(currentFilters);
+  const {
+    data: reportRes,
+    isPending: loading,
+    isFetching: reportFetching,
+    error: reportError,
+    refetch: refetchReport,
+  } = usePromoCodeReport(appliedFilters, { placeholderData: keepPreviousData });
+  const report = reportRes?.data ?? null;
+  const loadError = reportError?.message ?? "";
 
-  useEffect(() => {
-    getPromoCodes({ page: 1, limit: 100 })
-      .then((res) => setCodes(res?.data?.data ?? []))
-      .catch(() => {})
-      .finally(() => setCodesLoading(false));
-  }, []);
-
-  const fetchReport = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getPromoCodeReports({
-        code: codeFilter || undefined,
-        from: from || undefined,
-        to: to || undefined,
-        groupBy,
-        audience: audience || undefined,
-      });
-      setReport(res?.data ?? null);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [codeFilter, from, to, groupBy, audience]);
-
-  useEffect(() => {
-    fetchReport();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Same filters → fetch again; changed filters → the new key fetches.
+  const applyFilters = () => {
+    const next = currentFilters();
+    if (JSON.stringify(next) === JSON.stringify(appliedFilters)) refetchReport();
+    else setAppliedFilters(next);
+  };
 
   const summary = report?.summary || {};
   const period = report?.period || {};
@@ -299,11 +294,11 @@ export default function PromoCodeReports() {
               </select>
             </div>
             <button
-              onClick={fetchReport}
-              disabled={loading}
+              onClick={applyFilters}
+              disabled={reportFetching}
               className="flex h-9.5 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {reportFetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Apply
             </button>
           </div>
@@ -314,9 +309,14 @@ export default function PromoCodeReports() {
         )}
 
         {!loading && loadError && (
-          <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            Failed to load report: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load the report"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchReport() }}
+            />
           </div>
         )}
 
@@ -385,9 +385,7 @@ export default function PromoCodeReports() {
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex h-55 items-center justify-center text-[12.5px] text-neutral-500">
-                    No usage in this period yet.
-                  </div>
+                  <EmptyState variant="compact" icon="report" title="No usage in this period yet" description="Try a wider date range." />
                 )}
               </div>
 
@@ -418,7 +416,7 @@ export default function PromoCodeReports() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex h-35 items-center justify-center text-[12.5px] text-neutral-500">No action data yet.</div>
+                  <EmptyState variant="compact" icon="report" title="No action data yet" />
                 )}
               </div>
             </div>

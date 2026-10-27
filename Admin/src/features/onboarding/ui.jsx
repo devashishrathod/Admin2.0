@@ -63,11 +63,15 @@ export function Note({ tone = "info", children }) {
 }
 
 /** Label / value pair for verification results and the review screen. */
-export function KeyValue({ label, value, mono }) {
+export function KeyValue({ label, value, mono, fallback = "Not provided" }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[12px] text-[#5B616E] dark:text-neutral-400">{label}</span>
-      <span className={`text-[14px] font-medium text-[#15171C] dark:text-neutral-100 ${mono ? "font-mono" : ""}`}>{value || "—"}</span>
+      {value ? (
+        <span className={`text-[14px] font-medium text-[#15171C] dark:text-neutral-100 ${mono ? "font-mono" : ""}`}>{value}</span>
+      ) : (
+        <span className="text-[14px] text-[#5B616E] dark:text-neutral-400">{fallback}</span>
+      )}
     </div>
   );
 }

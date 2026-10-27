@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Plus,
@@ -26,7 +26,8 @@ import {
 import ToggleSwitch from "../../components/common/ToggleSwitch";
 import ConfirmActionModal from "../../components/common/ConfirmActionModal";
 import SelectDropdown from "../../components/common/SelectDropdown";
-import { getFaqs, createFaq, updateFaq, deleteFaq } from "./services/FaqApi";
+import { createFaq, updateFaq, deleteFaq } from "./services/FaqApi";
+import { useFaqs } from "./queries/faqQueries";
 import Loader from "../../components/common/Loader";
 
 /* -------------------------------------------------------------------------
@@ -58,9 +59,9 @@ function fromDatetimeLocal(value) {
 }
 
 function formatDateTime(iso) {
-  if (!iso) return "—";
+  if (!iso) return "Date not set";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "Date not set";
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -870,9 +871,6 @@ function FaqAccordionItem({ faq, isOpen, onToggleOpen, onEdit, onDelete, onReque
  * then one accordion group per type, sorted by each row's own `order`.
  * ---------------------------------------------------------------------- */
 export default function Faq() {
-  const [faqs, setFaqs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [usingMock, setUsingMock] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [openIds, setOpenIds] = useState(() => new Set());
@@ -888,29 +886,20 @@ export default function Faq() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  const fetchFaqs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getFaqs({ page: 1, limit: 200 });
-      const rows = (res?.data?.data ?? res?.data ?? []).map(normalizeFaq);
-      setFaqs(rows);
-      setUsingMock(false);
-    } catch (err) {
-      // The real endpoint isn't confirmed/live yet — fall back to sample
-      // content so the page is still usable to preview, instead of a
-      // dead error screen. Logged, not shown, so it doesn't read as a
-      // real failure to the admin.
-      console.error("Failed to load FAQs from the API, showing sample data:", err.message);
-      setFaqs(MOCK_FAQS.map(normalizeFaq));
-      setUsingMock(true);
-    } finally {
-      setLoading(false);
+  const faqsQuery = useFaqs({ page: 1, limit: 200 });
+  const loading = faqsQuery.isPending;
+  // The real endpoint isn't confirmed/live yet — if it fails (and there's
+  // no earlier good response cached) fall back to sample content so the
+  // page is still usable to preview, instead of a dead error screen. Not
+  // shown as an error, so it doesn't read as a real failure to the admin.
+  const usingMock = !faqsQuery.data && faqsQuery.isError;
+  const faqs = useMemo(() => {
+    if (faqsQuery.data) {
+      const res = faqsQuery.data;
+      return (res?.data?.data ?? res?.data ?? []).map(normalizeFaq);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchFaqs();
-  }, [fetchFaqs]);
+    return faqsQuery.isError ? MOCK_FAQS.map(normalizeFaq) : [];
+  }, [faqsQuery.data, faqsQuery.isError]);
 
   const faqsById = useMemo(() => new Map(faqs.map((f) => [f.id, f])), [faqs]);
 
@@ -955,7 +944,7 @@ export default function Faq() {
     }
     setFormOpen(false);
     setEditingFaq(null);
-    fetchFaqs();
+    // No manual reload — the write interceptor refreshes ["faqs"].
   };
 
   const handleConfirmToggle = async () => {
@@ -964,7 +953,6 @@ export default function Faq() {
     try {
       await updateFaq(toggleTarget.id, { isActive: !toggleTarget.isActive });
       setToggleTarget(null);
-      fetchFaqs();
     } catch (err) {
       setToggleError(err.message);
     } finally {
@@ -978,7 +966,6 @@ export default function Faq() {
     try {
       await deleteFaq(deleteTarget.id);
       setDeleteTarget(null);
-      fetchFaqs();
     } catch (err) {
       setDeleteError(err.message);
     } finally {
@@ -996,7 +983,6 @@ export default function Faq() {
     const other = rowsInList[swapWith];
     try {
       await Promise.all([updateFaq(faq.id, { order: other.order }), updateFaq(other.id, { order: faq.order })]);
-      fetchFaqs();
     } catch (err) {
       console.error("Failed to reorder FAQ:", err.message);
     }

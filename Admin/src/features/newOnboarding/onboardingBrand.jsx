@@ -1,4 +1,6 @@
 import { Eye } from "lucide-react";
+import ValueOr from "../../components/common/ValueOr";
+import { MISSING } from "../../utils/helpers";
 
 /* -------------------------------------------------------------------------
  * Onboarding step helpers + table columns — shared by New Onboarding and
@@ -112,13 +114,13 @@ export function onboardingTableColumns({ onOpen, now, renderStatus, renderAction
     {
       key: "phone",
       label: "Phone",
-      render: (b) => <span className="text-neutral-700 dark:text-neutral-300">{b.contactPhone}</span>,
+      render: (b) => <span className="text-neutral-700 dark:text-neutral-300"><ValueOr value={b.contactPhone} fallback={MISSING.phone} /></span>,
     },
     {
       key: "joined",
       label: "Joined",
       render: (b) => {
-        if (!b.joinedDate) return <span className="text-neutral-400">—</span>;
+        if (!b.joinedDate) return <span className="text-neutral-400">{MISSING.date}</span>;
         const days = Math.max(0, Math.floor((now - new Date(b.joinedDate).getTime()) / DAY));
         const stale = days > 7;
         return (

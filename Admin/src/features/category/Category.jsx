@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Search,
@@ -11,6 +12,7 @@ import {
   Loader2,
   PieChart as PieChartIcon,
   BarChart3,
+  RefreshCw,
 } from "lucide-react";
 import {
   PieChart,
@@ -23,16 +25,28 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import Table, { StatusBadge } from "../../components/common/Table";
+import Table from "../../components/common/Table";
 import {
   createCategory,
-  getCategories,
-  getCategoryById,
   updateCategory,
   deleteCategory,
 } from "../../features/category/services/CategoryApi";
+import { useCategories, useCategory } from "./queries/categoryQueries";
+import { queryKeys } from "../../lib/query";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 import ToggleSwitch from "../../components/common/ToggleSwitch";
+import {
+  LimitedField,
+  IconPicker,
+  ConfirmToggleModal,
+  DeleteWithCountsModal,
+  StatusTabsAndView,
+  CatalogGridCard,
+  CatalogViewModal,
+  PaginationBar,
+} from "./CatalogShared";
+import { NAME_MIN, NAME_MAX, DESC_MAX, STATUS_PARAM, listTotal } from "./catalogLimits";
 
 const EMPTY_FORM = {
   id: null,
@@ -63,28 +77,21 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
 
   const isEdit = Boolean(form.id);
 
-  const handleChange = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-  };
-
-  const handleImagePick = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setForm((prev) => ({
-      ...prev,
-      image: file,
-      imagePreview: URL.createObjectURL(file),
-    }));
-  };
+  // Icon + title are required, description optional; the submit button
+  // stays disabled until those are filled.
+  const nameLen = form.name.trim().length;
+  const hasIcon = Boolean(form.image || form.imagePreview);
+  const canSubmit = hasIcon && nameLen >= NAME_MIN && nameLen <= NAME_MAX && form.description.length <= DESC_MAX;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const nextErrors = {};
-    if (!form.name.trim()) nextErrors.name = "Category name is required";
+    if (nameLen < NAME_MIN) nextErrors.name = `Title needs at least ${NAME_MIN} characters`;
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
+    if (!canSubmit) return;
     onSave(form);
   };
 
@@ -120,104 +127,62 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="px-5 py-5">
-          {/* Image upload */}
-          <div className="mb-4">
-            <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Category Image
-            </label>
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-                {form.imagePreview ? (
-                  <img
-                    src={form.imagePreview}
-                    alt="preview"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <ImageIcon size={18} className="text-neutral-600" />
-                )}
+        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+          <IconPicker
+            preview={form.imagePreview}
+            onPick={(file) => setForm((prev) => ({ ...prev, image: file, imagePreview: URL.createObjectURL(file) }))}
+          />
+
+          <LimitedField
+            id="cat-name"
+            label="Title"
+            required
+            value={form.name}
+            onChange={(v) => {
+              setForm((prev) => ({ ...prev, name: v }));
+              if (errors.name) setErrors({});
+            }}
+            max={NAME_MAX}
+            placeholder="e.g. Electronics"
+            error={errors.name}
+          />
+
+          <LimitedField
+            id="cat-description"
+            label="Description"
+            value={form.description}
+            onChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+            max={DESC_MAX}
+            multiline
+            placeholder="Short description of this category"
+          />
+
+          {/* Status — only when adding; on edit it's changed from the list's
+              toggle (with a confirm), not here. */}
+          {!isEdit && (
+            <div className="pb-2">
+              <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
+              <div className="flex gap-2">
+                {[
+                  { label: "Active", value: true },
+                  { label: "Inactive", value: false },
+                ].map((s) => (
+                  <button
+                    type="button"
+                    key={s.label}
+                    onClick={() => setForm((prev) => ({ ...prev, isActive: s.value }))}
+                    className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
+                      form.isActive === s.value
+                        ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                        : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
               </div>
-              <label className="flex h-9 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-400 dark:border-neutral-700 dark:text-neutral-400">
-                <ImageIcon size={14} />
-                {form.image ? "Change image" : "Upload image"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImagePick}
-                  className="hidden"
-                />
-              </label>
             </div>
-          </div>
-
-          {/* Name */}
-          <div className="mb-4">
-            <label
-              htmlFor="cat-name"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
-            >
-              Category Name
-            </label>
-            <input
-              id="cat-name"
-              value={form.name}
-              onChange={handleChange("name")}
-              placeholder="e.g. Electronics"
-              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                errors.name
-                  ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-              }`}
-            />
-            {errors.name && (
-              <p className="mt-1.5 text-[12px] text-red-400">{errors.name}</p>
-            )}
-          </div>
-
-          {/* Description */}
-          <div className="mb-4">
-            <label
-              htmlFor="cat-description"
-              className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300"
-            >
-              Description
-            </label>
-            <textarea
-              id="cat-description"
-              value={form.description}
-              onChange={handleChange("description")}
-              placeholder="Short description of this category"
-              rows={3}
-              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
-            />
-          </div>
-
-          {/* Status */}
-          <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Status
-            </label>
-            <div className="flex gap-2">
-              {[
-                { label: "Active", value: true },
-                { label: "Inactive", value: false },
-              ].map((s) => (
-                <button
-                  type="button"
-                  key={s.label}
-                  onClick={() => setForm((prev) => ({ ...prev, isActive: s.value }))}
-                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.isActive === s.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-400"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* Footer actions */}
           <div className="flex items-center justify-end gap-2.5">
@@ -231,11 +196,12 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={saving || !canSubmit}
+              title={!canSubmit ? "Add an icon and a title first" : undefined}
+              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Category"}
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add"}
             </button>
           </div>
         </form>
@@ -244,138 +210,14 @@ function CategoryFormModal({ open, initialData, saving, onClose, onSave }) {
   );
 }
 
-/* -------------------------------------------------------------------------
- * View modal — read-only details for a category
- * ---------------------------------------------------------------------- */
-
-function CategoryViewModal({ open, category, loading, onClose }) {
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-neutral-900"
-      >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-          <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">Category Details</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="px-5 py-5">
-          {loading || !category ? (
-            <div className="flex items-center justify-center gap-2 py-14 text-[13px] text-neutral-500">
-              <Loader2 size={16} className="animate-spin" />
-              Loading…
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-200 dark:bg-neutral-800">
-                  {category.image ? (
-                    <img
-                      src={category.image}
-                      alt={category.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <ImageIcon size={20} className="text-neutral-600" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">{category.name}</p>
-                  <StatusBadge status={category.isActive ? "Active" : "Inactive"} />
-                </div>
-              </div>
-
-              {category.description && (
-                <p className="mt-4 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-                  {category.description}
-                </p>
-              )}
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                {[
-                  { label: "Sub Categories", stat: category.stats?.subCategories },
-                  { label: "Brands", stat: category.stats?.brands },
-                  { label: "Vouchers", stat: category.stats?.vouchers },
-                  { label: "Promo Codes", stat: category.stats?.promoCodes },
-                ].map(({ label, stat }) => (
-                  <div
-                    key={label}
-                    className="rounded-xl bg-neutral-50 px-3.5 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20"
-                  >
-                    <p className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</p>
-                    <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-                      {stat?.total ?? 0}
-                    </p>
-                    <p className="text-[10.5px] text-neutral-500">{stat?.active ?? 0} active</p>
-                  </div>
-                ))}
-              </div>
-
-              {category.createdAt && (
-                <p className="mt-4 text-[11.5px] text-neutral-600">
-                  Created {new Date(category.createdAt).toLocaleString("en-IN")}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
- * Delete confirmation modal
- * ---------------------------------------------------------------------- */
-
-function DeleteConfirmModal({ category, deleting, onCancel, onConfirm }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-neutral-900 p-6 shadow-2xl">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
-            <AlertTriangle size={18} />
-          </div>
-          <div>
-            <h3 className="text-[14.5px] font-semibold text-neutral-50">Delete category?</h3>
-            <p className="mt-0.5 text-[12.5px] text-neutral-500">
-              This removes "{category.name}" and its sub-categories/vouchers link.
-            </p>
-          </div>
-        </div>
-        <div className="mt-5 flex items-center justify-end gap-2.5">
-          <button
-            onClick={onCancel}
-            disabled={deleting}
-            className="rounded-xl border border-neutral-800 px-4 py-2.5 text-[13px] font-medium text-neutral-300 transition-colors hover:border-neutral-700 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:opacity-60"
-          >
-            {deleting && <Loader2 size={14} className="animate-spin" />}
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Every count attached to a category, for the delete box. Sub-categories,
+// brands and vouchers block a delete (API refuses); promo codes don't.
+const categoryCounts = (row) => [
+  { label: "Sub-categories", ...row.stats.subCategories, blocks: true },
+  { label: "Brands", ...row.stats.brands, blocks: true },
+  { label: "Vouchers", ...row.stats.vouchers, blocks: true },
+  { label: "Promo codes", ...row.stats.promoCodes, blocks: false },
+];
 
 /* -------------------------------------------------------------------------
  * Helpers to map between API shape and the form's shape
@@ -404,6 +246,20 @@ function apiToRow(cat) {
     brandCount: brands.total,
     promoCodeCount: promoCodes.total,
     createdAt: cat.createdAt,
+    updatedAt: cat.updatedAt,
+  };
+}
+
+// Flips one category's isActive inside a cached getAll response — used for
+// the optimistic status toggle. Detail entries (no data.data array) pass through.
+function patchCachedCategory(old, id, isActive) {
+  if (!Array.isArray(old?.data?.data)) return old;
+  return {
+    ...old,
+    data: {
+      ...old.data,
+      data: old.data.data.map((c) => ((c._id ?? c.id) === id ? { ...c, isActive } : c)),
+    },
   };
 }
 
@@ -433,14 +289,20 @@ function rowToFormDraft(row) {
  * ---------------------------------------------------------------------- */
 
 export default function Category() {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
+  // The search text actually sent to the API — trails `search` by 400ms.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
+  const [limit, setLimit] = useState(12);
+  // All / Active / Inactive — sent to the API as `isActive`.
+  const [statusFilter, setStatusFilter] = useState("All");
+  // Grid by default; table on request.
+  const [view, setView] = useState("grid");
+  // Row whose status switch was clicked — confirmed before the API call.
+  const [toggleTarget, setToggleTarget] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -448,8 +310,6 @@ export default function Category() {
   const [saveError, setSaveError] = useState("");
 
   const [viewTarget, setViewTarget] = useState(null); // row summary that was clicked
-  const [viewCategory, setViewCategory] = useState(null); // full detail from API
-  const [viewLoading, setViewLoading] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -457,57 +317,70 @@ export default function Category() {
   const [togglingId, setTogglingId] = useState(null);
   const [toggleError, setToggleError] = useState("");
 
-  // A broader, unpaginated snapshot used only for the overview charts —
-  // the paginated `categories` list above only ever holds one page, which
-  // would make a status/count chart misleading.
-  const [allCategories, setAllCategories] = useState([]);
-  const [chartsError, setChartsError] = useState("");
+  // Overview charts — every category matching the current search + status
+  // filter (up to 100, not just the visible page), so the charts follow
+  // the filters like the list does.
+  const allCategoriesQuery = useCategories({
+    page: 1,
+    limit: 100,
+    search: debouncedSearch,
+    isActive: STATUS_PARAM[statusFilter],
+  });
+  // "No any category found" (404) = nothing matches → empty charts.
+  const chartsNotFound = /not found|no .*found/i.test(allCategoriesQuery.error?.message || "");
+  const allCategories = useMemo(
+    () => (chartsNotFound ? [] : (allCategoriesQuery.data?.data?.data ?? []).map(apiToRow)),
+    [allCategoriesQuery.data, chartsNotFound]
+  );
+  const chartsError = chartsNotFound ? "" : allCategoriesQuery.error?.message ?? "";
 
-  const fetchAllCategories = useCallback(async () => {
-    setChartsError("");
-    try {
-      const res = await getCategories({ page: 1, limit: 100 });
-      setAllCategories((res?.data?.data ?? []).map(apiToRow));
-    } catch (err) {
-      setAllCategories([]);
-      setChartsError(err.message);
-    }
-  }, []);
+  // Pagination, search and the status filter all run on the backend; the
+  // counts below come from the same filters, so they match the list.
+  const categoriesQuery = useCategories(
+    { page, limit, search: debouncedSearch, isActive: STATUS_PARAM[statusFilter] },
+    { placeholderData: keepPreviousData }
+  );
+  // A 404 "No any category found" is just an empty page, not an error.
+  const listNotFound = /not found|no .*found/i.test(categoriesQuery.error?.message || "");
+  const categories = useMemo(
+    () => (listNotFound ? [] : (categoriesQuery.data?.data?.data ?? []).map(apiToRow)),
+    [categoriesQuery.data, listNotFound]
+  );
+  const totalPages = listNotFound ? 1 : categoriesQuery.data?.data?.totalPages ?? 1;
+  const total = listTotal(categoriesQuery) ?? 0;
+  const loading = categoriesQuery.isPending;
+  const loadError = listNotFound ? "" : categoriesQuery.error?.message ?? "";
 
-  useEffect(() => {
-    fetchAllCategories();
-  }, [fetchAllCategories]);
-
-  const fetchCategories = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await getCategories({ page, limit, search });
-      const rows = (res?.data?.data ?? []).map(apiToRow);
-      setCategories(rows);
-      setTotalPages(res?.data?.totalPages ?? 1);
-    } catch (err) {
-      setLoadError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, search]);
+  // Active / inactive totals for the tabs — same search, limit 1 (only the
+  // `total` is used).
+  const activeCountQuery = useCategories({ page: 1, limit: 1, search: debouncedSearch, isActive: true });
+  const inactiveCountQuery = useCategories({ page: 1, limit: 1, search: debouncedSearch, isActive: false });
+  const activeTotal = listTotal(activeCountQuery);
+  const inactiveTotal = listTotal(inactiveCountQuery);
+  const statusCounts = {
+    active: activeTotal,
+    inactive: inactiveTotal,
+    all: activeTotal != null && inactiveTotal != null ? activeTotal + inactiveTotal : undefined,
+  };
 
   // Debounce search so we don't hit the API on every keystroke
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(1);
-      fetchCategories();
+      setDebouncedSearch(search);
     }, 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Refetch on page change (search effect already handles search changes)
-  useEffect(() => {
-    fetchCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  // Full detail for the View modal; falls back to the clicked row's summary
+  // if the detail call fails.
+  const viewQuery = useCategory(viewTarget?.id);
+  const viewLoading = Boolean(viewTarget) && viewQuery.isPending;
+  const viewCategory = useMemo(() => {
+    if (!viewTarget) return null;
+    if (viewQuery.data) return apiToRow(viewQuery.data?.data ?? viewQuery.data);
+    return viewQuery.error ? viewTarget : null;
+  }, [viewTarget, viewQuery.data, viewQuery.error]);
 
   const handleAddClick = () => {
     setEditingCategory(null);
@@ -521,21 +394,8 @@ export default function Category() {
     setModalOpen(true);
   };
 
-  const handleView = async (row) => {
+  const handleView = (row) => {
     setViewTarget(row);
-    setViewCategory(null);
-    setViewLoading(true);
-    try {
-      const res = await getCategoryById(row.id);
-      const detail = res?.data ?? res;
-      setViewCategory(apiToRow(detail));
-    } catch (err) {
-      // fall back to the row data we already have if the detail call fails
-      setViewCategory(row);
-      console.error("Failed to load category details:", err.message);
-    } finally {
-      setViewLoading(false);
-    }
   };
 
   const handleSave = async (form) => {
@@ -543,11 +403,11 @@ export default function Category() {
     setSaveError("");
     try {
       if (form.id) {
+        // No isActive on edit — status changes only via the list toggle.
         await updateCategory(form.id, {
           name: form.name.trim(),
           description: form.description,
           image: form.image,
-          isActive: form.isActive,
         });
       } else {
         await createCategory({
@@ -559,8 +419,7 @@ export default function Category() {
       }
       setModalOpen(false);
       setEditingCategory(null);
-      fetchCategories();
-      fetchAllCategories();
+      // No manual reload — the write interceptor refreshes ["categories"].
     } catch (err) {
       setSaveError(err.message);
     } finally {
@@ -572,18 +431,20 @@ export default function Category() {
   // with the flipped flag; no image, so the existing one is kept.
   const handleToggleActive = async (row) => {
     const isActive = !row.isActive;
-    const patchRow = (r) => (r.id === row.id ? { ...r, isActive, status: isActive ? "Active" : "Inactive" } : r);
     setTogglingId(row.id);
     setToggleError("");
-    setCategories((prev) => prev.map(patchRow));
-    setAllCategories((prev) => prev.map(patchRow));
+    // Optimistic: flip the row in every cached list page (table + charts).
+    queryClient.setQueriesData({ queryKey: queryKeys.categories.all }, (old) =>
+      patchCachedCategory(old, row.id, isActive)
+    );
     try {
       await updateCategory(row.id, { name: row.name, description: row.description ?? "", isActive });
+      setToggleTarget(null);
     } catch (err) {
-      const revert = (r) => (r.id === row.id ? row : r);
-      setCategories((prev) => prev.map(revert));
-      setAllCategories((prev) => prev.map(revert));
+      // Revert by refetching the real state from the server.
+      queryClient.invalidateQueries({ queryKey: queryKeys.categories.all });
       setToggleError(`Couldn't update "${row.name}": ${err.message}`);
+      setToggleTarget(null);
     } finally {
       setTogglingId(null);
     }
@@ -591,16 +452,26 @@ export default function Category() {
 
   const confirmDelete = async () => {
     setDeleting(true);
+    setDeleteError("");
     try {
       await deleteCategory(deleteTarget.id);
       setDeleteTarget(null);
-      fetchCategories();
-      fetchAllCategories();
     } catch (err) {
-      console.error("Failed to delete category:", err.message);
+      // e.g. "Cannot delete this category — 2 sub-categories, 3 brands …"
+      setDeleteError(err.message);
     } finally {
       setDeleting(false);
     }
+  };
+
+  // Filters reset to page 1.
+  const changeStatus = (s) => {
+    setStatusFilter(s);
+    setPage(1);
+  };
+  const changeLimit = (n) => {
+    setLimit(n);
+    setPage(1);
   };
 
   // Overview charts — derived from the broader allCategories snapshot, not
@@ -644,7 +515,7 @@ export default function Category() {
     },
     {
       key: "icon",
-      label: "Category Icon",
+      label: "Icon",
       render: (row) => (
         <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-neutral-200 dark:bg-neutral-800">
           {row.image ? (
@@ -657,9 +528,9 @@ export default function Category() {
     },
     {
       key: "name",
-      label: "Category Name",
+      label: "Title",
       render: (row) => (
-        <span className="font-medium text-neutral-900 dark:text-neutral-50">{row.name}</span>
+        <span className="font-medium capitalize text-neutral-900 dark:text-neutral-50">{row.name}</span>
       ),
     },
     {
@@ -695,9 +566,11 @@ export default function Category() {
             checked={Boolean(row.isActive)}
             disabled={togglingId === row.id}
             title={row.isActive ? "Click to make Inactive" : "Click to make Active"}
-            onChange={() => handleToggleActive(row)}
+            onChange={() => setToggleTarget(row)}
           />
-          <StatusBadge status={row.status} />
+          <span className={`text-[11px] font-semibold ${row.isActive ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400"}`}>
+            {row.isActive ? "Active" : "Inactive"}
+          </span>
         </div>
       ),
     },
@@ -722,7 +595,10 @@ export default function Category() {
             <Pencil size={15} />
           </button>
           <button
-            onClick={() => setDeleteTarget(row)}
+            onClick={() => {
+              setDeleteError("");
+              setDeleteTarget(row);
+            }}
             aria-label={`Delete ${row.name}`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:text-neutral-400 dark:hover:text-red-400"
           >
@@ -751,16 +627,21 @@ export default function Category() {
             className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
           >
             <Plus size={16} />
-            Add Category
+            Add
           </button>
         </div>
 
-        {/* Overview charts — real data, independent of the table's filters */}
+        {/* Overview charts — follow the search / status filters */}
         {chartsError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={13} className="shrink-0" />
-            Couldn't load chart data: {chartsError}
-          </div>
+          <EmptyState
+            variant="compact"
+            tone="error"
+            icon="error"
+            title="Couldn't load chart data"
+            description={chartsError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => allCategoriesQuery.refetch() }}
+            className="mb-4"
+          />
         )}
         <div className="mb-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
           <div className="flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
@@ -845,15 +726,18 @@ export default function Category() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="mb-4 flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:max-w-xs">
-          <Search size={16} className="shrink-0 text-neutral-500" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search category..."
-            className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
-          />
+        {/* Search + status tabs (with backend counts) + grid / table */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 sm:w-72">
+            <Search size={16} className="shrink-0 text-neutral-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search category..."
+              className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+            />
+          </div>
+          <StatusTabsAndView status={statusFilter} onStatus={changeStatus} counts={statusCounts} view={view} onView={setView} />
         </div>
 
         {/* Load state */}
@@ -862,8 +746,14 @@ export default function Category() {
         )}
 
         {!loading && loadError && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-            Failed to load categories: {loadError}
+          <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+            <EmptyState
+              tone="error"
+              icon="error"
+              title="Couldn't load categories"
+              description={loadError}
+              action={{ label: "Try again", icon: RefreshCw, onClick: () => categoriesQuery.refetch() }}
+            />
           </div>
         )}
 
@@ -876,37 +766,56 @@ export default function Category() {
 
         {!loading && !loadError && (
           <>
-            {/* Table */}
-            <Table
-              columns={columns}
-              data={categories}
-              emptyTitle="No categories yet" emptyDescription="Categories group brands in the customer app. Add the first one to get started." emptyIcon="category" emptyAction={{ label: "Add Category", onClick: handleAddClick }}
-              dense
-              minWidth={920}
-            />
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-4 flex items-center justify-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Prev
-                </button>
-                <span className="text-[12.5px] text-neutral-500">
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Next
-                </button>
-              </div>
+            {view === "grid" ? (
+              categories.length ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {categories.map((row) => (
+                    <CatalogGridCard
+                      key={row.id}
+                      item={row}
+                      stats={[
+                        { label: "Sub-cats", total: row.stats.subCategories.total },
+                        { label: "Brands", total: row.stats.brands.total },
+                        { label: "Vouchers", total: row.stats.vouchers.total },
+                        { label: "Promos", total: row.stats.promoCodes.total },
+                      ]}
+                      toggling={togglingId === row.id}
+                      onToggle={() => setToggleTarget(row)}
+                      onView={() => handleView(row)}
+                      onEdit={() => handleEdit(row)}
+                      onDelete={() => {
+                        setDeleteError("");
+                        setDeleteTarget(row);
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <Table
+                  columns={columns}
+                  data={[]}
+                  emptyTitle={debouncedSearch || statusFilter !== "All" ? "No categories match" : "No categories yet"}
+                  emptyDescription="Categories group brands in the customer app. Add the first one to get started."
+                  emptyIcon="category"
+                  emptyAction={{ label: "Add", onClick: handleAddClick }}
+                  dense
+                />
+              )
+            ) : (
+              <Table
+                columns={columns}
+                data={categories}
+                emptyTitle={debouncedSearch || statusFilter !== "All" ? "No categories match" : "No categories yet"}
+                emptyDescription="Categories group brands in the customer app. Add the first one to get started."
+                emptyIcon="category"
+                emptyAction={{ label: "Add", onClick: handleAddClick }}
+                dense
+                minWidth={920}
+              />
             )}
+
+            {/* Pagination — counts come from the backend for the current filters */}
+            <PaginationBar page={page} limit={limit} total={total} totalPages={totalPages} onPage={setPage} onLimit={changeLimit} />
           </>
         )}
       </div>
@@ -930,21 +839,49 @@ export default function Category() {
       )}
 
       {/* View Category modal */}
-      <CategoryViewModal
+      <CatalogViewModal
         open={Boolean(viewTarget)}
-        category={viewCategory}
+        kind="Category"
+        item={viewCategory}
         loading={viewLoading}
-        onClose={() => {
+        stats={
+          viewCategory
+            ? [
+                { label: "Sub-categories", ...viewCategory.stats.subCategories },
+                { label: "Brands", ...viewCategory.stats.brands },
+                { label: "Vouchers", ...viewCategory.stats.vouchers },
+                { label: "Promo codes", ...viewCategory.stats.promoCodes },
+              ]
+            : []
+        }
+        onClose={() => setViewTarget(null)}
+        onEdit={() => {
+          const row = viewCategory;
           setViewTarget(null);
-          setViewCategory(null);
+          if (row) handleEdit(row);
         }}
       />
 
-      {/* Delete confirmation modal */}
+      {/* Status toggle confirmation */}
+      {toggleTarget && (
+        <ConfirmToggleModal
+          kind="category"
+          item={toggleTarget}
+          impact={`${toggleTarget.stats.subCategories.total} sub-categories · ${toggleTarget.stats.brands.total} brands · ${toggleTarget.stats.vouchers.total} vouchers`}
+          busy={togglingId === toggleTarget.id}
+          onCancel={() => setToggleTarget(null)}
+          onConfirm={() => handleToggleActive(toggleTarget)}
+        />
+      )}
+
+      {/* Delete confirmation — with every attached count */}
       {deleteTarget && (
-        <DeleteConfirmModal
-          category={deleteTarget}
+        <DeleteWithCountsModal
+          kind="category"
+          item={deleteTarget}
+          counts={categoryCounts(deleteTarget)}
           deleting={deleting}
+          error={deleteError}
           onCancel={() => !deleting && setDeleteTarget(null)}
           onConfirm={confirmDelete}
         />

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { presignUploadAndConfirm } from '../../banner/services/BannerApi';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{TryDood2.0BaseUrl}}
@@ -151,52 +152,104 @@ export async function deleteShowcaseSection(sectionId, brandId) {
 // MEDIA  (photos / videos that live inside a Section)
 // ══════════════════════════════════════════════════════════════
 
+// ── Presigned uploads (super admin doc #111/#112, A-3) ───────────────
+// Each file goes presign → S3 → confirm (shared helper in BannerApi), and
+// the showcase endpoint then gets only the upload ids. A video's poster
+// has its own purpose — sending a gallery id as a poster is a 422.
+export const SHOWCASE_UPLOAD_PURPOSE = Object.freeze({
+    MEDIA: 'SHOWCASE_MEDIA',
+    THUMBNAIL: 'SHOWCASE_THUMBNAIL',
+});
+
+export const isVideoFile = (file) => Boolean(file?.type?.startsWith('video/'));
+
+// Presign off (503) or storage not on S3 (409): multipart still works,
+// so fall back to it instead of failing the upload (doc A-1).
+const isPresignUnavailable = (error) => error?.status === 503 || error?.status === 409;
+
+// The backend matches posters to videos by position: videos first, photos
+// after, posters in the same order as the videos (doc A-3).
+function orderVideosFirst(files, posters = []) {
+    const videos = [];
+    const photos = [];
+    files.forEach((file, i) => {
+        if (isVideoFile(file)) videos.push({ file, poster: posters[i] ?? null });
+        else photos.push({ file });
+    });
+    if (videos.some((v) => !v.poster)) {
+        throw new Error('Every video needs its own poster image.');
+    }
+    return {
+        ordered: [...videos.map((v) => v.file), ...photos.map((p) => p.file)],
+        videoPosters: videos.map((v) => v.poster),
+    };
+}
+
 // ── Add Media to a Section ──────────────────────────────────────
-// POST {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/add-media   (multipart/form-data)
-// Matches the Postman request exactly:
-//   - "isShowInVideoClips": "true" | "false"   (text field)
-//   - "files": <file>                          (repeated file field, one per upload)
-//   - "thumbnail": <file>                      (single file field, optional —
-//     NOT independently confirmed against a real Postman sample; verify
-//     with the backend before relying on it)
+// POST {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/add-media
+// Presigned: JSON { uploadIds[], thumbnailUploadIds[], isShowInVideoClips }.
+// Fallback (presign off / not S3): multipart `files[]` + `thumbnails[]`.
+// `brandId` is never sent — add-media drops it, the section decides the
+// brand (doc A-3).
 //
 // @param {string} sectionId
 // @param {File[]} files
 // @param {object} [options]
-// @param {string} [options.brandId] - required when acting as an admin
 // @param {boolean} [options.isShowInVideoClips=false]
-// @param {File|null} [options.thumbnail] - optional custom thumbnail, only
-//        meaningful when isShowInVideoClips is true
-// @param {Record<string,string>} [options.extraFields] - e.g. a "month" tag
-//        for Ambience-style albums, if the backend accepts it per-upload.
+// @param {(File|null)[]} [options.posters] - poster per file index; required
+//        for every video, ignored for photos
 // @param {(percent:number)=>void} [onUploadProgress]
 export async function addShowcaseMedia(
     sectionId,
     files,
-    { brandId, isShowInVideoClips = false, thumbnail = null, extraFields = {} } = {},
+    { isShowInVideoClips = false, posters = [] } = {},
     onUploadProgress
 ) {
+    if (!sectionId) throw new Error('sectionId is required');
+    if (!files?.length) throw new Error('At least one file is required');
+    const { ordered, videoPosters } = orderVideosFirst(files, posters);
+
+    let uploadIds;
+    let thumbnailUploadIds;
     try {
-        if (!sectionId) throw new Error('sectionId is required');
-        if (!files?.length) throw new Error('At least one file is required');
+        const total = ordered.length + videoPosters.length;
+        let done = 0;
+        const upload = async (file, purpose) => {
+            const id = await presignUploadAndConfirm({ file, purpose });
+            done += 1;
+            onUploadProgress?.(Math.round((done * 100) / total));
+            return id;
+        };
+        uploadIds = [];
+        for (const file of ordered) uploadIds.push(await upload(file, SHOWCASE_UPLOAD_PURPOSE.MEDIA));
+        thumbnailUploadIds = [];
+        for (const poster of videoPosters) thumbnailUploadIds.push(await upload(poster, SHOWCASE_UPLOAD_PURPOSE.THUMBNAIL));
+    } catch (error) {
+        if (!isPresignUnavailable(error)) throw error;
+        return addShowcaseMediaMultipart(sectionId, ordered, videoPosters, isShowInVideoClips, onUploadProgress);
+    }
 
+    try {
+        const { data } = await api.post(`/showcase/section/${sectionId}/add-media`, {
+            uploadIds,
+            ...(thumbnailUploadIds.length ? { thumbnailUploadIds } : {}),
+            isShowInVideoClips,
+        });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+async function addShowcaseMediaMultipart(sectionId, ordered, videoPosters, isShowInVideoClips, onUploadProgress) {
+    try {
         const formData = new FormData();
-        if (brandId) formData.append('brandId', brandId);
         formData.append('isShowInVideoClips', String(isShowInVideoClips));
-        if (thumbnail) formData.append('thumbnail', thumbnail);
-
-        Object.entries(extraFields).forEach(([key, value]) => {
-            formData.append(key, value);
-        });
-
-        files.forEach((file) => {
-            formData.append('files', file);
-        });
+        ordered.forEach((file) => formData.append('files', file));
+        videoPosters.forEach((poster) => formData.append('thumbnails', poster));
 
         // No explicit Content-Type header — the browser must set it itself
-        // for a FormData body so it can attach the multipart boundary;
-        // overriding it with a boundary-less value makes the backend's
-        // multer/busboy parser silently fail to read any fields.
+        // for a FormData body so it can attach the multipart boundary.
         const { data } = await api.post(`/showcase/section/${sectionId}/add-media`, formData, {
             onUploadProgress: onUploadProgress
                 ? (evt) => onUploadProgress(Math.round((evt.loaded * 100) / (evt.total || 1)))
@@ -209,20 +262,29 @@ export async function addShowcaseMedia(
 }
 
 // ── Replace a Media Item's File ──────────────────────────────────
-// PUT {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/media/replace/:mediaId  (multipart/form-data)
-// body: "file" (single file field) and/or "isShowInVideoClips" — used by
-// the click-to-preview modal's "Replace" action.
-export async function replaceShowcaseMedia(sectionId, mediaId, { file, isShowInVideoClips, brandId } = {}) {
-    try {
-        const formData = new FormData();
-        if (file) formData.append('file', file);
-        if (isShowInVideoClips !== undefined) formData.append('isShowInVideoClips', String(isShowInVideoClips));
-        if (brandId) formData.append('brandId', brandId);
+// PUT {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/media/replace/:mediaId
+// Presigned: JSON { uploadId, thumbnailUploadId }. Fallback: multipart
+// `file` + `thumbnail`. A video replacement needs a poster (doc A-4).
+export async function replaceShowcaseMedia(sectionId, mediaId, { file, poster = null } = {}) {
+    if (!file) throw new Error('file is required');
+    if (isVideoFile(file) && !poster) throw new Error('A video needs a poster image.');
 
-        const { data } = await api.put(
-            `/showcase/section/${sectionId}/media/replace/${mediaId}`,
-            formData
-        );
+    let body;
+    try {
+        const uploadId = await presignUploadAndConfirm({ file, purpose: SHOWCASE_UPLOAD_PURPOSE.MEDIA });
+        const thumbnailUploadId = poster
+            ? await presignUploadAndConfirm({ file: poster, purpose: SHOWCASE_UPLOAD_PURPOSE.THUMBNAIL })
+            : undefined;
+        body = { uploadId, ...(thumbnailUploadId ? { thumbnailUploadId } : {}) };
+    } catch (error) {
+        if (!isPresignUnavailable(error)) throw error;
+        body = new FormData();
+        body.append('file', file);
+        if (poster) body.append('thumbnail', poster);
+    }
+
+    try {
+        const { data } = await api.put(`/showcase/section/${sectionId}/media/replace/${mediaId}`, body);
         return data;
     } catch (error) {
         handleError(error);
@@ -249,15 +311,22 @@ export async function reorderShowcaseMedia(sectionId, medias) {
 // PATCH {{TryDood2.0BaseUrl}}/showcase/section/:sectionId/media/update/:mediaId
 // body: partial, e.g. { title, altText, isActive, sortOrder,
 // isShowInVideoClips } — matches the confirmed response's own fields.
-// `thumbnail` (a real field on the response) is also editable here — when
-// a File is passed, this switches to multipart/form-data to carry it,
-// otherwise it stays a plain JSON PATCH like before. Does NOT replace the
+// `thumbnail` (a video's poster — photos 422 on it, doc A-9) is also
+// editable here: a File goes up presigned as `thumbnailUploadId`, or as
+// multipart `thumbnail` when presign is unavailable. Does NOT replace the
 // underlying media file itself — replaceShowcaseMedia does that.
 export async function updateShowcaseMedia(sectionId, mediaId, patch = {}) {
-    try {
-        const { thumbnail, ...rest } = patch;
-        let body = rest;
-        if (thumbnail instanceof File) {
+    const { thumbnail, ...rest } = patch;
+    let body = rest;
+    if (thumbnail instanceof File) {
+        try {
+            const thumbnailUploadId = await presignUploadAndConfirm({
+                file: thumbnail,
+                purpose: SHOWCASE_UPLOAD_PURPOSE.THUMBNAIL,
+            });
+            body = { ...rest, thumbnailUploadId };
+        } catch (error) {
+            if (!isPresignUnavailable(error)) throw error;
             const formData = new FormData();
             Object.entries(rest).forEach(([key, value]) => {
                 if (value === undefined) return;
@@ -266,6 +335,8 @@ export async function updateShowcaseMedia(sectionId, mediaId, patch = {}) {
             formData.append('thumbnail', thumbnail);
             body = formData;
         }
+    }
+    try {
         const { data } = await api.patch(
             `/showcase/section/${sectionId}/media/update/${mediaId}`,
             body
@@ -344,9 +415,9 @@ export async function createShowcaseSectionWithMedia(
 
 // ── Get Full Brand Showcase (sections + their media, ONE call) ───
 // GET {{TryDood2.0ServerUrl}}/showcase/get-brand-showcase/:brandId
-// Replaces the separate getShowcaseSections() list call for hydration —
-// this single endpoint returns every section AND its media already
-// nested, which is exactly what ShowcaseAlbumsEditor needs to prefill.
+// ⚠️ CUSTOMER gallery — drops sections below the min media count, hidden
+// sections and inactive media, and 404s on an unverified brand (super admin
+// doc A-5). The admin editor uses getAdminBrandShowcase() below instead.
 export async function getBrandShowcase(brandId) {
     try {
         const { data } = await api.get(`/showcase/get-brand-showcase/${brandId}`);
@@ -354,4 +425,85 @@ export async function getBrandShowcase(brandId) {
     } catch (error) {
         handleError(error);
     }
+}
+
+// GET /showcase/section/get-all?brandId=&limit=100&isVisible= (super admin
+// doc #36). `isVisible` defaults to true server-side, so hidden sections
+// need their own call. A 404 "No any showcasesection found" is the
+// empty-state, not an error.
+async function getBrandSectionsByVisibility(brandId, isVisible) {
+    try {
+        const { data } = await api.get('/showcase/section/get-all', {
+            params: { brandId, limit: 100, isVisible },
+        });
+        const list = data?.data?.data ?? data?.data ?? [];
+        return Array.isArray(list) ? list : [];
+    } catch (error) {
+        if (error?.response?.status === 404) return [];
+        handleError(error);
+    }
+}
+
+// Section detail's media list — the exact key isn't in the super admin doc
+// (it points to vendor doc #44), so take every array of media-like items
+// (`medias`, `media`, or separate `photos` / `videos`), in sortOrder.
+const looksLikeMedia = (item) =>
+    Boolean(item) &&
+    typeof item === 'object' &&
+    Boolean(item.media?.url || item.url || ['PHOTO', 'IMAGE', 'VIDEO'].includes(String(item.type).toUpperCase()));
+
+// Collects media arrays up to a few levels deep, so a paginated
+// `medias: { data: [...] }` or a `section.medias` is found too. It never
+// descends into a media item itself (its own `media` is an object).
+function collectMediaArrays(node, depth, out) {
+    if (!node || typeof node !== 'object' || depth < 0) return;
+    Object.values(node).forEach((value) => {
+        if (Array.isArray(value)) {
+            if (value.some(looksLikeMedia)) out.push(value);
+        } else if (value && typeof value === 'object') {
+            collectMediaArrays(value, depth - 1, out);
+        }
+    });
+}
+
+function sectionMediaList(detail) {
+    const arrays = [];
+    collectMediaArrays(detail, 3, arrays);
+    if (arrays.length) {
+        return arrays
+            .flat()
+            .filter(looksLikeMedia)
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    }
+    if (import.meta.env.DEV) {
+        console.warn('[showcase] no media array found in section detail:', detail);
+    }
+    return [];
+}
+
+// ── Admin editor: EVERY section of a brand, with its media ───────────
+// Sections from get-all (visible + hidden, any media count, untitled too),
+// media per section from GET /showcase/section/get/:sectionId. A section
+// whose detail call fails still shows, with its media left empty.
+export async function getAdminBrandShowcase(brandId) {
+    const [visible, hidden] = await Promise.all([
+        getBrandSectionsByVisibility(brandId, true),
+        getBrandSectionsByVisibility(brandId, false),
+    ]);
+    const byId = new Map();
+    [...visible, ...hidden].forEach((s) => {
+        if (s?._id && !byId.has(s._id)) byId.set(s._id, s);
+    });
+    const sections = [...byId.values()].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+    const details = await Promise.allSettled(sections.map((s) => getShowcaseSectionById(s._id)));
+    return sections.map((s, i) => {
+        const detail = details[i].status === 'fulfilled' ? details[i].value?.data : null;
+        return {
+            ...s,
+            ...(detail?.section ?? detail ?? {}),
+            medias: detail ? sectionMediaList(detail) : s.medias ?? [],
+            mediaLoadFailed: details[i].status === 'rejected',
+        };
+    });
 }

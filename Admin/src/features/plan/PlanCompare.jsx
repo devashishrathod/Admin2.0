@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { Check, Lock, X } from "lucide-react";
-import { getPlanComparison } from "./services/planApi";
+import React, { useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { Check, Lock, RefreshCw, X } from "lucide-react";
+import { usePlanComparison } from "./queries/planQueries";
 import Loader from "../../components/common/Loader";
+import EmptyState from "../../components/common/EmptyState";
 
 /* -------------------------------------------------------------------------
  * Plan comparison (#75e) — the same grid vendors see. `columns[]` are the
@@ -10,7 +12,7 @@ import Loader from "../../components/common/Loader";
  * ---------------------------------------------------------------------- */
 
 function CellValue({ cell }) {
-  if (!cell) return <span className="text-neutral-400 dark:text-neutral-700">—</span>;
+  if (!cell) return <span className="text-neutral-400 dark:text-neutral-500">Not included</span>;
   const raw = cell.raw;
   const isBool = raw && typeof raw === "object" && "isEnabled" in raw && Object.keys(raw).length === 1;
   if (isBool || (cell.display == null && typeof cell.isIncluded === "boolean")) {
@@ -22,35 +24,19 @@ function CellValue({ cell }) {
   }
   return (
     <span className={cell.isIncluded === false ? "text-neutral-400 dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}>
-      {cell.display ?? "—"}
+      {cell.display ?? (cell.isIncluded === false ? "Not included" : "Not set")}
     </span>
   );
 }
 
 export default function PlanCompare() {
   const [includeInactive, setIncludeInactive] = useState(true);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const res = await getPlanComparison(includeInactive);
-        if (!cancelled) setData(res?.data ?? res);
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [includeInactive]);
+  // Keep the grid on screen while the other "include inactive" variant loads.
+  const { data: res, isPending: loading, error: queryError, refetch: refetchComparison } = usePlanComparison(includeInactive, {
+    placeholderData: keepPreviousData,
+  });
+  const data = res?.data ?? res;
+  const error = queryError?.message ?? "";
 
   const columns = Array.isArray(data?.columns) ? data.columns : [];
   const rows = Array.isArray(data?.rows) ? data.rows : [];
@@ -95,8 +81,14 @@ export default function PlanCompare() {
       )}
 
       {!loading && error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-4 py-4 text-[13px] text-red-600 dark:text-red-400">
-          Failed to load comparison: {error}
+        <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
+          <EmptyState
+            tone="error"
+            icon="error"
+            title="Couldn't load the comparison"
+            description={error}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => refetchComparison() }}
+          />
         </div>
       )}
 

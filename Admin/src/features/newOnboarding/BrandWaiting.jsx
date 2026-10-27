@@ -140,9 +140,8 @@ export default function BrandWaiting() {
   }, [search]);
 
   // Every waiting brand (all server pages), then this page's slice of them.
-  // Brand Waiting rule: the vendor finished onboarding (isOnBoardingCompleted)
-  // or is on the UNDER_REVIEW screen, and the brand isn't approved yet
-  // (isApproved false) → it waits here for the admin to approve or reject.
+  // Brand Waiting rule: onboarding is complete or the API status/screen is
+  // UNDER_REVIEW, and the brand isn't approved yet.
   // One card per brand — its latest attempt.
   const waiting = [...latestByBrand(verifications).values()].filter(
     (v) =>

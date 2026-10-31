@@ -94,7 +94,33 @@ export async function getAllSubscriptionPages(params = {}) {
     return rows;
 }
 
+/* -------------------------------------------------------------------------
+ * (Re-)issue the invoice for a subscription's payment transaction.
+ * POST {{base_url}}/transactions/invoice/regenerate
+ *
+ * body: { transactionId }
+ * Amounts are never recomputed — the PDF is rebuilt from the pricing frozen
+ * on the transaction. Admin is exempt from the ownership check.
+ *
+ * response (live — differs from the API doc's `data.invoice` shape):
+ *   { success, message, data: { transactionId, invoiceId, invoiceUrl (null),
+ *     invoiceDownloadUrl (/documents/:token), previousUrl, snapshotBackfilled,
+ *     snapshot: { kind, title, documentNumber, issuedAt, seller, billTo,
+ *                 details[], timeline[], pricing } } }
+ * errors: 404 transaction / brand not found · 422 no completed payment ·
+ *   422 no stored pricing breakdown (old transaction)
+ * ---------------------------------------------------------------------- */
+export async function regenerateInvoice(transactionId) {
+    try {
+        const { data } = await api.post('/transactions/invoice/regenerate', { transactionId });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
     getAllSubscriptions,
     getAllSubscriptionPages,
+    regenerateInvoice,
 };

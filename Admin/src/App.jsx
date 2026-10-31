@@ -38,6 +38,7 @@ import PromoCode from './features/promoCode/PromoCode'
 import PromoCodeReports from './features/promoCode/PromoCodeReports'
 import Notification from './features/notification/Notification'
 import Subscriptions from './features/subscriptions/Subscriptions'
+import SubscriptionDetails from './features/subscriptions/SubscriptionDetails'
 import NotFoundPage from './components/common/NotFoundPage'
 import Faq from './features/faq/Faq'
 // import LoginPage from './features/auth/components/LoginPage'
@@ -255,6 +256,15 @@ function App() {
           element={
             <Layout>
               <Subscriptions key="dummy" scope="dummy" />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/subscriptions/:subscribedId"
+          element={
+            <Layout>
+              <SubscriptionDetails />
             </Layout>
           }
         />

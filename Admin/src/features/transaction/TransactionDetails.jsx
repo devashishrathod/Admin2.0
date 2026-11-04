@@ -481,7 +481,19 @@ export default function TransactionDetails() {
               }
             >
               <div className="col-span-2 sm:col-span-3">
-                <p className="text-[14px] font-semibold text-neutral-900 dark:text-neutral-50"><ValueOr value={customerName} fallback={MISSING.name} /></p>
+                <p className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-neutral-900 dark:text-neutral-50">
+                  <ValueOr value={customerName} fallback={MISSING.name} />
+                  {embeddedCustomer.isDeleted === true && (
+                    <span className="rounded-full bg-red-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-red-600 dark:text-red-400">
+                      Deleted
+                    </span>
+                  )}
+                </p>
+                {embeddedCustomer.isDeleted === true && (
+                  <p className="mt-0.5 text-[11px] text-neutral-500">
+                    Account deleted — name and contact are from the sale snapshot. Payment records are unchanged.
+                  </p>
+                )}
               </div>
               <Field icon={Hash} label="Unique ID" value={embeddedCustomer.uniqueId || customer?.uniqueId} mono fallback={MISSING.id} />
               <Field

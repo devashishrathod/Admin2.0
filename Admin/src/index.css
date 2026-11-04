@@ -268,3 +268,25 @@ html.dark .awning-closed { --awning-a: #4B5563; --awning-b: #1f2937; }
 @media (prefers-reduced-motion: reduce) {
   .sign-swing { animation: none; }
 }
+
+/* Promotional ticker preview — the strip scrolls right → left like the
+   customer app. The row holds the items twice, so moving it by half loops
+   seamlessly. data-mode="auto" runs and pauses on hover; "hover" (grid
+   cards) only runs while its .ticker-card is hovered. */
+@keyframes ticker-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-marquee {
+  animation: ticker-marquee var(--ticker-duration, 20s) linear infinite;
+}
+.ticker-strip:hover .ticker-marquee[data-mode="auto"],
+.ticker-marquee[data-mode="hover"] {
+  animation-play-state: paused;
+}
+.ticker-card:hover .ticker-marquee[data-mode="hover"] {
+  animation-play-state: running;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-marquee { animation: none; }
+}

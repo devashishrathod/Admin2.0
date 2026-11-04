@@ -9,7 +9,6 @@ import {
   ArrowLeft,
   Wallet,
   Landmark,
-  Receipt,
   CheckCircle2,
   Clock3,
   Upload,
@@ -29,8 +28,6 @@ import {
   Percent,
   Users2,
   History,
-  BarChart3,
-  PieChart as PieChartIcon,
 } from "lucide-react";
 import {
   approveSettlement,
@@ -63,8 +60,9 @@ import { mapSettlementStatus, SETTLEMENT_TONES, settlementNeedsAttention } from 
 import SelectDropdown from "../../components/common/SelectDropdown";
 import { downloadCsv } from "../../utils/exportTable";
 import { todayStr } from "../transaction/transactionUtils";
-import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
-import { pctChange, weekOverWeek, localDateStr } from "../../utils/overviewStats";
+import { PillTabs } from "../../components/common/Overview";
+import { localDateStr } from "../../utils/overviewStats";
+import SettlementsOverview from "./SettlementsOverview";
 import Loader from "../../components/common/Loader";
 import EmptyState from "../../components/common/EmptyState";
 import ValueOr from "../../components/common/ValueOr";
@@ -241,6 +239,9 @@ function normalizeSettlement(raw) {
     // so the date-range filter and daily chart compare it directly
     // against a native <input type="date"> value.
     dateForFilter: localDateStr(raw.periodEnd || raw.periodStart || raw.createdAt),
+    // Start of the period the settlement covers — the date filter keeps a
+    // settlement whose period overlaps the picked range, not only its end day.
+    periodStartKey: localDateStr(raw.periodStart || raw.periodEnd || raw.createdAt),
     settlementDate: formatDMYFromISO(raw.paidAt) || "—",
     createdAt: formatDMYFromISO(raw.createdAt) || "—",
     periodStart: formatDMYFromISO(raw.periodStart) || "—",
@@ -431,19 +432,6 @@ function DueBadge({ schedule }) {
   );
 }
 
-// Overview widgets — status colours mirror StatusBadge above.
-const STATUS_MIX_COLORS = {
-  "Pending Approval": "#F59E0B",
-  Approved: "#38BDF8",
-  Processing: "#FBBF24",
-  "Settlement done": "#10B981",
-  Reversed: "#8B5CF6",
-  "On hold": "#F87171",
-  Cancelled: "#A3A3A3",
-  Failed: "#EF4444",
-  Abandoned: "#D4D4D4",
-};
-
 // The admin worklist tab — flagged / Failed / On hold (doc's needsAttention).
 const NEEDS_ATTENTION = "Needs attention";
 
@@ -456,10 +444,6 @@ const STATUS_TABS = [
   { key: "Settlement done", label: "Settled" },
 ];
 
-const AWAITING_PAYOUT = ["Pending Approval", "Approved", "Processing"];
-
-const getSettlementDate = (s) => s.dateForFilter;
-const getSettlementAmount = (s) => s.amount;
 
 // A big payout can go out in several NEFT legs; the settlement is PAID
 // only once they add up. The confirm response says where it stands.
@@ -1769,66 +1753,8 @@ export default function Settlement() {
     return map;
   }, [settlements, delayDays]);
 
-  // Settlements due exactly today -> drives the "Today Settlement" stat card
-  const todaySettlementStats = useMemo(() => {
-    const dueToday = settlements.filter((s) => schedules[s.id]?.isToday);
-    return {
-      amount: dueToday.reduce((sum, s) => sum + s.amount, 0),
-      count: dueToday.length,
-    };
-  }, [settlements, schedules]);
-
-  // Most recently completed settlement (real, derived from the fetched
-  // list) drives the "Previous settlement" stat card. Available/GST
-  // balance have no per-settlement source in the 3 confirmed endpoints —
-  // shown as 0 rather than invented until a real balance endpoint exists.
-  const previousSettlement = useMemo(() => {
-    const done = settlements
-      .filter((s) => s.status === "Settlement done" && parseDMY(s.settlementDate))
-      .sort((a, b) => parseDMY(b.settlementDate) - parseDMY(a.settlementDate));
-    return done[0] || null;
-  }, [settlements]);
-
-  const kpis = useMemo(() => {
-    const summarize = (rows) => {
-      const paid = rows.filter((s) => s.status === "Settlement done");
-      const awaiting = rows.filter((s) => AWAITING_PAYOUT.includes(s.status));
-      return {
-        paidOut: paid.reduce((sum, s) => sum + s.amount, 0),
-        awaitingAmount: awaiting.reduce((sum, s) => sum + s.amount, 0),
-        awaitingCount: awaiting.length,
-        avg: rows.length ? rows.reduce((sum, s) => sum + s.amount, 0) / rows.length : 0,
-      };
-    };
-    const all = summarize(settlements);
-    const { cur, prev } = weekOverWeek(settlements, summarize, getSettlementDate);
-    return {
-      ...all,
-      paidOutTrend: pctChange(cur.paidOut, prev.paidOut),
-      avgTrend: pctChange(cur.avg, prev.avg),
-    };
-  }, [settlements]);
-
-  const statusMix = useMemo(() => {
-    const counts = {};
-    settlements.forEach((s) => {
-      counts[s.status] = (counts[s.status] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, count]) => ({
-      name: name === "Settlement done" ? "Settled" : name,
-      count,
-      color: STATUS_MIX_COLORS[name],
-    }));
-  }, [settlements]);
-
-  const statusCounts = useMemo(() => {
-    const counts = { All: settlements.length, [NEEDS_ATTENTION]: 0 };
-    settlements.forEach((s) => {
-      counts[s.status] = (counts[s.status] || 0) + 1;
-      if (settlementNeedsAttention(s)) counts[NEEDS_ATTENTION] += 1;
-    });
-    return counts;
-  }, [settlements]);
+  // Count on the "Due Today" toggle button.
+  const dueTodayCount = useMemo(() => settlements.filter((s) => schedules[s.id]?.isToday).length, [settlements, schedules]);
 
   const handleHoldConfirm = async (reason) => {
     setRowActionSubmitting(true);
@@ -1900,21 +1826,42 @@ export default function Settlement() {
     }
   };
 
-  const filtered = useMemo(() => {
+  // Every filter except the status tab — the tab counts read from this, so
+  // they follow the date range / search / due-today too.
+  const rangeFiltered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return settlements.filter((s) => {
       const matchesSearch =
-        s.id.toLowerCase().includes(search.toLowerCase()) ||
-        (s.settlementNumber || "").toLowerCase().includes(search.toLowerCase()) ||
-        s.vendor.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus =
-        statusFilter === "All" ||
-        (statusFilter === NEEDS_ATTENTION ? settlementNeedsAttention(s) : s.status === statusFilter);
+        !q ||
+        String(s.id).toLowerCase().includes(q) ||
+        (s.settlementNumber || "").toLowerCase().includes(q) ||
+        String(s.vendor).toLowerCase().includes(q);
       const matchesToday = !showTodayOnly || schedules[s.id]?.isToday;
+      // Period overlaps the picked range: ends on/after "from", starts on/before "to".
       const matchesDateFrom = !dateFrom || (s.dateForFilter && s.dateForFilter >= dateFrom);
-      const matchesDateTo = !dateTo || (s.dateForFilter && s.dateForFilter <= dateTo);
-      return matchesSearch && matchesStatus && matchesToday && matchesDateFrom && matchesDateTo;
+      const matchesDateTo = !dateTo || (s.periodStartKey && s.periodStartKey <= dateTo);
+      return matchesSearch && matchesToday && matchesDateFrom && matchesDateTo;
     });
-  }, [settlements, search, statusFilter, showTodayOnly, schedules, dateFrom, dateTo]);
+  }, [settlements, search, showTodayOnly, schedules, dateFrom, dateTo]);
+
+  const filtered = useMemo(
+    () =>
+      rangeFiltered.filter(
+        (s) =>
+          statusFilter === "All" ||
+          (statusFilter === NEEDS_ATTENTION ? settlementNeedsAttention(s) : s.status === statusFilter)
+      ),
+    [rangeFiltered, statusFilter]
+  );
+
+  const statusCounts = useMemo(() => {
+    const counts = { All: rangeFiltered.length, [NEEDS_ATTENTION]: 0 };
+    rangeFiltered.forEach((s) => {
+      counts[s.status] = (counts[s.status] || 0) + 1;
+      if (settlementNeedsAttention(s)) counts[NEEDS_ATTENTION] += 1;
+    });
+    return counts;
+  }, [rangeFiltered]);
 
   // Every scalar field on the normalized row — nothing left out — so the
   // export is a full data dump, not a curated subset of columns.
@@ -2098,57 +2045,15 @@ export default function Settlement() {
           </div>
         )}
 
-        {/* KPI cards */}
-        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiCard
-            icon={Wallet}
-            label="Total Paid Out"
-            value={inr(kpis.paidOut)}
-            trend={kpis.paidOutTrend}
-            sub={
-              previousSettlement
-                ? `Last ${inr(previousSettlement.amount)} on ${previousSettlement.settlementDate}`
-                : "No settlements paid yet"
-            }
-          />
-          <KpiCard
-            icon={Landmark}
-            label="Awaiting Payout"
-            value={inr(kpis.awaitingAmount)}
-            sub={`${kpis.awaitingCount} settlement${kpis.awaitingCount === 1 ? "" : "s"} pending · approved · processing`}
-          />
-          <KpiCard
-            icon={CalendarClock}
-            label="Due Today"
-            value={inr(todaySettlementStats.amount)}
-            sub={`${todaySettlementStats.count} due today · T+${delayDays} cycle`}
-          />
-          <KpiCard icon={Receipt} label="Avg. Settlement" value={inr(kpis.avg)} trend={kpis.avgTrend} />
-        </div>
-
-        {/* Net payable per day + status mix */}
-        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <DailyBarsCard
-            className="lg:col-span-2"
-            title="Settlement Overview"
-            subtitle="Net payable per day (by period end)"
-            icon={BarChart3}
-            rows={settlements}
-            getDate={getSettlementDate}
-            getValue={getSettlementAmount}
-            countLabel="settlements"
-            emptyText="No settlements in this period."
-            gradientId="settlementDailyBar"
-          />
-          <MixCard
-            title="Status mix"
-            icon={PieChartIcon}
-            total={settlements.length}
-            totalLabel="settlements"
-            items={statusMix}
-            emptyText="No settlements yet."
-          />
-        </div>
+        {/* Overview — follows every filter below (tab, due today, dates, search) */}
+        <SettlementsOverview
+          rows={filtered}
+          schedules={schedules}
+          delayDays={delayDays}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          loading={isFetching}
+        />
 
         <PillTabs
           tabs={STATUS_TABS.map((t) => ({ ...t, count: statusCounts[t.key] || 0 }))}
@@ -2214,9 +2119,9 @@ export default function Settlement() {
           >
             <CalendarClock size={14} />
             Due Today
-            {todaySettlementStats.count > 0 && (
+            {dueTodayCount > 0 && (
               <span className="ml-0.5 rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[10.5px] font-semibold text-cyan-700 dark:text-cyan-300">
-                {todaySettlementStats.count}
+                {dueTodayCount}
               </span>
             )}
           </button>

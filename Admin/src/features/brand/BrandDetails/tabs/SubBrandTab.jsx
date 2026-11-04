@@ -375,7 +375,7 @@ function OutletCard({ outlet, mainOutlet, index, readOnly, expanded, onToggle, o
       {!readOnly && outlet._id && (
         <div className="mr-2 flex shrink-0 items-center gap-2 border-l border-neutral-200/70 pl-3 dark:border-white/10">
           <span className={`hidden text-[11px] font-semibold sm:inline ${hidden ? "text-neutral-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-            {statusBusy ? "Saving…" : hidden ? "Inactive" : "Active"}
+            {statusBusy ? "Saving…" : hidden ? "Deactive" : "Active"}
           </span>
           {statusBusy ? (
             <Loader2 size={14} className="animate-spin text-neutral-400" />
@@ -383,7 +383,7 @@ function OutletCard({ outlet, mainOutlet, index, readOnly, expanded, onToggle, o
             <ToggleSwitch
               checked={!hidden}
               onChange={onToggleActive}
-              title={hidden ? "Click to make this outlet Active" : "Click to make this outlet Inactive"}
+              title={hidden ? "Click to make this outlet Active" : "Click to make this outlet Deactive"}
             />
           )}
         </div>
@@ -637,16 +637,16 @@ function OutletGridCard({ outlet, mainOutlet, readOnly, onOpen, statusBusy, onTo
               <ToggleSwitch
                 checked={isActive}
                 onChange={onToggleActive}
-                title={isActive ? "Click to make this outlet Inactive" : "Click to make this outlet Active"}
+                title={isActive ? "Click to make this outlet Deactive" : "Click to make this outlet Active"}
               />
             )}
             <span className={`text-[12px] font-semibold ${isActive ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-500 dark:text-neutral-400"}`}>
-              {statusBusy ? "Saving…" : isActive ? "Active" : "Inactive"}
+              {statusBusy ? "Saving…" : isActive ? "Active" : "Deactive"}
             </span>
           </div>
         ) : (
           <span className={`text-[12px] font-semibold ${isActive ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-500"}`}>
-            {isActive ? "Active" : "Inactive"}
+            {isActive ? "Active" : "Deactive"}
           </span>
         )}
         <button

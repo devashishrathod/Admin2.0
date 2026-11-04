@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Search,
   RefreshCw,
-  CheckCircle2,
   Wallet,
   Landmark,
   Upload,
@@ -15,10 +14,6 @@ import {
   Ban,
   Eye,
   Download,
-  BarChart3,
-  RotateCcw,
-  Percent,
-  ListChecks,
 } from "lucide-react";
 import { approveRefund, rejectRefund, payRefund, payToBank, confirmBankPayout } from "./services/RefundApi";
 import { useAllRefunds } from "./queries/refundQueries";
@@ -30,8 +25,9 @@ import { canAdminDecide, needsOverrideReason, isAdminApproved, approvedPatch, re
 import { formatDate, fmtTime, inr, todayStr } from "../transaction/transactionUtils";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
 import { downloadCsv } from "../../utils/exportTable";
-import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
-import { pctChange, weekOverWeek, localDateStr } from "../../utils/overviewStats";
+import { PillTabs } from "../../components/common/Overview";
+import { localDateStr } from "../../utils/overviewStats";
+import RefundsOverview from "./RefundsOverview";
 import EmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
 import ValueOr from "../../components/common/ValueOr";
@@ -225,8 +221,6 @@ function normalizeRefundRow(raw) {
 /* -------------------------------------------------------------------------
  * Small shared bits
  * ---------------------------------------------------------------------- */
-
-const getRequestedAmount = (r) => r.requestedAmount;
 
 const inputClass =
   "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 outline-none transition-colors focus:border-emerald-500/50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600";
@@ -429,16 +423,45 @@ function RejectRefundModal({ refund, onClose, onSubmit, submitting, error }) {
  * Tabs config
  * ---------------------------------------------------------------------- */
 
-const TABS = [
-  { key: "all", label: "All" },
-  { key: "pending", label: "Pending" },
-  { key: "approved", label: "Approved" },
-  { key: "rejected", label: "Rejected" },
-  { key: "withdrawn", label: "Withdrawn" },
-];
+// A refund *request* = raised but not decided yet: waiting on the vendor,
+// or on the admin's approve / reject (PENDING, VENDOR_*). These live on
+// the Refund Requests page only; Refunds keeps everything after the
+// decision (approved, rejected, withdrawn, in payout, failed) — so nothing
+// is listed on both pages. PROCESSING / FAILED are post-approval payout
+// states, not requests.
+const isRefundRequest = (r) => r.statusBucket === "pending" && !["PROCESSING", "FAILED"].includes(r.status);
+
+const SCOPES = {
+  all: {
+    title: "Refunds",
+    subtitle: "Approved, rejected and paid refunds — new requests are on Refund Requests.",
+    match: (r) => !isRefundRequest(r),
+    tabs: [
+      { key: "all", label: "All" },
+      { key: "pending", label: "In payout" },
+      { key: "approved", label: "Approved" },
+      { key: "rejected", label: "Rejected" },
+      { key: "withdrawn", label: "Withdrawn" },
+    ],
+    empty: ["No refunds yet", "Refunds show here once a request has been decided."],
+  },
+  requests: {
+    title: "Refund Requests",
+    subtitle: "New refund requests from customers — waiting on the vendor or on your decision.",
+    match: isRefundRequest,
+    tabs: [
+      { key: "all", label: "All requests" },
+      { key: "vendor", label: "Awaiting vendor" },
+      { key: "decide", label: "Needs your decision" },
+    ],
+    empty: ["No refund requests", "New requests from customers show up here as soon as they're raised."],
+  },
+};
 
 function matchesTab(row, tab) {
   if (tab === "all") return true;
+  if (tab === "vendor") return !row.canDecide;
+  if (tab === "decide") return row.canDecide;
   return row.statusBucket === tab;
 }
 
@@ -449,7 +472,12 @@ function matchesTab(row, tab) {
 // Every page of refunds; tabs, filters and pagination are client-side.
 const WORKLIST_PARAMS = {};
 
-export default function Refund() {
+// scope "all" (sidebar: Refunds) = decided refunds; scope "requests"
+// (sidebar: Refund Requests, RefundRequests.jsx) = undecided requests.
+// Both read the same cached list, so an action on one updates the other.
+export default function Refund({ scope = "all" }) {
+  const cfg = SCOPES[scope] || SCOPES.all;
+  const TABS = cfg.tabs;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const {
@@ -462,15 +490,18 @@ export default function Refund() {
   const loadError = error?.message ?? "";
   const refunds = useMemo(
     () =>
-      (worklistRes?.data?.data ?? []).map((raw) => {
-        const row = normalizeRefundRow(raw);
-        // `_patch` = optimistic overrides from patchRefund; the refetch the
-        // write triggers replaces the raw row, dropping it.
-        return raw._patch
-          ? { ...row, ...raw._patch, statusBucket: bucketRefundStatus(raw._patch.status ?? row.status) }
-          : row;
-      }),
-    [worklistRes]
+      (worklistRes?.data?.data ?? [])
+        .map((raw) => {
+          const row = normalizeRefundRow(raw);
+          // `_patch` = optimistic overrides from patchRefund; the refetch the
+          // write triggers replaces the raw row, dropping it.
+          return raw._patch
+            ? { ...row, ...raw._patch, statusBucket: bucketRefundStatus(raw._patch.status ?? row.status) }
+            : row;
+        })
+        // Only this page's rows: requests here, decided refunds there.
+        .filter(cfg.match),
+    [worklistRes, cfg]
   );
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
@@ -503,63 +534,16 @@ export default function Refund() {
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
 
+  // Count + amount per tab of this page.
   const stats = useMemo(() => {
-    const pending = refunds.filter((r) => r.statusBucket === "pending");
-    const approved = refunds.filter((r) => r.statusBucket === "approved");
-    const rejected = refunds.filter((r) => r.statusBucket === "rejected");
-    const withdrawn = refunds.filter((r) => r.statusBucket === "withdrawn");
     const sum = (rows) => rows.reduce((s, r) => s + r.requestedAmount, 0);
-    return {
-      all: { amount: sum(refunds), count: refunds.length },
-      pending: { amount: sum(pending), count: pending.length },
-      approved: { amount: sum(approved), count: approved.length },
-      rejected: { amount: sum(rejected), count: rejected.length },
-      withdrawn: { amount: sum(withdrawn), count: withdrawn.length },
-    };
-  }, [refunds]);
-
-  // Week-over-week KPIs. Requests and requested amount going up is bad
-  // news, so those trend badges render inverted (red when rising).
-  const kpis = useMemo(() => {
-    const summarize = (rows) => {
-      const approved = rows.filter((r) => r.statusBucket === "approved");
-      // Decided = approved or rejected; withdrawn requests were never decided.
-      const decided = rows.filter((r) => r.statusBucket === "approved" || r.statusBucket === "rejected");
-      return {
-        requested: rows.reduce((s, r) => s + r.requestedAmount, 0),
-        count: rows.length,
-        approvedAmount: approved.reduce((s, r) => s + (r.approvedAmount ?? r.requestedAmount), 0),
-        approvalRate: decided.length ? (approved.length / decided.length) * 100 : 0,
-        decided: decided.length,
-      };
-    };
-    const all = summarize(refunds);
-    const { cur, prev } = weekOverWeek(refunds, summarize);
-    return {
-      ...all,
-      requestedTrend: pctChange(cur.requested, prev.requested),
-      countTrend: pctChange(cur.count, prev.count),
-      approvedTrend: pctChange(cur.approvedAmount, prev.approvedAmount),
-      approvalRateTrend: prev.decided ? cur.approvalRate - prev.approvalRate : cur.decided ? null : 0,
-    };
-  }, [refunds]);
-
-  // Ranks every reason by how many refunds cite it, across all fetched
-  // refunds (not just the current search/date filter) so this stays a
-  // stable "what's driving refunds" summary. Past the top 6, the rest
-  // fold into "Other" rather than crowding the card with long-tail rows.
-  const reasonBreakdown = useMemo(() => {
-    const map = new Map();
-    refunds.forEach((r) => {
-      const key = orText(r.reason, "Unspecified");
-      map.set(key, (map.get(key) || 0) + 1);
-    });
-    const rows = Array.from(map, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-    const TOP_N = 6;
-    if (rows.length <= TOP_N) return rows;
-    const otherCount = rows.slice(TOP_N - 1).reduce((s, r) => s + r.count, 0);
-    return [...rows.slice(0, TOP_N - 1), { name: "Other", count: otherCount }];
-  }, [refunds]);
+    return Object.fromEntries(
+      TABS.map((t) => {
+        const rows = refunds.filter((r) => matchesTab(r, t.key));
+        return [t.key, { amount: sum(rows), count: rows.length }];
+      })
+    );
+  }, [refunds, TABS]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -955,11 +939,9 @@ export default function Refund() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-              Refunds
+              {cfg.title}
             </h1>
-            <p className="mt-1 text-[13px] text-neutral-500">
-              Review and action refund requests raised against redeemed vouchers.
-            </p>
+            <p className="mt-1 text-[13px] text-neutral-500">{cfg.subtitle}</p>
           </div>
           <button
             onClick={() => refetch()}
@@ -971,42 +953,11 @@ export default function Refund() {
           </button>
         </div>
 
-        {/* KPI cards */}
-        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiCard icon={Wallet} label="Total Requested" value={inr(kpis.requested)} trend={kpis.requestedTrend} invert />
-          <KpiCard icon={RotateCcw} label="Refund Requests" value={kpis.count.toLocaleString("en-IN")} trend={kpis.countTrend} invert />
-          <KpiCard icon={CheckCircle2} label="Approved Amount" value={inr(kpis.approvedAmount)} trend={kpis.approvedTrend} invert />
-          <KpiCard
-            icon={Percent}
-            label="Approval Rate"
-            value={`${kpis.approvalRate.toFixed(1)}%`}
-            trend={kpis.approvalRateTrend}
-            trendSuffix=" pts"
-          />
-        </div>
-
-        {/* Refunds per day + reason mix */}
-        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <DailyBarsCard
-            className="lg:col-span-2"
-            title="Refund Overview"
-            subtitle="Requested refund amount per day"
-            icon={BarChart3}
-            rows={refunds}
-            getValue={getRequestedAmount}
-            countLabel="refunds"
-            emptyText="No refund requests in this period."
-            gradientId="refundDailyBar"
-          />
-          <MixCard
-            title="Top refund reasons"
-            icon={ListChecks}
-            total={refunds.length}
-            totalLabel="refunds"
-            items={reasonBreakdown}
-            emptyText="No refunds yet."
-          />
-        </div>
+        {/* Overview — exactly the rows the filters below select (tab, date
+            range, search); content differs for Refund Requests vs Refunds. */}
+        {!loading && !loadError && (
+          <RefundsOverview rows={filtered} scope={scope} dateFrom={dateFrom} dateTo={dateTo} loading={isFetching} />
+        )}
 
         <PillTabs
           tabs={TABS.map((t) => ({ ...t, count: stats[t.key]?.count }))}
@@ -1093,7 +1044,13 @@ export default function Refund() {
             }))}
             onClear={clearSelection}
           />
-          <Table columns={columns} data={pageRows} emptyIcon={refunds.length ? "search" : "refund"} emptyTitle={refunds.length ? "No refunds match your filters" : "No refund requests yet"} emptyDescription={refunds.length ? "No refund requests match this status or search. Try a different filter." : "Refund requests from customers show up here for review."} />
+          <Table
+            columns={columns}
+            data={pageRows}
+            emptyIcon={refunds.length ? "search" : "refund"}
+            emptyTitle={refunds.length ? "Nothing matches your filters" : cfg.empty[0]}
+            emptyDescription={refunds.length ? "Try a different tab, date range or search." : cfg.empty[1]}
+          />
           </>
         )}
 

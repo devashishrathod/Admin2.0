@@ -140,8 +140,19 @@ function normalizeCustomer(raw) {
     openRefunds: Number(refunds.openRequests) || 0,
     disputedPayments: Number(disputes.disputedPayments) || 0,
     hasVerifiedBank: Boolean(profile.hasVerifiedBankAccount),
+    // v1.12 — account deletion. List rows carry it on `account`, the detail
+    // endpoint on `status` (merged in by the page).
+    accountState: account.accountState || null,
+    deletion: account.deletion || null,
     raw,
   };
+}
+
+// "Deletion scheduled — 12 Dec 2026" when the account is in its grace period.
+function deletionLabel(customer) {
+  if (customer.accountState !== "DELETION_SCHEDULED") return null;
+  const date = customer.deletion?.scheduledFor ? formatDateLabel(customer.deletion.scheduledFor) : null;
+  return date && date !== "—" ? `Deletion scheduled — ${date}` : "Deletion scheduled";
 }
 
 /* ------------------------------------------------------------------ */
@@ -283,6 +294,7 @@ function UserCard({ customer, onOpen }) {
           <StatusPill status={customer.status} />
           <PlatformBadge platform={customer.platform} />
           {!customer.signupCompleted && <CardFlag tone="amber">Signup pending</CardFlag>}
+          {deletionLabel(customer) && <CardFlag tone="red">{deletionLabel(customer)}</CardFlag>}
           {/* Things an admin should act on — shown only when they apply. */}
           {customer.openRefunds > 0 && (
             <CardFlag tone="amber">
@@ -433,6 +445,16 @@ function CustomerDetail({ customer, detailLoading, onBack }) {
               {!customer.signupCompleted && (
                 <span className="inline-flex items-center rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                   Signup pending
+                </span>
+              )}
+              {deletionLabel(customer) && (
+                <span className="inline-flex items-center rounded-full bg-red-400/10 px-2.5 py-1 text-[11px] font-medium text-red-600 dark:text-red-400">
+                  {deletionLabel(customer)}
+                </span>
+              )}
+              {customer.deletion?.holds?.length > 0 && (
+                <span className="inline-flex items-center rounded-full bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  Purge on hold — {customer.deletion.holds.join(", ").replace(/_/g, " ").toLowerCase()}
                 </span>
               )}
             </div>
@@ -641,14 +663,19 @@ function CustomerDetail({ customer, detailLoading, onBack }) {
   );
 }
 
+// Long values (emails) wrap onto a second line instead of being cut off.
+const looksLikeEmail = (v) => typeof v === "string" && v.includes("@");
+
 function InfoRow({ icon, label, value, fallback = MISSING.generic }) {
   return (
-    <div className="flex items-center justify-between border-b border-neutral-200/70 pb-3 last:border-0 last:pb-0 dark:border-neutral-800/70">
-      <span className="flex items-center gap-1.5 text-[12px] text-neutral-500">
+    <div className="flex items-center justify-between gap-3 border-b border-neutral-200/70 pb-3 last:border-0 last:pb-0 dark:border-neutral-800/70">
+      <span className="flex shrink-0 items-center gap-1.5 text-[12px] text-neutral-500">
         {icon}
         {label}
       </span>
-      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></span>
+      <span className={`min-w-0 text-right text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 ${looksLikeEmail(value) ? "break-all" : ""}`}>
+        <ValueOr value={value} fallback={fallback} />
+      </span>
     </div>
   );
 }
@@ -679,7 +706,7 @@ function DetailTile({ icon, label, value, fallback = MISSING.generic }) {
         {label}
       </span>
       <span
-        className="truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-50"
+        className={`${looksLikeEmail(value) ? "break-all" : "truncate"} text-[13px] font-semibold text-neutral-900 dark:text-neutral-50`}
         title={typeof value === "string" && !isMissing(value) ? value : undefined}
       >
         <ValueOr value={value} fallback={fallback} />
@@ -717,9 +744,18 @@ export default function Customer() {
   const [platformFilter, setPlatformFilter] = useState("All");
 
   const [selectedId, setSelectedId] = useState(null);
+  // Server-side ?accountState= filter ("" = default list, which hides only
+  // PENDING signups). Everything else stays client-side on the 100-row page.
+  const [accountStateFilter, setAccountStateFilter] = useState("");
 
-  const { data: listRes, isPending: loading, error, refetch: refetchCustomers } = useCustomers(CUSTOMER_LIST_PARAMS);
-  const loadError = error?.message ?? "";
+  const listParams = useMemo(
+    () => (accountStateFilter ? { ...CUSTOMER_LIST_PARAMS, accountState: accountStateFilter } : CUSTOMER_LIST_PARAMS),
+    [accountStateFilter]
+  );
+  const { data: listRes, isPending: loading, error, refetch: refetchCustomers } = useCustomers(listParams);
+  // The list API answers an empty filter with 404 "No any customer found" —
+  // that's an empty state (e.g. no deletion-scheduled accounts), not an error.
+  const loadError = /no any customer found/i.test(error?.message || "") ? "" : error?.message ?? "";
 
   // List rows are lightweight — pull the fully-populated customer once the
   // detail view opens, same pattern as BrandDetailsPage's refreshBrandDetail.
@@ -730,9 +766,21 @@ export default function Customer() {
   const customers = useMemo(() => {
     const rawDetail = detailRes?.data?.customer ?? detailRes?.data ?? detailRes;
     const detailed = rawDetail ? normalizeCustomer(rawDetail) : null;
+    // The detail endpoint reports deletion on `status`, not on the customer
+    // row — keep the list row's values unless the detail has its own.
+    const detailStatus = detailRes?.data?.status;
     return (listRes?.data?.data ?? listRes?.data ?? [])
       .map(normalizeCustomer)
-      .map((c) => (detailed && c.id === detailed.id ? { ...c, ...detailed } : c));
+      .map((c) =>
+        detailed && c.id === detailed.id
+          ? {
+              ...c,
+              ...detailed,
+              accountState: detailStatus?.accountState || detailed.accountState || c.accountState,
+              deletion: detailStatus?.deletion || detailed.deletion || c.deletion,
+            }
+          : c
+      );
   }, [listRes, detailRes]);
 
   const filtered = useMemo(() => {
@@ -869,6 +917,17 @@ export default function Customer() {
                 <FilterChip label="Inactive" count={counts.inactive} active={statusFilter === "Inactive"} onClick={() => { setStatusFilter(statusFilter === "Inactive" ? "All" : "Inactive"); setPage(1); }} />
                 <FilterChip label="Android" count={counts.android} active={platformFilter === "Android"} onClick={() => { setPlatformFilter(platformFilter === "Android" ? "All" : "Android"); setPage(1); }} />
                 <FilterChip label="iOS" count={counts.ios} active={platformFilter === "iOS"} onClick={() => { setPlatformFilter(platformFilter === "iOS" ? "All" : "iOS"); setPage(1); }} />
+                <select
+                  value={accountStateFilter}
+                  onChange={(e) => { setAccountStateFilter(e.target.value); setPage(1); }}
+                  aria-label="Account state"
+                  className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[12.5px] font-medium text-neutral-600 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
+                >
+                  <option value="">Account: default</option>
+                  <option value="ACTIVE">Account: active</option>
+                  <option value="PENDING">Account: pending signup</option>
+                  <option value="DELETION_SCHEDULED">Account: deletion scheduled</option>
+                </select>
               </div>
             </div>
 

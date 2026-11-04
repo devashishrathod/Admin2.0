@@ -1,760 +1,907 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  Bell,
-  BellOff,
-  Send,
-  Loader2,
-  AlertTriangle,
-  CheckCircle2,
-  Radio,
-  FlaskConical,
-  Users,
-  ShieldCheck,
-  Link2,
-  Globe,
-  Search,
-  X,
-  Info,
-  Eye,
-  Wifi,
-  SignalHigh,
-  BatteryFull,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { CalendarClock, Eraser, FileText, History, PencilLine } from "lucide-react";
+import { STARTER_TEMPLATES } from "./notificationConfig";
+import { useAuthStore } from "../auth/store/authStore";
 import { broadcastNotification } from "./services/NotificationApi";
-import { keepPreviousData } from "@tanstack/react-query";
-import { useCustomers } from "../customer/queries/customerQueries";
-import { isNotFoundMessage } from "../../utils/helpers";
-import { registerDeviceToken, unregisterDeviceToken } from "./services/DeviceTokenApi";
-import { getPushToken, getBrowserDeviceId, FCM_TOKEN_STORAGE_KEY } from "../../config/firebaseMessaging";
+import { historyStore } from "./hooks/historyStore";
+import { deliverEntry } from "./hooks/scheduleRunner";
+import { useAudienceDirectory } from "./hooks/useAudienceDirectory";
+import { useComposeDraft, useSendHistory, useTemplates } from "./hooks/useNotificationState";
+import { mergeRetry, statusOf, summarizeBroadcast } from "./utils/notificationUtils";
+import { Button, PageTabs } from "./components/NotificationUi";
+import NotificationStats from "./components/NotificationStats";
+import ComposeTab from "./components/ComposeTab";
+import TemplatesTab from "./components/TemplatesTab";
+import HistoryTab from "./components/HistoryTab";
+import ScheduledTab from "./components/ScheduledTab";
 
-// Roles the broadcast endpoint targets. A fixed list instead of free text,
-// so a typo ("VENDORS") can't silently resolve to zero recipients.
-const ROLE_OPTIONS = [
-  { value: "CUSTOMER", label: "Customers" },
-  { value: "VENDOR", label: "Vendors" },
-  { value: "ADMIN", label: "Admins" },
-];
-
-// "All users" = every customer and vendor. Sent as explicit roles because
-// the API only documents `target: { roles }` / `target: { userIds }`.
-const ALL_USER_ROLES = ["CUSTOMER", "VENDOR"];
-
-// GET /customers/admin/get-all row → picker option. `userIds` on the
-// broadcast must be the login User id, so prefer the linked account's id
-// over the customer-profile id when the payload carries it.
-function toUserOption(raw) {
-  const account = raw.account || {};
-  const phone = raw.whatsappNumber || account.whatsappNumber || raw.mobile || "";
-  return {
-    id: raw.userId || account._id || raw._id,
-    name: String(raw.fullName || raw.name || account.name || raw.uniqueId || raw._id || "Customer"),
-    // Email + number + id in one line — also what the local search matches on.
-    detail: [raw.email || account.email, phone, raw.uniqueId].filter(Boolean).join(" · "),
-  };
-}
-
-// get-all response → picker options.
-function rowsOf(res) {
-  const list = res?.data?.data ?? res?.data?.customers ?? res?.data ?? [];
-  return Array.isArray(list) ? list.map(toUserOption).filter((u) => u.id) : [];
-}
-
-const inputClass =
-  "w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none transition-colors focus:border-emerald-500/50";
-
-function Field({ label, required, children }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-        {label}
-        {required && <span className="ml-0.5 text-red-600 dark:text-red-400">*</span>}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function StepLabel({ n, children }) {
-  return (
-    <div className="mb-3 flex items-center gap-2">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
-        {n}
-      </span>
-      <p className="text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{children}</p>
-    </div>
-  );
-}
+// Not sent yet → Scheduled tab; everything else → History.
+const UNSENT = new Set(["scheduled", "sending", "missed", "cancelled"]);
+const isUnsent = (e) => UNSENT.has(e.status) && !e.sentAt;
 
 /* -------------------------------------------------------------------------
- * Push Setup — registers/unregisters this admin's own browser as a push
- * device via Firebase (config/firebaseMessaging.js) + POST/PUT
- * /deviceTokens/register|unregister. Broadcasts (below) with "Send push"
- * checked reach whatever device is registered here.
+ * Notifications — write one update and send it to Customers, Vendors and
+ * Outlet managers by role, by filter, hand-picked or from a pasted list.
+ * Everything goes through POST /notifications/broadcast (doc #22).
+ *
+ * Compose / Templates / Scheduled / History share state held here: the
+ * draft, saved templates and the send history (all kept in this browser —
+ * see hooks/useNotificationState.js and hooks/historyStore.js).
+ *
+ * The previous single-file implementation is kept, commented out, at the
+ * bottom of this file.
  * ---------------------------------------------------------------------- */
-const FCM_TOKEN_IS_REAL_KEY = "trydood-admin-fcm-token-is-real";
+export default function Notification() {
+  const [tab, setTab] = useState("compose");
+  const adminName = useAuthStore((s) => s.user?.name) || "admin";
 
-function BentoFact({ icon: Icon, label, value }) {
-  return (
-    <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-950/60 p-3.5">
-      <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
-        <Icon size={14} />
-      </span>
-      <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">{label}</p>
-      <p className="mt-0.5 truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">{value}</p>
-    </div>
-  );
-}
+  const draftApi = useComposeDraft();
+  const history = useSendHistory();
+  const templates = useTemplates();
+  const directory = useAudienceDirectory();
 
-function PushSetupCard() {
-  const [token, setToken] = useState(() => localStorage.getItem(FCM_TOKEN_STORAGE_KEY) || "");
-  const [isReal, setIsReal] = useState(() => localStorage.getItem(FCM_TOKEN_IS_REAL_KEY) === "true");
-  const [deviceId] = useState(() => getBrowserDeviceId());
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const scheduled = useMemo(() => history.entries.filter(isUnsent), [history.entries]);
+  const sent = useMemo(() => history.entries.filter((e) => !isUnsent(e)), [history.entries]);
+  const upcoming = scheduled.filter((e) => e.status === "scheduled").length;
+  const missed = scheduled.filter((e) => e.status === "missed").length;
 
-  const registered = Boolean(token);
-  const browserLabel = navigator.userAgent.includes("Chrome")
-    ? "Chrome"
-    : navigator.userAgent.includes("Firefox")
-    ? "Firefox"
-    : navigator.userAgent.includes("Safari")
-    ? "Safari"
-    : "This browser";
+  // New time for a scheduled / missed / cancelled send — back to "scheduled".
+  const reschedule = (entry, scheduledFor) =>
+    historyStore.claim(entry.id, entry.status, { status: "scheduled", scheduledFor });
 
-  const handleEnable = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      // Falls back to a placeholder token (same shape the Vendor Panel
-      // uses) when a real FCM token can't be obtained yet — e.g. no
-      // VAPID key set — so this still registers a device instead of
-      // just erroring out.
-      const { token: fcmToken, isReal: real } = await getPushToken();
-      console.log(`[Push Setup] Push token (${real ? "real FCM" : "placeholder"}):`, fcmToken);
-      const result = await registerDeviceToken({
-        token: fcmToken,
-        platform: "WEB",
-        deviceId: getBrowserDeviceId(),
-        deviceName: navigator.userAgent.slice(0, 80),
-        appVersion: "1.0.0",
-      });
-      console.log("[Push Setup] deviceTokens/register response:", result);
-      localStorage.setItem(FCM_TOKEN_STORAGE_KEY, fcmToken);
-      localStorage.setItem(FCM_TOKEN_IS_REAL_KEY, String(real));
-      setToken(fcmToken);
-      setIsReal(real);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDisable = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const result = await unregisterDeviceToken({ token, allDevices: false });
-      console.log("[Push Setup] deviceTokens/unregister response:", result);
-      localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
-      localStorage.removeItem(FCM_TOKEN_IS_REAL_KEY);
-      setToken("");
-      setIsReal(false);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
-      <div className="col-span-2 row-span-2 rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${registered ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"}`}>
-              {registered ? <Bell size={17} /> : <BellOff size={17} />}
-            </span>
-            <div>
-              <p className="text-[14.5px] font-semibold text-neutral-800 dark:text-neutral-100">Push Setup (this browser)</p>
-              <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-                {registered
-                  ? isReal
-                    ? "This browser is registered and can receive real push."
-                    : "Registered with a placeholder token — the device row exists, but it can't receive real push yet."
-                  : "Register this browser so broadcasts with push enabled can reach it."}
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={registered ? handleDisable : handleEnable}
-            disabled={busy}
-            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-              registered
-                ? "border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                : "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
-            }`}
-          >
-            {busy && <Loader2 size={13} className="animate-spin" />}
-            {registered ? "Disable" : "Enable Push"}
-          </button>
-        </div>
-
-        {error && (
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/[0.06] px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-            {error}
-          </div>
-        )}
-      </div>
-
-      <BentoFact icon={Radio} label="Status" value={registered ? "Registered" : "Not Registered"} />
-      <BentoFact icon={Globe} label="Browser" value={browserLabel} />
-      <BentoFact icon={ShieldCheck} label="Token Type" value={registered ? (isReal ? "Real FCM" : "Placeholder") : "No token"} />
-      <BentoFact icon={Users} label="Device ID" value={deviceId.replace("web_", "").slice(0, 13)} />
-    </div>
-  );
-}
-
-/* Big selectable card used for the audience picker — same "chosen state"
- * language as the Subscription action cards (border + tint when active). */
-function AudienceOption({ active, icon: Icon, title, description, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex flex-1 flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors ${
-        active
-          ? "border-emerald-400/60 bg-emerald-400/10"
-          : "border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 hover:border-neutral-300 dark:hover:border-neutral-700"
-      }`}
-    >
-      <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${active ? "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"}`}>
-        <Icon size={14} />
-      </span>
-      <div>
-        <p className={`text-[12.5px] font-medium ${active ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-800 dark:text-neutral-200"}`}>{title}</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-neutral-500">{description}</p>
-      </div>
-    </button>
-  );
-}
-
-/* Toggle chips over the fixed role list — pick one or more. */
-function RolePicker({ roles, onChange }) {
-  const toggle = (value) =>
-    onChange(roles.includes(value) ? roles.filter((r) => r !== value) : [...roles, value]);
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {ROLE_OPTIONS.map((r) => {
-        const active = roles.includes(r.value);
-        return (
-          <button
-            key={r.value}
-            type="button"
-            onClick={() => toggle(r.value)}
-            aria-pressed={active}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
-              active
-                ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                : "border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-            }`}
-          >
-            {active && <CheckCircle2 size={12} />}
-            {r.label}
-            <span className="text-[10.5px] opacity-60">{r.value}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/* Searchable multi-select over real customers (GET /customers/admin/get-all,
- * debounced server-side search) — selected users render as removable chips. */
-function UserPicker({ selected, onChange }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  // Base list — the same call (and cache entry) the Customers page uses
-  // (first 100, no search), filtered locally as the admin types.
-  const baseQuery = useCustomers({ page: 1, limit: 100 });
-  const baseList = useMemo(() => rowsOf(baseQuery.data), [baseQuery.data]);
-  const loadingBase = baseQuery.isPending;
-  // "No customers found" is just an empty platform, not an error.
-  const searchError =
-    baseQuery.error && !isNotFoundMessage(baseQuery.error.message) ? baseQuery.error.message : "";
-
-  // Extra matches from the server-side search, for customers past the
-  // first 100 — debounced 300ms.
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => clearTimeout(t);
-  }, [query]);
-  // Empty query → `results` ignores searchHits, so nothing to fetch. A miss
-  // ("No customers found" 404, unsupported search, …) is fine — the locally
-  // filtered base list still shows — so it isn't retried.
-  const searchQuery = useCustomers(
-    { page: 1, limit: 20, search: debouncedQuery },
-    { enabled: Boolean(debouncedQuery), retry: false, placeholderData: keepPreviousData }
-  );
-  const searchHits = useMemo(() => rowsOf(searchQuery.data), [searchQuery.data]);
-  const searching = searchQuery.isFetching;
-
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const local = baseList.filter(
-      (u) => !q || u.name.toLowerCase().includes(q) || u.detail.toLowerCase().includes(q)
-    );
-    const merged = new Map();
-    [...local, ...(q ? searchHits : [])].forEach((u) => merged.set(u.id, u));
-    return Array.from(merged.values())
-      .filter((u) => !selected.some((s) => s.id === u.id))
-      .slice(0, 8);
-  }, [baseList, searchHits, query, selected]);
-  const busy = loadingBase || searching;
-
-  const pick = (user) => {
-    onChange([...selected, user]);
-    setQuery("");
-  };
-
-  return (
-    <div>
-      {selected.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {selected.map((u) => (
-            <span key={u.id} className="flex items-center gap-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800 px-2.5 py-1 text-[11.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              {u.name}
-              <button type="button" onClick={() => onChange(selected.filter((s) => s.id !== u.id))} aria-label={`Remove ${u.name}`} className="text-neutral-500 hover:text-red-600 dark:hover:text-red-400">
-                <X size={11} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="relative">
-        <div className="flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 focus-within:border-emerald-500/50">
-          <Search size={13} className="shrink-0 text-neutral-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setOpen(true)}
-            onBlur={() => setTimeout(() => setOpen(false), 120)}
-            placeholder="Search customers by name, email or number…"
-            className="w-full bg-transparent text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
-          />
-          {busy && <Loader2 size={13} className="shrink-0 animate-spin text-neutral-400" />}
-        </div>
-
-        {open && results.length > 0 && (
-          <div className="absolute z-10 mt-1.5 w-full overflow-hidden rounded-xl bg-white dark:bg-neutral-900 shadow-xl dark:shadow-black/40">
-            {results.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(u)}
-                className="flex w-full flex-col items-start px-3.5 py-2.5 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              >
-                <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{u.name}</span>
-                {u.detail && <span className="text-[11px] text-neutral-500">{u.detail}</span>}
-              </button>
-            ))}
-          </div>
-        )}
-        {open && results.length === 0 && (
-          <div className="absolute z-10 mt-1.5 flex w-full items-center gap-2 rounded-xl bg-white px-3.5 py-2.5 text-[12px] text-neutral-500 shadow-xl dark:bg-neutral-900 dark:shadow-black/40">
-            {busy ? (
-              <>
-                <Loader2 size={12} className="animate-spin" /> Loading customers…
-              </>
-            ) : searchError ? (
-              "Couldn't load customers."
-            ) : query.trim() ? (
-              `No customer matches "${query.trim()}".`
-            ) : (
-              "No customers on the platform yet."
-            )}
-          </div>
-        )}
-      </div>
-      {searchError && (
-        <p className="mt-1.5 flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400">
-          <AlertTriangle size={11} /> {searchError}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
- * Broadcast — one form, two audience modes (roles / specific users) and
- * two actions (Dry Run, Send) against the same POST /notifications/broadcast
- * endpoint, matching the three Postman requests in that folder.
- * ---------------------------------------------------------------------- */
-function BroadcastSection() {
-  const [audienceMode, setAudienceMode] = useState("roles"); // 'roles' | 'users' | 'all'
-  const [roles, setRoles] = useState(["VENDOR"]);
-  const [selectedUsers, setSelectedUsers] = useState([]);
-  const [confirmAll, setConfirmAll] = useState(false);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [severity, setSeverity] = useState("INFO");
-  const [deepLink, setDeepLink] = useState("");
-  const [push, setPush] = useState(true);
-
-  const [submittingMode, setSubmittingMode] = useState(null); // null | 'dryRun' | 'send'
-  const [result, setResult] = useState(null); // { tone, message }
-
-  const audienceReady =
-    audienceMode === "all" || (audienceMode === "roles" ? roles.length > 0 : selectedUsers.length > 0);
-
-  const canSubmit = (mode) =>
-    Boolean(title.trim() && body.trim() && audienceReady) &&
-    (mode !== "send" || audienceMode !== "all" || confirmAll);
-
-  const runBroadcast = async (mode) => {
-    if (!canSubmit(mode) || submittingMode) return;
-    setSubmittingMode(mode);
-    setResult(null);
-
-    const target =
-      audienceMode === "roles"
-        ? { roles }
-        : audienceMode === "users"
-        ? { userIds: selectedUsers.map((u) => u.id) }
-        : { roles: ALL_USER_ROLES };
-
-    const payload = {
-      title: title.trim(),
-      body: body.trim(),
-      target,
-      severity,
-      ...(deepLink.trim() ? { deepLink: deepLink.trim() } : {}),
-      ...(mode === "dryRun" ? { dryRun: true } : { push, dryRun: false }),
-    };
-
-    try {
-      const res = await broadcastNotification(payload);
-      // Like every other endpoint, the numbers sit under `data` — check
-      // the top level too in case this one returns them flat.
-      const info = res?.data ?? {};
-      const pick = (...keys) => {
-        for (const k of keys) {
-          const v = info[k] ?? res?.[k];
-          if (v != null) return v;
-        }
-        return null;
+  const retry = async (entry) => {
+    const payload = entry.broadcastId ? { ...entry.payload, broadcastId: entry.broadcastId } : entry.payload;
+    const next = summarizeBroadcast(await broadcastNotification(payload));
+    history.update(entry.id, (e) => {
+      const stats = e.stats ? mergeRetry(e.stats, next) : next;
+      return {
+        ...e,
+        stats,
+        status: statusOf(stats),
+        broadcastId: e.broadcastId || next.broadcastId,
+        error: null,
+        retries: (e.retries || 0) + 1,
       };
-      const count = pick("audienceCount", "recipientCount", "totalRecipients", "count", "total");
-      const sent = pick("sentCount", "pushSent", "successCount", "delivered");
-      const countText = count != null ? ` ${count} recipient(s).` : "";
-
-      if (mode === "dryRun") {
-        setResult({
-          tone: "success",
-          message: `${res?.message || "Audience resolved."}${countText} Nothing was sent.`,
-        });
-      } else {
-        setResult({
-          tone: "success",
-          message: `${res?.message || "Broadcast sent."}${countText}${sent != null ? ` Push sent: ${sent}.` : ""}`,
-        });
-      }
-      console.log(`[Notifications] broadcast ${mode} response:`, res);
-    } catch (err) {
-      setResult({ tone: "error", message: err.message });
-    } finally {
-      setSubmittingMode(null);
-    }
+    });
   };
 
-  const toneStyles = {
-    success: "border-emerald-400/30 bg-emerald-400/[0.06] text-emerald-600 dark:text-emerald-400",
-    error: "border-red-500/30 bg-red-500/[0.06] text-red-600 dark:text-red-400",
+  const duplicate = (entry) => {
+    draftApi.load(entry.draft);
+    setTab("compose");
   };
-  const ToneIcon = result?.tone === "success" ? CheckCircle2 : AlertTriangle;
 
-  // Plain-language summary of the current audience selection — display only,
-  // derived from the same state the payload itself is built from.
-  const audienceSummary =
-    audienceMode === "all"
-      ? "All customers and vendors"
-      : audienceMode === "roles"
-      ? roles.length
-        ? `Everyone with role: ${roles.join(", ")}`
-        : "No roles selected yet"
-      : selectedUsers.length
-      ? `${selectedUsers.length} selected user${selectedUsers.length > 1 ? "s" : ""}`
-      : "No users selected yet";
+  // Starter templates carry a suggested audience (roles); saved ones keep
+  // whatever audience the draft already has.
+  const applyTemplate = (t) => {
+    const { draft } = draftApi;
+    const audience = t.audience?.roles ? { ...draft.audience, mode: "role", everyone: false, roles: t.audience.roles } : draft.audience;
+    draftApi.load({ ...draft, push: t.push, inApp: t.inApp !== false, message: { ...draft.message, ...t.message }, audience });
+    setTab("compose");
+  };
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-400/10 text-sky-600 dark:text-sky-400">
-          <Radio size={17} />
-        </span>
+    // The green gradient background comes from Layout (app-wide).
+    <div className="relative mx-auto w-full max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[14.5px] font-semibold text-neutral-800 dark:text-neutral-100">Create Notification</p>
-          <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-            Role-targeted or specific-user push notifications, with a dry run to check the audience first.
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 sm:text-[30px] dark:text-neutral-50">
+            Notifications<span className="text-emerald-600 dark:text-emerald-400">.</span>
+          </h1>
+          <p className="mt-1 text-[13px] text-neutral-500">
+            Write one update and send it to customers, vendors or outlet managers — by role, filter or a hand-picked list.
           </p>
         </div>
+        <Button icon={Eraser} onClick={draftApi.reset}>
+          Clear draft
+        </Button>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
-        {/* ── Form ─────────────────────────────────────────────── */}
-        <div className="space-y-5">
-          {/* ── Priority ─────────────────────────────────────────── */}
-          <div>
-            <StepLabel n={1}>Priority</StepLabel>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <AudienceOption
-                active={severity === "INFO"}
-                icon={Info}
-                title="Info"
-                description="Standard update — no urgency implied."
-                onClick={() => setSeverity("INFO")}
-              />
-              <AudienceOption
-                active={severity === "WARNING"}
-                icon={AlertTriangle}
-                title="Warning"
-                description="Flagged as important — stands out more to the recipient."
-                onClick={() => setSeverity("WARNING")}
-              />
-            </div>
-          </div>
+      <div className="space-y-4">
+        <NotificationStats entries={history.entries} />
 
-          {/* ── Audience ─────────────────────────────────────────── */}
-          <div>
-            <StepLabel n={2}>Audience</StepLabel>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <AudienceOption
-                active={audienceMode === "roles"}
-                icon={ShieldCheck}
-                title="By Role(s)"
-                description="Everyone with the given role, e.g. all vendors."
-                onClick={() => setAudienceMode("roles")}
-              />
-              <AudienceOption
-                active={audienceMode === "users"}
-                icon={Users}
-                title="Specific Users"
-                description="Pick individual people from search."
-                onClick={() => setAudienceMode("users")}
-              />
-              <AudienceOption
-                active={audienceMode === "all"}
-                icon={Globe}
-                title="All Users"
-                description="Every customer and vendor on the platform."
-                onClick={() => setAudienceMode("all")}
-              />
-            </div>
+        <PageTabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { key: "compose", label: "Compose", icon: PencilLine },
+            { key: "scheduled", label: "Scheduled", icon: CalendarClock, badge: upcoming + missed, alert: missed > 0 },
+            { key: "templates", label: "Templates", icon: FileText, badge: STARTER_TEMPLATES.length + templates.templates.length },
+            { key: "history", label: "History", icon: History, badge: sent.length },
+          ]}
+        />
 
-            <div className="mt-3">
-              {audienceMode === "roles" && (
-                // Not <Field> — it's a <label>, and a stray click inside one
-                // would toggle the first role button.
-                <div>
-                  <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                    Roles<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
-                  </span>
-                  <RolePicker roles={roles} onChange={setRoles} />
-                </div>
-              )}
-              {audienceMode === "users" && (
-                <Field label="Users" required>
-                  <UserPicker selected={selectedUsers} onChange={setSelectedUsers} />
-                </Field>
-              )}
-              {audienceMode === "all" && (
-                <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-3.5 py-3">
-                  <div className="flex items-start gap-2 text-[12.5px] text-amber-600 dark:text-amber-400">
-                    <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                    This sends to every user on the platform. Dry run first to check the reach.
-                  </div>
-                  <label className="mt-2.5 flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
-                    <input
-                      type="checkbox"
-                      checked={confirmAll}
-                      onChange={(e) => setConfirmAll(e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 accent-amber-400"
-                    />
-                    I understand this broadcasts to all users
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Message ──────────────────────────────────────────── */}
-          <div>
-            <StepLabel n={3}>Message</StepLabel>
-            <div className="space-y-3 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-              <Field label="Title" required>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
-              </Field>
-
-              <Field label="Body" required>
-                <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} className={inputClass} />
-              </Field>
-
-              <Field label="Deep Link (optional)">
-                <div className="flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 focus-within:border-emerald-500/50">
-                  <Link2 size={13} className="shrink-0 text-neutral-500" />
-                  <input
-                    value={deepLink}
-                    onChange={(e) => setDeepLink(e.target.value)}
-                    placeholder="/subscription/invoices"
-                    className="w-full bg-transparent text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
-                  />
-                </div>
-              </Field>
-            </div>
-          </div>
-
-          {/* ── Delivery ─────────────────────────────────────────── */}
-          <div>
-            <StepLabel n={4}>Delivery</StepLabel>
-            <label className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
-              <input
-                type="checkbox"
-                checked={push}
-                onChange={(e) => setPush(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 accent-emerald-400"
-              />
-              Send push (not just in-app) when broadcasting
-            </label>
-          </div>
-
-          {result && (
-            <div className={`flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] ${toneStyles[result.tone]}`}>
-              <ToneIcon size={13} className="mt-0.5 shrink-0" />
-              {result.message}
-            </div>
-          )}
-
-          <div className="flex flex-col justify-end gap-2 border-t border-neutral-200 dark:border-neutral-800 pt-4 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => runBroadcast("dryRun")}
-              disabled={!canSubmit("dryRun") || Boolean(submittingMode)}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-[13px] font-medium text-neutral-700 dark:text-neutral-300 transition-colors hover:border-neutral-300 dark:hover:border-neutral-700 hover:text-neutral-900 dark:hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {submittingMode === "dryRun" ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
-              Dry Run
-            </button>
-            <button
-              type="button"
-              onClick={() => runBroadcast("send")}
-              disabled={!canSubmit("send") || Boolean(submittingMode)}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {submittingMode === "send" ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              Send Broadcast
-            </button>
-          </div>
-        </div>
-
-        {/* ── Live Preview ─────────────────────────────────────── */}
-        <div>
-          <div className="mb-3 flex items-center gap-2">
-            <Eye size={13} className="text-neutral-500" />
-            <p className="text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Live Preview</p>
-          </div>
-
-          <div className="lg:sticky lg:top-6">
-            <div className="mx-auto w-60">
-              {/* Phone frame — a real lock-screen mockup, not a watch face */}
-              <div className="relative aspect-[9/19.5] overflow-hidden rounded-[2.75rem] border-[6px] border-neutral-800 bg-neutral-950 shadow-xl shadow-black/40">
-                {/* Wallpaper */}
-                <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/30 via-neutral-900 to-neutral-950" />
-
-                {/* Dynamic island */}
-                <div className="absolute left-1/2 top-2 z-20 h-5 w-21.5 -translate-x-1/2 rounded-full bg-neutral-950" />
-
-                <div className="relative z-10 flex h-full flex-col">
-                  {/* Status bar */}
-                  <div className="flex items-center justify-between px-5 pt-3 text-[10.5px] font-medium text-white">
-                    <span>9:41</span>
-                    <div className="flex items-center gap-1 text-white/90">
-                      <SignalHigh size={11} />
-                      <Wifi size={11} />
-                      <BatteryFull size={13} />
-                    </div>
-                  </div>
-
-                  {/* Lock-screen clock */}
-                  <div className="mt-5 px-4 text-center text-white">
-                    <p className="text-[11px] font-medium text-white/60">
-                      {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
-                    </p>
-                    <p className="mt-0.5 text-[38px] font-semibold leading-none tracking-tight">9:41</p>
-                  </div>
-
-                  {/* Notification banner */}
-                  <div className="mt-6 px-3">
-                    <div className="rounded-2xl border border-white/10 bg-neutral-900/90 p-2.5 shadow-lg shadow-black/40 backdrop-blur">
-                      <div className="flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-400/15 text-emerald-400">
-                          <Bell size={10} />
-                        </span>
-                        <span className="text-[10px] font-semibold tracking-wide text-neutral-300">TRYDOOD</span>
-                        {severity === "WARNING" && (
-                          <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[8.5px] font-semibold text-amber-400">
-                            !
-                          </span>
-                        )}
-                        <span className="ml-auto text-[9px] text-neutral-500">now</span>
-                      </div>
-                      <p className="mt-1.5 truncate text-[12px] font-semibold text-neutral-50">
-                        {title.trim() || "Your notification title"}
-                      </p>
-                      <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-neutral-400">
-                        {body.trim() || "Body text appears here as you type."}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 p-3 text-[12px] shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
-              <p className="font-medium text-neutral-700 dark:text-neutral-300">Going to</p>
-              <p className="mt-0.5 text-neutral-500 dark:text-neutral-400">{audienceSummary}</p>
-            </div>
-          </div>
-        </div>
+        {tab === "compose" && (
+          <ComposeTab
+            draftApi={draftApi}
+            directory={directory}
+            adminName={adminName}
+            onSent={history.add}
+            onSaveTemplate={templates.save}
+            onOpenHistory={() => setTab("history")}
+            onOpenScheduled={() => setTab("scheduled")}
+          />
+        )}
+        {tab === "scheduled" && (
+          <ScheduledTab
+            entries={scheduled}
+            onSendNow={(e) => deliverEntry(e)}
+            onCancel={(e) => historyStore.claim(e.id, "scheduled", { status: "cancelled" })}
+            onReschedule={reschedule}
+            onDuplicate={duplicate}
+            onRemove={history.remove}
+            onCompose={() => setTab("compose")}
+          />
+        )}
+        {tab === "templates" && <TemplatesTab templates={templates.templates} onUse={applyTemplate} onRemove={templates.remove} />}
+        {tab === "history" && <HistoryTab entries={sent} onDuplicate={duplicate} onRetry={retry} onRemove={history.remove} />}
       </div>
     </div>
   );
 }
 
-export default function Notification() {
-  return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-6 flex items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
-            <Bell size={19} />
-          </span>
-          <div>
-            <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Notifications</h1>
-            <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">Push notification setup and broadcast tools.</p>
-          </div>
-        </div>
+/* =========================================================================
+ * OLD IMPLEMENTATION — kept for reference, fully commented out.
+ * (Push setup card + single broadcast form with dry run.) The push-setup
+ * logic now lives in components/PushSetupCard.jsx.
+ * ========================================================================= */
 
-        <div className="space-y-4">
-          <PushSetupCard />
-          <BroadcastSection />
-        </div>
-      </div>
-    </div>
-  );
-}
+// import React, { useEffect, useMemo, useState } from "react";
+// import {
+//   Bell,
+//   BellOff,
+//   Send,
+//   Loader2,
+//   AlertTriangle,
+//   CheckCircle2,
+//   Radio,
+//   FlaskConical,
+//   Users,
+//   ShieldCheck,
+//   Link2,
+//   Globe,
+//   Search,
+//   X,
+//   Info,
+//   Eye,
+//   Wifi,
+//   SignalHigh,
+//   BatteryFull,
+// } from "lucide-react";
+// import { broadcastNotification } from "./services/NotificationApi";
+// import { keepPreviousData } from "@tanstack/react-query";
+// import { useCustomers } from "../customer/queries/customerQueries";
+// import { isNotFoundMessage } from "../../utils/helpers";
+// import { registerDeviceToken, unregisterDeviceToken } from "./services/DeviceTokenApi";
+// import { getPushToken, getBrowserDeviceId, FCM_TOKEN_STORAGE_KEY } from "../../config/firebaseMessaging";
+//
+// // Roles the broadcast endpoint targets. A fixed list instead of free text,
+// // so a typo ("VENDORS") can't silently resolve to zero recipients.
+// const ROLE_OPTIONS = [
+//   { value: "CUSTOMER", label: "Customers" },
+//   { value: "VENDOR", label: "Vendors" },
+//   { value: "ADMIN", label: "Admins" },
+// ];
+//
+// // "All users" = every customer and vendor. Sent as explicit roles because
+// // the API only documents `target: { roles }` / `target: { userIds }`.
+// const ALL_USER_ROLES = ["CUSTOMER", "VENDOR"];
+//
+// // GET /customers/admin/get-all row → picker option. `userIds` on the
+// // broadcast must be the login User id, so prefer the linked account's id
+// // over the customer-profile id when the payload carries it.
+// function toUserOption(raw) {
+//   const account = raw.account || {};
+//   const phone = raw.whatsappNumber || account.whatsappNumber || raw.mobile || "";
+//   return {
+//     id: raw.userId || account._id || raw._id,
+//     name: String(raw.fullName || raw.name || account.name || raw.uniqueId || raw._id || "Customer"),
+//     // Email + number + id in one line — also what the local search matches on.
+//     detail: [raw.email || account.email, phone, raw.uniqueId].filter(Boolean).join(" · "),
+//   };
+// }
+//
+// // get-all response → picker options.
+// function rowsOf(res) {
+//   const list = res?.data?.data ?? res?.data?.customers ?? res?.data ?? [];
+//   return Array.isArray(list) ? list.map(toUserOption).filter((u) => u.id) : [];
+// }
+//
+// const inputClass =
+//   "w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none transition-colors focus:border-emerald-500/50";
+//
+// function Field({ label, required, children }) {
+//   return (
+//     <label className="block">
+//       <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+//         {label}
+//         {required && <span className="ml-0.5 text-red-600 dark:text-red-400">*</span>}
+//       </span>
+//       {children}
+//     </label>
+//   );
+// }
+//
+// function StepLabel({ n, children }) {
+//   return (
+//     <div className="mb-3 flex items-center gap-2">
+//       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
+//         {n}
+//       </span>
+//       <p className="text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{children}</p>
+//     </div>
+//   );
+// }
+//
+// /* -------------------------------------------------------------------------
+//  * Push Setup — registers/unregisters this admin's own browser as a push
+//  * device via Firebase (config/firebaseMessaging.js) + POST/PUT
+//  * /deviceTokens/register|unregister. Broadcasts (below) with "Send push"
+//  * checked reach whatever device is registered here.
+//  * ---------------------------------------------------------------------- */
+// const FCM_TOKEN_IS_REAL_KEY = "trydood-admin-fcm-token-is-real";
+//
+// function BentoFact({ icon: Icon, label, value }) {
+//   return (
+//     <div className="rounded-2xl bg-neutral-50 dark:bg-neutral-950/60 p-3.5">
+//       <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
+//         <Icon size={14} />
+//       </span>
+//       <p className="text-[10.5px] uppercase tracking-wide text-neutral-500">{label}</p>
+//       <p className="mt-0.5 truncate text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">{value}</p>
+//     </div>
+//   );
+// }
+//
+// function PushSetupCard() {
+//   const [token, setToken] = useState(() => localStorage.getItem(FCM_TOKEN_STORAGE_KEY) || "");
+//   const [isReal, setIsReal] = useState(() => localStorage.getItem(FCM_TOKEN_IS_REAL_KEY) === "true");
+//   const [deviceId] = useState(() => getBrowserDeviceId());
+//   const [busy, setBusy] = useState(false);
+//   const [error, setError] = useState("");
+//
+//   const registered = Boolean(token);
+//   const browserLabel = navigator.userAgent.includes("Chrome")
+//     ? "Chrome"
+//     : navigator.userAgent.includes("Firefox")
+//     ? "Firefox"
+//     : navigator.userAgent.includes("Safari")
+//     ? "Safari"
+//     : "This browser";
+//
+//   const handleEnable = async () => {
+//     setBusy(true);
+//     setError("");
+//     try {
+//       // Falls back to a placeholder token (same shape the Vendor Panel
+//       // uses) when a real FCM token can't be obtained yet — e.g. no
+//       // VAPID key set — so this still registers a device instead of
+//       // just erroring out.
+//       const { token: fcmToken, isReal: real } = await getPushToken();
+//       console.log(`[Push Setup] Push token (${real ? "real FCM" : "placeholder"}):`, fcmToken);
+//       const result = await registerDeviceToken({
+//         token: fcmToken,
+//         platform: "WEB",
+//         deviceId: getBrowserDeviceId(),
+//         deviceName: navigator.userAgent.slice(0, 80),
+//         appVersion: "1.0.0",
+//       });
+//       console.log("[Push Setup] deviceTokens/register response:", result);
+//       localStorage.setItem(FCM_TOKEN_STORAGE_KEY, fcmToken);
+//       localStorage.setItem(FCM_TOKEN_IS_REAL_KEY, String(real));
+//       setToken(fcmToken);
+//       setIsReal(real);
+//     } catch (err) {
+//       setError(err.message);
+//     } finally {
+//       setBusy(false);
+//     }
+//   };
+//
+//   const handleDisable = async () => {
+//     setBusy(true);
+//     setError("");
+//     try {
+//       const result = await unregisterDeviceToken({ token, allDevices: false });
+//       console.log("[Push Setup] deviceTokens/unregister response:", result);
+//       localStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
+//       localStorage.removeItem(FCM_TOKEN_IS_REAL_KEY);
+//       setToken("");
+//       setIsReal(false);
+//     } catch (err) {
+//       setError(err.message);
+//     } finally {
+//       setBusy(false);
+//     }
+//   };
+//
+//   return (
+//     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
+//       <div className="col-span-2 row-span-2 rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+//         <div className="flex items-start justify-between gap-3">
+//           <div className="flex items-start gap-3">
+//             <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${registered ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"}`}>
+//               {registered ? <Bell size={17} /> : <BellOff size={17} />}
+//             </span>
+//             <div>
+//               <p className="text-[14.5px] font-semibold text-neutral-800 dark:text-neutral-100">Push Setup (this browser)</p>
+//               <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
+//                 {registered
+//                   ? isReal
+//                     ? "This browser is registered and can receive real push."
+//                     : "Registered with a placeholder token — the device row exists, but it can't receive real push yet."
+//                   : "Register this browser so broadcasts with push enabled can reach it."}
+//               </p>
+//             </div>
+//           </div>
+//
+//           <button
+//             onClick={registered ? handleDisable : handleEnable}
+//             disabled={busy}
+//             className={`flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+//               registered
+//                 ? "border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+//                 : "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
+//             }`}
+//           >
+//             {busy && <Loader2 size={13} className="animate-spin" />}
+//             {registered ? "Disable" : "Enable Push"}
+//           </button>
+//         </div>
+//
+//         {error && (
+//           <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/[0.06] px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
+//             <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+//             {error}
+//           </div>
+//         )}
+//       </div>
+//
+//       <BentoFact icon={Radio} label="Status" value={registered ? "Registered" : "Not Registered"} />
+//       <BentoFact icon={Globe} label="Browser" value={browserLabel} />
+//       <BentoFact icon={ShieldCheck} label="Token Type" value={registered ? (isReal ? "Real FCM" : "Placeholder") : "No token"} />
+//       <BentoFact icon={Users} label="Device ID" value={deviceId.replace("web_", "").slice(0, 13)} />
+//     </div>
+//   );
+// }
+//
+// /* Big selectable card used for the audience picker — same "chosen state"
+//  * language as the Subscription action cards (border + tint when active). */
+// function AudienceOption({ active, icon: Icon, title, description, onClick }) {
+//   return (
+//     <button
+//       type="button"
+//       onClick={onClick}
+//       className={`flex flex-1 flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors ${
+//         active
+//           ? "border-emerald-400/60 bg-emerald-400/10"
+//           : "border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 hover:border-neutral-300 dark:hover:border-neutral-700"
+//       }`}
+//     >
+//       <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${active ? "bg-emerald-400/15 text-emerald-600 dark:text-emerald-400" : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400"}`}>
+//         <Icon size={14} />
+//       </span>
+//       <div>
+//         <p className={`text-[12.5px] font-medium ${active ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-800 dark:text-neutral-200"}`}>{title}</p>
+//         <p className="mt-0.5 text-[11px] leading-snug text-neutral-500">{description}</p>
+//       </div>
+//     </button>
+//   );
+// }
+//
+// /* Toggle chips over the fixed role list — pick one or more. */
+// function RolePicker({ roles, onChange }) {
+//   const toggle = (value) =>
+//     onChange(roles.includes(value) ? roles.filter((r) => r !== value) : [...roles, value]);
+//
+//   return (
+//     <div className="flex flex-wrap gap-1.5">
+//       {ROLE_OPTIONS.map((r) => {
+//         const active = roles.includes(r.value);
+//         return (
+//           <button
+//             key={r.value}
+//             type="button"
+//             onClick={() => toggle(r.value)}
+//             aria-pressed={active}
+//             className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
+//               active
+//                 ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+//                 : "border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+//             }`}
+//           >
+//             {active && <CheckCircle2 size={12} />}
+//             {r.label}
+//             <span className="text-[10.5px] opacity-60">{r.value}</span>
+//           </button>
+//         );
+//       })}
+//     </div>
+//   );
+// }
+//
+// /* Searchable multi-select over real customers (GET /customers/admin/get-all,
+//  * debounced server-side search) — selected users render as removable chips. */
+// function UserPicker({ selected, onChange }) {
+//   const [query, setQuery] = useState("");
+//   const [open, setOpen] = useState(false);
+//   // Base list — the same call (and cache entry) the Customers page uses
+//   // (first 100, no search), filtered locally as the admin types.
+//   const baseQuery = useCustomers({ page: 1, limit: 100 });
+//   const baseList = useMemo(() => rowsOf(baseQuery.data), [baseQuery.data]);
+//   const loadingBase = baseQuery.isPending;
+//   // "No customers found" is just an empty platform, not an error.
+//   const searchError =
+//     baseQuery.error && !isNotFoundMessage(baseQuery.error.message) ? baseQuery.error.message : "";
+//
+//   // Extra matches from the server-side search, for customers past the
+//   // first 100 — debounced 300ms.
+//   const [debouncedQuery, setDebouncedQuery] = useState("");
+//   useEffect(() => {
+//     const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+//     return () => clearTimeout(t);
+//   }, [query]);
+//   // Empty query → `results` ignores searchHits, so nothing to fetch. A miss
+//   // ("No customers found" 404, unsupported search, …) is fine — the locally
+//   // filtered base list still shows — so it isn't retried.
+//   const searchQuery = useCustomers(
+//     { page: 1, limit: 20, search: debouncedQuery },
+//     { enabled: Boolean(debouncedQuery), retry: false, placeholderData: keepPreviousData }
+//   );
+//   const searchHits = useMemo(() => rowsOf(searchQuery.data), [searchQuery.data]);
+//   const searching = searchQuery.isFetching;
+//
+//   const results = useMemo(() => {
+//     const q = query.trim().toLowerCase();
+//     const local = baseList.filter(
+//       (u) => !q || u.name.toLowerCase().includes(q) || u.detail.toLowerCase().includes(q)
+//     );
+//     const merged = new Map();
+//     [...local, ...(q ? searchHits : [])].forEach((u) => merged.set(u.id, u));
+//     return Array.from(merged.values())
+//       .filter((u) => !selected.some((s) => s.id === u.id))
+//       .slice(0, 8);
+//   }, [baseList, searchHits, query, selected]);
+//   const busy = loadingBase || searching;
+//
+//   const pick = (user) => {
+//     onChange([...selected, user]);
+//     setQuery("");
+//   };
+//
+//   return (
+//     <div>
+//       {selected.length > 0 && (
+//         <div className="mb-2 flex flex-wrap gap-1.5">
+//           {selected.map((u) => (
+//             <span key={u.id} className="flex items-center gap-1.5 rounded-full bg-neutral-200 dark:bg-neutral-800 px-2.5 py-1 text-[11.5px] font-medium text-neutral-700 dark:text-neutral-300">
+//               {u.name}
+//               <button type="button" onClick={() => onChange(selected.filter((s) => s.id !== u.id))} aria-label={`Remove ${u.name}`} className="text-neutral-500 hover:text-red-600 dark:hover:text-red-400">
+//                 <X size={11} />
+//               </button>
+//             </span>
+//           ))}
+//         </div>
+//       )}
+//
+//       <div className="relative">
+//         <div className="flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 focus-within:border-emerald-500/50">
+//           <Search size={13} className="shrink-0 text-neutral-500" />
+//           <input
+//             value={query}
+//             onChange={(e) => setQuery(e.target.value)}
+//             onFocus={() => setOpen(true)}
+//             onBlur={() => setTimeout(() => setOpen(false), 120)}
+//             placeholder="Search customers by name, email or number…"
+//             className="w-full bg-transparent text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
+//           />
+//           {busy && <Loader2 size={13} className="shrink-0 animate-spin text-neutral-400" />}
+//         </div>
+//
+//         {open && results.length > 0 && (
+//           <div className="absolute z-10 mt-1.5 w-full overflow-hidden rounded-xl bg-white dark:bg-neutral-900 shadow-xl dark:shadow-black/40">
+//             {results.map((u) => (
+//               <button
+//                 key={u.id}
+//                 type="button"
+//                 onMouseDown={(e) => e.preventDefault()}
+//                 onClick={() => pick(u)}
+//                 className="flex w-full flex-col items-start px-3.5 py-2.5 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+//               >
+//                 <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{u.name}</span>
+//                 {u.detail && <span className="text-[11px] text-neutral-500">{u.detail}</span>}
+//               </button>
+//             ))}
+//           </div>
+//         )}
+//         {open && results.length === 0 && (
+//           <div className="absolute z-10 mt-1.5 flex w-full items-center gap-2 rounded-xl bg-white px-3.5 py-2.5 text-[12px] text-neutral-500 shadow-xl dark:bg-neutral-900 dark:shadow-black/40">
+//             {busy ? (
+//               <>
+//                 <Loader2 size={12} className="animate-spin" /> Loading customers…
+//               </>
+//             ) : searchError ? (
+//               "Couldn't load customers."
+//             ) : query.trim() ? (
+//               `No customer matches "${query.trim()}".`
+//             ) : (
+//               "No customers on the platform yet."
+//             )}
+//           </div>
+//         )}
+//       </div>
+//       {searchError && (
+//         <p className="mt-1.5 flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400">
+//           <AlertTriangle size={11} /> {searchError}
+//         </p>
+//       )}
+//     </div>
+//   );
+// }
+//
+// /* -------------------------------------------------------------------------
+//  * Broadcast — one form, two audience modes (roles / specific users) and
+//  * two actions (Dry Run, Send) against the same POST /notifications/broadcast
+//  * endpoint, matching the three Postman requests in that folder.
+//  * ---------------------------------------------------------------------- */
+// function BroadcastSection() {
+//   const [audienceMode, setAudienceMode] = useState("roles"); // 'roles' | 'users' | 'all'
+//   const [roles, setRoles] = useState(["VENDOR"]);
+//   const [selectedUsers, setSelectedUsers] = useState([]);
+//   const [confirmAll, setConfirmAll] = useState(false);
+//   const [title, setTitle] = useState("");
+//   const [body, setBody] = useState("");
+//   const [severity, setSeverity] = useState("INFO");
+//   const [deepLink, setDeepLink] = useState("");
+//   const [push, setPush] = useState(true);
+//
+//   const [submittingMode, setSubmittingMode] = useState(null); // null | 'dryRun' | 'send'
+//   const [result, setResult] = useState(null); // { tone, message }
+//
+//   const audienceReady =
+//     audienceMode === "all" || (audienceMode === "roles" ? roles.length > 0 : selectedUsers.length > 0);
+//
+//   const canSubmit = (mode) =>
+//     Boolean(title.trim() && body.trim() && audienceReady) &&
+//     (mode !== "send" || audienceMode !== "all" || confirmAll);
+//
+//   const runBroadcast = async (mode) => {
+//     if (!canSubmit(mode) || submittingMode) return;
+//     setSubmittingMode(mode);
+//     setResult(null);
+//
+//     const target =
+//       audienceMode === "roles"
+//         ? { roles }
+//         : audienceMode === "users"
+//         ? { userIds: selectedUsers.map((u) => u.id) }
+//         : { roles: ALL_USER_ROLES };
+//
+//     const payload = {
+//       title: title.trim(),
+//       body: body.trim(),
+//       target,
+//       severity,
+//       ...(deepLink.trim() ? { deepLink: deepLink.trim() } : {}),
+//       ...(mode === "dryRun" ? { dryRun: true } : { push, dryRun: false }),
+//     };
+//
+//     try {
+//       const res = await broadcastNotification(payload);
+//       // Like every other endpoint, the numbers sit under `data` — check
+//       // the top level too in case this one returns them flat.
+//       const info = res?.data ?? {};
+//       const pick = (...keys) => {
+//         for (const k of keys) {
+//           const v = info[k] ?? res?.[k];
+//           if (v != null) return v;
+//         }
+//         return null;
+//       };
+//       const count = pick("audienceCount", "recipientCount", "totalRecipients", "count", "total");
+//       const sent = pick("sentCount", "pushSent", "successCount", "delivered");
+//       const countText = count != null ? ` ${count} recipient(s).` : "";
+//
+//       if (mode === "dryRun") {
+//         setResult({
+//           tone: "success",
+//           message: `${res?.message || "Audience resolved."}${countText} Nothing was sent.`,
+//         });
+//       } else {
+//         setResult({
+//           tone: "success",
+//           message: `${res?.message || "Broadcast sent."}${countText}${sent != null ? ` Push sent: ${sent}.` : ""}`,
+//         });
+//       }
+//       console.log(`[Notifications] broadcast ${mode} response:`, res);
+//     } catch (err) {
+//       setResult({ tone: "error", message: err.message });
+//     } finally {
+//       setSubmittingMode(null);
+//     }
+//   };
+//
+//   const toneStyles = {
+//     success: "border-emerald-400/30 bg-emerald-400/[0.06] text-emerald-600 dark:text-emerald-400",
+//     error: "border-red-500/30 bg-red-500/[0.06] text-red-600 dark:text-red-400",
+//   };
+//   const ToneIcon = result?.tone === "success" ? CheckCircle2 : AlertTriangle;
+//
+//   // Plain-language summary of the current audience selection — display only,
+//   // derived from the same state the payload itself is built from.
+//   const audienceSummary =
+//     audienceMode === "all"
+//       ? "All customers and vendors"
+//       : audienceMode === "roles"
+//       ? roles.length
+//         ? `Everyone with role: ${roles.join(", ")}`
+//         : "No roles selected yet"
+//       : selectedUsers.length
+//       ? `${selectedUsers.length} selected user${selectedUsers.length > 1 ? "s" : ""}`
+//       : "No users selected yet";
+//
+//   return (
+//     <div className="rounded-2xl bg-white dark:bg-neutral-900 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+//       <div className="flex items-start gap-3">
+//         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-400/10 text-sky-600 dark:text-sky-400">
+//           <Radio size={17} />
+//         </span>
+//         <div>
+//           <p className="text-[14.5px] font-semibold text-neutral-800 dark:text-neutral-100">Create Notification</p>
+//           <p className="mt-0.5 text-[12.5px] text-neutral-500 dark:text-neutral-400">
+//             Role-targeted or specific-user push notifications, with a dry run to check the audience first.
+//           </p>
+//         </div>
+//       </div>
+//
+//       <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
+//         {/* ── Form ─────────────────────────────────────────────── */}
+//         <div className="space-y-5">
+//           {/* ── Priority ─────────────────────────────────────────── */}
+//           <div>
+//             <StepLabel n={1}>Priority</StepLabel>
+//             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+//               <AudienceOption
+//                 active={severity === "INFO"}
+//                 icon={Info}
+//                 title="Info"
+//                 description="Standard update — no urgency implied."
+//                 onClick={() => setSeverity("INFO")}
+//               />
+//               <AudienceOption
+//                 active={severity === "WARNING"}
+//                 icon={AlertTriangle}
+//                 title="Warning"
+//                 description="Flagged as important — stands out more to the recipient."
+//                 onClick={() => setSeverity("WARNING")}
+//               />
+//             </div>
+//           </div>
+//
+//           {/* ── Audience ─────────────────────────────────────────── */}
+//           <div>
+//             <StepLabel n={2}>Audience</StepLabel>
+//             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+//               <AudienceOption
+//                 active={audienceMode === "roles"}
+//                 icon={ShieldCheck}
+//                 title="By Role(s)"
+//                 description="Everyone with the given role, e.g. all vendors."
+//                 onClick={() => setAudienceMode("roles")}
+//               />
+//               <AudienceOption
+//                 active={audienceMode === "users"}
+//                 icon={Users}
+//                 title="Specific Users"
+//                 description="Pick individual people from search."
+//                 onClick={() => setAudienceMode("users")}
+//               />
+//               <AudienceOption
+//                 active={audienceMode === "all"}
+//                 icon={Globe}
+//                 title="All Users"
+//                 description="Every customer and vendor on the platform."
+//                 onClick={() => setAudienceMode("all")}
+//               />
+//             </div>
+//
+//             <div className="mt-3">
+//               {audienceMode === "roles" && (
+//                 // Not <Field> — it's a <label>, and a stray click inside one
+//                 // would toggle the first role button.
+//                 <div>
+//                   <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+//                     Roles<span className="ml-0.5 text-red-600 dark:text-red-400">*</span>
+//                   </span>
+//                   <RolePicker roles={roles} onChange={setRoles} />
+//                 </div>
+//               )}
+//               {audienceMode === "users" && (
+//                 <Field label="Users" required>
+//                   <UserPicker selected={selectedUsers} onChange={setSelectedUsers} />
+//                 </Field>
+//               )}
+//               {audienceMode === "all" && (
+//                 <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-3.5 py-3">
+//                   <div className="flex items-start gap-2 text-[12.5px] text-amber-600 dark:text-amber-400">
+//                     <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+//                     This sends to every user on the platform. Dry run first to check the reach.
+//                   </div>
+//                   <label className="mt-2.5 flex items-center gap-2 text-[12.5px] text-neutral-700 dark:text-neutral-300">
+//                     <input
+//                       type="checkbox"
+//                       checked={confirmAll}
+//                       onChange={(e) => setConfirmAll(e.target.checked)}
+//                       className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 accent-amber-400"
+//                     />
+//                     I understand this broadcasts to all users
+//                   </label>
+//                 </div>
+//               )}
+//             </div>
+//           </div>
+//
+//           {/* ── Message ──────────────────────────────────────────── */}
+//           <div>
+//             <StepLabel n={3}>Message</StepLabel>
+//             <div className="space-y-3 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+//               <Field label="Title" required>
+//                 <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
+//               </Field>
+//
+//               <Field label="Body" required>
+//                 <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} className={inputClass} />
+//               </Field>
+//
+//               <Field label="Deep Link (optional)">
+//                 <div className="flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3.5 py-2.5 focus-within:border-emerald-500/50">
+//                   <Link2 size={13} className="shrink-0 text-neutral-500" />
+//                   <input
+//                     value={deepLink}
+//                     onChange={(e) => setDeepLink(e.target.value)}
+//                     placeholder="/subscription/invoices"
+//                     className="w-full bg-transparent text-[13px] text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 dark:placeholder:text-neutral-600 outline-none"
+//                   />
+//                 </div>
+//               </Field>
+//             </div>
+//           </div>
+//
+//           {/* ── Delivery ─────────────────────────────────────────── */}
+//           <div>
+//             <StepLabel n={4}>Delivery</StepLabel>
+//             <label className="flex items-center gap-2 text-[12.5px] text-neutral-500 dark:text-neutral-400">
+//               <input
+//                 type="checkbox"
+//                 checked={push}
+//                 onChange={(e) => setPush(e.target.checked)}
+//                 className="h-3.5 w-3.5 rounded border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 accent-emerald-400"
+//               />
+//               Send push (not just in-app) when broadcasting
+//             </label>
+//           </div>
+//
+//           {result && (
+//             <div className={`flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] ${toneStyles[result.tone]}`}>
+//               <ToneIcon size={13} className="mt-0.5 shrink-0" />
+//               {result.message}
+//             </div>
+//           )}
+//
+//           <div className="flex flex-col justify-end gap-2 border-t border-neutral-200 dark:border-neutral-800 pt-4 sm:flex-row">
+//             <button
+//               type="button"
+//               onClick={() => runBroadcast("dryRun")}
+//               disabled={!canSubmit("dryRun") || Boolean(submittingMode)}
+//               className="flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-[13px] font-medium text-neutral-700 dark:text-neutral-300 transition-colors hover:border-neutral-300 dark:hover:border-neutral-700 hover:text-neutral-900 dark:hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
+//             >
+//               {submittingMode === "dryRun" ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
+//               Dry Run
+//             </button>
+//             <button
+//               type="button"
+//               onClick={() => runBroadcast("send")}
+//               disabled={!canSubmit("send") || Boolean(submittingMode)}
+//               className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+//             >
+//               {submittingMode === "send" ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+//               Send Broadcast
+//             </button>
+//           </div>
+//         </div>
+//
+//         {/* ── Live Preview ─────────────────────────────────────── */}
+//         <div>
+//           <div className="mb-3 flex items-center gap-2">
+//             <Eye size={13} className="text-neutral-500" />
+//             <p className="text-[12px] font-semibold uppercase tracking-wider text-neutral-500">Live Preview</p>
+//           </div>
+//
+//           <div className="lg:sticky lg:top-6">
+//             <div className="mx-auto w-60">
+//               {/* Phone frame — a real lock-screen mockup, not a watch face */}
+//               <div className="relative aspect-[9/19.5] overflow-hidden rounded-[2.75rem] border-[6px] border-neutral-800 bg-neutral-950 shadow-xl shadow-black/40">
+//                 {/* Wallpaper */}
+//                 <div className="absolute inset-0 bg-gradient-to-b from-emerald-900/30 via-neutral-900 to-neutral-950" />
+//
+//                 {/* Dynamic island */}
+//                 <div className="absolute left-1/2 top-2 z-20 h-5 w-21.5 -translate-x-1/2 rounded-full bg-neutral-950" />
+//
+//                 <div className="relative z-10 flex h-full flex-col">
+//                   {/* Status bar */}
+//                   <div className="flex items-center justify-between px-5 pt-3 text-[10.5px] font-medium text-white">
+//                     <span>9:41</span>
+//                     <div className="flex items-center gap-1 text-white/90">
+//                       <SignalHigh size={11} />
+//                       <Wifi size={11} />
+//                       <BatteryFull size={13} />
+//                     </div>
+//                   </div>
+//
+//                   {/* Lock-screen clock */}
+//                   <div className="mt-5 px-4 text-center text-white">
+//                     <p className="text-[11px] font-medium text-white/60">
+//                       {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
+//                     </p>
+//                     <p className="mt-0.5 text-[38px] font-semibold leading-none tracking-tight">9:41</p>
+//                   </div>
+//
+//                   {/* Notification banner */}
+//                   <div className="mt-6 px-3">
+//                     <div className="rounded-2xl border border-white/10 bg-neutral-900/90 p-2.5 shadow-lg shadow-black/40 backdrop-blur">
+//                       <div className="flex items-center gap-1.5">
+//                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-400/15 text-emerald-400">
+//                           <Bell size={10} />
+//                         </span>
+//                         <span className="text-[10px] font-semibold tracking-wide text-neutral-300">TRYDOOD</span>
+//                         {severity === "WARNING" && (
+//                           <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[8.5px] font-semibold text-amber-400">
+//                             !
+//                           </span>
+//                         )}
+//                         <span className="ml-auto text-[9px] text-neutral-500">now</span>
+//                       </div>
+//                       <p className="mt-1.5 truncate text-[12px] font-semibold text-neutral-50">
+//                         {title.trim() || "Your notification title"}
+//                       </p>
+//                       <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-neutral-400">
+//                         {body.trim() || "Body text appears here as you type."}
+//                       </p>
+//                     </div>
+//                   </div>
+//                 </div>
+//               </div>
+//             </div>
+//
+//             <div className="mt-4 rounded-xl bg-neutral-50 dark:bg-neutral-950/60 p-3 text-[12px] shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:shadow-black/20">
+//               <p className="font-medium text-neutral-700 dark:text-neutral-300">Going to</p>
+//               <p className="mt-0.5 text-neutral-500 dark:text-neutral-400">{audienceSummary}</p>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+//
+// export default function Notification() {
+//   return (
+//     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+//       <div className="mx-auto max-w-5xl">
+//         <div className="mb-6 flex items-center gap-3">
+//           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
+//             <Bell size={19} />
+//           </span>
+//           <div>
+//             <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Notifications</h1>
+//             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">Push notification setup and broadcast tools.</p>
+//           </div>
+//         </div>
+//
+//         <div className="space-y-4">
+//           <PushSetupCard />
+//           <BroadcastSection />
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }

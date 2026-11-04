@@ -7,7 +7,6 @@ import {
   Users,
   Landmark,
   Tag,
-  Package,
   ShieldCheck,
   CheckCircle2,
   Image as ImageIcon,
@@ -41,42 +40,24 @@ import { BrandAvatar } from "../brand/BrandShared";
 import { useTopBrands } from "../brand/queries/brandQueries";
 import { mapBrandListItem } from "../brand/brandMapper";
 import { useBrandVerifications } from "../newOnboarding/queries/onboardingReviewQueries";
+import { useAllVoucherClaimPayments } from "../transaction/queries/transactionQueries";
+import { normalizeClaimPayment } from "../transaction/transactionUtils";
+import { buildActivity, buildWeekRevenue, timeAgo } from "./dashboardData";
 import { useAuthStore } from "../auth/store/authStore";
 import CommonEmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
 import ValueOr from "../../components/common/ValueOr";
 import { MISSING } from "../../utils/helpers";
 
-/* -------------------------------------------------------------------------
- * Mock data — revenue/transactions/activity have no real endpoint yet, so
- * these stay hand-set and every widget using them carries a "Sample" tag.
- * Vendor counts, pending approvals, top brands and category mix are real —
- * see useBrands() and the queries inside Dashboard().
- * ---------------------------------------------------------------------- */
-
-const WEEKLY_TREND = [
-  { d: "Mon", revenue: 2100, transactions: 4 },
-  { d: "Tue", revenue: 2450, transactions: 5 },
-  { d: "Wed", revenue: 1980, transactions: 3 },
-  { d: "Thu", revenue: 2800, transactions: 6 },
-  { d: "Fri", revenue: 2350, transactions: 5 },
-  { d: "Sat", revenue: 3200, transactions: 7 },
-  { d: "Sun", revenue: 3650, transactions: 8 },
-];
-
-const ACTIVITY_FEED = [
-  { id: 1, icon: Store, tint: "emerald", who: "Bloom & Co Florist", what: "upgraded to the Pro plan", when: "6m ago" },
-  { id: 2, icon: Landmark, tint: "sky", who: "Spice Route Kitchen", what: "settlement of ₹2,050 was paid", when: "24m ago" },
-  { id: 3, icon: Tag, tint: "amber", who: "FitZone Gym", what: "customer redeemed a ₹150 voucher", when: "1h ago" },
-  { id: 4, icon: Package, tint: "pink", who: "GlowUp Cosmetics", what: "sold 3 Deal Packs", when: "2h ago" },
-  { id: 5, icon: Users, tint: "sky", who: "TechHub Electronics", what: "onboarded as a new vendor", when: "3h ago" },
-];
+/* Revenue this week and Recent Activity come from real payments, brands and
+ * onboarding submissions — see dashboardData.js. Nothing on this page is
+ * hand-set any more. */
 
 // BrandContext only holds approved brands, so the composition is
 // Active / Deactive / Expired (see deriveBrandStatus in brandMapper).
 const STATUS_SLICES = [
   { key: "Active", label: "Active", color: "#2FDE8C" },
-  { key: "Deactive", label: "Inactive", color: "#A3A3A3" },
+  { key: "Deactive", label: "Deactive", color: "#A3A3A3" },
   { key: "Expired", label: "Expired", color: "#F87171" },
 ];
 
@@ -174,6 +155,7 @@ const tints = {
   sky: "bg-sky-400/10 text-sky-500 dark:text-sky-400",
   pink: "bg-pink-400/10 text-pink-500 dark:text-pink-400",
   violet: "bg-violet-400/10 text-violet-500 dark:text-violet-400",
+  red: "bg-red-500/10 text-red-500 dark:text-red-400",
   neutral: "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
 };
 
@@ -188,8 +170,6 @@ const PENDING_STATUSES = new Set(["MANUAL_REVIEW", "PENDING"]);
 const formatCompact = (n) =>
   n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : n >= 1000 ? `₹${(n / 1000).toFixed(1)}K` : `₹${n}`;
 
-const weekRevenue = WEEKLY_TREND.reduce((s, d) => s + d.revenue, 0);
-const weekTransactions = WEEKLY_TREND.reduce((s, d) => s + d.transactions, 0);
 
 const greetingFor = (date) => {
   const h = date.getHours();
@@ -444,6 +424,19 @@ export default function Dashboard() {
   }, [topBrandsQuery.data]);
   const topBrandsLoading = topBrandsQuery.isPending;
 
+  // Real payments — GET /voucher-claims/payments, every page (the same
+  // query and cache entry the Transactions page uses). Drives "Revenue this
+  // week", the Payment Success ring and payment events in Recent Activity.
+  const paymentsQuery = useAllVoucherClaimPayments();
+  const payments = useMemo(
+    () => (paymentsQuery.data?.data?.data ?? []).map(normalizeClaimPayment),
+    [paymentsQuery.data]
+  );
+  const paymentsLoading = paymentsQuery.isPending;
+  const week = useMemo(() => buildWeekRevenue(payments), [payments]);
+  const activity = useMemo(() => buildActivity({ payments, brands, pending }), [payments, brands, pending]);
+  const activityLoading = paymentsLoading && brandsLoading;
+
   // Date range — controls how many months the Vendor Growth chart shows.
   const [dateRangeKey, setDateRangeKey] = useState("6M");
   const dateRange = DATE_RANGE_OPTIONS.find((o) => o.key === dateRangeKey) || DATE_RANGE_OPTIONS[1];
@@ -453,13 +446,14 @@ export default function Dashboard() {
 
   const handleManualRefresh = async () => {
     setRefreshSpinning(true);
-    await Promise.all([pendingQuery.refetch(), topBrandsQuery.refetch()]);
+    await Promise.all([pendingQuery.refetch(), topBrandsQuery.refetch(), paymentsQuery.refetch()]);
     setTimeout(() => setRefreshSpinning(false), 500);
   };
 
   const vendorGrowth = useMemo(() => buildVendorGrowth(brands, dateRange.months), [brands, dateRange.months]);
   const categoryMix = useMemo(() => buildCategoryMix(brands), [brands]);
   const newInRange = vendorGrowth.reduce((s, m) => s + m.added, 0);
+  const maxAdded = Math.max(1, ...vendorGrowth.map((m) => m.added));
 
   const recentBrands = useMemo(
     () =>
@@ -478,7 +472,8 @@ export default function Dashboard() {
     ? topBrands.reduce((s, b) => s + Math.min(100, ((b.followers || 0) / maxTopFollowers) * 100), 0) / topBrands.length
     : 0;
   const activeRatio = totalVendors ? (activeVendors / totalVendors) * 100 : 0;
-  const revenueGoalPct = (weekRevenue / 25000) * 100;
+  // This week's share of payments that went through (0 when there were none).
+  const paymentSuccessPct = week.successRate ?? 0;
   const clearancePct = 100 - Math.min(100, (pending.length / 10) * 100);
   const animatedTotal = useCountUp(totalVendors);
   const animatedActive = useCountUp(activeVendors);
@@ -600,13 +595,19 @@ export default function Dashboard() {
             <StatCard
               icon={Landmark}
               label="Revenue this week"
-              value={formatCompact(weekRevenue)}
-              sub={`${weekTransactions} transactions`}
+              value={paymentsLoading ? "…" : formatCompact(week.revenue)}
+              sub={
+                paymentsLoading
+                  ? "Loading payments…"
+                  : `${week.transactions} paid transaction${week.transactions === 1 ? "" : "s"}${
+                      week.change == null ? "" : ` · ${week.change >= 0 ? "▲" : "▼"} ${Math.abs(week.change).toFixed(0)}% vs last week`
+                    }`
+              }
               tint="sky"
-              sample
+              onClick={() => navigate("/transaction")}
             >
               <div className="h-10">
-                <Sparkline data={WEEKLY_TREND} dataKey="revenue" id="spark-revenue" color="#38BDF8" />
+                <Sparkline data={week.days} dataKey="revenue" id="spark-revenue" color="#38BDF8" />
               </div>
             </StatCard>
           </div>
@@ -673,8 +674,11 @@ export default function Dashboard() {
                         data={donutData.length ? donutData : [{ key: "none", value: 1, color: "#E5E5E5" }]}
                         dataKey="value"
                         nameKey="label"
-                        innerRadius={48}
-                        outerRadius={68}
+                        // Percent of the box, not px: the box is sized in rem
+                        // and the root font scales (index.css), so fixed radii
+                        // overflowed it and the ring got clipped flat.
+                        innerRadius="68%"
+                        outerRadius="96%"
                         paddingAngle={donutData.length > 1 ? 3 : 0}
                         cornerRadius={6}
                         isAnimationActive={false}
@@ -735,9 +739,29 @@ export default function Dashboard() {
                   ))}
                 </div>
 
+                {/* Joined per month — fills the card's height (it stretches to
+                    match the Vendor Growth chart beside it) with real data
+                    instead of empty space. */}
+                <div className="mt-4 flex min-h-[88px] flex-1 flex-col">
+                  <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-white/75">Joined per month</p>
+                  <div className="flex flex-1 items-end gap-1.5">
+                    {vendorGrowth.map((m) => (
+                      <div key={m.d} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                        <span className="text-[10px] font-bold leading-none">{m.added || ""}</span>
+                        <div
+                          className={`w-full rounded-md ${m.added ? "bg-white/80" : "bg-white/25"}`}
+                          style={{ height: `${Math.max(6, (m.added / maxAdded) * 100)}%` }}
+                          title={`${m.d}: +${m.added}`}
+                        />
+                        <span className="text-[9.5px] text-white/75">{m.d}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <button
                   onClick={() => navigate("/brand")}
-                  className="mt-auto flex w-fit items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[12px] font-semibold text-emerald-700 shadow-sm transition-transform hover:scale-[1.03]"
+                  className="mt-4 flex w-fit items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[12px] font-semibold text-emerald-700 shadow-sm transition-transform hover:scale-[1.03]"
                 >
                   Overview <ArrowRight size={13} />
                 </button>
@@ -808,7 +832,9 @@ export default function Dashboard() {
               {topBrandsLoading ? (
                 <LoadingState />
               ) : topBrands.length ? (
-                <div className="space-y-3">
+                // Spread over the card's full height (the row is as tall as
+                // its tallest card) instead of leaving a gap at the bottom.
+                <div className="flex flex-1 flex-col justify-around gap-3">
                   {topBrands.map((b, i) => {
                     const progress = Math.min(100, Math.round(((b.followers || 0) / maxTopFollowers) * 100));
                     return (
@@ -912,7 +938,7 @@ export default function Dashboard() {
               <div className="grid flex-1 grid-cols-2 content-center gap-3 sm:grid-cols-4">
                 <HealthRing label="Vendor Activity" pct={activeRatio} tint="emerald" />
                 <HealthRing label="Approval Clearance" pct={clearancePct} tint="amber" />
-                <HealthRing label="Revenue Goal" pct={revenueGoalPct} tint="sky" sample />
+                <HealthRing label="Payment Success" pct={paymentSuccessPct} tint="sky" />
                 <HealthRing label="Brand Targets" pct={avgGoalProgress} tint="violet" />
               </div>
             </div>
@@ -959,7 +985,7 @@ export default function Dashboard() {
                         <td className="px-2 py-2.5 text-right font-medium text-neutral-700 dark:text-neutral-300">{b.followers}</td>
                         <td className="px-2 py-2.5 text-right">
                           <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${STATUS_PILLS[b.status] || STATUS_PILLS.Deactive}`}>
-                            {b.status === "Deactive" ? "Inactive" : b.status}
+                            {b.status}
                           </span>
                         </td>
                       </tr>
@@ -975,30 +1001,50 @@ export default function Dashboard() {
             </div>
 
             <div className={cardClass}>
-              <CardHeader icon={Activity} title="Recent Activity" subtitle="Latest platform events" action={<SampleTag />} />
-              <div className="space-y-1.5">
-                {ACTIVITY_FEED.map((a) => {
-                  const Icon = a.icon;
-                  const amountMatch = a.what.match(/₹[\d,]+/);
-                  return (
-                    <div key={a.id} className={`flex items-center gap-3 rounded-2xl px-2.5 py-2 ${innerTile}`}>
-                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tints[a.tint]}`}>
-                        <Icon size={14} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">{a.who}</p>
-                        <p className="truncate text-[11px] text-neutral-500">{a.what}</p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        {amountMatch && (
-                          <p className="font-mono text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">+{amountMatch[0]}</p>
-                        )}
-                        <p className="text-[10.5px] text-neutral-400">{a.when}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <CardHeader
+                icon={Activity}
+                title="Recent Activity"
+                subtitle="Payments, new brands and onboarding"
+                action={<ViewAllButton onClick={() => navigate("/transaction")} />}
+              />
+              {activityLoading ? (
+                <LoadingState />
+              ) : activity.length ? (
+                <div className="space-y-1.5">
+                  {activity.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <button
+                        key={a.id}
+                        onClick={() => navigate(a.link)}
+                        className={`flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-colors hover:bg-white dark:hover:bg-neutral-800/60 ${innerTile}`}
+                      >
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tints[a.tint]}`}>
+                          <Icon size={14} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">{a.who}</p>
+                          <p className="truncate text-[11px] text-neutral-500">{a.what}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {a.amount && (
+                            <p
+                              className={`font-mono text-[11px] font-semibold ${
+                                a.amountTone === "neutral" ? "text-neutral-500" : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {a.amount}
+                            </p>
+                          )}
+                          <p className="text-[10.5px] text-neutral-400">{timeAgo(a.at)}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState icon={Activity} text="No activity yet — payments and new brands show up here." />
+              )}
             </div>
           </div>
         </div>

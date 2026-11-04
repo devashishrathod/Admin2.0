@@ -21,6 +21,8 @@ import {
   LayoutGrid,
   List,
   RefreshCw,
+  EyeOff,
+  CheckCircle2,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip } from "recharts";
 import Table from "../../components/common/Table";
@@ -38,8 +40,11 @@ import { bannerQueryOptions, useBanners } from "./queries/bannerQueries";
 import { useCategories } from "../category/queries/categoryQueries";
 import { useBrandsPage } from "../brand/queries/brandQueries";
 import StatusStepButton from "../../components/common/StatusStepButton";
+import ToggleSwitch from "../../components/common/ToggleSwitch";
+import ConfirmActionModal from "../../components/common/ConfirmActionModal";
 import EmptyState from "../../components/common/EmptyState";
 import Loader from "../../components/common/Loader";
+import { LimitedField } from "../category/CatalogShared";
 
 const TYPE_OPTIONS = [
   { value: BANNER_TYPES.IMAGE, label: "Image", icon: ImageIcon, accept: "image/*" },
@@ -137,6 +142,62 @@ export function formatDateTime(iso) {
   return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/* One upload slot in the banner's exact 1600×1332 shape — preview, size
+ * check badge, pick button and error. Used for the media file and, on video
+ * banners, the poster. `locked` shows the current file without a picker. */
+function MediaSlot({ label, required, hint, icon: Icon, preview, isVideo, size, accept, onPick, error, locked, lockedNote, buttonLabel }) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
+          {label}
+          {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+        </span>
+        {hint && <span className="truncate text-[10.5px] text-neutral-400">{hint}</span>}
+      </div>
+      <div
+        className={`relative flex aspect-[1600/1332] w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed transition-colors ${
+          error
+            ? "border-red-400/70 bg-red-50/60 dark:bg-red-500/5"
+            : preview
+            ? "border-transparent bg-neutral-100 dark:bg-neutral-800"
+            : "border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900"
+        }`}
+      >
+        {preview ? (
+          isVideo ? (
+            <video src={preview} className="h-full w-full object-contain" muted controls />
+          ) : (
+            <img src={preview} alt="" className="h-full w-full object-contain" />
+          )
+        ) : (
+          <div className="flex flex-col items-center gap-1.5 px-3 text-center text-neutral-400 dark:text-neutral-500">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-neutral-800">
+              <Icon size={18} />
+            </span>
+            <span className="text-[11px] font-medium">{BANNER_SPEC_LABEL}</span>
+          </div>
+        )}
+        {size && (
+          <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+            ✓ {size.width} × {size.height}
+          </span>
+        )}
+      </div>
+      {locked ? (
+        <p className="mt-2 text-[11px] leading-snug text-neutral-500">{lockedNote}</p>
+      ) : (
+        <label className="mt-2 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white text-[12.5px] font-medium text-neutral-600 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:text-emerald-400">
+          <Icon size={14} />
+          {buttonLabel}
+          <input type="file" accept={accept} onChange={onPick} className="hidden" />
+        </label>
+      )}
+      {error && <p className="mt-1.5 text-[11.5px] text-red-500 dark:text-red-400">{error}</p>}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------
  * Add / Edit modal — type-aware media upload + title + redirect target
  * ---------------------------------------------------------------------- */
@@ -216,12 +277,25 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
     }
   };
 
+  // Add stays disabled until every required input is in (like Category).
+  // Same rules handleSubmit checks; `missing` names what's left.
+  const needsTarget = TARGET_ID_TYPES.includes(form.redirectType) || form.redirectType === REDIRECT_TYPES.CATEGORY;
+  const missing = [
+    !form.title.trim() && "title",
+    !isEdit && !form.file && `${typeOption.label.toLowerCase()} file`,
+    form.type === BANNER_TYPES.VIDEO && form.file && !form.posterFile && "poster",
+    needsTarget && !form.targetId.trim() && "redirect target",
+    form.redirectType === REDIRECT_TYPES.EXTERNAL_URL && !form.url.trim() && "URL",
+    form.startDateLocal && form.endDateLocal && form.startDateLocal > form.endDateLocal && "end date after the start",
+  ].filter(Boolean);
+  const canSubmit = missing.length === 0;
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const nextErrors = {};
-    if (!form.title.trim()) nextErrors.title = "Banner title is required";
+    if (!form.title.trim()) nextErrors.title = "Title is required";
     else if (form.title.trim().length > TITLE_MAX_LENGTH) {
-      nextErrors.title = `Banner title must be ${TITLE_MAX_LENGTH} characters or fewer`;
+      nextErrors.title = `Title must be ${TITLE_MAX_LENGTH} characters or fewer`;
     }
     if (!isEdit && !form.file) nextErrors.file = `A ${typeOption.label.toLowerCase()} file is required`;
     // A video banner needs its poster whenever a new video file is being
@@ -298,93 +372,64 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
             </div>
           </div>
 
-          {/* Media upload — wide banner preview */}
+          {/* Media — and for a video, its poster beside it. The API refuses a
+              video banner without a poster (422), so it's required. On edit
+              the poster can only change together with a new video — the API
+              ignores a poster sent on its own. */}
           <div className="mb-4">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <label className="block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-                Banner {typeOption.label}
-              </label>
+              <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Media</span>
               <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400">
                 {BANNER_SPEC_LABEL}
               </span>
             </div>
-            {/* Exactly the app's banner shape (2:1), so this is how it will look. */}
-            <div className="relative mx-auto flex aspect-[1600/1332] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
-              {form.filePreview ? (
-                form.type === BANNER_TYPES.VIDEO ? (
-                  <video src={form.filePreview} className="h-full w-full object-contain" muted controls />
-                ) : (
-                  <img src={form.filePreview} alt="preview" className="h-full w-full object-contain" />
-                )
-              ) : (
-                <div className="flex flex-col items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
-                  <typeOption.icon size={24} />
-                  <span className="text-[11px] font-medium">{BANNER_SPEC_LABEL}</span>
-                </div>
-              )}
-              {form.fileSize && (
-                <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur">
-                  ✓ {form.fileSize.width} × {form.fileSize.height} px
-                </span>
+            <div className={`grid gap-3 ${form.type === BANNER_TYPES.VIDEO ? "grid-cols-1 sm:grid-cols-2" : "mx-auto max-w-[300px] grid-cols-1"}`}>
+              <MediaSlot
+                label={typeOption.label}
+                required={!isEdit}
+                icon={typeOption.icon}
+                preview={form.filePreview}
+                isVideo={form.type === BANNER_TYPES.VIDEO}
+                size={form.fileSize}
+                accept={typeOption.accept}
+                onPick={handleFilePick}
+                error={errors.file}
+                buttonLabel={form.filePreview ? `Change ${typeOption.label.toLowerCase()}` : `Upload ${typeOption.label.toLowerCase()}`}
+              />
+              {form.type === BANNER_TYPES.VIDEO && (
+                <MediaSlot
+                  label="Poster"
+                  required={!isEdit || Boolean(form.file)}
+                  hint="Shown before the video plays"
+                  icon={ImageIcon}
+                  preview={form.posterPreview}
+                  size={form.posterSize}
+                  accept="image/*"
+                  onPick={handlePosterPick}
+                  error={errors.posterFile}
+                  locked={isEdit && !form.file}
+                  lockedNote="To change the poster, upload a new video too — they're replaced together."
+                  buttonLabel={form.posterPreview ? "Change poster" : "Upload poster"}
+                />
               )}
             </div>
-            <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
-              <typeOption.icon size={14} />
-              {form.filePreview ? `Change ${typeOption.label.toLowerCase()}` : `Upload ${typeOption.label.toLowerCase()}`}
-              <input type="file" accept={typeOption.accept} onChange={handleFilePick} className="hidden" />
-            </label>
-            {errors.file && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.file}</p>}
           </div>
-
-          {/* Poster upload — required whenever a new video file is picked */}
-          {form.type === BANNER_TYPES.VIDEO && (
-            <div className="mb-4">
-              <label className="mb-2 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-                Poster Image <span className="font-normal text-neutral-500">(shown before the video plays)</span>
-              </label>
-              <div className="relative mx-auto flex aspect-[1600/1332] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
-                {form.posterPreview ? (
-                  <img src={form.posterPreview} alt="poster preview" className="h-full w-full object-contain" />
-                ) : (
-                  <div className="flex flex-col items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
-                    <ImageIcon size={24} />
-                    <span className="text-[11px] font-medium">{BANNER_SPEC_LABEL}</span>
-                  </div>
-                )}
-                {form.posterSize && (
-                  <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur">
-                    ✓ {form.posterSize.width} × {form.posterSize.height} px
-                  </span>
-                )}
-              </div>
-              <label className="mt-2.5 flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 text-[12.5px] font-medium text-neutral-500 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-700 dark:text-neutral-400 dark:hover:text-emerald-400">
-                <ImageIcon size={14} />
-                {form.posterPreview ? "Change poster" : "Upload poster"}
-                <input type="file" accept="image/*" onChange={handlePosterPick} className="hidden" />
-              </label>
-              {errors.posterFile && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.posterFile}</p>}
-            </div>
-          )}
 
           {/* Title */}
           <div className="mb-4">
-            <label htmlFor="banner-title" className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">
-              Banner Title
-            </label>
-            <input
+            <LimitedField
               id="banner-title"
+              label="Title"
+              required
               value={form.title}
-              maxLength={TITLE_MAX_LENGTH}
-              onChange={(e) => setField("title", e.target.value.slice(0, TITLE_MAX_LENGTH))}
+              onChange={(v) => {
+                setField("title", v);
+                if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
+              }}
+              max={TITLE_MAX_LENGTH}
               placeholder="e.g. Diwali Mega Sale"
-              className={`w-full rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13.5px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                errors.title
-                  ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                  : "border-neutral-200 focus:border-emerald-400/60 focus:ring-emerald-400/60 dark:border-neutral-800"
-              }`}
+              error={errors.title}
             />
-            <p className="mt-1 text-right text-[11px] text-neutral-400">{form.title.length}/{TITLE_MAX_LENGTH}</p>
-            {errors.title && <p className="mt-1.5 text-[12px] text-red-500 dark:text-red-400">{errors.title}</p>}
           </div>
 
           {/* Description */}
@@ -501,7 +546,7 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
           </div>
 
           {/* Validity */}
-          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Start Date</label>
               <input
@@ -532,32 +577,13 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
             </div>
           </div>
 
-          {/* Status */}
-          <div className="mb-6">
-            <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Status</label>
-            <div className="flex gap-2">
-              {[
-                { label: "Active", value: true },
-                { label: "Inactive", value: false },
-              ].map((s) => (
-                <button
-                  type="button"
-                  key={s.label}
-                  onClick={() => setField("isActive", s.value)}
-                  className={`flex-1 rounded-xl border px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                    form.isActive === s.value
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                      : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-200"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Footer actions */}
-          <div className="flex items-center justify-end gap-2.5">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            {!canSubmit && (
+              <p className="mr-auto text-[11.5px] text-neutral-500">
+                Still needed: <span className="font-medium text-neutral-700 dark:text-neutral-300">{missing.join(", ")}</span>
+              </p>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -568,8 +594,9 @@ function BannerFormModal({ open, initialData, saving, categories, brands, onClos
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={saving || !canSubmit}
+              title={canSubmit ? undefined : `Add ${missing.join(", ")} first`}
+              className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving && <Loader2 size={14} className="animate-spin" />}
               {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Banner"}
@@ -719,6 +746,8 @@ export function apiToRow(banner) {
 }
 
 const LIVE_STATE_TONES = { Live: "emerald", Scheduled: "sky", Expired: "red", Inactive: "neutral" };
+// What the admin reads — the switched-off state is called "Deactive" in the UI.
+const LIVE_STATE_LABELS = { Inactive: "Deactive" };
 export const TYPE_BADGE = {
   [BANNER_TYPES.IMAGE]: { label: "Image", icon: ImageIcon },
   [BANNER_TYPES.VIDEO]: { label: "Video", icon: Video },
@@ -818,9 +847,6 @@ function BannerMedia({ row, className = "", showBadge = true, children }) {
   );
 }
 
-const CARD_BTN =
-  "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 text-[12px] font-medium text-neutral-600 transition-colors dark:border-neutral-800 dark:text-neutral-300";
-
 // Compact status pill for the card cover — the table's StatusStepButton is
 // fixed-width so its column lines up, which is far too wide over an image.
 const COVER_STATUS = {
@@ -842,73 +868,103 @@ function cardDateRange(start, end) {
   return start ? `From ${fmt(start, true)}` : `Until ${fmt(end, true)}`;
 }
 
-// Grid card: cover with type + status along the top (so the banner's own
-// artwork at the bottom stays visible), then title, redirect, schedule,
-// and View / Edit / Delete.
-function BannerCard({ row, categories, onView, onEdit, onDelete }) {
+// Grid card — same compact layout as the Category card (CatalogGridCard):
+// banner thumbnail + title + type / live state on top, Active/Deactive
+// switch top-right, description, one schedule line, then redirect +
+// View / Edit / Delete icons. Chips never wrap inside themselves.
+function BannerCard({ row, categories, toggling, onToggle, onView, onEdit, onDelete }) {
   const chip = scheduleChip(row);
   const badge = TYPE_BADGE[row.type] || TYPE_BADGE[BANNER_TYPES.IMAGE];
   const BadgeIcon = badge.icon;
   const status = COVER_STATUS[row.liveState] || COVER_STATUS.Inactive;
+  const hasSchedule = Boolean(row.startDate || row.endDate);
+  const iconBtn =
+    "flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800";
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 dark:bg-neutral-900 dark:shadow-black/20">
-      <button onClick={() => onView(row)} className="relative block w-full text-left" aria-label={`View ${row.title}`}>
-        <BannerMedia row={row} showBadge={false}>
-          <span className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/40 to-transparent" />
-          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
-            <BadgeIcon size={10} /> {badge.label}
-          </span>
-          <span className={`absolute right-2 top-2 flex items-center gap-1.5 rounded-full bg-white/95 px-2 py-0.5 text-[10.5px] font-semibold shadow-sm backdrop-blur-sm ${status.text}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
-            {row.liveState}
-          </span>
-        </BannerMedia>
-      </button>
+    <div
+      className={`group relative flex flex-col rounded-2xl bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] ring-1 ring-transparent transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] hover:ring-emerald-400/30 dark:bg-neutral-900 dark:shadow-black/20 ${
+        row.isActive ? "" : "opacity-80"
+      }`}
+    >
+      {/* Active / Deactive switch, top-right — same spot as the Category card */}
+      <div className="absolute right-3 top-3">
+        <ToggleSwitch
+          checked={row.isActive}
+          disabled={toggling}
+          title={row.isActive ? "Click to make Deactive" : "Click to make Active"}
+          onChange={() => onToggle(row)}
+        />
+      </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3.5">
-        <div className="min-w-0">
+      {/* Banner thumbnail + title */}
+      <div className="flex items-center gap-3 pr-11">
+        <button
+          onClick={() => onView(row)}
+          title="View"
+          aria-label={`View ${row.title}`}
+          className="shrink-0 overflow-hidden rounded-xl ring-1 ring-neutral-200/70 transition-transform group-hover:scale-[1.03] dark:ring-neutral-700/60"
+        >
+          <BannerMedia row={row} showBadge={false} className="w-[67px]" />
+        </button>
+        <div className="min-w-0 flex-1">
           <button
             onClick={() => onView(row)}
             title={row.title}
-            className="line-clamp-1 text-left text-[14px] font-semibold text-neutral-900 hover:text-emerald-600 dark:text-neutral-50 dark:hover:text-emerald-400"
+            className="block max-w-full truncate text-left text-[14px] font-semibold leading-tight text-neutral-900 hover:text-emerald-600 dark:text-neutral-50 dark:hover:text-emerald-400"
           >
             {row.title}
           </button>
-          {row.description && row.description !== row.title && (
-            <p className="mt-0.5 line-clamp-1 text-[11.5px] text-neutral-500" title={row.description}>
-              {row.description}
-            </p>
-          )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+              <BadgeIcon size={10} /> {badge.label}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-neutral-50 px-2 py-0.5 text-[10px] font-semibold dark:bg-neutral-800 dark:text-neutral-200 ${status.text}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
+              {LIVE_STATE_LABELS[row.liveState] || row.liveState}
+            </span>
+          </div>
         </div>
+      </div>
 
-        <div className="min-w-0">
-          <RedirectChip redirect={row.redirect} categories={categories} />
-        </div>
+      {/* Description */}
+      <p className="mt-2.5 line-clamp-2 min-h-[2.4em] text-[11.5px] leading-snug text-neutral-500" title={row.description || ""}>
+        {row.description && row.description !== row.title ? row.description : "No description"}
+      </p>
 
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-neutral-100 pt-2.5 dark:border-neutral-800">
-          <p className="flex min-w-0 items-center gap-1 text-[11px] text-neutral-500">
-            <CalendarDays size={11} className="shrink-0" />
-            <span className="truncate">{cardDateRange(row.startDate, row.endDate)}</span>
-          </p>
-          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
+      {/* Schedule — dates + "x days left" on one line */}
+      <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[11px] text-neutral-500">
+        <span className="flex min-w-0 items-center gap-1">
+          <CalendarDays size={11} className="shrink-0" />
+          <span className="truncate">{cardDateRange(row.startDate, row.endDate)}</span>
+        </span>
+        {hasSchedule && (
+          <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${chip.tone}`}>
             <Clock3 size={10} /> {chip.label}
           </span>
-        </div>
+        )}
+      </div>
 
-        <div className="flex items-center gap-1.5">
-          <button onClick={() => onView(row)} className={`${CARD_BTN} hover:border-sky-400/40 hover:text-sky-600 dark:hover:text-sky-400`}>
-            <Eye size={13} /> View
+      {/* Redirect + actions */}
+      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-neutral-100 pt-2.5 dark:border-neutral-800">
+        <div className="min-w-0 flex-1 [&>*]:max-w-full">
+          <RedirectChip redirect={row.redirect} categories={categories} />
+        </div>
+        <div className="flex shrink-0 items-center">
+          <button onClick={() => onView(row)} aria-label={`View ${row.title}`} title="View" className={`${iconBtn} hover:text-sky-600 dark:hover:text-sky-400`}>
+            <Eye size={14} />
           </button>
-          <button onClick={() => onEdit(row)} className={`${CARD_BTN} hover:border-emerald-400/40 hover:text-emerald-600 dark:hover:text-emerald-400`}>
-            <Pencil size={13} /> Edit
+          <button onClick={() => onEdit(row)} aria-label={`Edit ${row.title}`} title="Edit" className={`${iconBtn} hover:text-emerald-600 dark:hover:text-emerald-400`}>
+            <Pencil size={14} />
           </button>
           <button
             onClick={() => onDelete(row)}
             aria-label={`Delete ${row.title}`}
             title="Delete"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
+            className={`${iconBtn} hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400`}
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} />
           </button>
         </div>
       </div>
@@ -980,6 +1036,10 @@ export default function Banner() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  // Active / Deactive switch — the banner being flipped (confirm first).
+  const [statusTarget, setStatusTarget] = useState(null);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusError, setStatusError] = useState("");
 
   // Categories power the redirect-target picker when type is CATEGORY.
   // A failure just leaves the picker empty.
@@ -1115,6 +1175,23 @@ export default function Banner() {
     }
   };
 
+  // PUT /banners/update/:id with only { isActive } — the API takes partial
+  // updates (#47), so title, media, redirect and schedule stay as they are.
+  const confirmStatus = async () => {
+    if (!statusTarget) return;
+    setStatusSaving(true);
+    setStatusError("");
+    try {
+      await updateBanner(statusTarget.id, { isActive: !statusTarget.isActive });
+      setStatusTarget(null);
+      // No manual reload — the write interceptor refreshes ["banners"].
+    } catch (err) {
+      setStatusError(err.message);
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const confirmDelete = async () => {
     setDeleting(true);
     try {
@@ -1215,7 +1292,19 @@ export default function Banner() {
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusStepButton label={row.liveState} tone={LIVE_STATE_TONES[row.liveState]} />,
+      // Click → confirm → Active / Deactive (same as the card's switch).
+      render: (row) => (
+        <StatusStepButton
+          label={LIVE_STATE_LABELS[row.liveState] || row.liveState}
+          tone={LIVE_STATE_TONES[row.liveState]}
+          stepLabel={row.isActive ? "Deactivate" : "Activate"}
+          disabled={statusSaving}
+          onClick={() => {
+            setStatusError("");
+            setStatusTarget(row);
+          }}
+        />
+      ),
     },
     {
       key: "action",
@@ -1254,7 +1343,7 @@ export default function Banner() {
             className="flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-[13.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
           >
             <Plus size={16} />
-            Add Banner
+            Add
           </button>
         </div>
 
@@ -1385,12 +1474,17 @@ export default function Banner() {
           <>
             {view === "grid" ? (
               banners.length ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {banners.map((row) => (
                     <BannerCard
                       key={row.id}
                       row={row}
                       categories={categories}
+                      toggling={statusSaving && statusTarget?.id === row.id}
+                      onToggle={(r) => {
+                        setStatusError("");
+                        setStatusTarget(r);
+                      }}
                       onView={openDetails}
                       onEdit={handleEdit}
                       onDelete={setDeleteTarget}
@@ -1454,6 +1548,28 @@ export default function Banner() {
           {saveError}
         </div>
       )}
+
+      {/* Active / Deactive confirmation */}
+      <ConfirmActionModal
+        open={Boolean(statusTarget)}
+        tone={statusTarget?.isActive ? "danger" : "neutral"}
+        icon={statusTarget?.isActive ? EyeOff : CheckCircle2}
+        title={statusTarget?.isActive ? "Deactivate this banner?" : "Activate this banner?"}
+        description={
+          statusTarget?.isActive
+            ? `"${statusTarget?.title}" will stop showing on the customer app's home screen until it's turned back on.`
+            : `"${statusTarget?.title}" will show on the customer app's home screen again (within its schedule, if one is set).`
+        }
+        confirmLabel={statusTarget?.isActive ? "Deactivate" : "Activate"}
+        submitting={statusSaving}
+        error={statusError}
+        onConfirm={confirmStatus}
+        onClose={() => {
+          if (statusSaving) return;
+          setStatusTarget(null);
+          setStatusError("");
+        }}
+      />
 
       {/* Delete confirmation modal */}
       {deleteTarget && (

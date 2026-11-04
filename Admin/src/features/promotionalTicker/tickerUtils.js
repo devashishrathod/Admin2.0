@@ -53,6 +53,15 @@ export function apiToRow(ticker) {
     startsInDays: ticker.startDate ? (new Date(ticker.startDate).getTime() - Date.now()) / 86400000 : null,
     isActive: Boolean(ticker.isActive),
     status: ticker.isActive ? "Active" : "Inactive",
+    // What the customer actually sees right now: switched off → Inactive;
+    // past end date → Expired; before start → Scheduled; else Live.
+    liveState: !ticker.isActive
+      ? "Inactive"
+      : ticker.endDate && new Date(ticker.endDate).getTime() < Date.now()
+      ? "Expired"
+      : ticker.startDate && new Date(ticker.startDate).getTime() > Date.now()
+      ? "Scheduled"
+      : "Live",
     createdAt: ticker.createdAt,
   };
 }

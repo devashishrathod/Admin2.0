@@ -2,26 +2,44 @@
 
 **Version:** 1.0.0
 **Base URL (Local):** `http://localhost:8080/trydood/v1`
-**Base URL (Staging):** `https://backend2-0-4v4i.onrender.com/trydood/v1`
+**Base URL (Staging):** `https://staging-api.trydood.com/trydood/v1`
 **Framework:** Express.js (Node.js, CommonJS)
 **Database:** MongoDB (Mongoose ODM)
-**Scope:** Super admin panel ke endpoints — platform ke **216 routes** me se admin-category ke **84** ([endpoints_category.md](./endpoints_category.md))
-**Postman:** [`trydood-admin.postman_collection.json`](../postman/trydood-admin.postman_collection.json) — 71 requests, **har ek par live-captured example** 
+**Scope:** Super admin panel ke endpoints — `routes/` ke **242** me se **93 sirf admin** (`isAdmin`), **43 vendor / outlet ke saath** (`isVendorOrAdmin`, `isBrandSideOrAdmin`), **38 har signed-in role** aur **35 guest** (public / `optionalAuth`) — gates code se (`postman/lib/routeGates.js`), 2026-10-26. Admin 209 call kar sakta hai; ye doc unme se 205 ka zikr karta hai (saare 93 admin-only). [endpoints_category.md](./endpoints_category.md)
+**Postman:** [`trydood-admin.postman_collection.json`](../postman/trydood-admin.postman_collection.json) — 142 requests (2026-10-26, `verifyApiCoverage`), **har ek par example** — pehla poora live run 71 requests ka tha (neeche), baad ke requests targeted capture se ([`postman/README.md`](../postman/README.md))
 
 > **Note:** Ye doc code padhkar likha gaya — har request field, error message aur response shape controller/service/validator se verify kiya gaya hai. Jahan behaviour buggy ya adhoora hai, wahan ⚠️ marker hai.
 >
 > **Ab uske upar live run bhi hai.** Admin collection ke 71 requests seeded database par asli server ke against chalte hain aur unke saved examples asli responses hain, likhe hue nahi. Wo run **teen cheezein pakad chuka hai** jo code padhne se nahi dikhtin: `PUT /notifications/preferences` har caller ko `500` de raha tha (validator ka closing brace), seeded admin ka email hi login validator ne kabhi accept nahi kiya hota (`.test` TLD), aur settlement approve/retry chup-chaap refuse karte the kyunki kisi brand ke paas verified bank account tha hi nahi.
 >
-> ⚠️ Baaki 35 admin routes ke requests `trydood-brand-verification`, `trydood-subscription` aur `trydood-security-changes` me hain — admin collection unhe dobara nahi likhti. Dekho [`postman/README.md`](../postman/README.md).
+> ℹ️ Pehle kuch admin routes alag collections (`trydood-brand-verification`, `trydood-subscription`, `trydood-security-changes`) me the — wo ab **repo me nahi hain**. Ab sirf teen collections: har `isAdmin` route ki request **isi** `trydood-admin` me, aur vendor + admin wale (`isVendorOrAdmin` / `isBrandSideOrAdmin`) routes ki `trydood-vendor` me (dono docs me likhe, request ek jagah) — `scripts/verifyApiCoverage.js` ye check karta hai. [`postman/README.md`](../postman/README.md).
+
+> ### 🆕 2026-10-24/25 — customer visibility (develop)
+>
+> Brand customer ko tabhi dikhega jab uska location wala outlet aur (switch ON par) dikhne layak
+> album ho. ✅ develop par: `customerVisibility` field (`GET /brands/admin/get-all`, `GET /brands/get`),
+> `?isCustomerVisible=` filter, `requireShowcase` setting. Customer app par asar: profile side (P3),
+> brand feed / Top Brands (P4), voucher feed / Suggestions / detail (P5) aur global search (P6) —
+> sab develop par; stage / prod par abhi nahi — [section](#customer-visibility-outlet--album-rule-).
+> Vendor ka aakhri-album guard (P7) bhi develop par. Postman (P8, 2026-10-26): `Saare brands ⭐` par
+> `customerVisibility` test + 2 naye requests (`isCustomerVisible=false`, galat → `422`), `Get Settings`
+> par `requireShowcase` — sab live capture.
+
+> ### 🆕 2026-10-23 — real brand par "Coming soon"
+>
+> Naya `PUT /brands/admin/real-dummy/:brandId` — approved asli brand ko note ke saath
+> customer ke liye dummy jaisa dikhao, phir wapas hatao. `GET /brands/admin/get-all` aur
+> `GET /brands/get` me naye keys + `?isRealDummy=` filter. Database ka `isDummy` nahi
+> badalta. Poora section: [Real brand par "Coming soon"](#real-brand-par-coming-soon--put-brandsadminreal-dummybrandid-).
 
 > ### 🆕 2026-10-07 — upload audit
 >
 > Admin panel (`stage` branch) ke har upload ko backend se milaya gaya. **Frontend
 > team ke liye poori list:** [Uploads — frontend action items](#-uploads--frontend-action-items-2026-10-07).
 > Sabse zaroori: staging admin domain S3 CORS me nahi (banner create fail), aur
-> Brand → Showcase editor me video add/replace toote hain aur naye album gayab ho
-> jaate hain. (Category/sub-category edit par Active ulat jaane wala bug backend me
-> ✅ fix ho chuka — panel ko kuch nahi karna.)
+> Brand → Showcase editor me video add/replace toote hain. (Naye album gayab hone wala
+> A-5 panel me ✅ fix ho chuka — owner, 2026-10-24. Category/sub-category edit par Active
+> ulat jaane wala bug backend me ✅ fix ho chuka — panel ko kuch nahi karna.)
 > Backend me banner/ticker/showcase ke error messages ab presigned field ka naam
 > bhi batate hain; #46/#47/#51/#52/#64/#69/#111/#112 ke sections update kiye.
 
@@ -43,11 +61,12 @@
 **Endpoints**
 
 10. [Auth APIs](#auth-apis) — 12
-11. [User Profile APIs](#user-profile-apis) — 3
+11. [User Profile APIs](#user-profile-apis) — 3 + admin contact change (#15a) 🆕
 12. [Push Notification APIs](#push-notification-apis) — 4
-13. [Notification APIs](#notification-apis) — 3
+13. [Notification APIs](#notification-apis) — 3 + admin preferences (#22a, #22b)
+    - [Customer Directory APIs](#customer-directory-apis) — 2 (#22c, #22d) 🆕
 14. [Brand Verification APIs](#brand-verification-apis) — 3
-15. [Brand Data APIs](#brand-data-apis) — 2
+15. [Brand Data APIs](#brand-data-apis) — 2 + admin brand directory (#25a) 🆕
 16. [Outlet APIs](#outlet-apis) — 3
 17. [Location APIs](#location-apis) — 5
 18. [Showcase APIs](#showcase-apis) — 2
@@ -76,16 +95,17 @@
 
 ## Overview
 
-Super admin panel 22 functional areas cover karta hai:
+Super admin panel 23 functional areas cover karta hai:
 
 | # | Area | Endpoints | Kya karta hai |
 |---|---|---:|---|
 | 1 | Auth | 12 | Register, password login, OTP flows, password set/reset, logout |
-| 2 | User Profile | 3 | Profile fetch, update, delete |
+| 2 | User Profile | 4 | Profile fetch, update, delete + 🆕 admin ka contact change (lost SIM, #15a) |
 | 3 | Push Notifications | 4 | Device register/unregister, my devices, test |
 | 4 | Notifications | 3 | Feed, mark read, **broadcast to any audience** |
+| 4a | 🆕 Customer Directory | 2 | Customer list (filters + stats) aur ek customer ka poora record (#22c, #22d) |
 | 5 | Brand Verification | 3 | KYC review queue, approve/reject/revoke, audit trail |
-| 6 | Brand Data | 2 | Brand detail, update |
+| 6 | Brand Data | 3 | 🆕 Brand directory (#25a), brand detail, update |
 | 7 | Outlets | 3 | Outlet signup, list, update |
 | 8 | Locations | 5 | Saare addresses |
 | 9 | Showcase | 2 | Sections list, reorder |
@@ -325,6 +345,15 @@ Admin ke liye `brandId` ek query filter hai — omit karein to data **platform-w
 **Ye modules 404 dete hain:** banners, tickers, brandFeatures, categories, subCategories, subscriptions, locations, subBrands, showcase, vouchers versions, legal
 
 **Ye modules `[]` dete hain (404 nahi):** `notifications`, `subscribeds`, `promoCodes`, `transactions/webhook/events`, `transactions/disputes`, `deviceTokens` — naye modules apna pagination use karte hain
+
+### `search` — plain text, pattern nahi
+
+Har list ka `search` (aur `title` / `name` filter) **jaisa likha waisa** dhoondhta hai — case-insensitive,
+kahin bhi match; `(`, `.`, `*` literal. 🔧 2026-10-26 (develop): 14 list services (plans, subscribeds,
+categories, sub-categories, terms, privacy, brand features, promo codes, banners, tickers, brand
+verifications + history, following / avoided) input ko regex maan leti thi — `search=(` par `500`, aur
+koi bhi apna pattern DB par chala sakta tha. Ab sab `escapeRegex` se; ek unit guard test
+(`__tests__/unit/regexInputEscaped.test.js`) naya bina-escape `RegExp` aane nahi deta.
 
 ---
 
@@ -621,7 +650,7 @@ Max recipients per dispatch: **5000** · Max tokens per push batch: **500**
 
 Naya user banata hai — **default role `ADMIN`**.
 
-**Access:** Intended: ADMIN · Enforced: 🔴 **Public — koi auth nahi**
+**Access:** Intended: ADMIN · Enforced: **ADMIN** (`isAdmin`) ✅ — pehle public tha (koi bhi `ADMIN` account bana sakta tha); band — [Appendix B #1](#appendix-b--known-issues)
 
 ### Body
 | Field | Type | Required | Default | Validation |
@@ -945,7 +974,7 @@ WhatsApp 2026-09-23 ko theek hua (pehle wahan verify commented tha).
 
 ## 9. POST /auth/set-password
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: ADMIN · Enforced: **ADMIN** (`isAdmin`) ✅ — admin apna password set / badalta hai
 
 ### Body
 | Field | Type | Required | Validation |
@@ -1310,7 +1339,7 @@ rehta hai, to sabko sign out karne se kuch milta nahi.
 ⚠️ **`whatsappNumber` ka koi plain write nahi hai.** `PUT /users/update`, `PUT /brands/update`
 aur `PUT /subBrands/update` — teeno me se koi bhi ise chhoo nahi sakta; koshish par `422
 WHATSAPP_REQUIRES_VERIFICATION`. Sirf ye flow, aur admin ka
-`PATCH /users/admin/:userId/contact` (jo value badalta hai par flag `false` par girata hai).
+`PATCH /users/admin/:userId/contact` ([#15a](#15a-patch-usersadminuseridcontact-) — jo value badalta hai par flag `false` par girata hai).
 
 | Code | Kab |
 |---|---|
@@ -1419,27 +1448,227 @@ WHATSAPP_REQUIRES_VERIFICATION`. Sirf ye flow, aur admin ka
 
 ---
 
-## 15. DELETE /users/delete
+## 15. DELETE /users/delete — 🟡 v1.12: customer ka apna delete (admin ke liye nahi)
 
-⚠️ **No-op stub.**
+**Access:** 🔒 **Sirf CUSTOMER** (`isCustomer`) — admin token par `403`.
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+🟡 **v1.12 (P12.2, develop):** pehle ye har role ke liye no-op stub tha (`200 "User deleted successfully"`, kuch
+delete nahi). Ab ye customer ka asli self-delete hai (grace period, restore) —
+[customer doc #6](./customer_mobile_api_doc.md). Prod par purana stub v1.12 release tak.
+
+**Admin ko kya use karna hai:** customer ki deletion dekhni / restore / abhi purge karni ho to
+[§15b](#15b-customer-account-deletion--admin--) (`/users/admin/deletions`, `…/deletion/restore`,
+`…/deletion/delete-now`). Vendor / admin account delete abhi scope me nahi
+([account_deletion_plan.md](./account_deletion_plan.md) Appendix A).
+
+---
+
+## 15a. PATCH /users/admin/:userId/contact 🆕
+
+Support desk ka raasta: admin kisi bhi account (customer / vendor / outlet manager / admin) ka
+`email`, `mobile` ya `whatsappNumber` badalta hai. Asli zaroorat: **jiska purana SIM chala gaya.**
+
+> 🟡 **P10.4 (develop) — outlet manager (SUB_VENDOR) ka `whatsappNumber`:** outlet `REVERIFY` ho jaata hai
+> (D15) — data aur edits rehte hain, par **customer ko tab tak nahi dikhta** jab tak manager naye number se
+> OTP na de; OTP par apne aap wapas. Hold / auto-cancel nahi. Brand ke vendor ko
+> `OUTLET_REVERIFY_REQUIRED` notification (in-app + push). Response shape same.
+> (Brand **owner** / VENDOR ka number badalne se brand nahi chhupta — D1.)
+`whatsappNumber` normally sirf purane number ke OTP se badalta hai ([#12e / #12f](#12e-post-authwhatsappsend-verification-)),
+aur jiska SIM gaya wo wahi OTP de nahi sakta — uske liye yahi ek darwaza hai.
+
+**Access:** ADMIN only (`isAdmin`)
+
+### Path Params
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `userId` | ObjectId | ✅ | **Account** (`User`) ki id — customer / brand profile ki nahi. Customer ke liye [#22d](#22d-get-customersadmincustomerid-) ka `customer.userId`, vendor ke liye [#25a](#25a-get-brandsadminget-all-) row ka `vendor._id`. Galat format → `422 "Invalid User ID format"` |
+
+### Body
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string | ⚠️ | Valid email; trim + lowercase hota hai (`" A@B.COM "` → `"a@b.com"`) |
+| `mobile` | string | ⚠️ | 10 digit; `+91…` / spaces bhi chalte hain — normalise ho kar `9876543210` jaisa save hota hai |
+| `whatsappNumber` | string | ⚠️ | 10 digit, `mobile` jaisa normalise. 🔴 Badalne par account **har device se sign out** |
+| `reason` | string | ✅ | 5–300 chars, trim. Audit log me jaata hai (value nahi, sirf wajah) |
+
+⚠️ = `email` / `mobile` / `whatsappNumber` me se **kam se kam ek**. Value hataane (khaali karne) ka raasta
+ye nahi — `""` bhejne par `422`. Body ki koi aur key chup-chaap hat jaati hai.
+
+```http
+PATCH /users/admin/6abbac93bf42053b91b6c440/contact
+{ "whatsappNumber": "9876543210", "reason": "Customer ka purana SIM kho gaya — ticket #4821" }
+```
 
 ### Success — `200`
-```json
-{ "message": "User deleted successfully" }
-```
-> Standard envelope nahi — koi `success` field nahi.
+Postman capture (vendor ka `mobile` pehli baar set hua):
 
-### ⚠️ Critical
-Route me inline handler hai, kuch delete nahi hota. Admin panel me user-deletion feature disable rakhein — ya DB-level tooling use karein.
+```json
+{
+  "success": true,
+  "message": "Updated mobile. The new details are unverified until the user confirms them.",
+  "data": {
+    "userId": "6abbac93bf42053b91b6c440",
+    "role": "VENDOR",
+    "changed": ["mobile"],
+    "previous": { "mobile": null },
+    "profileSynced": true,
+    "verified": { "isMobileVerified": false },
+    "sessionsEnded": false
+  }
+}
+```
+
+| Field | Matlab |
+|---|---|
+| `changed` | Sirf wo keys jinki value **sach me badli** — bheji hui value pehle jaisi ho to wo key yahan nahi aati. Khaali `[]` = kuch nahi badla (Note 1) |
+| `previous` | **Bheji gayi** har key ki purani value (`null` = pehle khaali thi). Nayi value response me nahi — wo aapne hi bheji thi |
+| `profileSynced` | Role profile (`Customer` / `Brand` / `SubBrand`) par bhi copy ho gayi. Admin account ka koi profile nahi hota, to wahan hamesha `false` |
+| `verified` | Har badli key ka flag — hamesha `false` |
+| `sessionsEnded` | `true` sirf jab `whatsappNumber` badla |
+
+`whatsappNumber` badalne par message:
+`"Updated whatsappNumber. The account has been signed out everywhere, and the new details are unverified until the user confirms them."`
+Kai keys ek saath: `"Updated email and mobile. …"`. Kuch na badle: `"Nothing changed — these details are already on the account."` (Note 1).
+
+### Kya hota hai — andar se
+1. **Value badalti hai, verify nahi hoti.** Jo key badli uska flag (`isEmailVerified` /
+   `isMobileVerified` / `isWhatsappVerified`) `false` ho jaata hai — **sirf usi ka**, baaki do jaise the
+   waise. Admin ka likhna saboot nahi ki pata us insaan ka hai.
+2. **Unverified `email` / `mobile` se login nahi hota** ([#5–8 ka note](#58-email--mobile-otp-login-flows)) —
+   isi wajah se ye endpoint kisi ke account me ghusne ka raasta nahi. Naya `whatsappNumber` agle
+   WhatsApp login par OTP se apne aap verify hota hai.
+3. **Notification channel band.** Badli hui `email` → us user ki `notificationPreferences.email = false`;
+   `whatsappNumber` → `whatsapp = false`. Verify karne ke baad bhi apne aap ON nahi hota — user khud ON
+   karega. (`mobile` ka koi channel nahi.)
+4. **Sessions:** `whatsappNumber` badla → `sessionInvalidatedAt` set, us waqt tak ke saare JWT khatam.
+   `email` / `mobile` par nahi.
+5. **Profile mirror:** teeno keys role profile par bhi likhi jaati hain (refund bank OTP, invoices,
+   notifications profile wali copy padhte hain).
+6. **Audit + suchna (sirf jab kuch sach me badla):** server log me `[identity] admin <id> changed <keys> on user <id> (<ROLE>) — reason: …`
+   (values nahi). User ko `ACCOUNT_CONTACT_CHANGED` notification (severity `WARNING`): *"Your contact details
+   were changed — An administrator updated your mobile. If you did not ask for this, contact support
+   straight away."* Notification fail ho to bhi API `200` deti hai.
+
+### Errors
+| Status | Message | Kab |
+|---|---|---|
+| `404` | `User not found` | User nahi mila ya deleted |
+| `409` | `That email address is already in use on another <ROLE> account.` · `That number is already in use on another <ROLE> account.` | Wahi value usi role ke kisi aur (non-deleted) account par. Alag role par chalti hai — ek insaan ka CUSTOMER aur VENDOR account ek number par ho sakta hai |
+| `409` | `That value was taken while you were saving. Try a different one.` | Check ke baad, save se pehle kisi aur ne le li (unique index) |
+| `422` | `Send at least one of email, mobile or whatsappNumber to change.` | Teeno me se kuch nahi bheja |
+| `422` | `A reason is required` · `Please give a reason of at least 5 characters` · `Reason cannot exceed 300 characters` | `reason` |
+| `422` | `Please enter a valid email address` · `Please enter a valid 10 digit mobile number` · `Please enter a valid 10 digit WhatsApp number` | Format |
+| `422` | `Invalid User ID format` | `userId` |
+
+### ⚠️ Notes
+**1. 🔧 Bheji hui value pehle jaisi ho — kuch nahi hota (develop, 2026-10-27).** Agar har bheji value
+account par pehle se wahi hai (`+91…` / email ka case normalise hone ke baad), to `200` aata hai par
+kuch nahi badalta: koi flag nahi girta, koi sign-out nahi, user ko notification nahi, audit line nahi.
+
+```json
+{
+  "success": true,
+  "message": "Nothing changed — these details are already on the account.",
+  "data": {
+    "userId": "6abbac93bf42053b91b6c440",
+    "role": "CUSTOMER",
+    "changed": [],
+    "previous": { "mobile": "9876543210" },
+    "profileSynced": true,
+    "verified": {},
+    "sessionsEnded": false
+  }
+}
+```
+
+Panel `changed: []` par "kuch nahi badla" dikhaye. (Pehle yahi case `"Updated . The new details are
+unverified…"` deta tha aur user ko *"An administrator updated your . …"* notification + audit line bhi
+chali jaati thi — owner decision A, 2026-10-27.)
+
+**2. Ek key same, doosri nayi** — sirf nayi `changed` me aati hai, sirf usi ka flag girta hai, aur
+notification / audit sirf usi key ka naam leta hai.
+
+**3. `PUT /users/update` (#14) se fark:** wo `mobile` / `whatsappNumber` nahi badalta, aur `reason` / audit /
+notification nahi. Contact badalna ho to yahi endpoint.
+
+---
+
+## 15b. Customer account deletion — admin 🆕 🟡 (v1.12 P12.4, develop)
+
+Design: [account_deletion_plan.md](./account_deletion_plan.md) §6.4 · Panel guide:
+[release_v1_12_admin_panel_guide.md](./release_v1_12_admin_panel_guide.md) §1.
+
+**Access (teeno):** 🔒 **Sirf ADMIN** (`isAdmin`)
+
+### `GET /users/admin/deletions`
+
+Jin customers ne account delete maanga — grace period wale (`DELETION_SCHEDULED`, restore ho sakta hai) aur purged
+(`DELETED`). Sabse pehle wo jinki date sabse paas hai.
+
+| Query | |
+|---|---|
+| `state` | `DELETION_SCHEDULED` · `DELETED` · na bhejo to dono |
+| `search` | naam / WhatsApp number / `uniqueId` (purged account par sirf `uniqueId` milta hai) |
+| `page` · `limit` | default 1 · 20, max 100 |
+
+```jsonc
+{ "total": 2, "totalPages": 1, "page": 1, "limit": 20, "data": [
+  { "userId": "…", "customerId": "…", "uniqueId": "USR-…", "name": "Priya", "whatsappNumber": "98765…",
+    "accountState": "DELETION_SCHEDULED", "isDeleted": false,
+    "deletion": { "requestedAt": "…", "scheduledFor": "…", "via": "APP", "holds": ["REFUND_OPEN"],
+                  "lastHoldCheckAt": "…", "history": [{ "action": "REQUESTED", "at": "…", "by": "SELF", "via": "APP" }] },
+    "snapshot": { "name": "Priya", "whatsappNumber": "98765…" } }
+] }
+```
+
+- `holds` khaali nahi → *"Purge ruka hai — refund / dispute / payout / pending claim khula"*.
+- Purged (`DELETED`) row me `name` / `whatsappNumber` nahi hote — `snapshot` (unke kisi claim ka) se pehchaan.
+- Khaali list `200` hai, `404` nahi.
+
+### `PATCH /users/admin/:userId/deletion/restore`
+
+```json
+{ "reason": "Customer called support" }
+```
+
+Grace period ka account wapas ACTIVE; customer ko "deletion cancelled" (WhatsApp / email). `history` me `RESTORED by
+ADMIN` + reason. `200 { userId, accountState: "ACTIVE" }`.
+
+| Error | |
+|---|---|
+| `409 NOT_SCHEDULED` | Active hai, ya purge ho chuka (wapas nahi aa sakta) |
+| `422` | `A reason is required` · `Please give a reason of at least 5 characters` · `Invalid User ID format` |
+
+### `PATCH /users/admin/:userId/deletion/delete-now`
+
+```json
+{ "reason": "Customer asked for immediate deletion" }
+```
+
+Grace ka intezaar kiye bina purge — wahi `purgeAccount` jo job chalata hai, wahi niyam. ⚠️ **Wapas nahi hota** — panel
+confirm dialog dikhaye: *"Personal data hamesha ke liye hat jayega. Paise ke records rahenge."*
+`200 { userId, purged: true }`.
+
+| Error | |
+|---|---|
+| `409 PURGE_ON_HOLD` + `details.holds[]` | Paisa abhi chal raha — refund / dispute / payout / pending claim. Wo khatam hone par job khud purge karega |
+| `409 NOT_SCHEDULED` | Customer ne delete maanga hi nahi, ya pehle hi purge ho chuka |
+| `422` | Reason / userId |
+
+### Customer list / detail
+
+- `GET /customers/admin/get-all` — `account.accountState` me `DELETION_SCHEDULED`, saath me `account.deletion.requestedAt`
+  / `scheduledFor` (badge *"Deletion scheduled — <date>"*). Filter `?accountState=DELETION_SCHEDULED`. Default list
+  ab bhi sirf PENDING chhupati hai.
+- `GET /customers/admin/:customerId` — `status.deletion` (`requestedAt`, `scheduledFor`, `via`, `holds`, `purgedAt`,
+  `history`) ya `null`.
 
 ---
 
 # Push Notification APIs
 
 Role-agnostic module. Admin ka browser bhi bilkul vendor/customer jaise register hota hai.
-Global middleware: `router.use(verifyJwtToken)`
+Har route ka apna gate (koi `router.use` nahi): `verifyJwtToken`, aur unregister (#17) `verifyJwtTokenEvenIfDeactivated` — suspended account bhi apna device hata sake.
 
 ## 16. POST /deviceTokens/register
 
@@ -1482,7 +1711,7 @@ Global middleware: `router.use(verifyJwtToken)`
 
 ## 17. PUT /deviceTokens/unregister
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Any authenticated — suspended account bhi** (`verifyJwtTokenEvenIfDeactivated`)
 
 ### Body
 | Field | Type | Required | Default |
@@ -1558,13 +1787,15 @@ Poora `token` kabhi nahi aata — sirf `tokenTail`. Empty pe `[]`, 404 nahi.
 ### ⚠️ Note
 **Broadcast bhejne se pehle ye chalayein** — `422` credentials error batata hai ki FCM setup galat hai, aur broadcast bhi fail hoga.
 
+🆕 `delivered: false` par `reason` aata hai (jaise `"SENDER_ID_MISMATCH ×1: SenderId mismatch"` = server key aur app/panel ki Firebase config alag project ki), aur `failures` me kind-wise ginti. Server-side galti (`CONFIG` / `PAYLOAD`) par devices ke token **band nahi hote** aur admin feed me `PUSH_DELIVERY_FAILED` alert aata hai — dekho §20.
+
 ---
 
 # Notification APIs
 
 ## 20. GET /notifications/get-all
 
-**Access:** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN + ownership**
+**Access:** Intended: All roles · Enforced: **Any authenticated — suspended account bhi** (`verifyJwtTokenEvenIfDeactivated`) · scope service me (`notificationScope`): customer apni, vendor apne brand ki, admin kisi bhi brand ki / admin feed; outlet manager `403`
 
 ### Query Params
 | Param | Type | Required | Default | Notes |
@@ -1651,6 +1882,7 @@ GET /notifications/get-all?brandId=68f1a2b3c4d5e6f7a8b9c3a1
 | `BRAND_SUBSCRIPTION_LAPSED` | Revenue loss, follow-up worth |
 | `PROMO_LIMIT_EXCEEDED` | Code cap se aage gaya (pehle quote hua payment baad me settle hua) |
 | `SUBSCRIPTION_CREDIT_REUSED` | Ek hi chalu plan ki upgrade credit par do order bane aur dono pay hue — doosre ko quoted price mila par extra din nahi. Recover karna hai ya chhodna, admin decide kare |
+| `PUSH_DELIVERY_FAILED` 🆕 | **Push hamari taraf se toot gaya hai** — server ki FCM key Google ne reject ki (`meta.code: "AUTH_FAILED"`), key doosre Firebase project ki hai (`SENDER_ID_MISMATCH`), ya FCM ne message hi reject kiya (`meta.kind: "PAYLOAD"`). `CRITICAL` = kisi ko kuch nahi pahuncha, `WARNING` = kuch pahuncha. In-app aur email par asar nahi. **Push se kabhi nahi aata** (push hi to toota hai) — sirf in-app + email. Ek problem ka **ghante me ek hi** alert. Fix env me hai (`FCM_PROJECT_ID` / `FCM_CLIENT_EMAIL` / `FCM_PRIVATE_KEY`) + restart; devices ke token **band nahi kiye jaate**, isliye fix hote hi sab wapas chalu |
 
 **3. `severity: "CRITICAL"` wale turant dikhane chahiye** — admin dashboard pe banner/toast.
 
@@ -1658,11 +1890,21 @@ GET /notifications/get-all?brandId=68f1a2b3c4d5e6f7a8b9c3a1
 
 **5. Empty pe `[]` aata hai, 404 nahi.**
 
+**6. Delivery diagnostics sirf admin ko** — har row par ye fields aa sakte hain (vendor aur customer ko kabhi nahi):
+
+| Field | Matlab |
+|---|---|
+| `emailSentAt` / `emailError` | email gaya kab, ya kyun nahi gaya |
+| `pushSentAt` 🆕 | kam se kam ek device tak push pahunchi |
+| `pushError` 🆕 | device **tha** par push nahi pahunchi — reason ke saath, jaise `"FCM authentication failed: …"` ya `"SENDER_ID_MISMATCH ×2: SenderId mismatch"` |
+
+Dono push fields khaali = us user ka koi device registered hi nahi (app install nahi) — ye normal hai, galti nahi. Purani rows (is field se pehle wali) par dono khaali rahenge.
+
 ---
 
 ## 21. PUT /notifications/mark-read
 
-**Access:** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN + ownership**
+**Access:** Intended: All roles · Enforced: **Any authenticated** (`verifyJwtToken`) · sirf apne scope ki notifications (#20 jaisa)
 
 ### Body
 | Field | Type | Required | Default |
@@ -1969,11 +2211,271 @@ deta hai.
 
 ---
 
+# Customer Directory APIs
+
+Admin ki customer list aur ek customer ka poora record. Dono ADMIN only. Contact badalna:
+[#15a](#15a-patch-usersadminuseridcontact-) · verification filters ka background:
+[Customer directory — verification filters](#customer-directory--verification-filters) · notification
+toggles: [#22a](#22a-get-notificationsadminpreferences-).
+
+## 22c. GET /customers/admin/get-all 🆕
+
+Customer worklist — har row par account, dono switch aur paanch stats blocks, taaki triage ke liye
+customer kholna na pade.
+
+**Access:** ADMIN only (`isAdmin`)
+
+### Query Params
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `page` | number | `1` | Min 1 |
+| `limit` | number | `10` | 1–100 |
+| `search` | string | — | Max 120, plain text (pattern nahi). Case-insensitive "contains" — **`fullName`, `uniqueId` (`#TC…`), `email`, `mobile`, `whatsappNumber`** (customer row par) |
+| `accountActive` | boolean | — | `User.isActive` — sign in kar sakta hai ya nahi |
+| `isActive` | boolean | — | `Customer.isActive` — profile row. Do alag switch, koi inhe saath nahi rakhta |
+| `isSignUpCompleted` | boolean | — | Customer row ka flag |
+| `isOnBoardingCompleted` | boolean | — | Account ka flag |
+| `isWhatsappVerified` · `isMobileVerified` · `isEmailVerified` | boolean | — | Har key ka apna flag — customer ke liye matlab wala `isWhatsappVerified` hai. [Detail](#customer-directory--verification-filters) |
+| `isLoggedIn` | boolean | — | Account ka flag |
+| `loginType` | enum | — | `EMAIL` · `MOBILE` · `USERNAME` · `WHATSAPP` · `GOOGLE` · `PASSWORD` · `FACEBOOK` · `OTHER` (lowercase bhi chalta hai). Public signup wale sab `WHATSAPP` |
+| `accountState` 🆕 🟡 | `PENDING` · `ACTIVE` | — | **Na bhejo = `PENDING` chhupe** (signup kiya, OTP nahi diya — asli customer nahi). `PENDING` = sirf wahi. `ACTIVE` = default jaisa. Lowercase bhi chalta hai. [P10 D5](./verified_signup_outlet_plan.md#2-locked-decisions) |
+| `city` · `state` | string | — | Max 80. Customer ka koi active address (`Location`) is city / state se "contains" match kare. Bhejne par hi ek extra join lagta hai |
+| `fromDate` · `toDate` | ISO date | — | Customer ka `createdAt`, dono inclusive (`toDate` poora din) |
+| `sortBy` | enum | `NEWEST` | `NEWEST` · `OLDEST` · `NAME` · `WALLET` · `T_COINS` · `REFERRALS` · `RECENTLY_UPDATED` |
+| `sortOrder` | `ASC` · `DESC` | — | `NEWEST` / `OLDEST` par ignore. Na bhejo to: `NAME` A→Z, baaki bade / naye pehle |
+
+- Saare boolean `booleanFlag` hain — `true` / `false` / `"true"` / `"false"`; na bhejo to filter nahi.
+  "false" ka matlab "true nahi" (purani rows jahan key hi nahi, wo bhi aati hain); `accountActive` /
+  `isActive` me "true" ka matlab "false nahi".
+- Unknown query key chup-chaap hat jaati hai (error nahi).
+- Sort sirf customer / account ke field par hai, stats par nahi ("top spenders" jaan-boojh kar nahi).
+  Barabar values par `_id` se tiebreak.
+- **Deleted customers kabhi nahi aate**; deactivated hamesha aate hain (unhe wapas chalu karna hota hai).
+  Deleted customer [#22d](#22d-get-customersadmincustomerid-) par id se khulta hai.
+
+```http
+GET /customers/admin/get-all?search=9876&isWhatsappVerified=true&sortBy=WALLET&page=1&limit=20
+```
+
+### Success — `200`
+Postman capture se, ek row (`{{…}}` variables ki jagah sample values):
+
+```json
+{
+  "success": true,
+  "message": "Customers fetched successfully.",
+  "data": {
+    "total": 34,
+    "totalPages": 2,
+    "page": 1,
+    "limit": 20,
+    "data": [
+      {
+        "_id": "6abbac93bf42053b91b6c441",
+        "userId": "6abbac93bf42053b91b6c440",
+        "fullName": "postman admin payout customer",
+        "whatsappNumber": "9700000045",
+        "uniqueId": "#TCPMFX45",
+        "isSignUpCompleted": false,
+        "createdAt": "2026-08-27T10:00:00.000Z",
+        "updatedAt": "2026-08-27T10:00:00.000Z",
+        "account": {
+          "_id": "6abbac93bf42053b91b6c440",
+          "name": "postman admin payout customer",
+          "role": "CUSTOMER",
+          "loginType": "WHATSAPP",
+          "whatsappNumber": "9700000045",
+          "referralCode": "PMFXC45",
+          "uniqueId": "USR-PMFX-45",
+          "referralCount": 0,
+          "notificationPreferences": { "email": false, "push": true, "whatsapp": true },
+          "followerCount": 0,
+          "followingCount": 0,
+          "reviewCount": 0,
+          "walletBalance": 0,
+          "tCoinsBalance": 0,
+          "isWhatsappVerified": true,
+          "isEmailVerified": false,
+          "isMobileVerified": false,
+          "isSignUpCompleted": false,
+          "isOnBoardingCompleted": false,
+          "isLoggedIn": false,
+          "isActive": true,
+          "createdAt": "2026-08-27T10:00:00.000Z",
+          "updatedAt": "2026-08-27T10:00:00.000Z"
+        },
+        "isAccountActive": true,
+        "isProfileActive": true,
+        "claims": {
+          "totalClaims": 1, "pendingClaims": 0, "paidClaims": 1, "redeemedClaims": 0, "failedClaims": 0,
+          "cancelledClaims": 0, "expiredClaims": 0, "refundedClaims": 0,
+          "totalBilled": 900, "grossSpend": 640, "totalSaved": 270, "netSpend": 640, "averageClaimValue": 640,
+          "firstClaimAt": "2026-08-27T10:00:00.000Z", "lastClaimAt": "2026-08-27T10:00:00.000Z", "lastPaidAt": null
+        },
+        "refunds": {
+          "totalRequests": 1, "openRequests": 1, "completedRequests": 0, "refusedRequests": 0,
+          "failedRequests": 1, "awaitingBankDetails": 0, "refundedAmount": 0,
+          "lastRequestAt": "2026-08-27T10:00:00.000Z"
+        },
+        "disputes": { "disputedPayments": 0, "disputedAmount": 0, "lastDisputedAt": null },
+        "engagement": {
+          "followingCount": 0, "avoidedBrandsCount": 0, "promoRedemptions": 0,
+          "promoDiscountAvailed": 0, "promoReservationsOpen": 0
+        },
+        "profile": {
+          "addressCount": 0, "primaryAddress": null, "bankAccountCount": 1, "hasVerifiedBankAccount": true,
+          "activeDeviceCount": 0, "devicePlatforms": [], "lastSeenAt": null
+        }
+      }
+    ]
+  }
+}
+```
+
+**Row ke fields:**
+
+| Block | Kya |
+|---|---|
+| Top level | `fullName`, `uniqueId`, `email`, `mobile`, `whatsappNumber`, `image`, `dob`, `userId`, `isSignUpCompleted`, `createdAt`, `updatedAt` — customer row se. **Jo set nahi wo key absent** (upar `email` / `mobile` nahi hain) |
+| `account` | `User` ka allow-list: `name`, `email`, `mobile`, `whatsappNumber`, `username`, `uniqueId`, `role`, `loginType`, `walletBalance`, `tCoinsBalance`, `referralCode`, `appliedReferralCode`, `referralCount`, `followingCount`, `followerCount`, `reviewCount`, `isActive`, `isLoggedIn`, `isOnline`, teeno verified flags, `isSignUpCompleted`, `isOnBoardingCompleted`, `notificationPreferences`, `createdAt`, `updatedAt`, 🆕 🟡 `accountState` (`PENDING` / `ACTIVE` — hamesha bhara; purane account `ACTIVE`), 🆕 🟡 `firstVerifiedAt` (pehla WhatsApp OTP kab; purane account par agle login tak absent). Photo `account` me nahi — top-level `image` |
+| `isAccountActive` | `account.isActive !== false` — sign in kar sakta hai |
+| `isProfileActive` | `Customer.isActive !== false` |
+| `claims` · `refunds` · `disputes` · `engagement` · `profile` | Sirf **is page** ke customers ke liye nikale stats — [#22d](#22d-get-customersadmincustomerid-) ke `stats` jaise hi figures |
+
+⚠️ `account.notificationPreferences` raw hai aur aksar absent (absent = sab on) — resolved jawab
+[#22a](#22a-get-notificationsadminpreferences-) deta hai.
+
+### Errors
+| Status | Message | Kab |
+|---|---|---|
+| `404` | `No any customer found` | Filter par koi customer nahi (khaali list `404` hai, `[]` nahi — [Pagination](#pagination)) |
+| `422` | `Limit cannot exceed 100` · `Page must be at least 1` · `Limit must be at least 1` | Paging |
+| `422` | `Search cannot exceed 120 characters` · `City cannot exceed 80 characters` · `State cannot exceed 80 characters` | Lambai |
+| `422` | `<param> must be true or false` | Koi boolean filter (jaise `isActive must be true or false`) |
+| `422` | `Login type must be one of EMAIL, MOBILE, USERNAME, WHATSAPP, GOOGLE, PASSWORD, FACEBOOK, OTHER` | `loginType` |
+| `422` | `Account state must be one of PENDING, ACTIVE` | 🟡 `accountState` |
+| `422` | `Sort by must be one of NEWEST, OLDEST, NAME, WALLET, T_COINS, REFERRALS, RECENTLY_UPDATED` · `Sort order must be one of ASC, DESC` | Sort |
+| `422` | `To date cannot be earlier than from date` | Dates |
+
+---
+
+## 22d. GET /customers/admin/:customerId 🆕
+
+Ek customer, sab kuch ek call me — support call ka jawab bina paanch screen khole.
+
+**Access:** ADMIN only (`isAdmin`)
+
+### Path / Query Params
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `customerId` | ObjectId **ya** customer number | ✅ | `Customer._id`, ya `#TC64840` / `TC64840` (`TC` + sirf digits, case-insensitive). ⚠️ URL me `#` ko `%23` likhna padta hai — warna browser baaki ko fragment maan leta hai; isliye bina `#` wala `TC64840` bhi chalta hai |
+| `recentLimit` | number (query) | ❌ | Default `10`, 1–50. Har embedded list me kitni rows |
+
+- **Deleted aur deactivated customer bhi khulte hain** — `status` block batata hai. "Account kahan gaya?"
+  ka jawab `404` nahi hona chahiye.
+
+```http
+GET /customers/admin/TC64840?recentLimit=20
+```
+
+### Success — `200`
+Postman capture se, chhota kiya (`stats` ke paanch block [#22c](#22c-get-customersadminget-all-) wale hi hain; `{{…}}` variables ki jagah sample values):
+
+```json
+{
+  "success": true,
+  "message": "Customer fetched successfully.",
+  "data": {
+    "customer": {
+      "_id": "6abbac93bf42053b91b6c441",
+      "fullName": "postman admin payout customer",
+      "uniqueId": "#TCPMFX45",
+      "email": null,
+      "mobile": null,
+      "whatsappNumber": "9700000045",
+      "image": null,
+      "dob": null,
+      "userId": "6abbac93bf42053b91b6c440",
+      "createdAt": "2026-08-27T10:00:00.000Z",
+      "updatedAt": "2026-08-27T10:00:00.000Z"
+    },
+    "account": { "_id": "6abbac93bf42053b91b6c440", "name": "postman admin payout customer", "role": "CUSTOMER", "loginType": "WHATSAPP", "isWhatsappVerified": true, "isActive": true, "isDeleted": false, "…": "…" },
+    "status": {
+      "hasAccount": true,
+      "isAccountActive": true,
+      "isProfileActive": true,
+      "isDeleted": false,
+      "isAccountDeleted": false,
+      "isSignUpCompleted": false,
+      "isOnBoardingCompleted": false,
+      "isLoggedIn": false,
+      "hasPassword": false,
+      "sessionInvalidatedAt": null,
+      "currentScreen": null,
+      "accountState": "ACTIVE",
+      "firstVerifiedAt": "2026-08-27T10:00:00.000Z"
+    },
+    "stats": { "claims": { "…": "…" }, "refunds": { "…": "…" }, "disputes": { "…": "…" }, "engagement": { "…": "…" }, "profile": { "…": "…" } },
+    "balances": { "wallet": 0, "tCoins": 0 },
+    "spendByBrand": [
+      { "brandId": "68f1a2b3c4d5e6f7a8b9c3a1", "brandName": "postman cafe mocha", "brandUniqueId": "BRD-PMFX-A", "logo": "https://…/sample.jpg", "claims": 1, "spend": 640, "saved": 270, "lastClaimAt": "2026-08-27T10:00:00.000Z" }
+    ],
+    "referrals": { "referralCode": "PMFXC45", "appliedReferralCode": null, "referredBy": null, "referralCountOnAccount": 0, "referredCount": 0, "referred": [] },
+    "refundAllowance": {
+      "canRequest": true,
+      "blockedReason": null,
+      "customerFacingMessage": null,
+      "openRequests": 1,
+      "refusedInWindow": 0,
+      "windowStartedAt": "2026-08-27T10:00:00.000Z",
+      "limits": { "maxOpenRequests": 3, "maxRejectedPerWindow": 3, "requestWindowDays": 30 }
+    },
+    "recentClaims": { "total": 1, "data": [ { "_id": "…", "claimCode": "TD-H3HE6G", "status": "PAID", "brandName": "postman cafe mocha", "voucherName": "flat 30% off on total bill", "billAmount": 900, "totalPayable": 640, "youSaved": 270, "createdAt": "2026-08-27T10:00:00.000Z", "…": "…" } ] },
+    "recentRefunds": { "total": 1, "data": [ { "_id": "…", "requestedAmount": 300, "status": "FAILED", "statusLabel": "Refund failed — we are on it", "…": "…" } ] },
+    "addresses": { "total": 0, "data": [] },
+    "bankAccounts": { "total": 1, "data": [ { "_id": "…", "accountHolderName": "postman admin refund customer", "maskedAccountNumber": "XXXXXXX0000", "accountLast4Digits": "0000", "ifscCode": "HDFC0000001", "bankName": "postman seed bank", "isVerified": true, "verifiedAt": "2026-08-27T10:00:00.000Z", "createdAt": "2026-08-27T10:00:00.000Z" } ] },
+    "devices": { "total": 0, "data": [] },
+    "following": { "total": 0, "data": [] },
+    "avoiding": { "total": 0, "data": [] },
+    "promoUsage": { "total": 0, "data": [] }
+  }
+}
+```
+
+| Block | Kya |
+|---|---|
+| `customer` | Customer row. Yahan unset value `null` aati hai (list ki tarah absent nahi) |
+| `account` | `User` allow-list — list wale fields ke alawa `image`, `dob`, `currentScreen`, `meta` (IP / device — fraud jaanch ke liye, isliye sirf yahan), `isDeleted`, `passwordSetAt`, `sessionInvalidatedAt`, 🆕 🟡 `accountState` / `firstVerifiedAt` (**raw** — purane account par absent; padhna ho to `status` wale lo). Password / OTP kabhi nahi. Account hi na ho (adhoora signup) to `null` |
+| `status` | Do switch + soft delete alag-alag: `isAccountActive` (`User.isActive`), `isProfileActive` (`Customer.isActive`), `isDeleted` (customer), `isAccountDeleted` (account; account na ho to `null`), `hasAccount`, `hasPassword`, `sessionInvalidatedAt`, `currentScreen`, 🆕 🟡 `accountState` (`PENDING` = signup kiya, OTP nahi diya · `ACTIVE`; purana account bina value ke = `ACTIVE`; account hi na ho to `null`), 🆕 🟡 `firstVerifiedAt` (pehla WhatsApp OTP; na pata ho to `null`) … |
+| `stats` | `claims` · `refunds` · `disputes` · `engagement` · `profile` — list ki row jaise hi figures (same helper) |
+| `balances` | `wallet`, `tCoins` (2 decimal) |
+| `spendByBrand` | Top **5** brand, kharch ke hisaab se (paise wale claims) |
+| `referrals` | `referredBy` (jiska code lagaya), `referred` (jinhone iska code lagaya, `recentLimit` tak), `referralCountOnAccount` (account ka counter) vs `referredCount` (asli ginti) — dono alag hon to dekhne layak |
+| `refundAllowance` | Customer abhi naya refund maang sakta hai? Wahi check jo customer par chalta hai. Band ho to `blockedReason` (`OPEN_LIMIT_REACHED` / `REFUSAL_LIMIT_REACHED`) + `customerFacingMessage` (customer ko dikha exact sentence) |
+| `recentClaims` · `recentRefunds` · `following` · `avoiding` · `promoUsage` | `{ total, data }` — `data` naye pehle, `recentLimit` tak; `total` poori ginti. Claims snapshot se (brand ka purana naam bhi). Refunds admin projection me |
+| `addresses` | Sirf active addresses, default pehle, `recentLimit` tak |
+| `bankAccounts` | **Saare** (cap nahi), account number masked |
+| `devices` | Saare active devices (cap nahi) — `platform`, `deviceName`, `appVersion`, `lastSeenAt`, `lastPushAt`, `failureCount` |
+
+Poori lists ke apne endpoints hain (`/voucherClaims`, `/refunds`, `/follows`) — ye screen "ye kaun hai" ke liye hai.
+
+### Errors
+| Status | Message | Kab |
+|---|---|---|
+| `404` | `Customer not found.` | Na id se mila na number se (dono ka ek hi jawab) |
+| `422` | `Customer id must be a valid id or a customer number like #TC64840` | Na ObjectId, na `TC` + digits |
+| `422` | `recentLimit cannot exceed 50` · `recentLimit must be at least 1` | `recentLimit` |
+
+---
+
 # Customer directory — verification filters
 
-`GET /customers/admin/get-all` par teen alag verification filter hain, ek har
+`GET /customers/admin/get-all` ([#22c](#22c-get-customersadminget-all-)) par teen alag verification filter hain, ek har
 identity key ke liye. Teeno `booleanFlag` hain — `true` / `false` / `"true"` /
-`"false"` chalte hain, aur na bhejne par koi filter nahi lagta.
+`"false"` chalte hain, aur na bhejne par koi filter nahi lagta. Kuch aur bhejne par `422
+"<param> must be true or false"` — is list ke saare boolean filters par (`accountActive`, `isActive`,
+`isSignUpCompleted`, `isOnBoardingCompleted`, teeno verification flags, `isLoggedIn`). 🔧 2026-10-26
+(develop): pehle Joi ka generic `"… must be one of [boolean, true, false]"` aata tha.
 
 | Param | Kis key ke baare me | Customer ke liye kya ummeed karein |
 |---|---|---|
@@ -2007,11 +2509,203 @@ mobile OTP diya tha, unke **dono** flag `true` hain, aur dono sach hain.
 
 ---
 
+# Customer visibility (outlet + album rule) 🆕
+
+Owner ne 2026-10-24 ko lock kiya. Poora design: [brand_feed_outlet_rule_plan.md](./brand_feed_outlet_rule_plan.md).
+Rule: brand customer ko tabhi dikhega jab approved ho, uska kam se kam ek **location wala** active
+outlet ho (`[0, 0]` location nahi ginti), aur (switch ON par) ek **dikhne layak album** — warna brand
+aur uske vouchers customer app me kahin nahi.
+
+⚠️ **Kya develop par bana hai, kya nahi** — customer app me ye rule phase-wise aa raha hai: profile,
+voucher list, gallery / reels, following / avoided (P3), brand feed / Directory / Top Brands (P4) aur
+voucher feed / Suggestions / voucher detail / search ka VOUCHER section (P5) aur search ke BRAND /
+AREA / CATEGORY sections (P6) — sab develop par padhte hain. Stage / prod par abhi kuch nahi. Admin
+ko neeche ke field aur filter **abhi se** poora sahi jawab dete hain, taaki release se pehle hi pata
+chal jaye kaun gayab hoga.
+
+⚠️ Search ka category "N brands" ab sirf customer ko dikhne wale brands ginta hai; admin ka
+`/categories/getAll` (`stats`) aur category delete guard **har** brand ginte hain (pehle jaisa) — dono
+numbers alag ho sakte hain, ye maana hua hai.
+
+| Kya | Kahan | Status | Detail |
+|---|---|---|---|
+| `customerVisibility` | `GET /brands/admin/get-all` ki har row · `GET /brands/get` | ✅ develop (P2, 2026-10-25) | Neeche dekhein |
+| `?isCustomerVisible=true\|false` | `GET /brands/admin/get-all` | ✅ develop (P2) | `?isDummy=` jaisa `booleanFlag` (kuch aur → `422 "isCustomerVisible must be true or false"`); paging se **pehle** lagta hai, to `total` sahi |
+| `customer.brandVisibility.requireShowcase` | `GET /settings/get` · `PUT /settings/update` | ✅ field develop (P1) · asar develop par profile side (P3), brand feed (P4), voucher side (P5), search (P6) | Boolean, default `false`. ON = album ke bina brand customer ko kahin nahi dikhega. Plan: stage deploy ke baad admin ON karega; prod par release OFF ke saath, visibility report saaf hone par ON (plan OR-3, §10) |
+| Top Brands | `/brands/customer/get-all?topOnly=true` | ✅ develop (P4) | Chuna gaya brand rule fail kare to customer ko nahi dikhega — `customerVisibility` dekhein. Naye app par bina-voucher top brands bhi (album ke saath) |
+| Suggestions | `/vouchers/customer/get-all?suggestedOnly=true` | ✅ develop (P5) | Wahi — suggested voucher ka brand rule fail kare to voucher customer ko nahi dikhega (main feed aur search me bhi nahi) |
+| `minItemsPerSection` | Settings | ⚠️ | Badhane se pehle visibility report chalayein — switch ON par jin brands ka aakhri album nayi line ke neeche gira wo (aur unke vouchers) ek saath customer se chhup jaate hain; OFF par bhi bina-voucher brand feed se hat jaata hai |
+| Showcase guard | Section hide / band / delete | ✅ develop (P7, 2026-10-26) | Vendor ko aakhri dikhne layak album chhupane / band karne / delete karne par `422` ("last album customers can see"). **Admin exempt** (moderation) — admin ka hide / delete is album ke saath brand ko customer se chhupa sakta hai (switch ON par), `customerVisibility` dekh kar karein |
+
+**`customerVisibility` ka shape** (har row par, aur `GET /brands/get` par):
+
+```jsonc
+"customerVisibility": {
+  "isVisible": false,                        // abhi ke switch ke hisaab se — customer ko dikhega?
+  "reasons": ["NO_LOCATED_OUTLET"],          // kyun nahi — saare, ek nahi
+  "showcaseReady": true,                     // dikhne layak album hai? (switch se independent)
+  "hasLiveVoucher": false                    // live, claim-able voucher hai? (sirf jaankari — status / album isme nahi)
+}
+```
+
+| `reasons` | Matlab | Theek kaise ho |
+|---|---|---|
+| `BRAND_NOT_LIVE` | Approved / active nahi, ya revoked / rejected / deleted | Verification / account status |
+| `NO_OUTLET` | Ek bhi active outlet nahi | Outlet banana / chalu karna |
+| `NO_LOCATED_OUTLET` | Outlet hain, kisi ki location set nahi (ya sirf `[0, 0]`) | Outlet ka address dalwana |
+| `NO_VERIFIED_OUTLET` 🆕 🟡 | Location wala outlet hai, par kisi location wale outlet ka manager WhatsApp verified nahi (P10.5, develop). Sirf **outlet** dekha jaata hai, brand owner nahi (D1). Purane / dummy outlets (flag hi nahi) verified maane jaate hain | Manager se OTP dilwana; admin ne number badla ho (`REVERIFY`) to manager naye number se login kare |
+| `NO_VISIBLE_SHOWCASE` | Dikhne layak album nahi — **sirf switch ON par** aata hai | Album me `minItemsPerSection` media, visible + active |
+
+- `hasLiveVoucher` = kisi location wale active outlet par live voucher, claimable offer ke saath, aur
+  plan claim le sake (live plan, ya `claim.allowWhenVendorPlanExpired` / `vendorPlanExpiredGraceDays`
+  ke hisaab se — wahi jo feed ka voucher card dekhta hai). ⚠️ Brand ka **status aur album isme nahi** —
+  `isVisible: false` ke saath bhi `true` ho sakta hai (jaise unapproved brand ka live voucher); feed par
+  voucher card tabhi jab `isVisible` bhi `true` ho.
+- ⚠️ **`isVisible: true` ≠ home feed par card.** Switch OFF par bhi bina-voucher brand ko feed card ke
+  liye album chahiye — `hasLiveVoucher: false` + `showcaseReady: false` wala brand `isVisible: true` hokar
+  bhi feed par nahi aata (profile / search / link se khulta hai). Purana app (bina
+  `includeBrandsWithoutVoucher`) feed me sirf voucher wale brand dikhata hai.
+- ⚠️ Showcase section ki rows ka `customerVisibility` (sections list — `isLive`, `HIDDEN` / `INACTIVE` /
+  `NOT_ENOUGH_MEDIA`) **alag object** hai — naam same, shape aur matlab alag (ek album ka, ye brand ka).
+- ⚠️ **`isVisibleToCustomers` ≠ `customerVisibility.isVisible`.** Purana `isVisibleToCustomers` sirf
+  aapka customer switch hai (`Brand.isActive`); `customerVisibility.isVisible` poora nateeja hai
+  (status + outlet + album). Switch ON ho kar bhi brand outlet ke bina chhupa reh sakta hai.
+- Har page par chaar `distinct` + ek voucher aggregate — row-wise nahi. Filter lagane par poori list
+  par lookups chalte hain (sirf tab).
+- Read-only report (poore platform ki ginti, `[0, 0]` outlets, switch ON par kaun gayab hoga):
+  `node scripts/reportCustomerBrandVisibility.js --db <name> [--show 50] [--csv <file>]` — plan §10
+  (`--show` default 25 naam; bina `--db` `.env` wala DB).
+
+```http
+GET /brands/admin/get-all?isCustomerVisible=false&isApproved=true&page=1&limit=50
+```
+
+# Brand directory — dummy ("Coming soon") badge + filter 🆕
+
+`GET /brands/admin/get-all` (isAdmin) — admin ki brand list ([#25a](#25a-get-brandsadminget-all-) — saare params aur fields). Production par fictional
+"Coming soon" brands hain (`docs/dummy_brands_runbook.md`); customer unhe asli brand
+ki tarah dekhta hai, claim server par band hai. Admin ko pehchaan ke liye:
+
+| Kya | Kahan | Value |
+|---|---|---|
+| `isDummy` | har row, top level | **Hamesha boolean.** Dummy par `true`, real par `false` (real brands par DB me key hai hi nahi, phir bhi response me `false` aata hai) |
+| `dummyBatch` | har row, top level | Dummy par batch naam (`"CHENNAI-DUMMY-1"`), real par `null` |
+| `?isDummy=true` | query | Sirf dummy brands |
+| `?isDummy=false` | query | Sirf real brands |
+
+`booleanFlag` hai — `true` / `false` / `"true"` / `"false"` chalte hain, kuch aur
+bhejne par `422 "isDummy must be true or false"`; na bhejne par dono aate hain. Baaki filters (`search`,
+`isApproved`, `categoryId`, …) ke saath jud jaata hai.
+
+> 🔧 2026-10-26 (develop): is list ke **saare** boolean filters (`accountActive`, `isActive`,
+> `isApproved`, `isReviewed`, `isRejected`, `isRevoked`, `isSubscribed`, `isTopBrand`, `isDummy`,
+> `isRealDummy`, `isCustomerVisible`) galat value par ab `"<param> must be true or false"` dete hain.
+> Pehle Joi ka generic `"… must be one of [boolean, true, false]"` aata tha (message sahi Joi code par
+> laga hi nahi tha) — Postman capture ne pakda. `GET /customers/admin/get-all` ke boolean filters par
+> bhi wahi fix (2026-10-26, develop) — [Customer directory](#customer-directory--verification-filters).
+
+```http
+GET /brands/admin/get-all?isDummy=false&page=1&limit=50
+```
+
+> ⚠️ Default sort `NEWEST` hai aur dummy brands haal hi me bane hain, to bina filter
+> ke pehle pages par wahi dikhte hain. Real vendors ki triage ke liye
+> `isDummy=false` lagayein.
+
+Isi tarah `brand.isDummy` + `brand.dummyBatch` aur `?isDummy=` filter
+`GET /vouchers/versions/get-all` (#43) aur `GET /subscribeds/admin/get-all` (#78)
+par bhi hain. Baaki admin screens par abhi nahi.
+
+---
+
+# Real brand par "Coming soon" — `PUT /brands/admin/real-dummy/:brandId` 🆕
+
+**Access:** ADMIN only (`isAdmin`) · Owner decision 2026-10-23.
+
+Ek **asli, approved** brand jiski details abhi poori nahi hain — launch tak customer
+ko use dummy brand jaisa dikhana hai. Admin ek note ke saath switch ON karta hai, aur
+details poori hone par wapas OFF.
+
+> 🔴 **Ye dummy brand banana nahi hai.** Database me `isDummy` **kabhi nahi** likha
+> jaata — wo fictional brands ka flag hai jinhe `scripts/dummyBrands.js remove` poore
+> data ke saath hard-delete karti hai. Ye brand asli hai aur asli rehta hai: admin
+> list me iska `isDummy` `false` hi aata hai, aur dummy wale koi rule (plan grant block,
+> promo / banner block, notification band) is par **nahi** lagte.
+
+### Body
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `isRealDummy` | boolean | ✅ | `true` = Coming soon ON, `false` = OFF |
+| `note` | string | ON par ✅ · OFF par ❌ | Max **500**, trim hota hai. **Internal** — vendor ya customer ko kabhi nahi jaata. OFF ke saath bhejne par `422` |
+
+```http
+PUT /brands/admin/real-dummy/68f1a2b3c4d5e6f7a8b9c3a1
+{ "isRealDummy": true, "note": "Menu aur photos baaki, 1 Nov launch" }
+```
+
+### Success — `200`
+
+```json
+{
+  "success": true,
+  "message": "Brand is now shown as coming soon.",
+  "data": {
+    "brandId": "68f1a2b3c4d5e6f7a8b9c3a1",
+    "brandName": "cafe mocha",
+    "brandUniqueId": "TDB000078",
+    "merchantId": "TM-362P-7M7E-ZB2N",
+    "isRealDummy": true,
+    "realDummyNote": "Menu aur photos baaki, 1 Nov launch",
+    "realDummyUpdatedAt": "2026-10-23T07:30:00.000Z",
+    "realDummyUpdatedByAdminId": "68e0…"
+  }
+}
+```
+
+OFF par message `"Brand is no longer shown as coming soon."`, `isRealDummy: false`,
+`realDummyNote: null` — note brand se clear ho jaata hai, aur `realDummyUpdatedAt/By`
+batata hai ki kisne aur kab hataya. **Koi history row nahi** banti (owner).
+
+### Errors
+
+| Status | Message | Kab |
+|---|---|---|
+| `404` | `Brand not found.` | Brand nahi mila ya deleted |
+| `409` | `This brand is already shown as coming soon.` / `This brand is not shown as coming soon.` | Pehle se wahi state |
+| `409` | `This brand was changed by someone else. Please refresh and try again.` | Do admin ek saath |
+| `422` | `Only an approved brand can be shown as coming soon.` | ON — brand approved nahi |
+| `422` | `This is a dummy brand. Coming soon applies only to real brands.` | Brand fictional dummy hai (`isDummy: true`) |
+| `422` | `A note is required when marking a brand as coming soon` | ON bina note |
+| `422` | `A note is only accepted when marking a brand as coming soon` | OFF ke saath note |
+| `422` | `Note cannot exceed 500 characters` | — |
+
+⚠️ OFF ke liye approval **nahi** chahiye — approval baad me revoke ho jaye to flag
+waisa hi rehta hai (auto-clear nahi), aur admin use phir bhi hata sakta hai.
+
+### Kahan dikhta hai
+
+| Kaun | Kahan | Kya |
+|---|---|---|
+| Admin | `GET /brands/admin/get-all` — har row | `isRealDummy` (hamesha boolean), `realDummyNote`, `realDummyUpdatedAt`, `realDummyUpdatedByAdminId` (warna `null`). Filter `?isRealDummy=true\|false` (`booleanFlag`, kuch aur → `422`) |
+| Admin | `GET /brands/get?brandId=…` (#26) | Wahi chaar keys, hamesha |
+| Customer | brand profile + claim preview | `isDummy: true` + `isRealDummy: true` — app ise dummy brand jaisa dikhata hai (contact / address / Directions chhupe, "Coming soon"). Claim server par band: `canClaim: false`, `BRAND_NOT_ACCEPTING`, *"Coming soon! Offers at this brand open shortly."* Pehle khareede vouchers redeem hote rehte hain. Note kabhi nahi |
+| Vendor | — | **Kuch nahi.** `GET /brands/get` aur `PUT /brands/update` me ye keys aati hi nahi, koi notification nahi |
+
+Brand customer feed, directory, search aur Top Brands me pehle jaisa rehta hai —
+fictional dummy brands ki tarah.
+
+```http
+GET /brands/admin/get-all?isRealDummy=true&page=1&limit=50
+```
+
+---
+
 # Brand Verification APIs
 
 Vendor KYC review queue. **Ye admin ka core workflow hai.**
 
-> 📖 **Ye 3 endpoints [brand_verification_api_doc.md](./brand_verification_api_doc.md) me full depth me documented hain** — scoring table (har flag ka weightage), state machine, model reference, aur frontend integration notes ke saath. Yahan summary + admin-specific detail hai.
+> 📖 **Ye 3 endpoints ka detail yahi hai.** Alag `brand_verification_api_doc.md` kabhi bana hi nahi (pehle link usi missing file ki taraf tha — 2026-10-26 ko hataya). Scoring ka exact formula aur har flag ka weightage sirf code me hai: `services/systemVerify/verifyVendor.js`; review ke transitions `services/systemVerify/reviewBrandVerification.js`; enums `constants/brandVerification.js`. Aage ka kaam: [brand_verification_future_updates.md](./brand_verification_future_updates.md).
 
 ## 23. GET /brands/admin/verifications
 
@@ -2128,7 +2822,7 @@ GET /brands/admin/verifications?status=REJECTED&maxScore=75&sortBy=SCORE&sortOrd
 
 **6. Score bands:** ≥90 auto-`APPROVED`, ≥75 `MANUAL_REVIEW`, <75 `REJECTED`.
 
-> 📖 Har flag ka exact weightage aur scoring formula → [brand_verification_api_doc.md](./brand_verification_api_doc.md) (Scoring Table)
+> 📖 Har flag ka exact weightage aur scoring formula → code: `services/systemVerify/verifyVendor.js` (alag doc nahi hai)
 
 ---
 
@@ -2232,7 +2926,7 @@ Approve / reject / revoke / reviewed-toggle.
 
 **8. ⚠️ `brand.isApproved` aur `brand.status` code me kahin set nahi hote** — approval ka truth `SystemVerify` doc pe hai. Admin panel ko wahi dekhna chahiye.
 
-> 📖 Full state machine, har transition, aur response ka poora shape → [brand_verification_api_doc.md](./brand_verification_api_doc.md) (Section 3)
+> 📖 Har transition (approve / reject / revoke, aur unke flags) → code: `services/systemVerify/reviewBrandVerification.js`; state ka flow #25 ke note 3 me. Rejection ke baad vendor ka raasta → [brand_rejection_remediation_design.md](./brand_rejection_remediation_design.md)
 
 ---
 
@@ -2240,7 +2934,7 @@ Approve / reject / revoke / reviewed-toggle.
 
 Verification audit trail. **Admin koi bhi brand dekh sakta hai.**
 
-**Access:** Intended: Vendor + Admin · Enforced: **Any authenticated** ⚠️
+**Access:** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN** (`isVendorOrAdmin`) ✅ · vendor sirf apna brand, admin koi bhi `brandId`
 
 ### Query Params
 | Param | Type | Required | Default | Validation |
@@ -2348,30 +3042,211 @@ APPROVED             (ADMIN)   ✅
 APPROVAL_ACKNOWLEDGED (VENDOR) dashboard pe gaya
 ```
 
-**4. ⚠️ Ye endpoint pe role gate nahi hai** aur service ki scoping sirf `VENDOR` handle karti hai — `CUSTOMER` bhi koi bhi `brandId` padh sakta hai. Security finding #13 ([Appendix B](#appendix-b--known-issues)).
+**4. ✅ Role gate + scoping (pehle nahi tha).** Route `isVendorOrAdmin` hai (customer ko `403`), aur service har role ko naam se dekhti hai: vendor sirf apne brand ki history (`brandId` param ignore), admin koi bhi `brandId`, baaki `403 "Forbidden"` — `services/systemVerify/getBrandVerificationHistory.js`. Pehle customer bhi koi bhi `brandId` padh sakta tha (security finding #13) — band.
 
-> 📖 Full detail → [brand_verification_api_doc.md](./brand_verification_api_doc.md) (Section 5)
+> 📖 Code: `services/systemVerify/getBrandVerificationHistory.js` (alag doc nahi hai)
 
 ---
 
 # Brand Data APIs
 
+## 25a. GET /brands/admin/get-all 🆕
+
+Admin ki brand directory — har brand ek row, triage ke saare columns (vendor, verification, plan,
+usage, outlets, dono switch, customer visibility) bina brand khole. Ek brand ka poora detail (PAN /
+GST / bank): [#26](#26-get-brandsget).
+
+**Access:** ADMIN only (`isAdmin`)
+
+### Query Params
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `page` | number | `1` | Min 1 |
+| `limit` | number | `10` | 1–100 |
+| `search` | string | — | Max 120, plain text. Case-insensitive "contains" — `brandName`, `legalBusinessName`, `uniqueId`, `merchantId`, `email`, `mobile`, `whatsappNumber` (brand row par) |
+| `accountActive` | boolean | — | Vendor ka `User.isActive` — sign in kar sakta hai |
+| `isActive` | boolean | — | `Brand.isActive` — admin ka customer switch (response me `isVisibleToCustomers`) |
+| `isCustomerVisible` | boolean | — | Customer ko **sach me** dikhta hai ya nahi (status + location wala outlet + switch ON par album). [Customer visibility](#customer-visibility-outlet--album-rule-) |
+| `status` | enum | — | `PENDING` · `APPROVED` · `MANUAL_REVIEW` · `UNDER_REVIEW` · `REJECTED` · `REVOKED` (lowercase bhi) |
+| `isApproved` · `isReviewed` · `isRejected` · `isRevoked` | boolean | — | Brand par mirrored verification flags |
+| `isSubscribed` · `isTopBrand` | boolean | — | — |
+| `isDummy` | boolean | — | Fictional "Coming soon" brands. [Dummy](#brand-directory--dummy-coming-soon-badge--filter-) |
+| `isRealDummy` | boolean | — | Asli brand jo "Coming soon" dikh raha hai. [Real-dummy](#real-brand-par-coming-soon--put-brandsadminreal-dummybrandid-) |
+| `categoryId` · `subCategoryId` | ObjectId | — | — |
+| `businessEntityType` | enum | — | `PROPRIETORSHIP` · `PARTNERSHIP` · `LLP` · `PRIVATE_LIMITED` · `PUBLIC_LIMITED` · `ONE_PERSON_COMPANY` · `TRUST` · `NGO` · `SOCIETY` · `OTHERS` — ⚠️ exact uppercase |
+| `businessRegistrationStatus` | enum | — | `REGISTERED` · `UNREGISTERED` — ⚠️ exact uppercase |
+| `currentScreen` | enum | — | Vendor ka onboarding kahan ruka: `BUSINESS_NAME` · `REGISTRATION_STATUS` · `REGISTRATION_ENTITY_TYPE` · `PAN_VERIFICATION` · `GST_VERIFICATION` · `BANK_VERIFICATION` · `SYSTEM_VERIFICATION` · `PARTNERSHIP_DEED` · `SUBSCRIBE_PLAN` · `OUTLET_PAGE` · `UNDER_REVIEW` · `DASHBOARD` (lowercase bhi) — "kaun atka hai" list |
+| `accountState` 🆕 🟡 | `PENDING` · `ACTIVE` | — | Vendor ka account. **Na bhejo = `PENDING` vendors ke brand chhupe** (signup kiya, OTP nahi diya). `PENDING` = sirf wahi. Paging se pehle lagta hai, `total` sahi. [P10 D5](./verified_signup_outlet_plan.md#2-locked-decisions) |
+| `fromDate` · `toDate` | ISO date | — | Brand ka `joinedDate`, dono inclusive (`toDate` poora din) |
+| `sortBy` | enum | `NEWEST` | `NEWEST` · `OLDEST` (joinedDate) · `NAME` · `FOLLOWERS` · `VOUCHERS` (vouchers used) · `OUTLETS` (live outlets) · `SUBSCRIPTION_END` · `STATUS_CHANGED` |
+| `sortOrder` | `ASC` · `DESC` | — | `NEWEST` / `OLDEST` par ignore. Na bhejo to: `NAME` A→Z, `SUBSCRIPTION_END` jaldi khatam hone wale pehle, baaki bade / naye pehle |
+
+- Saare boolean `booleanFlag` hain — `true` / `false` / `"true"` / `"false"`; na bhejo to filter nahi.
+  "false" = "true nahi" (purane brands jahan key hi nahi, wo bhi aate hain); `accountActive` / `isActive`
+  me "true" = "false nahi". `isCustomerVisible` paging se **pehle** lagta hai, to `total` sahi hai.
+- Unknown query key chup-chaap hat jaati hai. Barabar sort values par `_id` se tiebreak.
+- **Deleted brands kabhi nahi aate**; deactivated aate hain (unhe wapas chalu karna hota hai).
+- ⚠️ Default `NEWEST` par dummy brands (haal me bane) pehle pages par aate hain — real vendors ke liye `isDummy=false`.
+
+```http
+GET /brands/admin/get-all?isDummy=false&status=APPROVED&isCustomerVisible=false&sortBy=SUBSCRIPTION_END&page=1&limit=50
+```
+
+### Success — `200`
+Postman capture se, ek row (`{{…}}` variables ki jagah sample values):
+
+```json
+{
+  "success": true,
+  "message": "Brands fetched successfully.",
+  "data": {
+    "total": 24,
+    "totalPages": 2,
+    "page": 1,
+    "limit": 20,
+    "data": [
+      {
+        "_id": "6adef79cd4e5cefab6afd8f3",
+        "brandName": "postman bf vis album below the floor",
+        "uniqueId": "BRD-PMBF-VF",
+        "merchantId": "TM-EEPU-ZE5J-C9V9",
+        "logo": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+        "coverImage": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+        "description": "postman bf vis album below the floor — seeded for the brand-feed work",
+        "joinedDate": "2026-08-27T10:00:00.000Z",
+        "createdAt": "2026-08-27T10:00:00.000Z",
+        "updatedAt": "2026-08-27T10:00:00.000Z",
+        "isDummy": false,
+        "dummyBatch": null,
+        "isRealDummy": false,
+        "realDummyNote": null,
+        "realDummyUpdatedAt": null,
+        "realDummyUpdatedByAdminId": null,
+        "vendor": {
+          "_id": "6adef79cd4e5cefab6afd8f0",
+          "name": "postman bf vis album below the floor owner",
+          "role": "VENDOR",
+          "whatsappNumber": "9700000129",
+          "uniqueId": "USR-PMBF-VF",
+          "notificationPreferences": { "email": false, "push": true, "whatsapp": true },
+          "isWhatsappVerified": true,
+          "isMobileVerified": false,
+          "isSignUpCompleted": false,
+          "isOnBoardingCompleted": false,
+          "isLoggedIn": false,
+          "isActive": true,
+          "createdAt": "2026-08-27T10:00:00.000Z"
+        },
+        "category": { "_id": "68f1a2b3c4d5e6f7a8b9c100", "name": "postman seed food and beverages", "image": "https://…" },
+        "subCategory": { "_id": "6adef70bc13da20b67e7f450", "name": "postman seed cafe", "image": "https://…" },
+        "status": "PENDING",
+        "isApproved": true,
+        "isReviewed": false,
+        "isRejected": false,
+        "isRevoked": false,
+        "verificationAttemptCount": 0,
+        "isApprovalAcknowledged": false,
+        "systemVerify": {
+          "_id": "6adef79cd4e5cefab6afd8f2", "attemptNumber": 1, "score": 0, "status": "APPROVED",
+          "isRevoked": false, "isRejected": false, "isReviewed": false, "isAdminApproved": false, "isSuperseded": false
+        },
+        "onboarding": {
+          "hasPan": false, "hasGst": false, "hasBank": false, "hasLocation": true, "hasWorkHours": true,
+          "hasFirstOutlet": true, "hasSystemVerification": true, "hasAcceptedPartnershipDeed": false
+        },
+        "isSubscribed": true,
+        "subscription": {
+          "subscribedId": "6adef79ed4e5cefab6afd8ff",
+          "planId": "68f1a2b3c4d5e6f7a8b9c200",
+          "planName": "postman seed pro",
+          "status": "ACTIVE",
+          "source": "ADMIN_MANUAL",
+          "startDate": "2026-08-27T10:00:00.000Z",
+          "endDate": "2027-08-27T10:00:00.000Z",
+          "paidAmount": 4999,
+          "isFreeGrant": false,
+          "endsInDays": 364
+        },
+        "usage": {
+          "subBrands": { "used": 1, "limit": 10, "isUnlimited": false },
+          "franchises": { "used": 0, "limit": 5, "isUnlimited": false },
+          "vouchers": { "used": 1, "limit": 0, "isUnlimited": true },
+          "showcase": { "used": 1, "limit": 20, "isUnlimited": false }
+        },
+        "followersCount": 10,
+        "avoidanceCount": 0,
+        "outletCount": 1,
+        "isTopBrand": false,
+        "topOrder": 0,
+        "topAddedAt": null,
+        "isAccountActive": true,
+        "statusChangedAt": "2026-08-27T10:00:00.000Z",
+        "isVisibleToCustomers": true,
+        "customerVisibility": { "isVisible": true, "reasons": [], "showcaseReady": false, "hasLiveVoucher": true }
+      }
+    ]
+  }
+}
+```
+
+**Row ke fields** (allow-list — **jo set nahi wo key absent**, jaise upar `email`, `rejectionReason`, `accountDeactivatedAt`):
+
+| Group | Fields |
+|---|---|
+| Identity | `brandName`, `legalBusinessName`, `uniqueId`, `merchantId`, `logo`, `coverImage`, `description`, `email`, `mobile`, `whatsappNumber`, `businessEntityType`, `businessRegistrationStatus`, `joinedDate`, `createdAt`, `updatedAt` |
+| Dummy / Coming soon | `isDummy` (hamesha boolean), `dummyBatch`, `isRealDummy` (hamesha boolean), `realDummyNote`, `realDummyUpdatedAt`, `realDummyUpdatedByAdminId` (warna `null`) |
+| `vendor` | Owner ka `User`: `name`, `email`, `mobile`, `whatsappNumber`, `uniqueId`, `role`, `currentScreen`, `isActive`, `isLoggedIn`, `isMobileVerified`, `isWhatsappVerified`, `isSignUpCompleted`, `isOnBoardingCompleted`, `notificationPreferences` (raw, aksar absent — resolved: [#22a](#22a-get-notificationsadminpreferences-)), `createdAt`, 🆕 🟡 `accountState` (`PENDING` / `ACTIVE` — hamesha bhara; purane vendor `ACTIVE`), 🆕 🟡 `firstVerifiedAt` |
+| `category` · `subCategory` | `{ _id, name, image }` |
+| Verification | `status`, `isApproved`, `isReviewed`, `isRejected`, `isRevoked`, `rejectionReason`, `revokeReason`, `verifiedBy`, `verifiedAt`, `reviewedAt`, `approvedAt`, `rejectedAt`, `revokedAt`, `reviewedByAdminId`, `approvedByAdminId`, `rejectedByAdminId`, `revokedByAdminId`, `verificationAttemptCount`, `isApprovalAcknowledged` |
+| `systemVerify` | `{ status, score, attemptNumber, isSuperseded, isReviewed, isRejected, isRevoked, isAdminApproved }` — score ka breakdown nahi ([#23](#23-get-brandsadminverifications)) |
+| `onboarding` | Kaunse step file par hain (sirf haan / na): `hasPan`, `hasGst`, `hasBank`, `hasLocation`, `hasWorkHours`, `hasFirstOutlet`, `hasSystemVerification`, `hasAcceptedPartnershipDeed` |
+| Plan | `isSubscribed`; `subscription` = `{ subscribedId, planId, planName, status, source, startDate, endDate, paidAmount, isFreeGrant, endsInDays }` ya `null` (live plan nahi). `endsInDays` server ki ghadi se |
+| `usage` | `subBrands` · `franchises` · `vouchers` · `showcase` — har ek `{ used, limit, isUnlimited }` |
+| Engagement | `followersCount`, `avoidanceCount`, `outletCount` (**abhi chalu** outlets — `usage.subBrands.used` billing counter hai, dono alag hon to dekhne layak) |
+| Top brand | `isTopBrand`, `topOrder`, `topAddedAt` |
+| Account switch (vendor) | `isAccountActive`, `statusChangedAt`, `accountDeactivatedAt`, `accountDeactivatedByAdminId`, `accountDeactivationReason`, `accountActivatedAt`, `accountActivatedByAdminId` |
+| Customer switch | `isVisibleToCustomers` (= `Brand.isActive !== false`), `customerVisibilityUpdatedAt`, `customerVisibilityUpdatedByAdminId` |
+| `customerVisibility` | `{ isVisible, reasons, showcaseReady, hasLiveVoucher }` — poora nateeja. ⚠️ `isVisibleToCustomers` ≠ `customerVisibility.isVisible`. [Shape aur reasons](#customer-visibility-outlet--album-rule-) |
+
+Dono switch badalna: [`PUT /brands/admin/:brandId/status`](#put-brandsadminbrandidstatus).
+
+### Errors
+| Status | Message | Kab |
+|---|---|---|
+| `404` | `No any brand found` | Filter par koi brand nahi (khaali list `404` hai — [Pagination](#pagination)) |
+| `422` | `Limit cannot exceed 100` · `Page must be at least 1` · `Limit must be at least 1` | Paging |
+| `422` | `Search cannot exceed 120 characters` | — |
+| `422` | `<param> must be true or false` | Koi boolean filter (jaise `isCustomerVisible must be true or false`) |
+| `422` | `Status must be one of PENDING, APPROVED, MANUAL_REVIEW, UNDER_REVIEW, REJECTED, REVOKED` | `status` |
+| `422` | `Invalid category ID` · `Invalid subCategory ID` | Ids |
+| `422` | `Business Entity Type must be one of …` · `Business Registration Status must be one of …` · `Current screen must be one of …` | Enums (poori list upar) |
+| `422` | `Account state must be one of PENDING, ACTIVE` | 🟡 `accountState` |
+| `422` | `Sort by must be one of NEWEST, OLDEST, NAME, FOLLOWERS, VOUCHERS, OUTLETS, SUBSCRIPTION_END, STATUS_CHANGED` · `Sort order must be one of ASC, DESC` | Sort |
+| `422` | `To date cannot be earlier than from date` | Dates |
+
+---
+
 ## 26. GET /brands/get
 
 Brand ka poora detail — 14 lookups.
 
-**Access:** Intended: All roles · Enforced: **Any authenticated** ⚠️
+> 🆕 **develop (P2, 2026-10-25):** response me `customerVisibility` — brand customer ko dikhta hai ya
+> nahi, aur kyun nahi. Shape aur reasons: [Customer visibility](#customer-visibility-outlet--album-rule-).
+
+**Access:** Intended: Vendor + Admin · Enforced: **VENDOR + ADMIN** (`isVendorOrAdmin`) — customer ko `403`
 
 ### Query Params
 | Param | Type | Required | Notes |
 |---|---|---|---|
-| `brandId` | ObjectId | ⚠️ | **Admin ke liye effectively required** — token me `brandId` nahi hota, na do to `400` |
+| `brandId` | ObjectId | ⚠️ | **Admin ke liye required** — na do to `422 "brandId is required when acting as an admin"`. Vendor na bheje to apna brand; ✅ (prod par live 2026-10-27) vendor kisi **aur** brand ki id bheje to `403` |
 
 ```http
 GET /brands/get?brandId=68f1a2b3c4d5e6f7a8b9c3a1
 ```
 
 ### Success — `200`
+Shape (keys code ke `$lookup` se — har joda hua record **ek object**, array nahi; link na ho to key absent; lambi values chhoti ki):
+
 ```json
 {
   "success": true,
@@ -2379,70 +3254,85 @@ GET /brands/get?brandId=68f1a2b3c4d5e6f7a8b9c3a1
   "data": {
     "_id": "68f1a2b3c4d5e6f7a8b9c3a1",
     "brandName": "cafe mocha",
-    "legalBusinessName": "mocha hospitality private limited",
     "description": "artisanal coffee and continental bites",
     "logo": "https://res.cloudinary.com/…/mocha-logo.jpg",
     "coverImage": "https://res.cloudinary.com/…/mocha-cover.jpg",
-    "email": "hello@cafemocha.in",
-    "whatsappNumber": "9812345678",
     "uniqueId": "TDB000078",
     "merchantId": "TM-362P-7M7E-ZB2N",
-    "businessRegistrationStatus": "REGISTERED",
-    "businessEntityType": "PRIVATE_LIMITED",
-    "status": "PENDING",
-    "isApproved": false,
+    "status": "APPROVED",
+    "isApproved": true,
+    "isReviewed": true,
+    "isRejected": false,
+    "isRevoked": false,
     "isSubscribed": true,
-    "hasAcceptedPartnershipDeed": true,
+    "isActive": true,
+    "isTopBrand": false,
+    "isDummy": false,
     "followersCount": 1240,
     "avoidanceCount": 12,
     "subBrandsLimit": 10,
     "subBrandsUsed": 3,
-    "isActive": true,
-    "user": [{ "_id": "…", "role": "VENDOR", "name": "rahul sharma", "email": "…" }],
-    "pans": [{ "pan": "AABCM1234K", "isVerified": true }],
-    "gsts": [{ "gstNumber": "23AABCM1234K1ZP", "isVerified": true }],
-    "banks": [{ "accountNumber": "912010012345678", "ifscCode": "UTIB0001234" }],
-    "systemverifies": [{ "score": 94, "status": "APPROVED" }],
-    "subscribeds": [{ "status": "ACTIVE", "endDate": "2026-09-21T23:59:59.000Z" }],
-    "categories": [{ "name": "food & beverages" }],
-    "subcategories": [{ "name": "cafe" }],
-    "locations": [{ "formattedAddress": "…", "geo": {} }],
-    "workhours": [{ "monday": {} }],
-    "subbrands": [{ "_id": "…", "storeId": "MOCHA-VN-01", "user": [], "locations": [], "workhours": [] }],
+    "isRealDummy": false,
+    "realDummyNote": null,
+    "realDummyUpdatedAt": null,
+    "realDummyUpdatedByAdminId": null,
+    "user": { "_id": "…", "name": "rahul sharma", "role": "VENDOR", "email": "…", "mobile": "…", "whatsappNumber": "…" },
+    "pan": { "…": "…" },
+    "gst": { "…": "…" },
+    "bank": { "accountHolderName": "…", "accountNumber": "912010012345678", "ifscCode": "UTIB0001234", "bankName": "…" },
+    "location": { "formattedAddress": "…", "geo": { "type": "Point", "coordinates": [75.8937, 22.7533] } },
+    "systemVerify": { "score": 94, "status": "APPROVED" },
+    "subscribed": { "status": "ACTIVE", "endDate": "2026-09-21T23:59:59.000Z" },
+    "category": { "name": "food & beverages" },
+    "subCategory": { "name": "cafe" },
+    "workHours": { "monday": { "start": "09:00", "end": "22:00", "isOpen": true } },
+    "firstSubBrand": { "_id": "…", "storeId": "MOCHA-VN-01", "user": { "…": "…" }, "location": { "…": "…" }, "workHours": { "…": "…" } },
+    "customerVisibility": { "isVisible": true, "reasons": [], "showcaseReady": true, "hasLiveVoucher": true },
     "createdAt": "2026-03-15T00:00:00.000Z"
   }
 }
 ```
 
+`isRealDummy` · `realDummyNote` · `realDummyUpdatedAt` · `realDummyUpdatedByAdminId` sirf admin ko (vendor ke response se hata diye jaate hain).
+
 ### Errors
 | Status | Message | Kab |
 |---|---|---|
-| `400` | `Invalid brand ID` | Format galat, **ya `brandId` bheja hi nahi** |
-| `404` | *(empty)* | Brand nahi mila |
-| `422` | `Invalid brandId` | Joi check |
+| `403` | `Forbidden: You do not have permission to perform this action on this brand.` | Vendor ne doosre brand ki id bheji (✅ prod par live 2026-10-27) |
+| `404` | `Brand not found!` | Brand nahi mila / deleted |
+| `404` | `No brand is linked to your account` | Vendor ke account par brand nahi |
+| `422` | `brandId is required when acting as an admin` | Admin ne `brandId` nahi bheja |
+| `422` | `Invalid brandId` | Joi format check |
 
 ### ⚠️ Notes
 
-**1. Admin ke liye `brandId` mandatory hai.** Controller ka logic `req.query.brandId || req.brandId` hai — admin token me `brandId` nahi hota, to `undefined` pass hoga aur `400` aayega.
+**1. Admin ke liye `brandId` mandatory hai** — `resolveActorBrand`: admin token me brand nahi hota, na bhejo to `422`. (Pehle `400 "Invalid brand ID"` aata tha.)
 
 **2. Ye admin ka brand-detail view hai** — PAN/GST/Bank/verification/subscription sab ek jagah. Admin ke liye ye sahi hai.
 
-**3. ⚠️ Problem ye hai ki customer ko bhi yahi data milta hai** — role-based projection nahi hai ([Appendix B](#appendix-b--known-issues)).
+**3. ✅ Ownership (develop 2026-10-26, stage / prod par live 2026-10-27 — hotfix).** Pehle controller `req.query.brandId || req.brandId` seedha service ko deta tha aur vendor ka ownership check nahi tha — koi bhi vendor kisi bhi brand ka `brandId` bhej kar uska poora detail (PAN / GST / bank) padh sakta tha. Ab service (`getActorBrand`) pehle `resolveActorBrand` chalata hai: vendor sirf apna brand (bheje ya na bheje), doosre ka `403`; admin koi bhi, `brandId` ke saath. Customer ko route hi `403` deta hai. [Appendix B #6](#appendix-b--known-issues).
 
 **4. ✅ Approval state brand pe denormalized hai** — `status`, `isApproved`, `isReviewed`, `isRejected`, `isRevoked`, `rejectionReason`, `revokeReason`, `isApprovalAcknowledged`. `PUT /brands/admin/verifications/:brandId/review` (#25) aur vendor ka acknowledge inhe maintain karte hain. Brand list/detail screens ke liye yahi kaafi hai; `systemverifies[0]` sirf score/flags ke liye.
 
 **5. `subBrandsLimit`/`subBrandsUsed` plan pools batate hain** — detailed usage ke liye `GET /subscribeds/get?brandId=…` (#76) behtar hai.
 
+**6. 🆕 "Coming soon" on a real brand (2026-10-23)** — admin ke liye response me hamesha `isRealDummy` (boolean), `realDummyNote`, `realDummyUpdatedAt`, `realDummyUpdatedByAdminId` (warna `null`). Vendor ko yahi endpoint ye chaaron keys **nahi** deta. Switch: [`PUT /brands/admin/real-dummy/:brandId`](#real-brand-par-coming-soon--put-brandsadminreal-dummybrandid-).
+
 ---
 
 ## 27. PUT /brands/update
 
-**Access:** Intended: Vendor + Admin · Enforced: **Any authenticated** ⚠️
+**Access:** Intended: Vendor + Admin · Enforced: **VENDOR + ADMIN** (`isVendorOrAdmin`) **+ ownership** (✅ prod par live 2026-10-27)
 
 ### Query Params
 | Param | Type | Required | Notes |
 |---|---|---|---|
-| `brandId` | ObjectId | ⚠️ | **Admin ke liye required** |
+| `brandId` | ObjectId | ⚠️ | **Admin ke liye required** (`422` warna). Vendor na bheje to apna brand; doosre brand ki id → `403` |
+
+> ✅ **Stage / prod par live (hotfix, 2026-10-27):** pehle vendor `?brandId=` me kisi bhi brand ki id
+> bhej kar uska naam / description / logo / cover / sub-category badal sakta tha (email / mobile
+> `assertCanWriteIdentity` se ruk jaate the). Ab service pehle `resolveActorBrand` chalata hai — upload se
+> bhi pehle, to refuse hua request kuch kharch nahi karta. [Appendix B #6](#appendix-b--known-issues).
 
 ### Body — sab optional
 | Field | Type | Validation | Notes |
@@ -2482,7 +3372,9 @@ chali jaati. Brand pehle check hota hai, to galat id ab bhi kuch nahi kharchti.
 ### Errors
 | Status | Message |
 |---|---|
-| `404` | `Brand not found!` / `User not found!` |
+| `403` | `Forbidden: You do not have permission to perform this action on this brand.` — 🔧 vendor, doosre brand ki id |
+| `404` | `Brand not found!` / `User not found!` / `No brand is linked to your account` |
+| `422` | `brandId is required when acting as an admin` |
 | `422` | `Brand name must be at least 2 characters` / `cannot exceed 150 characters` |
 | `422` | `Please enter a valid email address` |
 | `422` | `Sub-category ID is required during onboarding` |
@@ -2504,6 +3396,10 @@ chali jaati. Brand pehle check hota hai, to galat id ab bhi kuch nahi kharchti.
 
 Admin kisi brand ke liye outlet bana sakta hai — **aur wahi call dobara maarne par
 OTP resend hota hai.**
+
+> 🟡 **P10.4 (develop):** naya outlet `NEVER_VERIFIED` (+ hold) banta hai; manager `outletNumberHoldHours`
+> (default 72) me OTP na de to job apne aap cancel karta hai. Uske pehle location / hours / voucher /
+> edit **admin ke liye bhi** `409 OUTLET_NOT_VERIFIED` (D14). Poora: [vendor doc #34 note 14](./vendor_panel_api_doc.md#34-post-subbrandssignup-with-whatsapp).
 
 **Access:** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN + ownership**
 
@@ -2685,11 +3581,39 @@ jayaz hai.
 `applyIdentityChange` ka niyam: unverified key apna channel off kar deti hai, aur
 verify hone par apne aap wapas on nahi hoti.
 
+**4. 🆕 🟡 (P10.4)** Kabhi verify na hue outlet par hold naye number se poora dobara shuru (D9);
+`REVERIFY` par hold nahi. Poora: [vendor doc #34a](./vendor_panel_api_doc.md#34a-patch-subbrandssubbrandidwhatsapp-number).
+
+---
+
+## 28b. PATCH /subBrands/:subBrandId/cancel 🆕 🟡
+
+Kabhi verify na hua outlet hatana — outlet + manager account soft-delete, slot wapas, number free.
+
+**Access:** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN + ownership** (admin koi bhi outlet — D14)
+
+> 📮 Request vendor collection (`trydood-vendor`) me hai — dekhein #28 ka note. Poora contract (response,
+> errors, panel): [vendor doc #34b](./vendor_panel_api_doc.md#34b-patch-subbrandssubbrandidcancel--).
+
+> 🟡 **Develop par (P10.4, 2026-10-28).**
+
+- **Body nahi.** `200` → `{ subBrandId, uniqueId, cancelled: true, slotReleased: true, outletType }`.
+- Sirf `verificationState: "NEVER_VERIFIED"`. Verified / `REVERIFY` → `409 OUTLET_ALREADY_VERIFIED`.
+- Voucher / claim / payment jude hon → `409 OUTLET_HAS_ACTIVITY` (sirf purane outlets par mumkin) — pehle
+  wo hatao, ya support decide kare.
+- Usi pal verify / job cancel → `409 OUTLET_STATE_CHANGED`.
+- **Admin ke liye:** purane (release se pehle bane) unverified outlets ko hatane ka raasta yahi hai (D16) —
+  wo apne aap cancel nahi hote.
+
 ---
 
 ## 29. GET /subBrands/get-all
 
-**Access:** Intended: Vendor + Admin · Enforced: **Any authenticated** ⚠️
+**Access:** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN** (`isVendorOrAdmin`) ✅ · vendor apne brand ke outlets (`resolveActorBrand`)
+
+> 🟡 **P10.4 (develop):** har row `verificationState` (`NEVER_VERIFIED` · `VERIFIED` · `REVERIFY`) aur
+> `holdExpiresAt` (sirf pending + hold wale par; warna `null`). Panel inhi ko padhe, raw flags nahi —
+> [vendor doc #35 note 5](./vendor_panel_api_doc.md#35-get-subbrandsget-all).
 
 ### Query Params
 | Param | Type | Required | Default | Notes |
@@ -2786,7 +3710,7 @@ to password hash jaisi koi cheez nikal nahi sakti.
 > `login-with-email` / `login-with-mobile` chalte hi nahi.
 >
 > **`whatsappNumber` in dono me se kisi se bhi nahi badalta** — uske liye
-> `PATCH /users/admin/:userId/contact` hai.
+> `PATCH /users/admin/:userId/contact` ([#15a](#15a-patch-usersadminuseridcontact-)) hai.
 >
 > Naya error: `409` jab wahi email/mobile kisi doosre account par ho (`User` par
 > partial unique index hai; profile par kabhi nahi tha).
@@ -2794,6 +3718,10 @@ to password hash jaisi koi cheez nikal nahi sakti.
 ## 30. PUT /subBrands/update/:subBrandId
 
 **Access:** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN + ownership**
+
+> 🟡 **P10.4 (develop):** `NEVER_VERIFIED` outlet par koi edit → `409 OUTLET_NOT_VERIFIED`
+> (`details: { code, subBrandId }`) — **admin par bhi** (D14). `REVERIFY` par edits chalte hain.
+> Same gate: work hours, outlet ka location create / update / delete, voucher par outlet lagana.
 
 ### Path Params
 | Param | Type | Required |
@@ -2843,11 +3771,14 @@ to password hash jaisi koi cheez nikal nahi sakti.
 
 # Location APIs
 
-Global middleware: `router.use(verifyJwtToken)` — ⚠️ **koi role gate nahi**
+Har route ka apna gate (koi `router.use` nahi) — gate sirf *kaun* call kar sakta hai batata hai, *kiska* address ye service tay karti hai: create / getAll / update `isBrandSideOrAdmin` (vendor, outlet manager, admin), customer ka upsert `isCustomer`, get / delete `verifyJwtToken` + service me har role ki ownership.
 
 ## 31. POST /locations/create
 
 **Access:** **VENDOR+SUB_VENDOR+ADMIN**, ownership verified ✅ · admin kisi bhi brand / outlet / **customer** ka
+
+> 🟡 **P10.4:** outlet ka address + outlet `NEVER_VERIFIED` → `409 OUTLET_NOT_VERIFIED`, admin par bhi.
+> Update (#34) / delete (#35) par bhi.
 
 > 🆕 **Admin ab customer ka address bhi bana sakta hai** — `userId` me us customer
 > ke user ki id bhejein, aur `isBrandAddress` / `isSubBrandAddress` dono chhod
@@ -2951,13 +3882,13 @@ GET /locations/getAll?isBrandAddress=true&limit=100
 | `422` | `Invalid brandId format` |
 
 ### ⚠️ Note
-⚠️ **Bina filter ke ye platform ke saare addresses deta hai — customers ke ghar ke pate bhi.** Admin ke liye by design theek hai, par ye endpoint **vendor aur customer ko bhi khula hai** ([Appendix B](#appendix-b--known-issues)).
+⚠️ **Admin ko bina filter ke platform ke saare addresses milte hain — customers ke ghar ke pate bhi** (by design). Vendor / outlet manager ko sirf apne brand / outlet ke (`resolveActorBrand`), customer ko route hi `403` deta hai (`isBrandSideOrAdmin`). Pehle ye endpoint vendor aur customer ko bhi poora khula tha — band.
 
 ---
 
 ## 33. GET /locations/get/:id
 
-**Access:** Intended: All roles · Enforced: **Any authenticated** ⚠️
+**Access:** Intended: All roles · Enforced: **Any authenticated** (`verifyJwtToken`) + har role ki ownership service me ✅
 
 ### Path Params
 | Param | Type | Required |
@@ -2979,14 +3910,14 @@ GET /locations/getAll?isBrandAddress=true&limit=100
 | `404` | `Location not found` |
 | `422` | `Location ID is required` / `Invalid location ID format` |
 
-### ⚠️ Note
-Koi ownership check nahi — admin ke liye theek, par sabke liye khula hai.
+### Note
+Ownership service me (`services/locations/getLocation.js`): admin koi bhi; customer sirf apna address; vendor apne brand / outlets ke; outlet manager apne outlet ka — baaki `403 "Forbidden"`. (Pehle koi ownership check nahi tha.)
 
 ---
 
 ## 34. PUT /locations/update/:id
 
-**Access:** **VENDOR+ADMIN**, ownership verified ✅ · admin kisi ka bhi
+**Access:** **VENDOR+SUB_VENDOR+ADMIN** (`isBrandSideOrAdmin`), ownership verified ✅ · admin kisi ka bhi
 
 ### Path Params
 | Param | Type | Required |
@@ -3011,7 +3942,7 @@ Koi ownership check nahi — admin ke liye theek, par sabke liye khula hai.
 
 ## 35. DELETE /locations/delete/:id
 
-**Access:** **VENDOR+ADMIN**, ownership verified ✅ · admin kisi ka bhi
+**Access:** **Any authenticated** (`verifyJwtToken`) + ownership har kind par ✅ — customer apna address, vendor apne brand / outlet ka, outlet manager apne outlet ka, admin kisi ka bhi
 
 ### Path Params
 | Param | Type | Required |
@@ -3038,7 +3969,7 @@ Koi ownership check nahi — admin ke liye theek, par sabke liye khula hai.
 
 Admin showcase ke **saare 11 endpoints** chala sakta hai — section/media CRUD samet. Sab `routes/showcase.js` me `isVendorOrAdmin` ke peeche hain, aur `helpers/showcases/resolveSectionForActor.js:62` admin ke liye ownership check chhod deta hai (*"Admins moderate every brand's content"*).
 
-> 🆕 **Vendor ke do floors admin par lagte hi nahi.** Vendor ko ab rok hai: media delete/hide jo section ko `minItemsPerSection` (default 3) se neeche le jaaye, brand ka aakhri section delete karna, aur aakhri dikhne wale section ko hide karna. **Admin ke liye chaaron rok band hain** — admin media hata raha hai matlab wo moderate kar raha hai, aur floor use rokta to platform kisi galat content ko sirf isliye nahi utaar paata kyunki utaarne se section chhota ho jaata. Floor vendor ko apni galti se bachane ke liye hai, content ko platform se nahi. Poori table [vendor doc](./vendor_panel_api_doc.md) ke Showcase floors block me.
+> 🆕 **Vendor ke do floors admin par lagte hi nahi.** Vendor ko ab rok hai: media delete/hide jo section ko `minItemsPerSection` (default 3) se neeche le jaaye, brand ka aakhri section delete karna, aakhri dikhne wale section ko hide karna, aur 🆕 (develop, P7) brand ka aakhri **customer-visible album** (on + `minItemsPerSection` media) hide / band / delete karna (`422`). **Admin ke liye ye saari rok band hain** — admin media hata raha hai matlab wo moderate kar raha hai, aur floor use rokta to platform kisi galat content ko sirf isliye nahi utaar paata kyunki utaarne se section chhota ho jaata. Floor vendor ko apni galti se bachane ke liye hai, content ko platform se nahi. Poori table [vendor doc](./vendor_panel_api_doc.md) ke Showcase floors block me.
 
 > 🆕 **`409` — koi aur usi section par kaam kar raha tha.** Admin aur vendor ek hi
 > section par ek saath likhein to **dusre ko `409`** milta hai aur uski write hoti
@@ -3061,7 +3992,8 @@ Neeche sirf do ke apne section hain — `get-all` (#36) aur `reorder` (#37), kyu
 >    batch ka ek.
 > 2. **Video replace hamesha `422`** — replace video ke saath `thumbnail` poster
 >    maangta hai, panel bhejta nahi.
-> 3. **Editor customer wala endpoint padhta hai** (`GET
+> 3. ✅ **Fixed (owner, 2026-10-24) — editor ab #36 aur vendor doc #44 padhta hai ([A-5](#a-5--showcase-editor-customer-endpoint-padhta-tha--fixed)).**
+>    Pehle: **editor customer wala endpoint padhta tha** (`GET
 >    /showcase/get-brand-showcase/:brandId`) — wo sirf customer ko dikhne layak
 >    sections deta hai (min media floor, `isVisible`, active, verified brand). Naya
 >    khaali album refetch par **gayab** ho jaata hai, hidden sections/media kabhi
@@ -3073,7 +4005,7 @@ Neeche sirf do ke apne section hain — `get-all` (#36) aur `reorder` (#37), kyu
 
 ## 36. GET /showcase/section/get-all
 
-**Access:** Intended: Admin + Vendor · Enforced: **Any authenticated** ⚠️
+**Access:** Intended: Admin + Vendor · Enforced: **VENDOR+ADMIN** (`isVendorOrAdmin`) ✅ · vendor sirf apna brand (`resolveActorBrand`)
 
 ### Query Params
 | Param | Type | Required | Default | Validation |
@@ -3134,7 +4066,7 @@ Neeche sirf do ke apne section hain — `get-all` (#36) aur `reorder` (#37), kyu
 
 ## 37. PUT /showcase/section/:brandId/reorder
 
-**Access:** Intended: Admin + Vendor · Enforced: **Any authenticated** ⚠️
+**Access:** Intended: Admin + Vendor · Enforced: **VENDOR+ADMIN** (`isVendorOrAdmin`) ✅ · vendor sirf apna brand (`resolveActorBrand`)
 
 ### Path Params
 | Param | Type | Required |
@@ -3448,7 +4380,7 @@ Ye 11 endpoints vendor ke liye banaye gaye hain, par admin bhi chala sakta hai �
 > milna hi chahiye. Refusal ke saath `liveClaims`, `breakdown` aur
 > `suggestedAction` aata hai — aur suggestion pause hai (45), jo turant customer
 > se hata deta hai par claims ko chhoota nahi.
-**Access (43):** Intended: Vendor + Admin · Enforced: **Any authenticated** ⚠️
+**Access (43):** Intended: Vendor + Admin · Enforced: **VENDOR+ADMIN** (`isVendorOrAdmin`) ✅
 
 ### 43. GET /vouchers/versions/get-all — approval queue
 
@@ -3465,6 +4397,7 @@ Admin ke liye ye sabse important hai.
 | `versionNumber` | number | ❌ | – | |
 | `versionCode` | string | ❌ | – | |
 | `isImmutable` · `isActive` | boolean | ❌ | – | |
+| `isDummy` | boolean | ❌ | – | 🆕 `true` = sirf dummy ("Coming soon") brands ki versions, `false` = sirf real brands ki. Na bhejein to dono. `true`/`false`/`"true"`/`"false"` chalte hain, kuch aur bhejne par `422 isDummy must be true or false` |
 | `includeDeleted` | boolean | ❌ | `false` | 🆕 **Sirf aapke liye.** Deleted versions bhi dikhne lagti hain, apne `deletedAt`/`deletedBy`/`deleteReason` ke saath. Vendor bheje to **403** |
 | `fromDate` · `toDate` | ISO date | ❌ | – | |
 | `sortBy` | string | ❌ | `NEWEST` | Presets: `NEWEST` \| `EXPIRING_SOON` \| `RELEVANCE`. Raw columns: `name` \| `versionNumber` \| `status` \| `startAt` \| `endAt` \| `publishedAt` \| `createdAt` \| `updatedAt`. ⚠️ **`DISTANCE` yahan nahi chalta** — is listing me customer ka geo context hai hi nahi, bhejne par `422` |
@@ -3495,6 +4428,11 @@ GET /vouchers/versions/get-all?includeDeleted=true&status=DELETED
 GET /vouchers/versions/get-all?approvedBy=68f1a2b3c4d5e6f7a8b9c000&fromDate=2026-08-01
 ```
 
+**🆕 Sirf real brands (dummy hata ke):**
+```http
+GET /vouchers/versions/get-all?isDummy=false&status=PUBLISHED
+```
+
 #### Success — `200`
 ```json
 {
@@ -3510,6 +4448,15 @@ GET /vouchers/versions/get-all?approvedBy=68f1a2b3c4d5e6f7a8b9c000&fromDate=2026
         "_id": "68f1a2b3c4d5e6f7a8b9c2b1",
         "voucherId": "68f1a2b3c4d5e6f7a8b9c2a1",
         "brandId": "68f1a2b3c4d5e6f7a8b9c3a1",
+        "brand": {
+          "_id": "68f1a2b3c4d5e6f7a8b9c3a1",
+          "brandName": "cafe mocha",
+          "uniqueId": "#TB000078",
+          "isApproved": true,
+          "isActive": true,
+          "isDummy": false,
+          "dummyBatch": null
+        },
         "versionNumber": 1,
         "versionCode": "TDV000451-V1",
         "name": "flat 30% off on total bill",
@@ -3553,8 +4500,11 @@ GET /vouchers/versions/get-all?approvedBy=68f1a2b3c4d5e6f7a8b9c000&fromDate=2026
 | `404` | `No any voucherversion found` — **empty-state (queue khali)** |
 | `422` | `Invalid Voucher Id` / `Invalid Brand Id` |
 | `422` | Invalid `status`/`sortBy` |
+| `422` | `isDummy must be true or false` |
 
 #### ⚠️ Notes
+**0. 🆕 Dummy badge — `brand.isDummy` + `brand.dummyBatch`.** Har row ke `brand` block me. `isDummy` **hamesha boolean** hai (real brand par bhi `false` aata hai, key kabhi gayab nahi hoti); `dummyBatch` dummy par batch ka naam (`"CHENNAI-DUMMY-1"`), real par `null`. Panel `isDummy: true` par "Dummy" / "Coming soon" badge dikhaye. Filter `?isDummy=` (upar table) brand ke through lagta hai, `brandId` ke saath bhi chalta hai — `brandId=<real>&isDummy=true` khaali (`404`) aata hai. Ye do keys **sirf is listing** par hain; voucher detail (#49) ka `brand` block abhi waisa hi hai. Dummy brands kya hain → `docs/dummy_brands_runbook.md`.
+
 **1. Ye **versions** deta hai, vouchers nahi** — ek voucher ke multiple versions honge.
 **2. `sortBy=RELEVANCE` bina `search` ke silently `NEWEST` ban jaata hai.**
 **3. Review (#38) aur publish (#42) ke liye `versionId` yahin se milta hai.**
@@ -4557,7 +5507,7 @@ nahi hota. Reads par koi gate nahi (customer app brand profile par dikhati hai).
 
 ## 57. GET /brandFeatures/get-all
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Query Params
 | Param | Type | Required | Default | Validation |
@@ -4610,7 +5560,7 @@ nahi hota. Reads par koi gate nahi (customer app brand profile par dikhati hai).
 
 ## 58. GET /brandFeatures/get/:featureId
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Path Params
 | Param | Type | Required |
@@ -4781,7 +5731,7 @@ isActive:    true
 
 ## 62. GET /categories/getAll
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Query Params
 | Param | Type | Required | Default | Notes |
@@ -4862,7 +5812,7 @@ Admin panel me `isActive` filter **na** lagayein — inactive categories bhi man
 
 ## 63. GET /categories/get/:id
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Path Params
 | Param | Type | Required |
@@ -5095,7 +6045,7 @@ image:       <file>
 
 ## 67. GET /subCategories/getAll
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Query Params
 Same as [#62](#62-get-categoriesgetall), plus:
@@ -5157,7 +6107,7 @@ Same as [#62](#62-get-categoriesgetall), plus:
 
 ## 68. GET /subCategories/get/:id
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Path Params
 | Param | Type | Required |
@@ -5485,15 +6435,20 @@ Price se aisa hota tha: 3 saal Basic (₹30,000) → 1 saal Premium (₹15,000) 
 
 ## 72. GET /subscriptions/getAll
 
-**Access:** Intended: Vendor + Admin · Enforced: **Any authenticated**
+**Access:** Intended: Vendor + Admin · Enforced: **Any authenticated** (`verifyJwtToken`) — 🔧 (develop, 2026-10-26) admin ke alawa sabko sirf **on-sale** plans (`isActive: true`)
+
+> 🔧 **develop (2026-10-26 — stage / prod par abhi nahi):** pehle har signed-in user (customer bhi) ko
+> inactive (unreleased / retired) plans bhi milte the, aur `isActive=false` koi bhi bhej sakta tha. Ab
+> admin ke alawa sabko sirf on-sale plans; `isActive` filter sirf admin ka — `GET /subscriptions/compare`
+> (`includeInactive`) jaisa. `search` ab plain text hai (`(` par pehle `500` aata tha).
 
 ### Query Params
 | Param | Type | Required | Default | Validation |
 |---|---|---|---|---|
 | `page` · `limit` | number | ❌ | `1` / `10` | |
-| `search` | string | ❌ | – | `""` allowed |
+| `search` | string | ❌ | – | `""` allowed. Plain text — naam / description me, case-insensitive (regex nahi) |
 | `type` | string | ❌ | – | SUBSCRIPTION_TYPES — derived label (`CUSTOM` bhi). `QUATERLY` bhi chalta hai, QUARTERLY padha jaata hai |
-| `isActive` | boolean\|string | ❌ | – | |
+| `isActive` | boolean\|string | ❌ | – | **Sirf admin ke liye maana jaata hai** — baaki ke liye hamesha on-sale |
 | `sortBy` | string | ❌ | – | `price` \| `name` \| `createdAt` |
 | `sortOrder` | string | ❌ | – | `asc` \| `desc` |
 
@@ -5501,7 +6456,7 @@ Price se aisa hota tha: 3 saal Basic (₹30,000) → 1 saal Premium (₹15,000) 
 ```json
 {
   "success": true,
-  "message": "Subscriptions fetched successfully",
+  "message": "Subscriptions fetched",
   "data": {
     "total": 3,
     "totalPages": 1,
@@ -5545,7 +6500,7 @@ Price se aisa hota tha: 3 saal Basic (₹30,000) → 1 saal Premium (₹15,000) 
 
 ## 73. GET /subscriptions/get/:id
 
-**Access:** Intended: Vendor + Admin · Enforced: **Any authenticated**
+**Access:** Intended: Vendor + Admin · Enforced: **Any authenticated** (`verifyJwtToken`) — 🔧 (develop, 2026-10-26) inactive plan sirf admin ko; baaki ko `404 "Subscription not found"` (jaise plan hai hi nahi). Vendor ka apna current plan `GET /subscribeds/get` deta hai, on sale ho ya na ho
 
 ### Path Params
 | Param | Type | Required |
@@ -5556,7 +6511,7 @@ Price se aisa hota tha: 3 saal Basic (₹30,000) → 1 saal Premium (₹15,000) 
 ```json
 {
   "success": true,
-  "message": "Subscription fetched successfully",
+  "message": "Subscription fetched",
   "data": {
     "_id": "…", "name": "BASIC", "tier": 1, "type": "MONTHLY", "typeLabel": "Monthly",
     "durationValue": 1, "durationUnit": "MONTH", "durationLabel": "1 month",
@@ -6629,6 +7584,7 @@ Saare brands ki subscriptions — **renewals worklist**.
 | `status` | string | ❌ | – | SUBSCRIBED_STATUS enum — `SCHEDULED` = queued renewals |
 | `source` | string | ❌ | – | `PAYMENT` \| `ADMIN_PAYMENT` \| `ADMIN_MANUAL` |
 | `expiringInDays` | number | ❌ | – | ⚠️ Integer 1–365 — **renewals worklist** (jinke peeche plan queued hai wo **nahi** aate) |
+| `isDummy` | boolean | ❌ | – | 🆕 `true` = sirf dummy ("Coming soon") brands ke plans, `false` = sirf real brands ke. Na bhejein to dono. `true`/`false`/`"true"`/`"false"`, warna `422` |
 | `fromDate` · `toDate` | ISO date | ❌ | – | |
 | `sortBy` | string | ❌ | – | `createdAt` \| `endDate` \| `startDate` \| `paidAmount` |
 | `sortOrder` | string | ❌ | – | `asc` \| `desc` |
@@ -6648,6 +7604,11 @@ GET /subscribeds/admin/get-all?source=PAYMENT&sortBy=paidAmount&sortOrder=desc
 GET /subscribeds/admin/get-all?source=ADMIN_MANUAL
 ```
 
+**🆕 Free grants, dummy brands hata ke** (dummy ke 1-saal ke plans bhi `ADMIN_MANUAL` free grants hain):
+```http
+GET /subscribeds/admin/get-all?source=ADMIN_MANUAL&isDummy=false
+```
+
 ### Success — `200`
 ```json
 {
@@ -6661,7 +7622,7 @@ GET /subscribeds/admin/get-all?source=ADMIN_MANUAL
     "data": [
       {
         "_id": "68f1a2b3c4d5e6f7a8b9f001",
-        "brand": { "_id": "…", "brandName": "cafe mocha", "uniqueId": "TDB000078" },
+        "brand": { "_id": "…", "brandName": "cafe mocha", "uniqueId": "TDB000078", "isDummy": false, "dummyBatch": null },
         "plan": { "_id": "…", "name": "BASIC", "type": "MONTHLY", "price": 999 },
         "status": "ACTIVE",
         "mode": "IMMEDIATE",
@@ -6687,8 +7648,11 @@ GET /subscribeds/admin/get-all?source=ADMIN_MANUAL
 | `422` | `Invalid brandId` / `Invalid subscriptionId` |
 | `422` | Invalid `status`/`source`/`sortBy` |
 | `422` | `expiringInDays` 1–365 ke bahar |
+| `422` | `isDummy must be true or false` |
 
 ### ⚠️ Notes
+
+**0. 🆕 Dummy badge — `brand.isDummy` + `brand.dummyBatch`.** Har row ke `brand` block me. `isDummy` hamesha boolean (real par `false`), `dummyBatch` dummy par batch naam, real par `null`. Dummy brands ke plan `source: ADMIN_MANUAL`, `paymentMode: FREE`, `isFreeGrant: true`, `paidAmount: 0` hote hain aur ~1 saal baad renewals worklist (`expiringInDays`) me bhi aayenge — wahan `isDummy=false` lagayein taaki sirf real vendors chase hon. `isDummy` filter `brandId` ke saath bhi chalta hai (`brandId=<dummy>&isDummy=false` → `404`).
 
 **1. `expiringInDays` sabse useful filter hai** — validator comment: *"Renewals worklist: active plans ending within N days, minus those with a renewal already queued behind them."* Jo vendor pehle hi renew kar chuka (`AFTER_CURRENT`) use chase karne ki zarurat nahi, isliye wo list me nahi aata. Backend `[7, 3, 1]` days pe reminders bhejta hai (sirf term se chhote offsets, queued wale ko koi nahi), to admin panel me bhi wahi cadence rakhein.
 
@@ -7095,6 +8059,9 @@ GET /subscribeds/history?brandId=68f1a2b3c4d5e6f7a8b9c3a1&limit=50
 **2. `UPGRADED` rows pe `forfeitedDays`/`forfeitedValue` dekhein** — yahi forfeited worklist (#79) me aata hai.
 
 **3. `ADMIN_GRANTED` rows pe `note` mandatory tha** — grant ka reason yahin milega.
+
+**4. 📝 Planned (abhi build nahi hua) — `ORDER_CREATED` row par "paid hua ya nahi".** Har baar vendor Pay dabata hai to ek `ORDER_CREATED` row banti hai, payment ho ya na ho. Checkout band karke promo lagaya aur phir pay kiya, to do rows dikhti hain — pehli bina payment ki. Prod example (13 Oct, BEYOU WOMEN GYM): ₹2358.82 order `created` (koi paisa nahi, koi invoice number nahi), phir ₹1998.92 promo ke saath `captured`. Ye normal Razorpay behaviour hai (order ≠ payment; Razorpay order cancel karne ka API nahi deta) — rokna ya delete nahi karna. Abhi response me koi field nahi jo unpaid row ko alag bataye, isliye admin confuse hota hai.
+Owner decision (2026-10-13): har row par **naya key** `paymentStatus` (`PAID` / `NOT_PAID`) linked transaction ke status se — `created` / `attempted` = `NOT_PAID`. Admin aur vendor dono ko (vendor doc #69). Panel `NOT_PAID` par grey "Not paid" label. Rules: sirf naya key add, koi purana key nahi badlega, rows hide nahi hongi, transaction data DB me nahi badlega; aage koi bhi endpoint jo subscription transactions/history laaye wo bhi yahi key de. Claim-side payment list pehle se `status` deti hai.
 
 > 📖 Poori design — pricing, tax, forfeit policy, entitlement sync → [subscription_lifecycle_design.md](./subscription_lifecycle_design.md)
 
@@ -8317,7 +9284,7 @@ Stored payload ko dobara process karta hai — **recovery tool**.
 
 Chargebacks — **deadline-first worklist**.
 
-**Access:** Intended: ADMIN · Enforced: **ADMIN** ✅
+**Access:** Intended: Admin + Vendor · Enforced: **Any authenticated** (`verifyJwtToken`) — scope service me: admin sab, vendor sirf apne brand ke, outlet manager 🔧 (develop, 2026-10-27) sirf **apne outlet** ke (payment ke outlet se; account par outlet nahi → `403`) — dono alag, chhota shape; customer `403`
 
 ### Query Params
 | Param | Type | Required | Default | Validation |
@@ -8433,8 +9400,15 @@ field projection me the wo **hamesha khaali aate the**:
 | Field | Vendor / Sub-vendor | **Admin** | Customer |
 |---|---|---|---|
 | `fullName` · `uniqueId` | ✅ | ✅ | — block hi nahi |
-| `email` · `mobile` · `whatsappNumber` | ❌ | ✅ | — block hi nahi |
+| `email` | ✅ | ✅ | — block hi nahi |
+| `mobile` · `whatsappNumber` | ❌ | ✅ | — block hi nahi |
+| 🆕 🟡 `isDeleted` | ✅ | ✅ | — |
 | `_id` | ❌ | ❌ | — |
+
+🟡 **Deleted customer (P12.1, [deletion plan §10](./account_deletion_plan.md)):** purge ke baad profile saaf ho jaati
+hai, to `fullName` (aur admin ko `email` / `mobile` / `whatsappNumber`) **claim ke snapshot** se aate hain — sale ke
+waqt jo the. `isDeleted: true` par panel **"Account deleted"** badge dikhaye. Vendor ko snapshot se sirf naam — email /
+number kabhi nahi. Amount, settlement, payout — kuch nahi badalta. Grace period (`DELETION_SCHEDULED`) me sab waisa hi.
 
 ⚠️ **Set na ki gayi key gayab hoti hai, `null` nahi.** `fullName`, `email`,
 `mobile` — koi bhi required nahi hai, aur aggregation projection missing field ko
@@ -8575,7 +9549,7 @@ Platform-wide configuration. **Ek singleton document.**
 ```json
 {
   "success": true,
-  "message": "Setting fetched successfully",
+  "message": "Settings fetched successfully.",
   "data": {
     "_id": "68f1a2b3c4d5e6f7a8b9s001",
     "vendor": {
@@ -8690,7 +9664,21 @@ Platform-wide configuration. **Ek singleton document.**
         "releasePromoOnRefund": false,
         "authorizedAlertMinutes": 30
       },
-      "chargeback": { "writeOffDays": 90 }
+      "chargeback": { "writeOffDays": 90 },
+      "brandVisibility": { "requireShowcase": false }
+    },
+    "security": {
+      "otp": {
+        "resendCooldownSeconds": 60, "maxPerHour": 5, "maxVerifyAttempts": 5, "ttlSeconds": 300,
+        "review": { "maxVerifyAttempts": 100, "ttlSeconds": 300, "resendCooldownSeconds": 0, "maxPerHour": 100 }
+      },
+      "signup": {
+        "pendingAccountDays": 7,
+        "outletNumberHoldHours": 72,
+        "outletHoldReminderHours": 24,
+        "signupAttemptRetentionDays": 180
+      },
+      "accountDeletion": { "graceDays": 30, "requireOtpForAll": false }
     },
     "isActive": true,
     "updatedAt": "2026-08-01T00:00:00.000Z"
@@ -8706,6 +9694,14 @@ Sirf [common auth errors](#common-errors) + `403` role check.
 ---
 
 ## 100. PUT /settings/update
+
+**Access:** Intended: ADMIN · Enforced: **ADMIN** (`isAdmin`) ✅
+
+> 🆕 **Naya field `customer.brandVisibility.requireShowcase`** (boolean, default `false`) — develop
+> par save / return hota hai (P1). Develop par profile side (P3), brand feed (P4), voucher side (P5)
+> aur search (P6) ise padhte hain. ON par jis brand ka dikhne layak album nahi wo customer ko
+> kahin nahi dikhega — [neeche ki table](#100-put-settingsupdate) ·
+> [plan §3](./brand_feed_outlet_rule_plan.md#3-rules--l1-l3-aur-switch).
 
 > #### ⚠️ Badlaav turant nahi, **30 second** ke andar pahunchta hai
 >
@@ -8879,6 +9875,12 @@ ka banner, generated invoice, sab.
 > Badhane se pehle dekh lijiye ki kitne sections us line ke neeche hain. Vendor ko
 > unme media add karne padenge, warna unka gallery chhota ho jayega aur unhe pata
 > bhi nahi chalega.
+>
+> 🆕 (develop) Switch `customer.brandVisibility.requireShowcase` ON ho to jis brand ka **aakhri**
+> dikhne layak album is line ke neeche gira, **poora brand aur uske vouchers** customer se chhup jaate
+> hain (OFF par bhi bina-voucher brand feed se hat jaata hai). Badhane se pehle
+> `node scripts/reportCustomerBrandVisibility.js --db <name>` chalayein —
+> [Customer visibility](#customer-visibility-outlet--album-rule-).
 
 > ⚠️ **Floor ceiling se upar nahi ja sakta.** `minItemsPerSection` ko
 > `maxItemsPerSection` se bada karne par `422`:
@@ -8933,7 +9935,7 @@ ka banner, generated invoice, sab.
 | Endpoint | Switch off par |
 |---|---|
 | `GET /showcase/section/get/:sectionId` · `/section/get-all` (vendor/admin) | **khula** — vendor ko wo gallery dikhni chahiye jise edit karne se roka gaya hai |
-| `GET /showcase/get-brand-showcase/:brandId` · `/:brandId/video-clips` (public) | **khula** — jo brand ne pehle publish kiya wo publish rehta hai |
+| `GET /showcase/get-brand-showcase/:brandId` · `/:brandId/video-clips` (public) | **khula** — jo brand ne pehle publish kiya wo publish rehta hai, jab tak brand customer ko dikhta hai. 🆕 develop (P3): brand ka location wala outlet (ya switch ON par album) na ho to `404 BRAND_NOT_AVAILABLE` — [plan](./brand_feed_outlet_rule_plan.md) |
 | Baaki sab (9 write routes) | **422** |
 
 Gate `middlewares/requireShowcaseEnabled.js` hai, route file me `isVendorOrAdmin` ke saath baitha hai.
@@ -8966,6 +9968,28 @@ Gate `middlewares/requireShowcaseEnabled.js` hai, route file me `isVendorOrAdmin
 ```
 
 Yahi block **`GET /app-config`** padhta hai — wo public hai, token ke bina, aur app launch par pehla call hota hai.
+
+🟡 **P11.1 (v1.12, develop, 2026-11-03)** — [release guide §4.3](./release_v1_12_admin_panel_guide.md):
+
+| Field | Default | Validation | Kya karta hai |
+|---|---|---|---|
+| 🆕 `minBuild` `{android, ios, web}` | `0` | poora number, `0`–2,000,000,000 | Is build se neeche → **zaroori update**. `0` = set nahi (tab version se) |
+| 🆕 `latestBuild` `{android, ios, web}` | `0` | wahi | Is se neeche → optional "update available" |
+| `forceUpdate` | `false` | boolean | 🔁 Ab **sirf latest se peeche** walon ko force (pehle latest wale ko bhi — loop). ⚠️ `latestVersion` / `latestBuild` set kiye bina ON karna kuch nahi karta |
+| `updateMessage` | — | max 300 | Ek hi text dono platform par — **kisi store ka naam mat likho** (Apple 2.3.10) |
+
+```json
+{ "app": { "minBuild": { "ios": 18 }, "latestBuild": { "android": 28, "ios": 18 } } }
+```
+
+🔴 **Store review trap:** submit karte waqt iOS `minBuild` / `latestBuild` **review build se zyada nahi** — warna
+reviewer ko update screen, aur store me app abhi hai hi nahi → rejection. ⚠️ Android build 27 app-config call
+nahi karta — use ye settings force nahi kar sakti.
+
+| Galat value | `422` |
+|---|---|
+| `minBuild.ios: -1` | `ios build cannot be negative.` |
+| `latestBuild.web: 1.5` | `web build must be a whole number.` |
 
 > ### 🔴 Ye block yahan hone ki poori wajah
 >
@@ -9282,6 +10306,122 @@ jabki aapne sirf ek switch band kiya tha.
 banti hai, to usme value bake karne se aapka har baad ka badlaav chup-chaap ignore ho
 jaata. Service har request par ye setting padhti hai.
 
+**`customer.brandVisibility`** 🆕 🚧 — customer ko kaunse brand dikhein ([plan](./brand_feed_outlet_rule_plan.md))
+| Field | Default | Validation | Kya karta hai |
+|---|---|---|---|
+| `requireShowcase` | **`false`** | boolean | ON = jis brand ka ek bhi dikhne layak album (`isVisible`, active, `minItemsPerSection` visible media) nahi, wo aur uske vouchers customer app me **kahin** nahi dikhenge |
+
+> 🚧 **Abhi sirf develop par.** Field save hoti hai aur `GET /settings/get` me aati hai (P1,
+> 2026-10-25). Develop par ise padhte hain: profile, voucher list, gallery / reels, following /
+> avoided (P3), brand feed / Directory / Top Brands (P4), voucher feed / Suggestions / voucher
+> detail / search ka VOUCHER section (P5) aur search ke BRAND / AREA / CATEGORY sections (P6) — har
+> customer surface. Stage / prod par ye release ke saath aayega; prod par **OFF** se shuru,
+> visibility report saaf hone ke baad ON.
+
+```json
+{ "customer": { "brandVisibility": { "requireShowcase": true } } }
+```
+
+**`security.otp`** — one-time codes, **har role** ke liye (customer, vendor, outlet manager, admin)
+| Field | Default | Validation | Kya karta hai |
+|---|---|---|---|
+| `resendCooldownSeconds` | **60** | poora number, 0–3600 | Ek target ko do codes ke beech gap. `0` = koi gap nahi |
+| `maxPerHour` | **5** | poora number, 1–100 | Ek target (number / email) ko ghante me kitne codes. IP par nahi |
+| 🆕 🟡 `maxVerifyAttempts` | **5** | poora number, **1–100** | Ek code par kitne galat try — agla try `403 "Max attempts exceeded!"` aur code delete. Verify ke waqt padha jaata hai, isliye chal rahe codes par bhi turant lagta hai |
+| 🆕 🟡 `ttlSeconds` | **300** | poora number, **120–1500** (2–25 min) | Code kitni der chale. Code **bhejte waqt** us par likh diya jaata hai (`Otp.expiresAt`) — sirf naye codes par lagta hai |
+
+> 🟡 **`maxVerifyAttempts` / `ttlSeconds` abhi sirf develop par** (P12.0, 2026-11-03 —
+> [release plan](./store_release_plan_v1_12_v1_13.md) O-5 / O-6). ⚠️ Har database par ek baar
+> `node scripts/migrateOtpExpiryIndex.js` (dry-run → `--apply --confirm-db <db>`) chahiye — tab tak purana
+> `createdAt` TTL index har code ko 5 minute par hi mita deta hai, setting kuch bhi ho. ⚠️ WhatsApp OTP
+> template me koi duration likha ho to `ttlSeconds` badalne par template ka text bhi badlo. Store review ke
+> liye ye settings **mat chhedo** — har customer par lagti hain ([runbook](./store_review_runbook.md)).
+
+```json
+{ "security": { "otp": { "maxVerifyAttempts": 5, "ttlSeconds": 300 } } }
+```
+
+| Galat value | `422` message |
+|---|---|
+| `maxVerifyAttempts: 0` | `At least one try per code, or nobody can sign in.` |
+| `maxVerifyAttempts: 101` | `maxVerifyAttempts cannot be above 100.` |
+| `ttlSeconds: 119` | `ttlSeconds cannot be below 120 (2 minutes).` |
+| `ttlSeconds: 1501` | `ttlSeconds cannot be above 1500 (25 minutes).` |
+
+**`security.otp.review`** 🆕 🟡 (P12.0c) — **store-review numbers ki alag settings** ([release plan](./store_release_plan_v1_12_v1_13.md) O-9)
+| Field | Default | Validation | Kya karta hai |
+|---|---|---|---|
+| `maxVerifyAttempts` | **100** | 1–100 ya `null` | Reviewer galat code daale to "Invalid OTP", jaldi lock nahi |
+| `ttlSeconds` | **300** | 120–1500 ya `null` | Review number par **asli** code ki umr (static code par kuch nahi lagta) |
+| `resendCooldownSeconds` | **0** | 0–3600 ya `null` | Resend me gap nahi |
+| `maxPerHour` | **100** | 1–100 ya `null` | Ghante me codes |
+
+- 🔴 **Sirf wahan lagti hain jahan static code bhi chalta hai:** number `OTP_BYPASS_TARGETS` me **aur** account ka role
+  `OTP_BYPASS_ROLES` me (default `CUSTOMER`). Usi number ka ADMIN / VENDOR account upar wali normal settings par —
+  warna admin ke asli code par 100 try mil jaate.
+- `null` = us field par normal `security.otp` value. Sirf bheja hua field badalta hai (merge, baaki review fields waise hi).
+- ⚠️ Har resend ek paid WhatsApp message — sirf allowlisted numbers, isliye chhota. Throttle bucket phone ka ek hi hai,
+  sab roles ka saath: review customer ke 100 sends usi phone ke admin login ko normal cap (5/hr) se rok sakte hain.
+- Store review ke liye **yahi** block — normal `security.otp` mat chhedo ([runbook](./store_review_runbook.md)).
+
+```json
+{ "security": { "otp": { "review": { "maxVerifyAttempts": 100, "ttlSeconds": null } } } }
+```
+
+| Galat value | `422` message |
+|---|---|
+| `review.maxVerifyAttempts: 0` | `review.maxVerifyAttempts cannot be below 1.` |
+| `review.maxPerHour: 101` | `review.maxPerHour cannot be above 100.` |
+| `review.ttlSeconds: "x"` | `review.ttlSeconds must be a number, or null to use the normal value.` |
+
+**`security.accountDeletion`** 🆕 🟡 (P12.2) — customer account deletion ([deletion plan §4](./account_deletion_plan.md))
+| Field | Default | Validation | Kya karta hai |
+|---|---|---|---|
+| `graceDays` | **30** | poora number, **1–1095** (max 3 saal) | Delete request se purge tak din. Sirf **naye** requests par lagta hai |
+| `requireOtpForAll` | **`false`** | boolean | `true` → bina OTP wala delete (purana app) `422 OTP_REQUIRED`. Purane builds kam hone par ON (v1.13 report) |
+
+```json
+{ "security": { "accountDeletion": { "graceDays": 30 } } }
+```
+
+⚠️ `graceDays` badla to privacy policy / app ka text bhi badlo (wahan din likhe hain).
+
+🟡 **Purge (P12.3):** `purgeScheduledDeletions` job har ghante — grace khatam hone par personal data hatata hai, paise
+ke records kabhi nahi. Refund / dispute / payout / pending claim khula ho to **hold** (`deletion.holds`), har run
+dobara check. Detail: [deletion plan §7.2 / §8](./account_deletion_plan.md).
+
+**`security.signup`** 🆕 🟡 — verified signup ke din / ghante ([design §4](./verified_signup_outlet_plan.md#4-settings))
+| Field | Default | Validation | Kya karta hai |
+|---|---|---|---|
+| `pendingAccountDays` | **7** | poora number, `≥ 0` | Self-signup jo OTP nahi deta (`PENDING`) — aakhri OTP ke itne din baad soft-delete. `0` = kabhi nahi |
+| `outletNumberHoldHours` | **72** | poora number, `≥ 0` | Naye outlet ka manager itne ghante me OTP na de to outlet apne aap cancel, number free. `0` = hold kabhi expire nahi |
+| `outletHoldReminderHours` | **24** | poora number, `≥ 0` | Hold khatam hone se itne ghante pehle vendor ko reminder. `0` = reminder band |
+| `signupAttemptRetentionDays` | **180** | poora number, `≥ 0` | Signup audit (`SignupAttempt`) kitne din rahe. `0` = hamesha |
+
+> 🟡 **Abhi sirf develop par.** Save hota hai, `GET /settings/get` me `security.signup` me aata hai
+> (P10.2, 2026-10-28). `pendingAccountDays` ko 🟡 `sweepPendingAccounts` (P10.3), `outletNumberHoldHours`
+> + `outletHoldReminderHours` ko 🟡 `outletHoldSweep` (P10.4), `signupAttemptRetentionDays` ko 🟡
+> `purgeSignupAttempts` (P10.6) padhte hain — teeno har ghante.
+
+⚠️ **`0` ka matlab "band" hai, kabhi "turant" nahi.** `0` hold par koi outlet cancel nahi hota, `0`
+retention par audit kabhi nahi mitta. Isi liye config ise `??` se padhta hai — `||` se padhta to `0`
+chup-chaap default (72 ghante) ban jaata aur aapke band kiye hold par bhi outlet cancel hote.
+
+⚠️ **Koi upper limit nahi** (owner decision D18) — kitna rukna hai ye aapka faisla. Sirf poora number aur
+negative nahi:
+
+| Galat value | `422` message |
+|---|---|
+| `1.5` | `"pendingAccountDays must be a whole number."` |
+| `-1` | `"pendingAccountDays cannot be negative. Use 0 to switch it off."` |
+| `"abc"` | `"pendingAccountDays must be a number."` |
+
+Merge hota hai, replace nahi — sirf jo badalna hai wo bhejein, baaki teen apni jagah rehte hain:
+
+```json
+{ "security": { "signup": { "outletNumberHoldHours": 48 } } }
+```
+
 ### ⚠️ Golden rule — ek 422 jo aapko milega
 
 ```
@@ -9330,7 +10470,7 @@ Dono taraf se block hota hai:
 ```json
 {
   "success": true,
-  "message": "Setting updated successfully",
+  "message": "Settings updated successfully.",
   "data": { "_id": "…", "vendor": { "subscription": { "isPromoCodeEnabled": true, "gstPercentage": 18 } }, "updatedAt": "2026-08-23T01:30:00.000Z" }
 }
 ```
@@ -9385,47 +10525,129 @@ Dono taraf se block hota hai:
 
 Terms & Conditions aur Privacy Policy — dono ke 5-5 endpoints, identical shape.
 
-## 🔴 ⚠️ CRITICAL — create endpoints kaam hi nahi karte
+## ✅ Create endpoints ab chalte hain (pehle hamesha fail hote the)
 
-**`POST /terms-and-conditions/create` aur `POST /privacy-and-policies/create` har baar fail hote hain.**
+> 🔧 **2026-10-26 ko code se dobara dekha** — ye section pehle "CRITICAL — create endpoints kaam hi
+> nahi karte" tha. Teeno wajah code me theek ho chuki hain; Appendix B ki "ab fix" table me bhi ye hai.
 
-Model `type` ko mandatory maangta hai:
-```js
-// models/Terms&Condition.js  (aur Privacy&Policy.js)
-type: { type: String, required: true, trim: true },
+| Pehle | Ab (code) |
+|---|---|
+| Model `type` maangta tha, par validator / service me `type` tha hi nahi → har create `422 "Path type is required."` | Validator me `type` **required** (max 40), service aage pass karti hai — `validator/termsAndConditions.js`, `validator/privacyAndPolicies.js`, dono create services |
+| `description` max **300** characters | Max **50,000** (`MAX_DESCRIPTION`) |
+| `description` create par **lowercase** ho jaata tha (HTML / formatting kharab) | Jaisa likha waisa save hota hai. Purane records lowercase reh sakte hain |
+
+Admin panel legal content screen ban sakti hai. Detail → [security_findings.md](./security_findings.md) #16.
+
+---
+
+## 100a. GET /signupAttempts/admin/get-all 🆕 🟡
+
+Signup audit — kisne signup shuru kiya aur uska kya hua (P10 D7, [design §8](./verified_signup_outlet_plan.md#8-audit--signupattempt)).
+Ek row = ek signup cycle: code bheja gaya ek aise account (customer / vendor) ya outlet (manager) ke liye jo
+abhi verify nahi tha.
+
+**Access:** Intended: Admin · Enforced: **ADMIN** (`isAdmin`)
+
+> 🟡 **Develop par (P10.6, 2026-10-28).** Rows P10.3 / P10.4 ke flows likhte hain — release se pehle ke
+> signups ka koi row nahi.
+
+### Query Params
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `page` | number | `1` | Min 1 |
+| `limit` | number | `20` | 1–100 |
+| `role` | enum | — | `CUSTOMER` · `VENDOR` · `SUB_VENDOR` (lowercase bhi) |
+| `status` | enum | — | `SENT` (code gaya, abhi verify nahi) · `VERIFIED` · `EXPIRED` (job ne hataya — pending account ya outlet hold) · `CANCELLED` (vendor / admin ne outlet cancel kiya ya number badla) |
+| `from` · `to` | ISO date | — | Cycle kab shuru hua (`firstSentAt`), dono inclusive (`to` poora din) |
+| `search` | string | — | Number ka hissa, max 20, plain text (pattern nahi) |
+
+```http
+GET /signupAttempts/admin/get-all?status=SENT&role=CUSTOMER&page=1&limit=20
 ```
 
-Par poori chain me `type` hai hi nahi:
-1. Validator me nahi hai
-2. Controller Joi ka `value` pass karta hai — `stripUnknown` `type` ko drop kar deta hai chahe caller bheje bhi
-3. Service `create()` me `type` set nahi karti
-
-**Result:**
+### Success — `200`
 ```json
-{ "success": false, "message": "Path `type` is required." }
+{
+  "success": true,
+  "message": "Signup attempts fetched successfully.",
+  "data": {
+    "total": 2,
+    "totalPages": 1,
+    "page": 1,
+    "limit": 20,
+    "data": [
+      {
+        "_id": "68f1a2b3c4d5e6f7a8b9f101",
+        "target": "9876543210",
+        "role": "SUB_VENDOR",
+        "brandId": "68f1a2b3c4d5e6f7a8b9c3a1",
+        "subBrandId": "68f1a2b3c4d5e6f7a8b9c4a1",
+        "firstSentAt": "2026-10-28T10:00:00.000Z",
+        "lastSentAt": "2026-10-28T10:05:00.000Z",
+        "sendCount": 2,
+        "status": "SENT",
+        "createdAt": "2026-10-28T10:00:00.000Z",
+        "updatedAt": "2026-10-28T10:05:00.000Z",
+        "brand": { "_id": "68f1a2b3c4d5e6f7a8b9c3a1", "brandName": "Cafe Mocha" },
+        "outlet": { "_id": "68f1a2b3c4d5e6f7a8b9c4a1", "uniqueId": "#TS538618", "isDeleted": false }
+      },
+      {
+        "_id": "68f1a2b3c4d5e6f7a8b9f102",
+        "target": "9812345678",
+        "role": "CUSTOMER",
+        "firstSentAt": "2026-10-20T09:00:00.000Z",
+        "lastSentAt": "2026-10-20T09:00:00.000Z",
+        "sendCount": 1,
+        "status": "EXPIRED",
+        "closedAt": "2026-10-27T10:00:00.000Z",
+        "closedBy": "JOB",
+        "createdAt": "2026-10-20T09:00:00.000Z",
+        "updatedAt": "2026-10-27T10:00:00.000Z"
+      }
+    ],
+    "summary": { "SENT": 1, "VERIFIED": 7, "EXPIRED": 1, "CANCELLED": 0, "total": 9 }
+  }
+}
 ```
-*(Mongoose ValidationError → errorHandler `422` me convert kar deta hai)*
 
-**Do aur problems:**
-- `description` sirf **300 characters** tak allowed hai — asli terms text ke liye bilkul kam
-- `description` service me **lowercase** ho jaata hai — HTML aur formatting destroy
+| Field | Matlab |
+|---|---|
+| `target` | **Poora** WhatsApp number (owner decision) — isi liye route sirf admin ka |
+| `sendCount` · `firstSentAt` · `lastSentAt` | Resend usi cycle me ginta hai |
+| `verifiedAt` · `closedAt` · `closedBy` | Ant: `VERIFIED` par `verifiedAt`; `EXPIRED` / `CANCELLED` par `closedAt` + `closedBy` (`JOB` · `VENDOR` · `ADMIN`) |
+| `brand` · `outlet` | Sirf outlet (`SUB_VENDOR`) rows par — kaunse brand ka, kaunsa outlet (`isDeleted: true` = cancel ho chuka) |
+| `summary` | Har status ki ginti — baaki filters ke saath, **`status` ke bina** (chips stable rehte hain) |
 
-**Admin panel pe impact:** legal content management screen abhi ban nahi sakta. Detail + fix → [security_findings.md](./security_findings.md) #16
+- Khaali nateeja `200` + `data: []` (404 nahi).
+- Sort: naya activity pehle (`lastSentAt`), barabar par `_id`.
+- Purane rows `purgeSignupAttempts` job (har ghante) `security.signup.signupAttemptRetentionDays` (default 180,
+  `0` = hamesha) ke baad **hata** deta hai — audit log, domain data nahi.
+
+### Errors
+| Status | Message | Kab |
+|---|---|---|
+| `422` | `Role must be one of CUSTOMER, VENDOR, SUB_VENDOR` · `Status must be one of SENT, VERIFIED, EXPIRED, CANCELLED` | Enums |
+| `422` | `to cannot be earlier than from` · `from must be an ISO date` | Dates |
+| `422` | `Search cannot exceed 20 characters` · `Limit cannot exceed 100` · `Page must be at least 1` | |
+| `403` | role check | Admin nahi |
+
+**Panel:** naya "Signup report" screen — filters + summary chips; outlet rows par brand / outlet link.
 
 ---
 
 ## 101. POST /terms-and-conditions/create
 
-**Access:** Intended: ADMIN · Enforced: **ADMIN** ✅ · ⚠️ **BROKEN**
+**Access:** Intended: ADMIN · Enforced: **ADMIN** (`isAdmin`) ✅
 
 ### Body
 | Field | Type | Required | Validation |
 |---|---|---|---|
 | `title` | string | ✅ | 3–120 chars |
-| `description` | string | ❌ | ⚠️ Max **300** chars, `""` allowed |
+| `type` | string | ✅ | Max 40 — audience, jaise `"VENDOR"` / `"CUSTOMER"` (free text) |
+| `description` | string | ❌ | Max **50,000** chars, `""` allowed — jaisa likha waisa save |
 | `isActive` | boolean | ❌ | |
 
-### Expected Success — `201`
+### Success — `201`
 ```json
 {
   "success": true,
@@ -9434,24 +10656,19 @@ Par poori chain me `type` hai hi nahi:
 }
 ```
 
-### Actual behaviour — `422` (hamesha)
-```json
-{ "success": false, "message": "Path `type` is required." }
-```
-
 ### Errors
 | Status | Message | Kab |
 |---|---|---|
-| `422` | `` Path `type` is required. `` | ⚠️ **Hamesha** |
-| `400` | `Term and condition already exist with this title` | Duplicate title *(is error tak pahunchne se pehle hi type fail ho jaata hai)* |
+| `422` | `Type is required` / `Type cannot exceed 40 characters` | `type` nahi bheja / bahut lamba |
+| `400` | `Term and condition already exist with this title` | Duplicate title |
 | `422` | `Title has minimum 3 characters` / `cannot exceed 120 characters` | |
-| `422` | `Description cannot exceed 300 characters` | |
+| `422` | `Description cannot exceed 50000 characters` | |
 
 ---
 
 ## 102. GET /terms-and-conditions/getAll
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Query Params
 | Param | Type | Required | Default |
@@ -9499,15 +10716,15 @@ Par poori chain me `type` hai hi nahi:
 
 **1. `type` free-form string hai** — `"VENDOR"`, `"CUSTOMER"` jaisi values. **API me `type` filter nahi hai**, to audience-wise filtering client-side karni padegi.
 
-**2. `description` lowercase me aa sakta hai** — service ne create pe lowercase kar diya tha. HTML tags bhi lowercase ho jaate hain (jo valid HTML hai, par content readability chali jaati hai).
+**2. Purane records ka `description` lowercase me aa sakta hai** — pehle create par lowercase hota tha. Ab create / update jaisa likha waisa rakhte hain.
 
-**3. Existing records seed/manual insert se aaye honge** — create endpoint kaam nahi karta.
+**3. `search` / `title` plain text hain** (🔧 2026-10-26) — `(`, `.` jaise characters literal match hote hain, pattern nahi.
 
 ---
 
 ## 103. GET /terms-and-conditions/get/:id
 
-**Access:** Intended: All roles · Enforced: **Any authenticated**
+**Access:** Intended: All roles · Enforced: **Public** — token ki zarurat nahi (guest bhi)
 
 ### Path Params
 | Param | Type | Required |
@@ -9585,7 +10802,7 @@ Par poori chain me `type` hai hi nahi:
 | `422` | `Invalid TermAndCondition Id` |
 
 ### ⚠️ Note
-Soft delete. ⚠️ **Delete karne se pehle sochein** — create endpoint kaam nahi karta, to naya banana possible nahi hoga. `isActive: false` (#104) safer hai.
+Soft delete — wapas nahi aata (restore endpoint nahi). Sirf chhupana ho to `isActive: false` (#104) safer hai; naya create (#101) ab chalta hai.
 
 ---
 
@@ -9595,9 +10812,9 @@ Bilkul same shape as #101–105, sirf path aur messages alag.
 
 | # | Method | Endpoint | Access | Message |
 |---|---|---|---|---|
-| 106 | POST | `/privacy-and-policies/create` | **ADMIN** ✅ ⚠️ **BROKEN** | `Privacy and policy created` |
-| 107 | GET | `/privacy-and-policies/getAll` | Any authenticated | `Privacys and policies fetched` ⚠️ *(typo backend me hai)* |
-| 108 | GET | `/privacy-and-policies/get/:id` | Any authenticated | `Privacy and policy fetched` |
+| 106 | POST | `/privacy-and-policies/create` | **ADMIN** ✅ (`type` required — #101 jaisa) | `Privacy and policy created` |
+| 107 | GET | `/privacy-and-policies/getAll` | **Public** (guest bhi) | `Privacys and policies fetched` ⚠️ *(typo backend me hai)* |
+| 108 | GET | `/privacy-and-policies/get/:id` | **Public** (guest bhi) | `Privacy and policy fetched` |
 | 109 | PUT | `/privacy-and-policies/update/:id` | **ADMIN** ✅ | `Privacy and policy updated` |
 | 110 | DELETE | `/privacy-and-policies/delete/:id` | **ADMIN** ✅ | `Privacy and policy deleted` |
 
@@ -10066,7 +11283,7 @@ Customer app ke **Top Brands section** me kaunse brands aayenge, aur kis kram me
 
 | Customer surface | Top brand ka kya hota hai |
 |---|---|
-| Top Brands section (`/brands/customer/get-all?topOnly=true`) | **Aapka `topOrder` hi order hai** — distance se kabhi nahi. Customer ki location sirf ye tay karti hai ki **kaun se** top brands dikhenge: jinka koi outlet `maxDistanceKm` ke andar ho; ek bhi na ho to saare top brands |
+| Top Brands section (`/brands/customer/get-all?topOnly=true`) | **Aapka `topOrder` hi order hai** — distance se kabhi nahi. Customer ki location sirf ye tay karti hai ki **kaun se** top brands dikhenge: jinka koi outlet `maxDistanceKm` ke andar ho; ek bhi na ho to saare top brands. 🆕 develop (P4, stage / prod par abhi nahi): naye app par bina-voucher top brands bhi (album ke saath); naye mode me "andar" = brand ka koi bhi location wala outlet range me, aur fallback tab jab range me ek bhi **offer** na ho (sirf bina-voucher outlet paas ho tab bhi) — tab saare top brands, `isOutOfRange: true`; jis top brand ka location wala outlet (ya switch ON par album) nahi wo customer ko nahi dikhega — [plan](./brand_feed_outlet_rule_plan.md) |
 | Poori brand directory | 🔴 **Ab upar pin nahi hote.** Pehle har page par sabse upar aate the; ab apni normal jagah par |
 
 ⚠️ Matlab: aapne 10 top brands chune aur customer ke paas sirf 1 hai, to us customer ko Top Brands section me **1** dikhega. Kisi sheher me top brands kam pad rahe hon to ye wajah ho sakti hai — bug nahi.
@@ -10216,7 +11433,7 @@ number, dono nahi bante.
 
 ### `GET /disputes` · `GET /disputes/:disputeId`
 
-Gate sirf `verifyJwtToken` — **scope token se aata hai**. Vendor apne brand ke disputes dekhta hai, admin sabke. Isi wajah se ye kisi ek role ki collection me fit nahi hota; request `13 — Disputes` folder me hai.
+Gate sirf `verifyJwtToken` — **scope token se aata hai**. Vendor apne brand ke disputes dekhta hai, outlet manager 🔧 (develop, 2026-10-27) sirf apne outlet ke (dusre outlet ka dispute `404`, jaise maujood na ho), admin sabke. Isi wajah se ye kisi ek role ki collection me fit nahi hota; request `13 — Disputes` folder me hai.
 
 ⚠️ `respondBy` **absent** hota hai jab tak Razorpay deadline na de. Use aggregation me `null` se compare karna bina `$ifNull` ke ulta jawab deta hai — yahi galti `vendorWasPaid: true` bana chuki hai un payments par jo **kabhi settle hi nahi hue**, aur wahi field admin dekhkar tay karta hai ki wapas lene ko kuch hai bhi ya nahi.
 
@@ -10284,7 +11501,7 @@ Admin ke paas platform ka sabse zyada access hai, par **34 endpoints** aise hain
 
 ### Work hours (1)
 
-`POST /workHours/upsert` — vendor apne outlet ki timings set karta hai. Admin ke liye koi use case nahi.
+`POST /workHours/upsert` — vendor apne outlet ki timings set karta hai. Admin ke liye koi use case nahi. ✅ Prod par live 2026-10-27: ab owner check hai — vendor sirf apne brand / apne outlet ke hours (doosre ka `403`), aur vendor ko active plan chahiye; admin koi bhi, plan ke bina. [Appendix B #7](#7-koi-bhi-vendor-kisi-bhi-brand--outlet-ke-work-hours-badal-sakta-tha--post-workhoursupsert).
 
 ### Provider endpoint (1)
 
@@ -10315,7 +11532,8 @@ account khul jaata tha** — claims, refunds, bank accounts, settlements: sab.
 Ye **do-line change** tha, ek nahi: `verifyOtpWithWhatsapp.js` ka `verifyOtp` aur
 `loginOrSignUpWithWhatsapp.js` ka `sendOtp`, dono commented the. Dono ab live hain
 aur asli number par end-to-end test pass hua — code jaata hai, verify hota hai,
-use hone ke baad dobara nahi chalta, 5 galat try pe mar jaata hai.
+use hone ke baad dobara nahi chalta, 5 galat try pe mar jaata hai (5 = default; 🟡 P12.0 se
+`security.otp.maxVerifyAttempts`, aur code ki umr `security.otp.ttlSeconds`).
 
 ⚠️ **Throttle ab live hai** (60s / 5 per hour, target par keyed) — Postman
 collections ke auth folders reseed ke beech `429` khaa sakte hain. Capture run se
@@ -10337,17 +11555,12 @@ hi hai jitna upar likha hai:
 
 ## 🟠 Feature toota hua hai, chup-chaap
 
-### 2. `DELETE /users/delete` kuch delete nahi karta
+### 2. 🟡 `DELETE /users/delete` kuch delete nahi karta tha — v1.12 me theek (develop)
 
-```js
-// routes/users.js:9 — poora handler yahi hai
-router.delete("/delete", verifyJwtToken, (req, res) => {
-  res.status(200).json({ message: "User deleted successfully" });
-});
-```
-
-App ka "Delete my account" button success dikhata hai aur **kuch nahi hota**.
-Account deletion Play Store aur App Store dono ki requirement hai.
+Pehle ye route ek inline no-op tha: app ka "Delete my account" success dikhata aur kuch nahi hota (Play Store
+aur App Store dono ki requirement). 🟡 v1.12 (P12.2–P12.5, develop) me asli customer delete + grace + restore,
+admin actions §15b, aur Google web page. Prod par v1.12 release ke saath band —
+[account_deletion_plan.md](./account_deletion_plan.md).
 
 ⚠️ Ye envelope bhi todta hai — `success` field hai hi nahi — aur route file me
 business logic hai, jo `CLAUDE.md` ka *"Never"* hai.
@@ -10441,7 +11654,8 @@ GET /settlements · /settlements/:settlementId
 To **claim verify karne ka read-half aaj hi kaam karta hai** — Phase 2 ke liye
 sirf likhne wala aadha banana hai.
 
-**Scoping sahi hai, koi leak nahi.** `assertTransactionAccess.js:133` par:
+**Scoping — 🔧 develop par fail-closed (2026-10-27, security sweep).** Pehle yahan
+"koi leak nahi" likha tha, aur check aisa tha:
 
 ```js
 if (role === SUB_VENDOR && actor.subBrandId && claim.subBrandId &&
@@ -10449,10 +11663,21 @@ if (role === SUB_VENDOR && actor.subBrandId && claim.subBrandId &&
   throwError(403, "This claim was not made at your outlet.");
 ```
 
-Aur `VoucherClaim.subBrandId` model me `required: true` hai aur hamesha
-`outlet._id` se bharta hai, to wo null-check kabhi bypass nahi ho sakta. Yahi
-narrowing `buildRefundReadPipeline`, `buildSettlementReadPipeline` aur
-`notificationScope` me bhi hai.
+Ye sirf tab rokta tha jab **dono** taraf outlet id ho aur alag ho. Claim par
+`subBrandId` required hai, par payment / refund / sub-vendor token par nahi — aur
+`buildAccessScopeFilter` bina outlet ke sub-vendor ko poore brand ka filter de
+deta tha. Disputes (`getDisputes`, `disputeEvidence`) brand par hi ruk jaate the:
+outlet manager sibling outlet ke chargebacks dekh sakta tha aur unka note badal
+sakta tha.
+
+Ab ek helper — `assertOwnOutlet` (`helpers/transactions/assertTransactionAccess.js`)
+— payment, claim, refund (padhna + decide) aur dispute evidence par; list filter
+bhi wahi niyam: outlet manager ke account par outlet nahi → `403 "No outlet is
+linked to this account."`; record par outlet nahi ya dusra outlet → `403`
+(dispute par `404 "Dispute not found."`, jaise maujood hi na ho). Disputes ki list /
+detail ab payment ke outlet se filter hoti hai (paging se pehle). Tests:
+`accessControl`, `decideRefund`, `disputeVisibility`. `notificationScope` outlet
+manager ko pehle se `403` deta hai.
 
 ⚠️ **Jo sach me nahi khulta**, aur kyun: `resolveActorBrand` par
 `String(brand.userId) !== String(userId)` → `403`. SUB_VENDOR ka `userId` Brand
@@ -10462,10 +11687,56 @@ kaam — vouchers, showcase, subscriptions — outlet ke liye band hai. Wo helpe
 
 ⚠️ `GET /settlements` par SUB_VENDOR ko **poora brand** dikhta hai, apna outlet
 nahi — settlement poore brand ke din ka hota hai, ek counter ka nahi. Ye
-`buildSettlementReadPipeline.js:77` par jaan-boojh kar hai.
+`buildSettlementReadPipeline.js:77` par jaan-boojh kar hai (owner ne 2026-10-27 ke
+security sweep me yahi rakhna maana).
 
 ℹ️ Do middleware bane hain par koi route inhe use nahi karta: `isSubVendor`
 (`validateRoles.js:19`) aur `isBrandSideOrAdmin` (`validateRoles.js:34`).
+
+---
+
+## ✅ Security — theek, stage / prod par live (2026-10-27)
+
+Dono fix (#6, #7) `main` se bane hotfix branch `hotfix/brand-ownership` (PR #15 → stage, #16 → main) se
+**2026-10-27 ko stage aur prod par deploy** ho chuke hain; develop me bhi wahi fix hai. Neeche ka record
+isliye rakha hai ki pata rahe kya khula tha aur kaise band hua.
+
+### 6. ✅ Vendor `?brandId=` se kisi bhi brand ko padh / badal sakta tha — `GET /brands/get`, `PUT /brands/update`
+
+> ✅ **Fix prod par live (2026-10-27).** Develop par 2026-10-26 (owner ka option A; commit `022e45e`), hotfix `43dd892`:
+> `GET` → `services/brands/getBrand.js` ka naya `getActorBrand` (pehle `resolveActorBrand`, phir `getBrand`);
+> `PUT` → `services/brands/updateBrand.js` upload se pehle `resolveActorBrand`. Dono controller ab sirf
+> `req.query.brandId` aur actor (`userId`, `role`, `brandId`) dete hain. Test:
+> `__tests__/money/brandActorScope.test.js`. Neeche ka text fix se pehle ki halat hai.
+
+Dono controller brand `req.query.brandId || req.brandId` se lete hain
+(`controllers/brands/get.js:5`, `controllers/brands/update.js:5`), route sirf
+`isVendorOrAdmin` hai (`routes/brands.js:219`, `:220-225`), aur dono services me vendor ki
+**ownership check nahi** — repo ka apna `helpers/brands/resolveActorBrand.js` (jo vouchers,
+showcase, subscriptions jaisi bahut si services me yahi rokta hai) yahan nahi laga.
+
+- **Padhna:** `getBrand` (`services/brands/getBrand.js:56-78`) `pan`, `gst`, `bank` (poora
+  `accountNumber`, `ifscCode`) aur owner `user` jodta hai — koi bhi vendor doosre brand ka ye sab
+  padh sakta hai.
+- **Badalna:** `updateBrand` (`services/brands/updateBrand.js`) naam, description, logo / cover,
+  sub-category doosre brand par likh deta hai. `email` / `mobile` `assertCanWriteIdentity` se ruk
+  jaate hain (login identity safe).
+- Customer ko route `403` deta hai.
+
+Fix: dono me `resolveActorBrand` — vendor sirf apna brand, admin `brandId` ke saath koi bhi (upar).
+
+### 7. Koi bhi vendor kisi bhi brand / outlet ke work hours badal sakta tha — `POST /workHours/upsert`
+
+> ✅ **Fix prod par live (2026-10-27; security sweep me mila — develop `c1e5872`, hotfix `43dd892`):**
+> `services/workHours/upsertWorkHours.js` ka `assertMayEditHours` — brand ke hours par `resolveActorBrand`,
+> outlet ke hours par usi check ko outlet ke brand par; vendor ke liye `assertActiveSubscription` (admin par
+> nahi). Controller ab actor (`userId`, `role`, `brandId`) deta hai. Test:
+> `__tests__/money/workHoursOwnership.test.js`. Neeche ka text fix se pehle ki halat hai.
+
+Service `userId` leta tha par kabhi padhta nahi tha — brand ya outlet body ki id se dhoondh kar likh deta
+tha. Route sirf `isVendorOrAdmin` hai, jo batata hai ki caller *koi* vendor hai, *kaunsa* brand nahi. Customer
+wahi timings dekhta hai. `docs/authorization_plan.md` kehta tha ki ye `resolveActorBrand` ke peeche hai — wo
+galat tha (theek kar diya).
 
 ---
 
@@ -10481,7 +11752,7 @@ Har ek code ke against verify kiya gaya — 2026-09-06.
 | `?userId` param se kisi bhi user ka data | Aisa koi param bacha nahi |
 | Legal create endpoints kaam nahi karte | `controllers/termsAndConditions` — `create` maujood aur wired |
 | `showcase/section/get-all` brand-scoped nahi | `services/showcases/getAllSections.js:7` — `resolveActorBrand` |
-| `GET /brands/get` PAN/GST/Bank expose karta hai | Projection me wo fields nahi |
+| `GET /brands/get` PAN/GST/Bank expose karta hai | ❌ **Ye "fix" galat likha tha** (2026-10-26 ko code se dekha): customer ko ab `403` (`isVendorOrAdmin`), par `pan` / `gst` / `bank` aate hain aur vendor kisi bhi brand ka padh sakta tha — upar **#6** (✅ 2026-10-27 se prod par theek: ab sirf apna brand) |
 | Brand verification history customer ko dikhti hai | `routes/brands.js:146` — `isVendorOrAdmin` |
 | `FIXED` discount type kaam nahi karta | `calculateVoucherPricing.js:41` — FLAT ka alias |
 | Email verification ka endpoint nahi | `POST /auth/email/send-verification` + `/verify` |
@@ -10879,7 +12150,7 @@ aur wo value **CI se inject** ho — repo me kabhi nahi.
 | A-2 | ~~Category / sub-category har edit par Active ulat jaata hai~~ | ✅ backend me fixed — panel ko kuch nahi karna |
 | A-3 | Showcase editor: **video add** hamesha `422` | 🔴 High |
 | A-4 | Showcase editor: **video replace** hamesha `422` | 🟠 Medium |
-| A-5 | Showcase editor **customer endpoint** se padhta hai → naye/hidden album gayab | 🟠 Medium |
+| A-5 | ~~Showcase editor **customer endpoint** se padhta hai → naye/hidden album gayab~~ | ✅ panel me fixed (owner, 2026-10-24) — editor admin wali section APIs padhta hai |
 | A-6 | Banner edit: **sirf poster** badalna chup-chaap ignore | 🟠 Medium |
 | A-7 | Presign helper ka error handling | 🟡 Low |
 | A-8 | Settings → Storage ke number fields | 🟡 Low |
@@ -10951,11 +12222,16 @@ backend poster maangta hai. **Fix:** media video ho to poster maangein aur
 `thumbnail` (singular, is endpoint par) me bhejein — ya presigned `uploadId` +
 `thumbnailUploadId`.
 
-## A-5 🟠 Showcase editor customer endpoint padhta hai
+## A-5 ✅ Showcase editor customer endpoint padhta tha — fixed
+
+> ✅ **Panel me fixed (owner, 2026-10-24).** Editor ab neeche wale fix ke mutabik admin wali
+> section APIs padhta hai — `GET /showcase/section/get-all?brandId=` (#36) aur
+> `GET /showcase/section/get/:sectionId` (vendor doc #44) — customer wali gallery nahi. Neeche ki
+> table purana problem record ke liye hai.
 
 | | |
 |---|---|
-| Symptom | Naya khaali album banao → refetch par **gayab**, us par pehli media upload hi nahi ho sakti. Hidden sections, inactive media kabhi nahi dikhte. Unverified / switched-off brand par `404 "Brand not found"` |
+| Symptom (tha) | Naya khaali album banao → refetch par **gayab**, us par pehli media upload hi nahi ho sakti. Hidden sections, inactive media kabhi nahi dikhte. Unverified / switched-off brand par `404 "Brand not found"` |
 | Panel | `ShowcaseAlbums.jsx` → `getBrandShowcase(brandId)` → `GET /showcase/get-brand-showcase/:brandId` |
 | Backend | Wo **customer** gallery hai — `assertPublicBrand` + `customerSectionMatch` (min media floor, `isVisible`, active) |
 
@@ -11106,7 +12382,7 @@ Sirf error **messages** — koi field, status code ya behaviour nahi badla.
 - [ ] **⚠️ Ticker dates: dono do ya koi nahi** — sirf ek set karoge to wo kabhi nahi dikhega
 - [ ] **`isActive: false` usually delete se behtar hai** — banner, ticker, category, plan, promo code sab pe
 - [ ] **Category/sub-category delete cascade nahi karta** — dangling references bachte hain
-- [ ] **⚠️ Legal create endpoints broken hain** — screen abhi na banayein
+- [ ] Legal create (#101, #106) ab chalta hai — `type` bhejna zaroori (pehle broken tha, 2026-10-26 ko code se dekha)
 
 **Settings**
 - [ ] **Merge hota hai, replace nahi** — sirf jo bhejo wahi badalta hai
@@ -11258,7 +12534,7 @@ hai**.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `uploadId` | ObjectId | ✅ | Presign se mila |
-| `entityId` | ObjectId | ❌ | Kis row ki file hai. Surface endpoint ise khud bhar deta hai, to `uploadId` waale flow me panel ko dene ki zarurat nahi |
+| `entityId` | ObjectId | ❌ | Kis row ki file hai — sirf S3 key ka folder. Surface endpoint ise khud bhar deta hai, to `uploadId` waale flow me panel ko dene ki zarurat nahi. Admin ka koi bhi id maana jaata hai; 🔧 (develop, 2026-10-27) vendor / outlet manager / customer ka sirf apna brand / outlet / user id — warna segment hata diya jaata hai (refuse nahi), `services/storage/confirm.js` `trustedEntityId` |
 
 ### Success — `200`
 ```json
@@ -11336,4 +12612,4 @@ gaya use bucket ka lifecycle rule uthata hai.
 ---
 
 **Doc version:** 1.0.0 · **Last verified:** 2026-08-22 against current code
-**Related docs:** [endpoints_category.md](./endpoints_category.md) · [security_findings.md](./security_findings.md) · [brand_verification_api_doc.md](./brand_verification_api_doc.md) · [subscription_lifecycle_design.md](./subscription_lifecycle_design.md) · [subscription_future_updates.md](./subscription_future_updates.md) · [brand_rejection_remediation_design.md](./brand_rejection_remediation_design.md) · [vendor_panel_api_doc.md](./vendor_panel_api_doc.md) · [customer_mobile_api_doc.md](./customer_mobile_api_doc.md)
+**Related docs:** [endpoints_category.md](./endpoints_category.md) · [security_findings.md](./security_findings.md) · [brand_verification_future_updates.md](./brand_verification_future_updates.md) · [subscription_lifecycle_design.md](./subscription_lifecycle_design.md) · [subscription_future_updates.md](./subscription_future_updates.md) · [brand_rejection_remediation_design.md](./brand_rejection_remediation_design.md) · [vendor_panel_api_doc.md](./vendor_panel_api_doc.md) · [customer_mobile_api_doc.md](./customer_mobile_api_doc.md)

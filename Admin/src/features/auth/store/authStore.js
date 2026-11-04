@@ -192,6 +192,11 @@ export const useAuthStore = create(
                 error: '',
             }),
 
+            // Merge fresh profile fields (GET /users/get, a profile save, a
+            // verified email/number) into the signed-in user, so the header
+            // and everything else reading `user` update straight away.
+            updateUser: (patch) => set((state) => ({ user: state.user ? { ...state.user, ...patch } : patch })),
+
             // A session borrowed from another open admin tab (tabSession.js).
             restoreSession: ({ user, accessToken, refreshToken }) => {
                 set({ user: user ?? null, accessToken, refreshToken: refreshToken ?? null, isAuthenticated: true });

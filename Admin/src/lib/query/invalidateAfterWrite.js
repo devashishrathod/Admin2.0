@@ -33,6 +33,9 @@ const RELATED_RESOURCES = {
   transactions: ["voucher-claims", "settlements"],
   // A category's name / image shows on its sub-categories.
   categories: ["subCategories"],
+  // Restoring / purging an account changes the customer list and the
+  // customer block on transaction rows.
+  users: ["customers", "voucher-claims"],
 };
 
 // Upload plumbing — never a resource a screen displays.

@@ -23,6 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Check,
+  Minus,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, LabelList } from "recharts";
 import PlanDetails from "./PlanDetails";
@@ -359,165 +361,184 @@ function planFeatureList(plan, featureMeta) {
     .sort((a, b) => a.order - b.order);
 }
 
+// Pricing-card look: plan identity + status, a tinted price panel, the
+// feature limits as ✓ / – rows (first 6, "+N more" opens the plan), a
+// benefit and a limitation, then compact actions.
+const CARD_FEATURE_LIMIT = 6;
+
 function PlanCard({ plan, featureMeta, onView, onEdit, onDelete, onApplyTerms }) {
   const featureList = planFeatureList(plan, featureMeta);
+  const shownFeatures = featureList.slice(0, CARD_FEATURE_LIMIT);
+  const moreFeatures = featureList.length - shownFeatures.length;
   const discounted = plan.discountedPrice != null ? Number(plan.discountedPrice) : null;
   const hasDiscount = discounted != null && discounted < Number(plan.price || 0);
   const discountLabel =
     plan.discountType === "PERCENT"
       ? Number(plan.discountPercent) > 0 && `${Math.round(Number(plan.discountPercent))}% OFF`
       : Number(plan.discountAmount) > 0 && `₹${Number(plan.discountAmount).toLocaleString("en-IN")} OFF`;
+  const active = plan.status === "Active";
+  const iconBtn =
+    "flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800";
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20 ${
-        plan.popular ? "ring-1 ring-emerald-400/60" : ""
-      }`}
+      className={`group relative flex h-full flex-col rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)] ring-1 transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] dark:bg-neutral-900 dark:shadow-black/20 ${
+        plan.popular ? "ring-emerald-400/60" : "ring-transparent hover:ring-emerald-400/30"
+      } ${active ? "" : "opacity-85"}`}
     >
       {plan.popular && (
-        <span className="absolute -top-3 left-5 flex items-center gap-1 rounded-full bg-emerald-400 px-2.5 py-0.5 text-[10.5px] font-semibold text-neutral-950">
+        <span className="absolute -top-2.5 left-4 flex items-center gap-1 rounded-full bg-emerald-400 px-2.5 py-0.5 text-[10px] font-semibold text-neutral-950 shadow-sm">
           <Star size={10} fill="currentColor" />
           Most Popular
         </span>
       )}
 
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-3">
+      {/* Identity + status */}
+      <div className="flex items-start gap-3">
+        <button onClick={() => onView(plan)} title="View plan" className="shrink-0">
           {plan.image ? (
-            <img src={plan.image} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+            <img src={plan.image} alt="" className="h-12 w-12 rounded-xl object-cover ring-1 ring-neutral-200/70 dark:ring-neutral-700/60" />
           ) : (
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-400 dark:bg-neutral-800">
-              <Layers size={16} />
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
+              <Layers size={18} />
             </span>
           )}
-          <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">{plan.name}</h3>
-            <p className="mt-0.5 truncate text-[12px] text-neutral-500">{plan.description || "No description"}</p>
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <button
+              onClick={() => onView(plan)}
+              title={plan.name}
+              className="min-w-0 truncate text-left text-[15px] font-semibold leading-tight text-neutral-900 hover:text-emerald-600 dark:text-neutral-50 dark:hover:text-emerald-400"
+            >
+              {plan.name}
+            </button>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                active ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-neutral-400"}`} />
+              {active ? "Active" : "Deactive"}
+            </span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <span
+              className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                plan.tier != null ? "bg-violet-400/10 text-violet-600 dark:text-violet-400" : "bg-amber-400/10 text-amber-700 dark:text-amber-400"
+              }`}
+            >
+              {plan.tier != null ? `Tier ${plan.tier}` : "No tier"}
+            </span>
+            {plan.durationLabel && (
+              <span className="whitespace-nowrap rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                {plan.durationLabel}
+              </span>
+            )}
+            {plan.isTrial && (
+              <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-sky-400/10 px-2 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400">
+                <Gift size={10} />
+                Free trial
+              </span>
+            )}
           </div>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-            plan.status === "Active"
-              ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-              : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400"
-          }`}
-        >
-          {plan.status}
-        </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <span
-          className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold ${
-            plan.tier != null
-              ? "bg-violet-400/10 text-violet-600 dark:text-violet-400"
-              : "bg-amber-400/10 text-amber-700 dark:text-amber-400"
-          }`}
-        >
-          {plan.tier != null ? `Tier ${plan.tier}` : "No tier"}
-        </span>
-        {plan.durationLabel && (
-          <span className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-            {plan.durationLabel}
-          </span>
-        )}
-        {plan.isTrial && (
-          <span className="flex items-center gap-1 rounded-md bg-sky-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-sky-600 dark:text-sky-400">
-            <Gift size={10} />
-            Free trial
-          </span>
-        )}
-      </div>
+      <p className="mt-2.5 line-clamp-2 min-h-[2.4em] text-[11.5px] leading-snug text-neutral-500" title={plan.description || ""}>
+        {plan.description || "No description"}
+      </p>
 
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-[24px] font-bold text-neutral-900 dark:text-neutral-50">
-          ₹{Number(hasDiscount ? discounted : plan.price || 0).toLocaleString("en-IN")}
-        </span>
-        {plan.typeLabel && <span className="text-[12px] text-neutral-500">/ {plan.typeLabel}</span>}
-      </div>
-      {(hasDiscount || discountLabel) && (
-        <div className="mt-1 flex items-center gap-2">
+      {/* Price panel */}
+      <div className="mt-3 flex items-end justify-between gap-2 rounded-xl bg-gradient-to-br from-emerald-400/10 via-emerald-400/5 to-transparent px-3.5 py-2.5 ring-1 ring-emerald-400/15">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[24px] font-bold leading-none tracking-tight tabular-nums text-neutral-900 dark:text-neutral-50">
+              ₹{Number(hasDiscount ? discounted : plan.price || 0).toLocaleString("en-IN")}
+            </span>
+            {plan.typeLabel && <span className="truncate text-[11.5px] text-neutral-500">/ {plan.typeLabel}</span>}
+          </div>
           {hasDiscount && (
-            <span className="rounded-md bg-neutral-200 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-500 line-through dark:bg-neutral-800 dark:text-neutral-400">
-              ₹{Number(plan.price).toLocaleString("en-IN")}
-            </span>
-          )}
-          {discountLabel && (
-            <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
-              {discountLabel}
-            </span>
+            <span className="mt-1 inline-block text-[11px] tabular-nums text-neutral-400 line-through">₹{Number(plan.price).toLocaleString("en-IN")}</span>
           )}
         </div>
-      )}
+        {discountLabel && (
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">{discountLabel}</span>
+        )}
+      </div>
 
-      {featureList.length > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-1.5">
-          {featureList.map((f) => (
-            <div
-              key={f.key}
-              className="flex items-center justify-between gap-2 rounded-lg bg-neutral-50 px-2.5 py-1.5 dark:bg-neutral-950/60"
-            >
-              <span className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">{f.label}</span>
-              <span
-                className={`shrink-0 text-[11.5px] font-semibold ${
-                  f.off ? "text-neutral-400 dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"
-                }`}
-              >
+      {/* Feature limits */}
+      {shownFeatures.length > 0 && (
+        <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
+          {shownFeatures.map((f) => (
+            <li key={f.key} className="flex min-w-0 items-center gap-1.5 text-[11.5px]">
+              {f.off ? (
+                <Minus size={12} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
+              ) : (
+                <Check size={12} className="shrink-0 text-emerald-500" />
+              )}
+              <span className={`min-w-0 flex-1 truncate ${f.off ? "text-neutral-400" : "text-neutral-600 dark:text-neutral-300"}`} title={f.label}>
+                {f.label}
+              </span>
+              <span className={`shrink-0 font-semibold tabular-nums ${f.off ? "text-neutral-400 dark:text-neutral-600" : "text-neutral-900 dark:text-neutral-100"}`}>
                 {f.text}
               </span>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
+      )}
+      {moreFeatures > 0 && (
+        <button onClick={() => onView(plan)} className="mt-1.5 self-start text-[11px] font-semibold text-emerald-600 hover:underline dark:text-emerald-400">
+          +{moreFeatures} more feature{moreFeatures === 1 ? "" : "s"}
+        </button>
       )}
 
+      {/* One benefit + one limitation */}
       {(plan.benefits.length > 0 || plan.limitations.length > 0) && (
-        <div className="mt-4 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-          {plan.benefits.slice(0, 2).map((b, i) => (
-            <p key={i} className="flex items-start gap-1.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+        <div className="mt-3 space-y-1 rounded-xl bg-neutral-50 px-3 py-2 dark:bg-neutral-950/60">
+          {plan.benefits.slice(0, 1).map((b, i) => (
+            <p key={`b${i}`} className="flex items-start gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
               <ThumbsUp size={11} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              {b}
+              <span className="line-clamp-1" title={b}>{b}</span>
             </p>
           ))}
           {plan.limitations.slice(0, 1).map((l, i) => (
-            <p key={i} className="mt-1 flex items-start gap-1.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+            <p key={`l${i}`} className="flex items-start gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
               <ThumbsDown size={11} className="mt-0.5 shrink-0 text-red-600/70 dark:text-red-400/70" />
-              {l}
+              <span className="line-clamp-1" title={l}>{l}</span>
             </p>
           ))}
         </div>
       )}
 
-      <div className="mt-auto pt-5">
-        <div className="flex items-center gap-2">
+      {/* Actions */}
+      <div className="mt-auto pt-3">
+        <div className="flex items-center justify-between gap-2 border-t border-neutral-100 pt-2.5 dark:border-neutral-800">
           <button
-            onClick={() => onView(plan)}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-sky-400/60 hover:text-sky-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-sky-400"
+            onClick={() => onApplyTerms(plan)}
+            title="Apply this plan's limits to brands already on it"
+            className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11.5px] font-medium text-neutral-500 transition-colors hover:bg-sky-400/10 hover:text-sky-600 dark:hover:text-sky-400"
           >
-            <Eye size={13} />
-            View
+            <Users size={13} className="shrink-0" />
+            <span className="truncate">Apply to subscribers</span>
           </button>
-          <button
-            onClick={() => onEdit(plan)}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-emerald-400/60 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-emerald-400"
-          >
-            <Pencil size={13} />
-            Edit
-          </button>
-          <button
-            onClick={() => onDelete(plan)}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-red-500/60 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-300 dark:hover:text-red-400"
-          >
-            <Trash2 size={13} />
-            Delete
-          </button>
+          <div className="flex shrink-0 items-center">
+            <button onClick={() => onView(plan)} aria-label={`View ${plan.name}`} title="View" className={`${iconBtn} hover:text-sky-600 dark:hover:text-sky-400`}>
+              <Eye size={14} />
+            </button>
+            <button onClick={() => onEdit(plan)} aria-label={`Edit ${plan.name}`} title="Edit" className={`${iconBtn} hover:text-emerald-600 dark:hover:text-emerald-400`}>
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={() => onDelete(plan)}
+              aria-label={`Delete ${plan.name}`}
+              title="Delete"
+              className={`${iconBtn} hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400`}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => onApplyTerms(plan)}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl py-1.5 text-[12px] font-medium text-neutral-500 transition-colors hover:bg-sky-400/10 hover:text-sky-600 dark:hover:text-sky-400"
-        >
-          <Users size={13} />
-          Apply limits to current subscribers
-        </button>
       </div>
     </div>
   );

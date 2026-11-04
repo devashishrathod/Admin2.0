@@ -11,7 +11,6 @@ import {
   Trash2,
   FileDown,
   AlertTriangle,
-  SlidersHorizontal,
   Check,
   MoreVertical,
   ChevronLeft,
@@ -71,7 +70,7 @@ const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Hidden Brand", "T
 const STATUS_TAB_LABELS = {
   All: "All",
   "Active Brand": "Verified",
-  "Deactive Brand": "Inactive",
+  "Deactive Brand": "Deactive",
   "Hidden Brand": "Hidden",
   "Top Brand": "Top Brand",
 };
@@ -144,7 +143,7 @@ function BrandStatusBadge({ brand }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${style.pill}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-      {label === "Active" ? "Verified" : label === "Deactive" ? "Inactive" : label}
+      {label === "Active" ? "Verified" : label}
     </span>
   );
 }
@@ -351,7 +350,7 @@ function CollapsibleSearch({ value, onChange, placeholder }) {
 function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSetTopBrand, onSetComingSoon }) {
   // Dummy (isDummy) brands are view-only: no Edit, no Delete.
   const readOnly = Boolean(brand.isDummy);
-  // Confirm popup for Active/Inactive (same one the details page uses).
+  // Confirm popup for Active/Deactive (same one the details page uses).
   const [showActiveConfirm, setShowActiveConfirm] = useState(false);
   // Top Brand placement — same modal as the details page.
   const [showTopBrandModal, setShowTopBrandModal] = useState(false);
@@ -446,7 +445,7 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
                         size={14}
                         className={`shrink-0 ${brand.active ? "text-neutral-500" : "text-amber-600 dark:text-amber-400"}`}
                       />
-                      Inactive
+                      Deactive
                     </span>
                     {/* ON = brand is inactive (same sense as "Hide from customers"). */}
                     <MiniToggle
@@ -623,7 +622,7 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
           {/* Pill tags */}
           <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5 pr-40">
             {/* "Verified" is the blue tick next to the name below;
-                Expired / Inactive still get their own pill here. */}
+                Expired / Deactive still get their own pill here. */}
             {brand.isDummy && (
               <span className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wide text-violet-600 shadow-sm dark:bg-neutral-900 dark:text-violet-400">
                 <FlaskConical size={12} />
@@ -632,7 +631,7 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
             )}
             {statusLabel !== "Active" && (
               <span className={`rounded-full bg-white px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wide shadow-sm dark:bg-neutral-900 ${CARD_TAG_STYLES[statusLabel] || CARD_TAG_STYLES.Deactive}`}>
-                {statusLabel === "Deactive" ? "Inactive" : statusLabel}
+                {statusLabel}
               </span>
             )}
             {brand.isTopBrand && (
@@ -912,8 +911,8 @@ function writeSession(key, value) {
   }
 }
 
-// scope "live" = Live Brands (every approved brand); "expired" = Expired
-// Brands (only approved brands whose plan has run out).
+// scope "live" = Live Brands (approved brands, minus RD and expired ones);
+// "expired" = Expired Brands (only approved brands whose plan has run out).
 const isExpired = (b) => b.status === "Expired" || isExpiredBrand(b);
 
 export default function Brand({ scope = "live" }) {
@@ -943,8 +942,9 @@ export default function Brand({ scope = "live" }) {
     ? liveBrands.filter((b) => b.isRealDummy === true)
     : isExpiredScope
     ? liveBrands.filter(isExpired)
-    : // Real-dummy brands move to their own "Real Dummy" page.
-      liveBrands.filter((b) => !b.isRealDummy);
+    : // Real-dummy and expired brands have their own pages (RD Brands /
+      // Expired Brands) — Live shows only brands that are live right now.
+      liveBrands.filter((b) => !b.isRealDummy && !isExpired(b));
 
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState("All");
@@ -1366,7 +1366,7 @@ export default function Brand({ scope = "live" }) {
             />
             <StatTile
               icon={Power}
-              label="Inactive"
+              label="Deactive"
               value={tabCount("Deactive Brand")}
               hint="Switched off"
               tint="neutral"
@@ -1457,14 +1457,29 @@ export default function Brand({ scope = "live" }) {
               <BarChart3 size={13} className="text-emerald-500" /> Top Brands
             </div>
             <p className="mb-1 text-[10px] text-neutral-500">By followers</p>
+            {/* Ranked rows instead of bars — axis labels had to cut names to
+                6 letters; here the full name + follower count are readable. */}
             {topBrandsByFollowers.length ? (
-              <ResponsiveContainer width="100%" height={90}>
-                <BarChart data={topBrandsByFollowers} margin={{ top: 2, right: 2, left: -22, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9 }} axisLine={false} tickLine={false} interval={0} tickFormatter={(v) => v.slice(0, 6)} />
-                  <Tooltip />
-                  <Bar dataKey="followers" name="Followers" fill="#2FDE8C" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <ul className="space-y-1">
+                {topBrandsByFollowers.map((b, i) => {
+                  const max = topBrandsByFollowers[0].followers || 1;
+                  return (
+                    <li key={`${b.name}-${i}`} className="relative flex items-center gap-1.5 overflow-hidden rounded-md px-1.5 py-0.5 text-[10.5px]">
+                      <span
+                        className="absolute inset-y-0 left-0 rounded-md bg-emerald-400/15"
+                        style={{ width: `${Math.max(4, (b.followers / max) * 100)}%` }}
+                      />
+                      <span className="relative w-3 shrink-0 text-center font-bold tabular-nums text-neutral-400">{i + 1}</span>
+                      <span className="relative min-w-0 flex-1 truncate capitalize text-neutral-700 dark:text-neutral-300" title={b.name}>
+                        {b.name}
+                      </span>
+                      <span className="relative shrink-0 font-semibold tabular-nums text-neutral-900 dark:text-neutral-50">
+                        {b.followers.toLocaleString("en-IN")}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
             ) : (
               <div className="flex h-22.5 items-center justify-center text-[11px] text-neutral-500">No data yet.</div>
             )}
@@ -1516,10 +1531,11 @@ export default function Brand({ scope = "live" }) {
         )}
 
         {/* Status tabs + Search + filters */}
-        {/* One line: tabs on the left (never wrap; scroll sideways on narrow
-            screens), filters on the right as compact pills. */}
-        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="no-scrollbar flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto">
+        {/* One line on wide screens: tabs on the left, filters on the right as
+            compact pills. Tabs are never squeezed or cut off — on narrower
+            screens the filters drop to the next line instead. */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 xl:flex-nowrap">
+          <div className="flex shrink-0 flex-wrap items-center gap-0.5">
             {/* Status tabs only on Live Brands — every row here is already expired */}
             {!isExpiredScope && STATUS_TABS.filter(
               (tab) => !(isDummyScope && tab === "Hidden Brand") && !(isRealDummyScope && tab === "Top Brand")
@@ -1555,10 +1571,12 @@ export default function Brand({ scope = "live" }) {
             })}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+          <div className="ml-auto flex flex-wrap items-center gap-2 xl:flex-nowrap">
             <CollapsibleSearch value={search} onChange={setSearchAndReset} placeholder="Search brand, category..." />
 
-            <div className="relative shrink-0">
+            {/* z-30: above the brand cards' three-dot button (z-20), which
+                otherwise shows through the open menu. */}
+            <div className="relative z-30 shrink-0">
               <button
                 onClick={() => setPlanMenuOpen((o) => !o)}
                 className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
@@ -1597,7 +1615,7 @@ export default function Brand({ scope = "live" }) {
               )}
             </div>
 
-            <div className="relative shrink-0">
+            <div className="relative z-30 shrink-0">
               <button
                 onClick={() => setCategoryMenuOpen((o) => !o)}
                 className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
@@ -1650,20 +1668,6 @@ export default function Brand({ scope = "live" }) {
                 }}
               />
             </div>
-
-            <button
-              onClick={resetFilters}
-              disabled={!filtersActive}
-              title="Reset all filters"
-              aria-label="Reset all filters"
-              className={`flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-                filtersActive
-                  ? "border-neutral-200 bg-white text-neutral-700 hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:text-red-400"
-                  : "cursor-not-allowed border-neutral-200/60 bg-neutral-100/60 text-neutral-400 dark:border-neutral-800/60 dark:bg-neutral-900/60 dark:text-neutral-700"
-              }`}
-            >
-              <SlidersHorizontal size={14} />
-            </button>
           </div>
         </div>
 

@@ -16,9 +16,11 @@ import VendorPlanAnalytics from './features/plan/Vendorplananalytics'
 import CustomerPlanAnalytics from './features/plan/Customerplananalytics'
 import Settlement from './features/settlement/Settlement'
 import Customer from './features/customer/Customer'
+import AccountDeletions from './features/accountDeletion/AccountDeletions'
 import Transaction from './features/transaction/Transaction'
 import TransactionDetails from './features/transaction/TransactionDetails'
 import Refund from './features/refund/Refund'
+import RefundRequests from './features/refund/RefundRequests'
 import RefundDetails from './features/refund/RefundDetails'
 
 import VoucherDetails from './features/voucher/VoucherDetails'
@@ -37,6 +39,7 @@ import Settings from './features/settings/Settings'
 import PromoCode from './features/promoCode/PromoCode'
 import PromoCodeReports from './features/promoCode/PromoCodeReports'
 import Notification from './features/notification/Notification'
+import Profile from './features/profile/Profile'
 import Subscriptions from './features/subscriptions/Subscriptions'
 import SubscriptionDetails from './features/subscriptions/SubscriptionDetails'
 import NotFoundPage from './components/common/NotFoundPage'
@@ -234,6 +237,15 @@ function App() {
         />
 
         <Route
+          path="/profile"
+          element={
+            <Layout>
+              <Profile />
+            </Layout>
+          }
+        />
+
+        <Route
           path="/notifications"
           element={
             <Layout>
@@ -343,6 +355,15 @@ function App() {
               />
 
                  <Route
+                path="/account-deletions"
+                element={
+                  <Layout>
+                    <AccountDeletions />
+                  </Layout>
+                }
+              />
+
+                 <Route
                 path="/transaction"
                 element={
                   <Layout>
@@ -364,7 +385,16 @@ function App() {
                 path="/refund"
                 element={
                   <Layout>
-                    <Refund />
+                    <Refund key="all" />
+                  </Layout>
+                }
+              />
+
+                 <Route
+                path="/refund-requests"
+                element={
+                  <Layout>
+                    <RefundRequests key="requests" />
                   </Layout>
                 }
               />

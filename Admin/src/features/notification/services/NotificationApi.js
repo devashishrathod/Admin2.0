@@ -109,9 +109,28 @@ export async function markNotificationsRead({ notificationIds, markAll = false }
     }
 }
 
+/* -------------------------------------------------------------------------
+ * Platform-wide outlet list — the "Outlet managers" audience picker.
+ * GET {{base_url}}/subBrands/get-all?page=&limit=&search=
+ * No brandId → every outlet on the platform (admin view). limit max 100.
+ * Each row's `_id` is what broadcast `target.subBrandIds` takes.
+ * (super_admin_panel_api_doc #29)
+ * ---------------------------------------------------------------------- */
+export async function getAllOutlets({ page = 1, limit = 100, search } = {}) {
+    try {
+        const params = { page, limit, sortBy: 'joinedDate', sortOrder: 'desc' };
+        if (search) params.search = search;
+        const { data } = await api.get('/subBrands/get-all', { params });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
 export default {
     sendTestPush,
     broadcastNotification,
     getAdminNotifications,
     markNotificationsRead,
+    getAllOutlets,
 };

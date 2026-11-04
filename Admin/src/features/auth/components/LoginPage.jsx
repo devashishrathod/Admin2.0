@@ -437,24 +437,11 @@ export default function LoginPage() {
                         </p>
 
                         {/* Support */}
-                        {/* Help card — hidden on short screens so the form never needs a scroll. */}
-                        <div className="mt-6 flex items-center gap-3 rounded-2xl [@media(max-height:660px)]:hidden border border-neutral-200/80 bg-neutral-50/80 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-950/40">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                                <Mail size={16} />
-                            </span>
-                            <div className="min-w-0">
-                                <p className="text-[11.5px] text-neutral-500">Need help signing in?</p>
-                                <a
-                                    href="mailto:TrydoodTeam@gmail.com"
-                                    className="truncate text-[13px] font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
-                                >
-                                    trydoodteam@gmail.com
-                                </a>
-                            </div>
-                        </div>
+                        
                     </div>
                 </main>
             </div>
+            
 
             {/* ── OTP Modal ── */}
             <OtpModal

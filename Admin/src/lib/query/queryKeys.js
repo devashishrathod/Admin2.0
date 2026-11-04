@@ -63,6 +63,11 @@ export const queryKeys = {
   promoCodes: resourceKeys("promoCodes"),
   promotionalTickers: resourceKeys("promotionalTickers"),
   notifications: resourceKeys("notifications"),
+  users: resourceKeys("users"), // the signed-in admin's own profile
+  // Broadcast dry runs (audience size). Deliberately NOT under
+  // ["notifications"]: a dry run is a POST /notifications/broadcast, which
+  // invalidates ["notifications"] — keyed there it would refetch itself forever.
+  notificationReach: resourceKeys("notification-reach"),
   termsAndConditions: resourceKeys("terms-and-conditions"),
   privacyPolicies: resourceKeys("privacy-and-policies"),
 };

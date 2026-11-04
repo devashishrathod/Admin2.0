@@ -38,12 +38,15 @@ function handleError(error) {
  * ---------------------------------------------------------------------- */
 
 // ── Get All Customers ─────────────────────────────────────────────
-// GET {{base_url}}/customers/admin/get-all?page=&limit=&search=&status=
-export async function getAllCustomers({ page = 1, limit = 50, search, status } = {}) {
+// GET {{base_url}}/customers/admin/get-all?page=&limit=&search=&status=&accountState=
+// accountState: PENDING | ACTIVE | DELETION_SCHEDULED (omit = default list,
+// which hides only PENDING).
+export async function getAllCustomers({ page = 1, limit = 50, search, status, accountState } = {}) {
     try {
         const params = { page, limit };
         if (search) params.search = search;
         if (status) params.status = status;
+        if (accountState) params.accountState = accountState;
         const { data } = await api.get('/customers/admin/get-all', { params });
         return data;
     } catch (error) {

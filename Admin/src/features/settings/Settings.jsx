@@ -66,7 +66,10 @@ const SECTIONS = [
     id: "security",
     label: "Security Setting",
     icon: Lock,
-    children: [{ id: "security.otp", label: "OTP" }],
+    children: [
+      { id: "security.otp", label: "OTP" },
+      { id: "security.accountDeletion", label: "Account Deletion" },
+    ],
   },
   {
     id: "admin",
@@ -215,7 +218,17 @@ const EMPTY_REFUND = {
 const EMPTY_CHARGEBACK = { writeOffDays: 90, deadlineAlertHours: [] };
 const EMPTY_SEARCH = { isEnabled: true, minQueryLength: 2, sectionLimit: 5, historyLimit: 20, popularQueries: [] };
 
-const EMPTY_OTP = { resendCooldownSeconds: 60, maxPerHour: 5 };
+// Store-review numbers' own OTP settings. `null` on a field means "use the
+// normal security.otp value" — the server merges, so null is meaningful.
+const EMPTY_OTP_REVIEW = { maxVerifyAttempts: 100, ttlSeconds: 300, resendCooldownSeconds: 0, maxPerHour: 100 };
+const EMPTY_OTP = {
+  resendCooldownSeconds: 60,
+  maxPerHour: 5,
+  maxVerifyAttempts: 5,
+  ttlSeconds: 300,
+  review: EMPTY_OTP_REVIEW,
+};
+const EMPTY_ACCOUNT_DELETION = { graceDays: 30, requireOtpForAll: false };
 
 const EMPTY_ADMIN_NOTIFICATION = {
   isEmailNotificationEnabled: true,
@@ -227,6 +240,8 @@ const EMPTY_ADMIN_NOTIFICATION = {
 const EMPTY_APP = {
   minVersion: { android: "", ios: "" },
   latestVersion: { android: "", ios: "" },
+  minBuild: { android: 0, ios: 0, web: 0 },
+  latestBuild: { android: 0, ios: 0, web: 0 },
   forceUpdate: false,
   updateMessage: "",
   storeUrl: { android: "", ios: "" },
@@ -272,7 +287,12 @@ function apiToForm(settings) {
       search: { ...EMPTY_SEARCH, ...(customer.search || {}) },
     },
     security: {
-      otp: { ...EMPTY_OTP, ...(security.otp || {}) },
+      otp: {
+        ...EMPTY_OTP,
+        ...(security.otp || {}),
+        review: { ...EMPTY_OTP_REVIEW, ...(security.otp?.review || {}) },
+      },
+      accountDeletion: { ...EMPTY_ACCOUNT_DELETION, ...(security.accountDeletion || {}) },
     },
     admin: {
       notification: { ...EMPTY_ADMIN_NOTIFICATION, ...(admin.notification || {}) },
@@ -280,6 +300,8 @@ function apiToForm(settings) {
     app: {
       minVersion: { ...EMPTY_APP.minVersion, ...(app.minVersion || {}) },
       latestVersion: { ...EMPTY_APP.latestVersion, ...(app.latestVersion || {}) },
+      minBuild: { ...EMPTY_APP.minBuild, ...(app.minBuild || {}) },
+      latestBuild: { ...EMPTY_APP.latestBuild, ...(app.latestBuild || {}) },
       forceUpdate: Boolean(app.forceUpdate),
       updateMessage: app.updateMessage || "",
       storeUrl: { ...EMPTY_APP.storeUrl, ...(app.storeUrl || {}) },
@@ -316,8 +338,8 @@ function buildSavePayload(sectionId, form) {
 
   if (group === "app") {
     if (key === "version") {
-      const { minVersion, latestVersion, forceUpdate, updateMessage, storeUrl } = form.app;
-      return { app: { minVersion, latestVersion, forceUpdate, updateMessage, storeUrl } };
+      const { minVersion, latestVersion, minBuild, latestBuild, forceUpdate, updateMessage, storeUrl } = form.app;
+      return { app: { minVersion, latestVersion, minBuild, latestBuild, forceUpdate, updateMessage, storeUrl } };
     }
     const { support, features } = form.app;
     return { app: { support, features } };
@@ -333,6 +355,50 @@ function buildSavePayload(sectionId, form) {
   }
 
   return { [group]: { [key]: form[group][key] } };
+}
+
+// Range checks for the v1.12 fields (guide §4). The server is still the
+// authority — its 422 message is shown as-is — this just catches the
+// obvious slip before a round trip.
+function checkRange(label, value, min, max, { nullable = false } = {}) {
+  if (value === null || value === undefined || value === "") {
+    return nullable ? "" : `${label} is required.`;
+  }
+  if (!Number.isInteger(value)) return `${label} must be a whole number.`;
+  if (value < min || value > max) return `${label} must be between ${min} and ${max}.`;
+  return "";
+}
+
+function validateSection(sectionId, form) {
+  const errors = [];
+  if (sectionId === "security.otp") {
+    const o = form.security.otp;
+    errors.push(
+      checkRange("Resend cooldown", o.resendCooldownSeconds, 0, 3600),
+      checkRange("Max per hour", o.maxPerHour, 1, 100),
+      checkRange("Max verify attempts", o.maxVerifyAttempts, 1, 100),
+      checkRange("Code lifetime", o.ttlSeconds, 120, 1500),
+      checkRange("Review max verify attempts", o.review.maxVerifyAttempts, 1, 100, { nullable: true }),
+      checkRange("Review code lifetime", o.review.ttlSeconds, 120, 1500, { nullable: true }),
+      checkRange("Review resend cooldown", o.review.resendCooldownSeconds, 0, 3600, { nullable: true }),
+      checkRange("Review max per hour", o.review.maxPerHour, 1, 100, { nullable: true }),
+    );
+  }
+  if (sectionId === "security.accountDeletion") {
+    errors.push(checkRange("Grace period", form.security.accountDeletion.graceDays, 1, 1095));
+  }
+  if (sectionId === "app.version") {
+    ["minBuild", "latestBuild"].forEach((k) =>
+      ["android", "ios", "web"].forEach((p) =>
+        errors.push(checkRange(`${k} ${p}`, form.app[k][p], 0, 2000000000)),
+      ),
+    );
+    if (!form.app.storeUrl.android.trim() || !form.app.storeUrl.ios.trim()) {
+      errors.push("Store URLs (Android and iOS) cannot be empty — the update button opens them.");
+    }
+    if ((form.app.updateMessage || "").length > 300) errors.push("Update message cannot exceed 300 characters.");
+  }
+  return errors.filter(Boolean)[0] || "";
 }
 
 /* -------------------------------------------------------------------------
@@ -537,6 +603,28 @@ function NumberField({ label, value, onChange, suffix, disabled = false, hint })
   );
 }
 
+// Number input where an empty box means `null` ("use the normal value") —
+// used by security.otp.review, where null is a real, meaningful setting.
+function NullableNumberField({ label, value, onChange, suffix, hint, placeholder }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">{label}</label>
+      <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 focus-within:border-emerald-400/60 focus-within:ring-1 focus-within:ring-emerald-400/60 dark:border-neutral-800 dark:bg-neutral-950">
+        <input
+          type="number"
+          min={0}
+          value={value ?? ""}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+          className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
+        />
+        {suffix && <span className="shrink-0 text-[11.5px] text-neutral-500">{suffix}</span>}
+      </div>
+      {hint && <p className="mt-1 text-[10.5px] text-neutral-500">{hint}</p>}
+    </div>
+  );
+}
+
 // A real dropdown for fields the backend validator restricts to a fixed
 // enum — free text on these would just 422 on save.
 function SelectField({ label, value, options, onChange }) {
@@ -631,6 +719,12 @@ export default function Settings() {
     setSaving(true);
     setSaveError("");
     setSavedSection("");
+    const clientError = validateSection(activeSection, form);
+    if (clientError) {
+      setSaveError(clientError);
+      setSaving(false);
+      return;
+    }
     try {
       await updateSettings(buildSavePayload(activeSection, form));
       setSavedSection(activeSection);
@@ -1534,18 +1628,95 @@ export default function Settings() {
 
               {/* ---------------- Security > OTP ---------------- */}
               {activeSection === "security.otp" && (
-                <Card title="OTP">
+                <div className="space-y-4">
+                  <Card title="OTP">
+                    <NumberField
+                      label="Resend Cooldown"
+                      value={form.security.otp.resendCooldownSeconds}
+                      onChange={(v) => setSecurityField("otp", "resendCooldownSeconds", v)}
+                      suffix="seconds"
+                      hint="0–3600. 0 = no wait."
+                    />
+                    <NumberField
+                      label="Max Per Hour"
+                      value={form.security.otp.maxPerHour}
+                      onChange={(v) => setSecurityField("otp", "maxPerHour", v)}
+                      hint="1–100, per number / email."
+                    />
+                    <NumberField
+                      label="Max Verify Attempts"
+                      value={form.security.otp.maxVerifyAttempts}
+                      onChange={(v) => setSecurityField("otp", "maxVerifyAttempts", v)}
+                      hint="1–100. Wrong tries per code before it is deleted. Default 5."
+                    />
+                    <NumberField
+                      label="Code Lifetime"
+                      value={form.security.otp.ttlSeconds}
+                      onChange={(v) => setSecurityField("otp", "ttlSeconds", v)}
+                      suffix="seconds"
+                      hint="120–1500 (2–25 min). New codes only. Default 300. Update the WhatsApp template text if it states a duration."
+                    />
+                  </Card>
+                  <p className="px-1 text-[11.5px] text-amber-600 dark:text-amber-400">
+                    These apply to every customer and vendor — don&apos;t change them for store review. Use the block below.
+                  </p>
+                  <Card title="Store review (allowlisted numbers)">
+                    <NullableNumberField
+                      label="Max Verify Attempts"
+                      value={form.security.otp.review.maxVerifyAttempts}
+                      onChange={(v) => setSecurityField("otp", "review", { ...form.security.otp.review, maxVerifyAttempts: v })}
+                      placeholder="Normal value"
+                      hint="1–100. Empty = use normal value. Default 100."
+                    />
+                    <NullableNumberField
+                      label="Code Lifetime"
+                      value={form.security.otp.review.ttlSeconds}
+                      onChange={(v) => setSecurityField("otp", "review", { ...form.security.otp.review, ttlSeconds: v })}
+                      suffix="seconds"
+                      placeholder="Normal value"
+                      hint="120–1500. Empty = use normal value. Default 300."
+                    />
+                    <NullableNumberField
+                      label="Resend Cooldown"
+                      value={form.security.otp.review.resendCooldownSeconds}
+                      onChange={(v) => setSecurityField("otp", "review", { ...form.security.otp.review, resendCooldownSeconds: v })}
+                      suffix="seconds"
+                      placeholder="Normal value"
+                      hint="0–3600. Empty = use normal value. Default 0."
+                    />
+                    <NullableNumberField
+                      label="Max Per Hour"
+                      value={form.security.otp.review.maxPerHour}
+                      onChange={(v) => setSecurityField("otp", "review", { ...form.security.otp.review, maxPerHour: v })}
+                      placeholder="Normal value"
+                      hint="1–100. Empty = use normal value. Default 100."
+                    />
+                  </Card>
+                  <p className="px-1 text-[11px] text-neutral-500">
+                    Store review settings apply only to numbers in the server&apos;s OTP_BYPASS_TARGETS, and only to the roles in
+                    OTP_BYPASS_ROLES (default customer). Every resend is a paid WhatsApp message.
+                  </p>
+                </div>
+              )}
+
+              {/* ---------------- Security > Account Deletion ---------------- */}
+              {activeSection === "security.accountDeletion" && (
+                <Card title="Account Deletion">
                   <NumberField
-                    label="Resend Cooldown"
-                    value={form.security.otp.resendCooldownSeconds}
-                    onChange={(v) => setSecurityField("otp", "resendCooldownSeconds", v)}
-                    suffix="seconds"
+                    label="Grace Period"
+                    value={form.security.accountDeletion.graceDays}
+                    onChange={(v) => setSecurityField("accountDeletion", "graceDays", v)}
+                    suffix="days"
+                    hint="1–1095 (max 3 years). Applies to new requests only. Update the privacy policy text if changed. Default 30."
                   />
-                  <NumberField
-                    label="Max Per Hour"
-                    value={form.security.otp.maxPerHour}
-                    onChange={(v) => setSecurityField("otp", "maxPerHour", v)}
+                  <ToggleField
+                    label="Require OTP for every delete"
+                    checked={form.security.accountDeletion.requireOtpForAll}
+                    onChange={(v) => setSecurityField("accountDeletion", "requireOtpForAll", v)}
                   />
+                  <p className="text-[10.5px] text-neutral-500 sm:col-span-3">
+                    When on, old app builds (no OTP) get &quot;Please update the app&quot;. Keep off until old builds are gone.
+                  </p>
                 </Card>
               )}
 
@@ -1606,6 +1777,50 @@ export default function Settings() {
                       placeholder="e.g. 1.0.0"
                     />
                   </Card>
+                  <Card title="Min Build">
+                    <NumberField
+                      label="Android"
+                      value={form.app.minBuild.android}
+                      onChange={(v) => setAppField("minBuild", "android", v)}
+                      hint="Builds below this must update."
+                    />
+                    <NumberField
+                      label="iOS"
+                      value={form.app.minBuild.ios}
+                      onChange={(v) => setAppField("minBuild", "ios", v)}
+                      hint="On prod, never above the build in App Store review."
+                    />
+                    <NumberField
+                      label="Web"
+                      value={form.app.minBuild.web}
+                      onChange={(v) => setAppField("minBuild", "web", v)}
+                      hint="Web panels below this must reload. 0 = not set."
+                    />
+                  </Card>
+                  <Card title="Latest Build">
+                    <NumberField
+                      label="Android"
+                      value={form.app.latestBuild.android}
+                      onChange={(v) => setAppField("latestBuild", "android", v)}
+                      hint="Builds below this see an optional update."
+                    />
+                    <NumberField
+                      label="iOS"
+                      value={form.app.latestBuild.ios}
+                      onChange={(v) => setAppField("latestBuild", "ios", v)}
+                      hint="On prod, never above the build in App Store review."
+                    />
+                    <NumberField
+                      label="Web"
+                      value={form.app.latestBuild.web}
+                      onChange={(v) => setAppField("latestBuild", "web", v)}
+                      hint="Newest web build. 0 = not set."
+                    />
+                  </Card>
+                  <p className="px-1 text-[11.5px] text-amber-600 dark:text-amber-400">
+                    0 = not set (the version decides). Before store review, keep iOS min / latest build at or below the build under
+                    review — otherwise the reviewer sees the update screen.
+                  </p>
                   <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
                     <p className="mb-4 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">
                       Force Update
@@ -1615,6 +1830,9 @@ export default function Settings() {
                       checked={form.app.forceUpdate}
                       onChange={(v) => setAppTopField("forceUpdate", v)}
                     />
+                    <p className="mt-1.5 text-[10.5px] text-neutral-500">
+                      Forces only users behind the latest version / build. Does nothing unless a latest version or build is set.
+                    </p>
                     <div className="mt-4">
                       <TextField
                         label="Update Message"
@@ -1623,6 +1841,9 @@ export default function Settings() {
                         placeholder="Shown to users who must update"
                         textarea
                       />
+                      <p className="mt-1 text-[10.5px] text-neutral-500">
+                        Max 300 characters. One message for both platforms — don&apos;t name any store.
+                      </p>
                     </div>
                   </div>
                   <Card title="Store URLs">
@@ -1638,6 +1859,9 @@ export default function Settings() {
                       onChange={(v) => setAppField("storeUrl", "ios", v)}
                       placeholder="App Store link"
                     />
+                    <p className="text-[10.5px] text-neutral-500 sm:col-span-3">
+                      Required — the update button opens these. Must be a full URL.
+                    </p>
                   </Card>
                 </div>
               )}

@@ -18,6 +18,7 @@ import {
   Gift,
   // Ticket,
   ArrowLeftRight,
+  Inbox,
   Undo2,
   HandCoins,
   // Megaphone, // used by the Feature Campaign link (commented out below)
@@ -29,6 +30,7 @@ import {
   TrendingUp,
   FlaskConical,
   Rocket,
+  UserX,
 } from "lucide-react";
 
 // Grouped nav — each group renders with an uppercase label (hidden when
@@ -48,6 +50,8 @@ export const NAV_GROUPS = [
     label: "Payments",
     items: [
       { id: "transaction", label: "Transactions", icon: ArrowLeftRight, path: "/transaction" },
+      // New, undecided refund requests (vendor / admin still to decide).
+      { id: "refund-requests", label: "Refund Requests", icon: Inbox, path: "/refund-requests" },
       { id: "refund", label: "Refunds", icon: Undo2, path: "/refund" },
       { id: "settlements", label: "Settlements", icon: HandCoins, path: "/settlements" },
     ],
@@ -97,6 +101,7 @@ export const NAV_GROUPS = [
     label: "Customers",
     items: [
       { id: "customer", label: "Customers", icon: Users, path: "/customer" },
+      { id: "account-deletions", label: "Account Deletions", icon: UserX, path: "/account-deletions" },
     ],
   },
   {

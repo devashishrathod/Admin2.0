@@ -398,7 +398,7 @@ export default function BrandDetails({
 
             {/* Active/Inactive works on dummy brands too (one of their two actions). */}
             <div className="absolute right-4 top-2.5 flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur">
-              {brand.active ? "Active" : "Inactive"}
+              {brand.active ? "Active" : "Deactive"}
               <ToggleSwitch
                 checked={brand.active}
                 onChange={() => setShowToggleConfirm(true)}

@@ -576,12 +576,14 @@ export default function RefundDetails() {
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
+        {/* Back to wherever this was opened from (Refund Requests or
+            Refunds); opened directly → Refunds. */}
         <button
-          onClick={() => navigate("/refund")}
+          onClick={() => ((window.history.state?.idx ?? 0) > 0 ? navigate(-1) : navigate("/refund"))}
           className="mb-5 flex items-center gap-1.5 text-[12.5px] font-medium text-neutral-500 transition-colors hover:text-emerald-600 dark:hover:text-emerald-400"
         >
           <ArrowLeft size={14} />
-          Back to Refunds
+          Back
         </button>
 
         {/* Header */}

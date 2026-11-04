@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -8,23 +8,16 @@ import {
   CheckCircle2,
   Clock3,
   XCircle,
-  Wallet,
   Eye,
-  ArrowLeftRight,
-  Receipt,
-  BarChart3,
-  CreditCard,
   Undo2,
 } from "lucide-react";
 import { useAllVoucherClaimPayments } from "./queries/transactionQueries";
-import { KpiCard, DailyBarsCard, MixCard, PillTabs } from "../../components/common/Overview";
-import { pctChange, weekOverWeek, localDateStr } from "../../utils/overviewStats";
+import { PillTabs } from "../../components/common/Overview";
+import TransactionsOverview from "./TransactionsOverview";
 import {
   todayStr,
   formatDate,
-  fmtTime,
-  normalizeClaimStatus,
-  formatPaymentMethod,
+  normalizeClaimPayment,
   inr,
 } from "./transactionUtils";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
@@ -142,53 +135,6 @@ export function Table({
  * Real data — GET /voucher-claims/payments (see ./services/TransactionApi)
  * ---------------------------------------------------------------------- */
 
-// Normalizes one real voucher-claim payment record (GET
-// /voucher-claims/payments) into the flat row shape this page's table/
-// stats expect.
-//
-// The sibling detail endpoint (GET /voucher-claims/:claimId, confirmed real
-// — see TransactionDetails.jsx) returns each record wrapped as
-// { payment, claim, brand, outlet, timeline } rather than one flat object,
-// so each list row is defensively unwrapped the same way here: read every
-// payment field off `item.payment` when present, falling back to the item
-// itself for a flatter shape. This is what was making most cells show "—"
-// — the old code only ever read straight off the list item.
-//
-// On an admin token every row carries a `customer` block (fullName,
-// uniqueId, email, mobile, whatsappNumber). Unset keys are omitted, not
-// null, so "Customer" falls back to the raw `customerId` when there's no name.
-function normalizeClaimPayment(item) {
-  const payment = item?.payment ?? item ?? {};
-  const claim = item?.claim ?? {};
-  const brand = item?.brand ?? payment?.brand ?? {};
-  const customerInfo = item?.customer ?? payment?.customer ?? {};
-  const customerId = payment.customerId || claim.customerId || "—";
-
-  // No usable timestamp → no date (shown as "—"), never "today".
-  const ts = payment.createdAt || payment.verifiedAt || null;
-  const dateStr = localDateStr(ts);
-
-  const status = normalizeClaimStatus(payment.status);
-
-  return {
-    id: payment._id || item?._id || "—",
-    claimId: claim._id || payment.claimId || item?.voucher?.claimId || item?._id || payment._id || "—",
-    razorpayPaymentId: payment.razorpayPaymentId || "—",
-    vendor: brand.brandName || "—",
-    customer: customerInfo.fullName || customerId,
-    customerId,
-    customerUniqueId: customerInfo.uniqueId || "—",
-    customerPhone: customerInfo.mobile || customerInfo.whatsappNumber || "—",
-    date: dateStr,
-    time: dateStr ? fmtTime(ts) : "—",
-    amount: Number(payment.amount) || 0,
-    method: formatPaymentMethod(payment.paymentMethod),
-    status,
-    isToday: dateStr === todayStr(),
-    reference: payment.invoiceId || "—",
-    failureReason: status === "Failed" ? payment.errorDescription || payment.failureReason || "Payment failed." : null,
-  };
-}
 
 /* -------------------------------------------------------------------------
  * Small shared bits
@@ -237,8 +183,6 @@ const TABS = [
   { key: "failed", label: "Failed" },
   { key: "refunded", label: "Refunded" },
 ];
-
-const getTxnAmount = (t) => t.amount;
 
 function matchesTab(row, tab) {
   switch (tab) {
@@ -302,31 +246,6 @@ export default function Transaction() {
       refunded: { amount: sum(refunded), count: refunded.length },
     };
   }, [transactions]);
-
-  const kpis = useMemo(() => {
-    const summarize = (rows) => {
-      const success = rows.filter((r) => r.status === "Success");
-      const revenue = success.reduce((s, r) => s + r.amount, 0);
-      return {
-        revenue,
-        count: rows.length,
-        aov: success.length ? revenue / success.length : 0,
-        successRate: rows.length ? (success.length / rows.length) * 100 : 0,
-      };
-    };
-    const all = summarize(transactions);
-    const { cur, prev } = weekOverWeek(transactions, summarize);
-    return {
-      ...all,
-      revenueTrend: pctChange(cur.revenue, prev.revenue),
-      countTrend: pctChange(cur.count, prev.count),
-      aovTrend: pctChange(cur.aov, prev.aov),
-      // Percentage-point difference, not a relative change.
-      successRateTrend: prev.count ? cur.successRate - prev.successRate : cur.count ? null : 0,
-    };
-  }, [transactions]);
-
-  const successfulTxns = useMemo(() => transactions.filter((t) => t.status === "Success"), [transactions]);
 
   const methodMix = useMemo(() => {
     const counts = {};
@@ -399,7 +318,23 @@ export default function Transaction() {
       </button>
     ) },
     { key: "vendor", label: "Vendor", render: (r) => <ValueOr value={r.vendor} fallback="No brand" /> },
-    { key: "customer", label: "Customer", render: (r) => <ValueOr value={r.customer} fallback={MISSING.name} /> },
+    {
+      key: "customer",
+      label: "Customer",
+      render: (r) => (
+        <span className="inline-flex items-center gap-1.5">
+          <ValueOr value={r.customer} fallback={MISSING.name} />
+          {r.customerIsDeleted && (
+            <span
+              title="Account deleted — name and contact are from the sale snapshot"
+              className="rounded-full bg-red-400/10 px-2 py-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400"
+            >
+              Deleted
+            </span>
+          )}
+        </span>
+      ),
+    },
     {
       key: "date",
       label: "Date",
@@ -488,42 +423,11 @@ export default function Transaction() {
           </div>
         </div>
 
-        {/* KPI cards */}
-        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiCard icon={Wallet} label="Total Revenue" value={inr(kpis.revenue)} trend={kpis.revenueTrend} />
-          <KpiCard icon={ArrowLeftRight} label="Transactions" value={kpis.count.toLocaleString("en-IN")} trend={kpis.countTrend} />
-          <KpiCard icon={Receipt} label="Avg. Order Value" value={inr(kpis.aov)} trend={kpis.aovTrend} />
-          <KpiCard
-            icon={CheckCircle2}
-            label="Success Rate"
-            value={`${kpis.successRate.toFixed(1)}%`}
-            trend={kpis.successRateTrend}
-            trendSuffix=" pts"
-          />
-        </div>
-
-        {/* Revenue overview + payment method mix */}
-        <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <DailyBarsCard
-            className="lg:col-span-2"
-            title="Revenue Overview"
-            subtitle="Successful payments per day"
-            icon={BarChart3}
-            rows={successfulTxns}
-            getValue={getTxnAmount}
-            countLabel="txn"
-            emptyText="No successful payments in this period."
-            gradientId="txnRevenueBar"
-          />
-          <MixCard
-            title="Payment method mix"
-            icon={CreditCard}
-            total={transactions.length}
-            totalLabel="transactions"
-            items={methodMix}
-            emptyText="No transactions yet."
-          />
-        </div>
+        {/* Overview — exactly the rows the filters below select (tab,
+            method, date range, search), so it changes with them. */}
+        {!loading && !loadError && (
+          <TransactionsOverview rows={filtered} dateFrom={dateFrom} dateTo={dateTo} loading={isFetching} />
+        )}
 
         <PillTabs
           tabs={TABS.map((t) => ({ ...t, count: t.key === "all" ? stats.total.count : stats[t.key]?.count }))}

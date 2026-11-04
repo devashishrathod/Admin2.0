@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import NotificationScheduler from "../../features/notification/NotificationScheduler";
 import { useAuthStore } from "../../features/auth/store/authStore";
 import { isTokenValid, getTokenExpiry, expireSession } from "../../features/auth/session";
 
@@ -56,6 +57,8 @@ export default function Layout({ children }) {
         {/* Sidebar and Header stay put — this is the only region that scrolls. */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
       </div>
+      {/* Sends scheduled notifications while any admin page is open. */}
+      <NotificationScheduler />
     </div>
   );
 }

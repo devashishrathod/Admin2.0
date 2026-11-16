@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -21,7 +21,12 @@ import {
   Calendar,
   X,
   ChevronDown,
+  ChevronRight,
   RefreshCw,
+  LayoutDashboard,
+  Landmark,
+  History,
+  Eye,
 } from "lucide-react";
 import { BrandAvatar, StatusBadge, SectionCard, EmptyState, ToggleSwitch, StatChip, RingStat } from "../brand/BrandShared";
 import CommonEmptyState from "../../components/common/EmptyState";
@@ -31,13 +36,23 @@ import { mapBrandDetail } from "../brand/brandMapper";
 import { useVouchers } from "../voucher/queries/voucherQueries";
 import { useVerificationHistory } from "./queries/onboardingReviewQueries";
 import ShowcaseAlbums from "../brand/ShowcaseAlbums";
+import AccountDetailsTab from "../brand/BrandDetails/tabs/AccountDetailsTab";
+import SubmittedDetails from "./SubmittedDetails";
 import { isNotFoundMessage, MISSING, orText } from "../../utils/helpers";
 import Loader from "../../components/common/Loader";
 import ValueOr from "../../components/common/ValueOr";
 
-// GET /brands/get response → the flat brand-detail shape (stable reference
-// so `select` only re-runs when the data changes).
-const selectBrandDetail = (res) => mapBrandDetail(res?.data || res);
+// GET /brands/get response → the flat brand-detail shape, plus the untouched
+// payload as `raw` for the Business Details tab (stable reference so
+// `select` only re-runs when the data changes).
+const selectBrandDetail = (res) => {
+  const raw = res?.data || res;
+  return raw ? { ...mapBrandDetail(raw), raw } : null;
+};
+
+// Card chrome shared by the hero, sidebar panels and loading/error boxes.
+const CARD =
+  "rounded-3xl border border-white/80 bg-white/65 shadow-[0_8px_30px_rgba(16,185,129,0.07)] backdrop-blur-xl dark:border-white/5 dark:bg-neutral-900/60 dark:shadow-black/30";
 
 const STATUS_LABELS = {
   APPROVED: "Approved",
@@ -78,6 +93,35 @@ function DetailTile({ icon: Icon, label, value, fallback = MISSING.generic }) {
       </p>
       <p className="mt-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200"><ValueOr value={value} fallback={fallback} /></p>
     </div>
+  );
+}
+
+// Label ↔ value row used inside the sidebar panels.
+function FactRow({ icon: Icon, label, children, tint = "bg-neutral-200/70 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400" }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
+      <span className="flex min-w-0 items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
+        {Icon && (
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tint}`}>
+            <Icon size={13} />
+          </span>
+        )}
+        <span className="truncate">{label}</span>
+      </span>
+      <span className="min-w-0 truncate text-right text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{children}</span>
+    </div>
+  );
+}
+
+// Small pill in the hero's meta row.
+function MetaPill({ icon: Icon, children, className = "" }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border border-neutral-200/80 bg-white/70 px-2.5 py-1 text-[11.5px] font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-400 ${className}`}
+    >
+      {Icon && <Icon size={12} className="shrink-0" />}
+      {children}
+    </span>
   );
 }
 
@@ -139,7 +183,7 @@ function ScoreRing({ label, value }) {
   const ringColor = pct >= 80 ? "stroke-emerald-400" : pct >= 50 ? "stroke-amber-400" : "stroke-red-400";
 
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl bg-neutral-50 p-3 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-950 dark:shadow-black/20">
+    <div className="flex flex-col items-center gap-2 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
       <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
         <svg className="absolute inset-0 h-16 w-16 -rotate-90" viewBox="0 0 64 64">
           <circle cx="32" cy="32" r={radius} className="fill-none stroke-neutral-200 dark:stroke-neutral-800" strokeWidth="6" />
@@ -300,6 +344,74 @@ function TimelineEntry({ entry, isLast }) {
   );
 }
 
+// Loading / error wrapper for anything fed by GET /brands/get.
+function BrandDetailState({ loading, error, onRetry, what, children }) {
+  if (loading) {
+    return (
+      <div className={`${CARD} p-5`}>
+        <Loader variant="inline" center className="py-6" label={`Loading ${what}…`} />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className={`${CARD} p-5`}>
+        <CommonEmptyState
+          variant="compact"
+          tone="error"
+          icon="error"
+          title={`Couldn't load ${what}`}
+          description={error}
+          action={{ label: "Try again", icon: RefreshCw, onClick: onRetry }}
+        />
+      </div>
+    );
+  }
+  return children;
+}
+
+// Pill tab bar; `count` shows a small badge (red when `alert`).
+function TabBar({ tabs, active, onChange }) {
+  return (
+    <div className={`${CARD} no-scrollbar flex gap-1 overflow-x-auto p-1.5`} role="tablist">
+      {tabs.map((t) => {
+        const isActive = active === t.key;
+        const Icon = t.icon;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(t.key)}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl px-3.5 py-2 text-[12.5px] font-medium transition-all ${
+              isActive
+                ? "bg-emerald-400 text-neutral-950 shadow-sm"
+                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+            }`}
+          >
+            <Icon size={14} />
+            {t.label}
+            {t.count > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-px text-[10px] font-semibold ${
+                  isActive
+                    ? "bg-neutral-950/15 text-neutral-950"
+                    : t.alert
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                    : "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                }`}
+              >
+                {t.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function VerificationDetails({
   verification,
   onBack,
@@ -316,10 +428,13 @@ export default function VerificationDetails({
 }) {
   const { brand, flags, nameMatch, bankNameMatch, entityMatch, duplicateDetails } = verification;
   const checklist = buildChecklist(flags);
+  const passedCount = checklist.filter((c) => c.ok).length;
+  const failedChecks = checklist.filter((c) => !c.ok);
   const statusLabel = STATUS_LABELS[verification.derivedStatus] || verification.derivedStatus;
   const accent = STATUS_ACCENTS[verification.derivedStatus] || "from-neutral-500/20 via-neutral-500/0";
-  const checksPassedPct = checklist.length ? (checklist.filter((c) => c.ok).length / checklist.length) * 100 : 0;
+  const checksPassedPct = checklist.length ? (passedCount / checklist.length) * 100 : 0;
 
+  const [tab, setTab] = useState("overview");
   const [approveNote, setApproveNote] = useState("");
   const [showApproveBox, setShowApproveBox] = useState(false);
   const [showRejectBox, setShowRejectBox] = useState(false);
@@ -372,12 +487,13 @@ export default function VerificationDetails({
   // not every attempt's events mixed together.
   const currentAttemptHistory = history.filter((h) => h.systemVerifyId === verification.id);
 
-  // Plan / Subscription snapshot — GET /brands/get?brandId=... (same
-  // fully-populated payload the Brand folder's detail page uses).
+  // Account details + Plan / Subscription — GET /brands/get?brandId=...
+  // (same fully-populated payload the Brand folder's detail page uses).
   const brandDetailQuery = useBrandDetails(brandId, { select: selectBrandDetail });
   const brandDetail = brandDetailQuery.data ?? null;
   const brandDetailLoading = brandDetailQuery.isPending;
   const brandDetailError = brandDetailQuery.error?.message ?? "";
+  const retryBrandDetail = () => brandDetailQuery.refetch();
 
   // Listing data — the vouchers this brand has created, GET
   // /vouchers/versions/get-all?brandId=...
@@ -444,689 +560,746 @@ export default function VerificationDetails({
     { label: "Email", ids: duplicateDetails?.emailBrandIds },
   ].filter((g) => g.ids?.length);
 
+  // Brand-card values — the verification record first, then GET /brands/get
+  // (most onboarding brands have no verification record yet).
+  const brandEmail = brand.email || brandDetail?.contactEmail;
+  const brandWhatsapp = brand.whatsappNumber || brandDetail?.contactPhone;
+  const legalName = brand.legalBusinessName || brandDetail?.legalBusinessName;
+
+  const tabs = [
+    { key: "overview", label: "Overview", icon: LayoutDashboard },
+    { key: "business", label: "Business Details", icon: Store },
+    { key: "account", label: "Account Details", icon: Landmark },
+    { key: "verification", label: "Verification", icon: ShieldCheck, count: failedChecks.length, alert: true },
+    { key: "listings", label: "Listings & Showcase", icon: Tag, count: vouchers.length },
+    { key: "timeline", label: "Timeline", icon: History, count: currentAttemptHistory.length },
+  ];
+
+  /* ---------------------------------------------------------------- tabs */
+
+  const brandCard = (
+    <SectionCard title="Brand">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <DetailTile icon={Hash} label="Merchant ID" value={brand.merchantId} fallback={MISSING.id} />
+        <DetailTile icon={Phone} label="Mobile" value={brand.mobile} fallback={MISSING.phone} />
+        <DetailTile icon={Phone} label="WhatsApp" value={brandWhatsapp} fallback={MISSING.phone} />
+        <DetailTile icon={Mail} label="Email" value={brandEmail} fallback={MISSING.email} />
+        <DetailTile icon={Store} label="Entity Type" value={brand.businessEntityType} fallback="Not added" />
+        <DetailTile icon={Store} label="Registration" value={brand.businessRegistrationStatus} fallback="Not added" />
+        <DetailTile icon={RotateCcw} label="Verification Attempts" value={brand.verificationAttemptCount ?? 0} />
+        <DetailTile icon={Calendar} label="Submitted" value={verification.createdAt ? formatDateTime(verification.createdAt) : null} fallback={MISSING.date} />
+        <DetailTile icon={Clock} label="Last Updated" value={verification.updatedAt ? formatDateTime(verification.updatedAt) : null} fallback={MISSING.date} />
+      </div>
+    </SectionCard>
+  );
+
+  const overviewTab = (
+    <div className="space-y-4">
+      {brandCard}
+
+      <SectionCard title="Verification Snapshot">
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Score</p>
+            <p className={`mt-1 text-[18px] font-bold leading-none ${scoreColor(verification.score)}`}>
+              {verification.score ?? 0}
+              <span className="ml-0.5 text-[11px] font-medium text-neutral-500">/100</span>
+            </p>
+          </div>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Checks Passed</p>
+            <p className="mt-1 text-[18px] font-bold leading-none text-neutral-900 dark:text-neutral-50">
+              {passedCount}
+              <span className="ml-0.5 text-[11px] font-medium text-neutral-500">/{checklist.length}</span>
+            </p>
+          </div>
+          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
+            <p className="text-[10.5px] text-neutral-500">Duplicates</p>
+            <p className={`mt-1 text-[18px] font-bold leading-none ${duplicateGroups.length ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              {duplicateGroups.length}
+            </p>
+          </div>
+        </div>
+
+        {failedChecks.length ? (
+          <div className="mt-4">
+            <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">Needs attention</p>
+            <div className="flex flex-wrap gap-1.5">
+              {failedChecks.map((c) => (
+                <span
+                  key={c.label}
+                  className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11.5px] font-medium text-red-700 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400"
+                >
+                  <XCircle size={12} /> {c.label}
+                </span>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setTab("verification")}
+              className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+            >
+              View full checklist <ChevronRight size={13} />
+            </button>
+          </div>
+        ) : (
+          <p className="mt-4 flex items-center gap-1.5 text-[12.5px] text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 size={13} /> All automated checks passed.
+          </p>
+        )}
+      </SectionCard>
+
+      {verification.remarks?.length > 0 && (
+        <SectionCard title="Remarks">
+          <ul className="space-y-2">
+            {verification.remarks.map((r, i) => (
+              <li key={i} className="flex items-start gap-2 rounded-xl bg-amber-400/10 px-3 py-2 text-[12.5px] text-amber-700 dark:text-amber-300">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                {r}
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      )}
+    </div>
+  );
+
+  const verificationTab = (
+    <div className="space-y-4">
+      <SectionCard title="Verification Checklist">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {checklist.map((c) => (
+            <div
+              key={c.label}
+              className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] ${
+                c.ok
+                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/5"
+                  : "border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/5"
+              }`}
+            >
+              <span className="text-neutral-700 dark:text-neutral-300">{c.label}</span>
+              {c.ok ? (
+                <span className="flex shrink-0 items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 size={13} /> Pass
+                </span>
+              ) : (
+                <span className="flex shrink-0 items-center gap-1 font-semibold text-red-600 dark:text-red-400">
+                  <XCircle size={13} /> Fail
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <SectionCard title="Name Match Scores">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <ScoreRing label="PAN ↔ GST" value={nameMatch?.panGstScore ?? 0} />
+            <ScoreRing label="PAN ↔ Brand" value={nameMatch?.panBrandScore ?? 0} />
+            <ScoreRing label="GST ↔ Brand" value={nameMatch?.gstBrandScore ?? 0} />
+            <ScoreRing label="Average" value={nameMatch?.averageScore ?? 0} />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Bank Name Match Scores">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <ScoreRing label="Bank ↔ PAN" value={bankNameMatch?.bankPanScore ?? 0} />
+            <ScoreRing label="Bank ↔ GST" value={bankNameMatch?.bankGstScore ?? 0} />
+            <ScoreRing label="Bank ↔ Brand" value={bankNameMatch?.bankBrandScore ?? 0} />
+            <ScoreRing label="Highest" value={bankNameMatch?.highestScore ?? 0} />
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <SectionCard title="Business Entity Match" icon={Store}>
+          <div className="space-y-2">
+            <FactRow icon={Store} label="GST Constitution" tint="bg-sky-400/10 text-sky-600 dark:text-sky-400">
+              <ValueOr value={entityMatch?.gstConstitution} fallback="Not added" />
+            </FactRow>
+            <FactRow icon={Store} label="Brand Entity Type" tint="bg-sky-400/10 text-sky-600 dark:text-sky-400">
+              <ValueOr value={entityMatch?.brandEntityType} fallback="Not added" />
+            </FactRow>
+            <FactRow
+              icon={entityMatch?.matched ? CheckCircle2 : XCircle}
+              label="Matched"
+              tint={entityMatch?.matched ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-red-400/10 text-red-500 dark:text-red-400"}
+            >
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                  entityMatch?.matched
+                    ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
+                    : "bg-red-400/10 text-red-500 dark:text-red-400"
+                }`}
+              >
+                {entityMatch?.matched ? "Yes" : "No"}
+              </span>
+            </FactRow>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Duplicate Detection">
+          {duplicateGroups.length ? (
+            <div className="space-y-2.5">
+              {duplicateGroups.map((g) => (
+                <div key={g.label} className="rounded-xl border border-red-500/30 bg-red-500/5 p-3">
+                  <p className="mb-1 text-[11.5px] font-semibold text-red-700 dark:text-red-300">Duplicate {g.label}</p>
+                  <p className="break-all text-[11.5px] text-red-700/80 dark:text-red-300/80">{g.ids.join(", ")}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="flex items-center gap-1.5 text-[12.5px] text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 size={13} /> No duplicates found across PAN, GST, bank, WhatsApp or email.
+            </p>
+          )}
+        </SectionCard>
+      </div>
+    </div>
+  );
+
+  // PAN / GST / Bank + contact — same view as Live Brand's Account Details
+  // tab. A step the vendor hasn't done yet has no record ("Not added").
+  const accountTab = (
+    <BrandDetailState loading={brandDetailLoading} error={brandDetailError} onRetry={retryBrandDetail} what="account details">
+      {brandDetail ? (
+        <AccountDetailsTab brand={brandDetail} defaultOpen />
+      ) : (
+        <EmptyState label="No account details available." />
+      )}
+    </BrandDetailState>
+  );
+
+  // Everything the vendor filled in during onboarding — business profile,
+  // owner contact, outlet + location, working hours, step-by-step progress.
+  const businessTab = (
+    <BrandDetailState loading={brandDetailLoading} error={brandDetailError} onRetry={retryBrandDetail} what="business details">
+      <SubmittedDetails raw={brandDetail?.raw} />
+    </BrandDetailState>
+  );
+
+  const listingsTab = (
+    <div className="space-y-4">
+      {/* Vouchers this brand has created, GET /vouchers/versions/get-all?brandId=... */}
+      <SectionCard title="Listing Data" icon={Tag}>
+        {vouchersLoading ? (
+          <Loader variant="inline" center className="py-6" label="Loading listings…" />
+        ) : vouchersError ? (
+          <CommonEmptyState
+            variant="compact"
+            tone="error"
+            icon="error"
+            title="Couldn't load listings"
+            description={vouchersError}
+            action={{ label: "Try again", icon: RefreshCw, onClick: () => vouchersQuery.refetch() }}
+          />
+        ) : vouchers.length ? (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {vouchers.map((v) => (
+              <div
+                key={v._id}
+                className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 transition-colors hover:bg-neutral-100 dark:bg-neutral-950/60 dark:hover:bg-neutral-900"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
+                    <Tag size={13} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{v.name}</p>
+                    <p className="mt-0.5 text-[11px] text-neutral-500">{v.versionCode || "No version"}</p>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full bg-neutral-200 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                  {v.status ? v.status.replace(/_/g, " ") : "No status"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState label="No vouchers created by this brand yet." />
+        )}
+      </SectionCard>
+
+      {/* Showcase — same albums view as Live Brand's details page.
+          ShowcaseAlbums has its own heading, hence a plain card. */}
+      {brandId && (
+        <div className={`${CARD} p-5`}>
+          <ShowcaseAlbums brand={{ id: brandId }} readOnly={readOnly} />
+        </div>
+      )}
+    </div>
+  );
+
+  // The real audit trail, GET /brands/verifications/history?brandId=...,
+  // so dates always match what actually happened.
+  const timelineTab = (
+    <SectionCard title="Review Timeline">
+      {historyLoading ? (
+        <Loader variant="inline" center className="py-8" label="Loading timeline…" />
+      ) : historyError ? (
+        <CommonEmptyState
+          variant="compact"
+          tone="error"
+          icon="error"
+          title="Couldn't load timeline"
+          description={historyError}
+          action={{ label: "Try again", icon: RefreshCw, onClick: () => historyQuery.refetch() }}
+        />
+      ) : currentAttemptHistory.length ? (
+        <>
+          <div className="px-1">
+            {currentAttemptHistory.map((h, i) => (
+              <TimelineEntry key={h._id} entry={h} isLast={i === currentAttemptHistory.length - 1} />
+            ))}
+          </div>
+          {historyTotalPages > 1 && (
+            <div className="mt-4 flex items-center justify-center gap-2 border-t border-neutral-200/70 pt-4 dark:border-neutral-800">
+              <button
+                onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                disabled={historyPage === 1}
+                className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
+              >
+                Prev
+              </button>
+              <span className="text-[12px] text-neutral-500">
+                Page {historyPage} of {historyTotalPages}
+              </span>
+              <button
+                onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                disabled={historyPage === historyTotalPages}
+                className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <EmptyState label="No timeline events recorded yet." />
+      )}
+    </SectionCard>
+  );
+
+  const tabContent = {
+    overview: overviewTab,
+    business: businessTab,
+    verification: verificationTab,
+    account: accountTab,
+    listings: listingsTab,
+    timeline: timelineTab,
+  }[tab];
+
+  /* ------------------------------------------------------------- sidebar */
+
+  const decisionPanel = (
+    <div className={`${CARD} p-5`}>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
+          <ShieldCheck size={16} className="text-emerald-600 dark:text-emerald-400" />
+          {readOnly ? "Verification Status" : "Decision"}
+        </p>
+        <StatusBadge status={statusLabel} activeLabel="Approved" />
+      </div>
+
+      {brandApproved && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-emerald-400/10 p-3.5">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <p className="text-[12.5px] text-emerald-700 dark:text-emerald-300">This brand has been approved by admin.</p>
+        </div>
+      )}
+      {/* System check passed / pending, but the brand still needs the admin's call. */}
+      {!brandApproved && ["APPROVED", "PENDING"].includes(verification.derivedStatus) && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-sky-400/10 p-3.5">
+          <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
+          <p className="text-[12.5px] text-sky-700 dark:text-sky-300">
+            {readOnly
+              ? "The vendor is still onboarding — once they submit, approve or reject this brand from Brand Waiting."
+              : verification.derivedStatus === "APPROVED"
+              ? `System check passed (score ${verification.score}/100) — the vendor finished onboarding and this brand is awaiting your decision.`
+              : "The vendor finished onboarding — this brand is awaiting your decision."}
+          </p>
+        </div>
+      )}
+      {verification.derivedStatus === "REJECTED" && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-red-500/10 p-3.5">
+          <XCircle size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+          <div>
+            <p className="text-[12.5px] font-medium text-red-700 dark:text-red-300">Rejected</p>
+            <p className="mt-0.5 text-[12.5px] text-red-700/80 dark:text-red-300/80">
+              {verification.rejectionReason || "No reason recorded."}
+            </p>
+          </div>
+        </div>
+      )}
+      {verification.derivedStatus === "REVOKED" && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-orange-400/10 p-3.5">
+          <RotateCcw size={16} className="mt-0.5 shrink-0 text-orange-600 dark:text-orange-400" />
+          <div>
+            <p className="text-[12.5px] font-medium text-orange-700 dark:text-orange-300">Revoked</p>
+            <p className="mt-0.5 text-[12.5px] text-orange-700/80 dark:text-orange-300/80">
+              {verification.revokeReason || "No reason recorded."}
+            </p>
+          </div>
+        </div>
+      )}
+      {verification.derivedStatus === "MANUAL_REVIEW" && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-amber-400/10 p-3.5">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-[12.5px] text-amber-700 dark:text-amber-300">Flagged for manual review — awaiting an admin decision.</p>
+        </div>
+      )}
+
+      {/* Approve / Reject — available while pending review, and as a
+          manual override on a previously rejected verification. */}
+      {canReview && !showApproveBox && (
+        <div className="flex gap-2.5">
+          <button
+            onClick={() => setShowApproveBox(true)}
+            disabled={anyBusy}
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+            Approve
+          </button>
+          <button
+            onClick={() => setShowRejectBox(true)}
+            disabled={anyBusy}
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/40 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+          >
+            {rejectBusy ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
+            Reject
+          </button>
+        </div>
+      )}
+
+      {canReview && showApproveBox && (
+        <form onSubmit={handleApproveSubmit} className="space-y-3">
+          <label className="mb-1.5 block text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+            Note <span className="text-neutral-500">(optional — e.g. manual override reason)</span>
+          </label>
+          <textarea
+            value={approveNote}
+            onChange={(e) => setApproveNote(e.target.value)}
+            rows={3}
+            placeholder="e.g. Bank passbook manually verified over call"
+            disabled={anyBusy}
+            className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
+          />
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                setShowApproveBox(false);
+                setApproveNote("");
+              }}
+              disabled={anyBusy}
+              className="flex h-10 flex-1 items-center justify-center rounded-xl border border-neutral-200 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={anyBusy}
+              className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+              Confirm
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Revoke Approval — available on an approved verification,
+          backed by Case E: { action: "REVOKED", revokeReason }. */}
+      {canRevoke && !showRevokeBox && (
+        <button
+          onClick={() => setShowRevokeBox(true)}
+          disabled={anyBusy}
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-orange-400/40 text-[13px] font-semibold text-orange-600 transition-colors hover:bg-orange-400/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-orange-400"
+        >
+          {revokeBusy ? <Loader2 size={15} className="animate-spin" /> : <RotateCcw size={15} />}
+          Revoke Approval
+        </button>
+      )}
+
+      {canRevoke && showRevokeBox && (
+        <form onSubmit={handleRevokeSubmit} className="space-y-3">
+          <label className="mb-1.5 block text-[12px] font-medium text-orange-600 dark:text-orange-400">
+            Reason for revoking approval <span className="text-neutral-500">(required)</span>
+          </label>
+          <textarea
+            value={revokeReason}
+            onChange={(e) => {
+              setRevokeReason(e.target.value);
+              if (revokeError) setRevokeError("");
+            }}
+            rows={3}
+            placeholder="e.g. GST was cancelled by the department after approval. Brand suspended pending fresh documents."
+            disabled={anyBusy}
+            className={`w-full resize-none rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
+              revokeError
+                ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
+                : "border-neutral-200 focus:border-orange-400/60 focus:ring-orange-400/60 dark:border-neutral-800"
+            }`}
+          />
+          {revokeError && (
+            <p className="flex items-center gap-1 text-[11.5px] text-red-600 dark:text-red-400">
+              <AlertTriangle size={11} /> {revokeError}
+            </p>
+          )}
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                setShowRevokeBox(false);
+                setRevokeError("");
+              }}
+              disabled={anyBusy}
+              className="flex h-10 flex-1 items-center justify-center rounded-xl border border-neutral-200 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={anyBusy}
+              className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-orange-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {revokeBusy ? <Loader2 size={15} className="animate-spin" /> : <RotateCcw size={15} />}
+              Confirm Revoke
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Reviewed flag — Case D: { action: "REVIEWED" } flips it; Case D2:
+          { action: "REVIEWED", isReviewed } forces it either way. */}
+      {!readOnly && (
+        <div className="mt-4 flex items-center justify-between gap-2 border-t border-neutral-200/70 pt-4 dark:border-neutral-800">
+          <div className="flex items-center gap-2">
+            <BadgeCheck size={14} className={verification.isReviewed ? "text-sky-600 dark:text-sky-400" : "text-neutral-500"} />
+            <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Reviewed</span>
+            {reviewedBusy && <Loader2 size={11} className="animate-spin text-neutral-500" />}
+            <ToggleSwitch checked={Boolean(verification.isReviewed)} onChange={anyBusy ? undefined : onMarkReviewed} />
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="mr-0.5 text-[11px] font-medium text-neutral-500">Force</span>
+            <button
+              onClick={() => onForceReviewed(true)}
+              disabled={anyBusy}
+              title="Force isReviewed = true"
+              aria-label="Force reviewed on"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-400"
+            >
+              {forceOnBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+            </button>
+            <button
+              onClick={() => onForceReviewed(false)}
+              disabled={anyBusy}
+              title="Force isReviewed = false"
+              aria-label="Force reviewed off"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-700/40"
+            >
+              {forceOffBusy ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Plan + subscription in one panel — GET /brands/get?brandId=...
+  const planPanel = (
+    <BrandDetailState loading={brandDetailLoading} error={brandDetailError} onRetry={retryBrandDetail} what="plan">
+      <SectionCard title="Plan & Subscription" icon={CreditCard}>
+        {brandDetail ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <StatChip icon={BadgeCheck} label="Plan" value={brandDetail.subscriptionPlan} tint="emerald" />
+              <StatChip icon={CreditCard} label="Price" value={brandDetail.planPrice} tint="violet" />
+              <StatChip icon={Tag} label="Type" value={brandDetail.planType} tint="sky" />
+              <StatChip icon={Clock} label="Term" value={brandDetail.subscriptionTerm} tint="amber" />
+            </div>
+
+            {brandDetail.subscriptionDetail ? (
+              <>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-4 text-white">
+                  <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
+                  <div className="relative flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10.5px] font-medium text-emerald-100">Paid Amount</p>
+                      <p className="mt-0.5 text-[17px] font-bold leading-tight">
+                        ₹{Number(brandDetail.subscriptionDetail.paidAmount).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10.5px] font-medium text-emerald-100">Due Amount</p>
+                      <p className="mt-0.5 text-[17px] font-bold leading-tight">
+                        ₹{Number(brandDetail.subscriptionDetail.dueAmount).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="relative mt-3 flex flex-wrap gap-1.5">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        brandDetail.subscriptionDetail.isActive ? "bg-white/20 text-white" : "bg-white/10 text-emerald-100"
+                      }`}
+                    >
+                      {brandDetail.subscriptionDetail.isActive ? "Active" : "Inactive"}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-emerald-100">
+                      {orText(brandDetail.subscriptionDetail.status, "No status")}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-emerald-100">
+                      {brandDetail.expiredInDays}d left
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <FactRow icon={Receipt} label="Subscription ID" tint="bg-violet-400/10 text-violet-600 dark:text-violet-400">
+                    <span className="font-mono text-[11.5px] tracking-tight">
+                      <ValueOr value={brandDetail.subscriptionDetail.subscriptionId} fallback={MISSING.id} />
+                    </span>
+                  </FactRow>
+                  <FactRow icon={Receipt} label="Transaction ID" tint="bg-violet-400/10 text-violet-600 dark:text-violet-400">
+                    <span className="font-mono text-[11.5px] tracking-tight">
+                      <ValueOr value={brandDetail.subscriptionDetail.transactionId} fallback={MISSING.id} />
+                    </span>
+                  </FactRow>
+                  <FactRow icon={Calendar} label="Start Date" tint="bg-sky-400/10 text-sky-600 dark:text-sky-400">
+                    <ValueOr value={brandDetail.subscriptionDetail.startDateDisplay} fallback={MISSING.date} />
+                  </FactRow>
+                  <FactRow icon={Calendar} label="End Date" tint="bg-sky-400/10 text-sky-600 dark:text-sky-400">
+                    <ValueOr value={brandDetail.subscriptionDetail.endDateDisplay} fallback="No end date" />
+                  </FactRow>
+                </div>
+              </>
+            ) : (
+              <EmptyState label="No subscription record for this brand yet." />
+            )}
+          </div>
+        ) : (
+          <EmptyState label="No plan data available." />
+        )}
+      </SectionCard>
+    </BrandDetailState>
+  );
+
+  const factsPanel = (
+    <SectionCard title="Quick Facts">
+      <div className="divide-y divide-neutral-200/70 text-[12.5px] dark:divide-neutral-800">
+        {[
+          ["Submissions", verification.submissionCount ?? 0],
+          ["Rejections", verification.rejectionCount ?? 0],
+          ["Revocations", verification.revocationCount ?? 0],
+          ["Submitted", formatDateTime(verification.createdAt)],
+          ["Last Updated", formatDateTime(verification.updatedAt)],
+        ].map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
+            <span className="text-neutral-500">{label}</span>
+            <span className="font-medium text-neutral-800 dark:text-neutral-200">{value}</span>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+
+  /* ---------------------------------------------------------------- page */
+
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div className="w-full">
-        {/* Back */}
-        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <button
-            onClick={onBack}
-            aria-label="Back to onboarding"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-colors hover:text-neutral-900 dark:bg-neutral-900 dark:text-neutral-400 dark:shadow-black/20 dark:hover:text-neutral-100"
-          >
-            <ArrowLeft size={16} />
+      {/* Top bar — back + breadcrumb */}
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          onClick={onBack}
+          aria-label="Back to onboarding"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-neutral-500 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-colors hover:text-neutral-900 dark:bg-neutral-900 dark:text-neutral-400 dark:shadow-black/20 dark:hover:text-neutral-100"
+        >
+          <ArrowLeft size={16} />
+        </button>
+        <nav className="flex min-w-0 items-center gap-1 text-[12.5px] text-neutral-500" aria-label="Breadcrumb">
+          <button onClick={onBack} className="shrink-0 hover:text-neutral-800 dark:hover:text-neutral-200">
+            {readOnly ? "New Onboarding" : "Brand Waiting"}
           </button>
+          <ChevronRight size={13} className="shrink-0" />
+          <span className="truncate font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span>
+        </nav>
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+      {/* Hero */}
+      <div className={`relative mb-4 overflow-hidden ${CARD}`}>
+        <div className={`pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${accent} opacity-90`} />
+
+        <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="shrink-0 rounded-2xl shadow-sm ring-4 ring-white/80 dark:ring-neutral-950">
+              <BrandAvatar brand={brand} size="xl" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-lg font-semibold tracking-tight text-neutral-900 sm:text-xl dark:text-neutral-50">
+                  {brand.brandName}
+                </h1>
+                <StatusBadge status={statusLabel} activeLabel="Approved" />
+                {readOnly && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-neutral-900/5 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
+                    <Eye size={11} /> View only
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 truncate text-[12.5px] text-neutral-500">
+                {[brand.uniqueId, legalName].filter(Boolean).join(" · ") || MISSING.id}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <MetaPill icon={RotateCcw}>{attemptCaption}</MetaPill>
+                {verification.createdAt && <MetaPill icon={Calendar}>Submitted {formatDateTime(verification.createdAt)}</MetaPill>}
+                {brand.businessEntityType && <MetaPill icon={Store}>{brand.businessEntityType.replace(/_/g, " ")}</MetaPill>}
+                {brand.merchantId && (
+                  <MetaPill icon={Hash} className="font-mono">
+                    {brand.merchantId}
+                  </MetaPill>
+                )}
+                {verification.isReviewed && (
+                  <MetaPill icon={BadgeCheck} className="border-sky-200 text-sky-600 dark:border-sky-500/30 dark:text-sky-400">
+                    Reviewed
+                  </MetaPill>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid shrink-0 grid-cols-2 gap-2.5">
             <RingStat
               pct={verification.score ?? 0}
               label="Verification Score"
               caption={attemptCaption}
               tint={verification.score >= 80 ? "emerald" : verification.score >= 50 ? "amber" : "red"}
             />
-            <RingStat
-              pct={checksPassedPct}
-              label="Checks Passed"
-              caption={`${checklist.filter((c) => c.ok).length}/${checklist.length}`}
-              tint="sky"
-            />
+            <RingStat pct={checksPassedPct} label="Checks Passed" caption={`${passedCount}/${checklist.length}`} tint="sky" />
           </div>
         </div>
+      </div>
 
-        {/* Header card */}
-        <div className="relative mb-5 overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-          <div className={`pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${accent} opacity-90`} />
+      {actionError && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
+          <AlertTriangle size={14} className="shrink-0" />
+          {actionError}
+        </div>
+      )}
 
-          <div className="relative flex flex-wrap items-start gap-4 p-6">
-            <div className="rounded-2xl shadow-sm ring-4 ring-neutral-50 dark:ring-neutral-950">
-              <BrandAvatar brand={brand} size="xl" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-lg sm:text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-                  {brand.brandName}
-                </h1>
-                <StatusBadge status={statusLabel} activeLabel="Approved" />
-              </div>
-              <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-neutral-500">
-                <Hash size={11} /> {brand.uniqueId} · {brand.legalBusinessName}
-              </p>
-            </div>
-          </div>
-
-          {/* Quick-glance stat strip */}
-          <div className="relative flex flex-wrap items-center gap-2 border-t border-neutral-200/80 px-6 py-3 dark:border-neutral-800/80">
-            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-200/80 bg-neutral-50/60 px-2.5 py-1.5 dark:border-neutral-800/80 dark:bg-neutral-950/60">
-              <span className={`text-[15px] font-bold ${scoreColor(verification.score)}`}>{verification.score}</span>
-              <span className="text-[10px] text-neutral-500">/100</span>
-            </div>
-            <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-              {attemptCaption}
-            </span>
-
-            {!readOnly && (
-            <>
-            <div className="h-6 w-px bg-neutral-200 dark:bg-neutral-800" />
-
-            {/* Reviewed toggle — Case D: { action: "REVIEWED" }, plain flip,
-                no explicit direction. */}
-            <div className="flex items-center gap-2 rounded-xl border border-neutral-200/80 bg-neutral-50/60 px-3 py-1.5 dark:border-neutral-800/80 dark:bg-neutral-950/60">
-              <BadgeCheck size={13} className={verification.isReviewed ? "text-sky-600 dark:text-sky-400" : "text-neutral-500"} />
-              <span className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300">Reviewed</span>
-              {reviewedBusy && <Loader2 size={11} className="animate-spin text-neutral-500" />}
-              <ToggleSwitch checked={Boolean(verification.isReviewed)} onChange={anyBusy ? undefined : onMarkReviewed} />
-            </div>
-
-            {/* Force reviewed flag — Case D2: { action: "REVIEWED", isReviewed }.
-                Explicit override in either direction, independent of the
-                toggle above. */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-neutral-200/80 bg-neutral-50/60 px-2.5 py-1.5 dark:border-neutral-800/80 dark:bg-neutral-950/60">
-              <span className="text-[11px] font-medium text-neutral-500">Force</span>
-              <button
-                onClick={() => onForceReviewed(true)}
-                disabled={anyBusy}
-                title="Force isReviewed = true"
-                className="flex h-6 w-6 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-400"
-              >
-                {forceOnBusy ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-              </button>
-              <button
-                onClick={() => onForceReviewed(false)}
-                disabled={anyBusy}
-                title="Force isReviewed = false"
-                className="flex h-6 w-6 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-700/40"
-              >
-                {forceOffBusy ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
-              </button>
-            </div>
-            </>
-            )}
-          </div>
+      {/* Body — tabbed main column + sticky sidebar */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-4">
+          <TabBar tabs={tabs} active={tab} onChange={setTab} />
+          <div role="tabpanel">{tabContent}</div>
         </div>
 
-        {actionError && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
-            <AlertTriangle size={14} className="shrink-0" />
-            {actionError}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-          {/* Left */}
-          <div className="min-w-0 space-y-4">
-            {/* Verification checklist */}
-            <SectionCard title="Verification Checklist">
-              {checklist.length ? (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {checklist.map((c) => (
-                    <div
-                      key={c.label}
-                      className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] ${
-                        c.ok
-                          ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/5"
-                          : "border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/5"
-                      }`}
-                    >
-                      <span className="text-neutral-700 dark:text-neutral-300">{c.label}</span>
-                      {c.ok ? (
-                        <span className="flex shrink-0 items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 size={13} /> Pass
-                        </span>
-                      ) : (
-                        <span className="flex shrink-0 items-center gap-1 font-semibold text-red-600 dark:text-red-400">
-                          <XCircle size={13} /> Fail
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState label="No checks recorded." />
-              )}
-            </SectionCard>
-
-            {/* Listing Data — vouchers this brand has created, GET
-                /vouchers/versions/get-all?brandId=... */}
-            <SectionCard title="Listing Data" icon={Tag}>
-              {vouchersLoading ? (
-                <Loader variant="inline" center className="py-6" label="Loading listings…" />
-              ) : vouchersError ? (
-                <CommonEmptyState
-                  variant="compact"
-                  tone="error"
-                  icon="error"
-                  title="Couldn't load listings"
-                  description={vouchersError}
-                  action={{ label: "Try again", icon: RefreshCw, onClick: () => vouchersQuery.refetch() }}
-                />
-              ) : vouchers.length ? (
-                <div className="space-y-2">
-                  {vouchers.map((v) => (
-                    <div
-                      key={v._id}
-                      className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 transition-colors hover:bg-neutral-100 dark:bg-neutral-950/60 dark:hover:bg-neutral-900"
-                    >
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-600 dark:text-emerald-400">
-                          <Tag size={13} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200">{v.name}</p>
-                          <p className="mt-0.5 text-[11px] text-neutral-500">{v.versionCode || "No version"}</p>
-                        </div>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-neutral-200 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        {v.status ? v.status.replace(/_/g, " ") : "No status"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState label="No vouchers created by this brand yet." />
-              )}
-            </SectionCard>
-
-            <SectionCard title="Business Entity Match" icon={Store}>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-                  <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 text-sky-600 dark:text-sky-400">
-                      <Store size={13} />
-                    </span>
-                    GST Constitution
-                  </span>
-                  <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={entityMatch?.gstConstitution} fallback="Not added" /></span>
-                </div>
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-                  <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 text-sky-600 dark:text-sky-400">
-                      <Store size={13} />
-                    </span>
-                    Brand Entity Type
-                  </span>
-                  <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={entityMatch?.brandEntityType} fallback="Not added" /></span>
-                </div>
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-                  <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
-                    <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                        entityMatch?.matched ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-red-400/10 text-red-500 dark:text-red-400"
-                      }`}
-                    >
-                      {entityMatch?.matched ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-                    </span>
-                    Matched
-                  </span>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      entityMatch?.matched
-                        ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-red-400/10 text-red-500 dark:text-red-400"
-                    }`}
-                  >
-                    {entityMatch?.matched ? "Yes" : "No"}
-                  </span>
-                </div>
-              </div>
-            </SectionCard>
-
-            {/* Duplicate details */}
-            <SectionCard title="Duplicate Detection">
-              {duplicateGroups.length ? (
-                <div className="space-y-2.5">
-                  {duplicateGroups.map((g) => (
-                    <div key={g.label} className="rounded-xl border border-red-500/30 bg-red-500/5 p-3">
-                      <p className="mb-1 text-[11.5px] font-semibold text-red-700 dark:text-red-300">Duplicate {g.label}</p>
-                      <p className="text-[11.5px] text-red-700/80 dark:text-red-300/80">{g.ids.join(", ")}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="flex items-center gap-1.5 text-[12.5px] text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 size={13} /> No duplicates found across PAN, GST, bank, WhatsApp or email.
-                </p>
-              )}
-            </SectionCard>
-
-            {/* Remarks */}
-            {verification.remarks?.length > 0 && (
-              <SectionCard title="Remarks">
-                <ul className="space-y-2">
-                  {verification.remarks.map((r, i) => (
-                    <li key={i} className="flex items-start gap-2 text-[13px] text-amber-700 dark:text-amber-300">
-                      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                      {r}
-                    </li>
-                  ))}
-                </ul>
-              </SectionCard>
-            )}
-
-            {/* Review Timeline — the real audit trail, GET
-                /brands/verifications/history?brandId=..., so dates always
-                match what actually happened (not a client-side guess).
-                Each entry is collapsed by default — click to expand. */}
-            <SectionCard title="Review Timeline">
-              {historyLoading ? (
-                <Loader variant="inline" center className="py-8" label="Loading timeline…" />
-              ) : historyError ? (
-                <CommonEmptyState
-                  variant="compact"
-                  tone="error"
-                  icon="error"
-                  title="Couldn't load timeline"
-                  description={historyError}
-                  action={{ label: "Try again", icon: RefreshCw, onClick: () => historyQuery.refetch() }}
-                />
-              ) : currentAttemptHistory.length ? (
-                <>
-                  <div className="px-1">
-                    {currentAttemptHistory.map((h, i) => (
-                      <TimelineEntry key={h._id} entry={h} isLast={i === currentAttemptHistory.length - 1} />
-                    ))}
-                  </div>
-                  {historyTotalPages > 1 && (
-                    <div className="mt-3 flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                        disabled={historyPage === 1}
-                        className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                      >
-                        Prev
-                      </button>
-                      <span className="text-[12px] text-neutral-500">
-                        Page {historyPage} of {historyTotalPages}
-                      </span>
-                      <button
-                        onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-                        disabled={historyPage === historyTotalPages}
-                        className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <EmptyState label="No timeline events recorded yet." />
-              )}
-            </SectionCard>
-
-            {/* Showcase — same albums view as Live Brand's details page
-                (GET /showcase/get-brand-showcase/:brandId), so a brand still
-                waiting for approval shows its showcase too. ShowcaseAlbums has
-                its own "Showcase" heading, hence a plain card, not SectionCard. */}
-            {brandId && (
-              <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                <ShowcaseAlbums brand={{ id: brandId }} readOnly={readOnly} />
-              </div>
-            )}
-          </div>
-
-          {/* Right */}
-          <div className="min-w-0 space-y-4">
-            {/* Verification status + admin review actions */}
-            <div className="rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-              <div className="mb-4 flex items-center gap-1.5 text-[14px] font-bold text-neutral-900 dark:text-neutral-50">
-                <ShieldCheck size={16} className="text-emerald-600 dark:text-emerald-400" /> Verification Status
-              </div>
-
-              {brandApproved && (
-                <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-emerald-400/10 p-3.5">
-                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  <p className="text-[12.5px] text-emerald-700 dark:text-emerald-300">This brand has been approved by admin.</p>
-                </div>
-              )}
-              {/* System check passed / pending, but the brand still needs the admin's call. */}
-              {!brandApproved && ["APPROVED", "PENDING"].includes(verification.derivedStatus) && (
-                <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-sky-400/10 p-3.5">
-                  <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
-                  <p className="text-[12.5px] text-sky-700 dark:text-sky-300">
-                    {readOnly
-                      ? "The vendor is still onboarding — once they submit, approve or reject this brand from Brand Waiting."
-                      : verification.derivedStatus === "APPROVED"
-                      ? `System check passed (score ${verification.score}/100) — the vendor finished onboarding and this brand is awaiting your decision.`
-                      : "The vendor finished onboarding — this brand is awaiting your decision."}
-                  </p>
-                </div>
-              )}
-              {verification.derivedStatus === "REJECTED" && (
-                <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-red-500/10 p-3.5">
-                  <XCircle size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
-                  <div>
-                    <p className="text-[12.5px] font-medium text-red-700 dark:text-red-300">Rejected</p>
-                    <p className="mt-0.5 text-[12.5px] text-red-700/80 dark:text-red-300/80">
-                      {verification.rejectionReason || "No reason recorded."}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {verification.derivedStatus === "REVOKED" && (
-                <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-orange-400/10 p-3.5">
-                  <RotateCcw size={16} className="mt-0.5 shrink-0 text-orange-600 dark:text-orange-400" />
-                  <div>
-                    <p className="text-[12.5px] font-medium text-orange-700 dark:text-orange-300">Revoked</p>
-                    <p className="mt-0.5 text-[12.5px] text-orange-700/80 dark:text-orange-300/80">
-                      {verification.revokeReason || "No reason recorded."}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {verification.derivedStatus === "MANUAL_REVIEW" && (
-                <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-amber-400/10 p-3.5">
-                  <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <p className="text-[12.5px] text-amber-700 dark:text-amber-300">
-                    Flagged for manual review — awaiting an admin decision.
-                  </p>
-                </div>
-              )}
-
-              {/* Approve / Reject — available while pending review, and as a
-                  manual override on a previously rejected verification. */}
-              {canReview && !showApproveBox && (
-                <div className="flex gap-2.5">
-                  <button
-                    onClick={() => setShowApproveBox(true)}
-                    disabled={anyBusy}
-                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => setShowRejectBox(true)}
-                    disabled={anyBusy}
-                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/40 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
-                  >
-                    <XCircle size={15} /> Reject
-                  </button>
-                </div>
-              )}
-
-              {canReview && showApproveBox && (
-                <form onSubmit={handleApproveSubmit} className="space-y-3">
-                  <label className="mb-1.5 block text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
-                    Note <span className="text-neutral-500">(optional — e.g. manual override reason)</span>
-                  </label>
-                  <textarea
-                    value={approveNote}
-                    onChange={(e) => setApproveNote(e.target.value)}
-                    rows={3}
-                    placeholder="e.g. Bank passbook manually verified over call"
-                    disabled={anyBusy}
-                    className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
-                  />
-                  <div className="flex gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowApproveBox(false);
-                        setApproveNote("");
-                      }}
-                      disabled={anyBusy}
-                      className="flex h-10 flex-1 items-center justify-center rounded-xl border border-neutral-200 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={anyBusy}
-                      className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                      Confirm Approve
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Revoke Approval — available on an approved verification,
-                  backed by Case E: { action: "REVOKED", revokeReason }. */}
-              {canRevoke && !showRevokeBox && (
-                <button
-                  onClick={() => setShowRevokeBox(true)}
-                  disabled={anyBusy}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-orange-400/40 text-[13px] font-semibold text-orange-600 transition-colors hover:bg-orange-400/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-orange-400"
-                >
-                  <RotateCcw size={15} /> Revoke Approval
-                </button>
-              )}
-
-              {canRevoke && showRevokeBox && (
-                <form onSubmit={handleRevokeSubmit} className="space-y-3">
-                  <label className="mb-1.5 block text-[12px] font-medium text-orange-600 dark:text-orange-400">
-                    Reason for revoking approval <span className="text-neutral-500">(required)</span>
-                  </label>
-                  <textarea
-                    value={revokeReason}
-                    onChange={(e) => {
-                      setRevokeReason(e.target.value);
-                      if (revokeError) setRevokeError("");
-                    }}
-                    rows={3}
-                    placeholder="e.g. GST was cancelled by the department after approval. Brand suspended pending fresh documents."
-                    disabled={anyBusy}
-                    className={`w-full resize-none rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
-                      revokeError
-                        ? "border-red-500/60 focus:border-red-500/60 focus:ring-red-500/60"
-                        : "border-neutral-200 focus:border-orange-400/60 focus:ring-orange-400/60 dark:border-neutral-800"
-                    }`}
-                  />
-                  {revokeError && (
-                    <p className="flex items-center gap-1 text-[11.5px] text-red-600 dark:text-red-400">
-                      <AlertTriangle size={11} /> {revokeError}
-                    </p>
-                  )}
-                  <div className="flex gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRevokeBox(false);
-                        setRevokeError("");
-                      }}
-                      disabled={anyBusy}
-                      className="flex h-10 flex-1 items-center justify-center rounded-xl border border-neutral-200 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={anyBusy}
-                      className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-orange-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {revokeBusy ? <Loader2 size={15} className="animate-spin" /> : <RotateCcw size={15} />}
-                      Confirm Revoke
-                    </button>
-                  </div>
-                </form>
-              )}
-
-            </div>
-
-            {/* Plan Details — GET /brands/get?brandId=... */}
-            <SectionCard title="Plan Details">
-              {brandDetailLoading ? (
-                <Loader variant="inline" center className="py-6" label="Loading plan…" />
-              ) : brandDetailError ? (
-                <CommonEmptyState
-                  variant="compact"
-                  tone="error"
-                  icon="error"
-                  title="Couldn't load plan"
-                  description={brandDetailError}
-                  action={{ label: "Try again", icon: RefreshCw, onClick: () => brandDetailQuery.refetch() }}
-                />
-              ) : brandDetail ? (
-                <div className="grid grid-cols-2 gap-2.5">
-                  <StatChip icon={BadgeCheck} label="Plan" value={brandDetail.subscriptionPlan} tint="emerald" />
-                  <StatChip icon={CreditCard} label="Price" value={brandDetail.planPrice} tint="violet" />
-                  <StatChip icon={Tag} label="Type" value={brandDetail.planType} tint="sky" />
-                  <StatChip icon={Clock} label="Term" value={brandDetail.subscriptionTerm} tint="amber" />
-                  <StatChip icon={Calendar} label="Expiry" value={`${brandDetail.expiredInDays}d left`} tint="emerald" />
-                </div>
-              ) : (
-                <EmptyState label="No plan data available." />
-              )}
-            </SectionCard>
-
-            {/* Subscribe Details — brandDetail.subscriptionDetail, same
-                fully-populated `subscribed` record the Brand folder shows. */}
-            <SectionCard title="Subscribe Details" icon={CreditCard}>
-              {brandDetailLoading ? (
-                <Loader variant="inline" center className="py-6" label="Loading subscription…" />
-              ) : brandDetailError ? (
-                <CommonEmptyState
-                  variant="compact"
-                  tone="error"
-                  icon="error"
-                  title="Couldn't load subscription"
-                  description={brandDetailError}
-                  action={{ label: "Try again", icon: RefreshCw, onClick: () => brandDetailQuery.refetch() }}
-                />
-              ) : brandDetail?.subscriptionDetail ? (
-                <>
-                  {/* Payment summary — gradient card, matching the reference's transaction card */}
-                  <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-4 text-white">
-                    <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/10" />
-                    <div className="relative flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10.5px] font-medium text-emerald-100">Paid Amount</p>
-                        <p className="mt-0.5 text-[18px] font-bold leading-tight">
-                          ₹{Number(brandDetail.subscriptionDetail.paidAmount).toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10.5px] font-medium text-emerald-100">Due Amount</p>
-                        <p className="mt-0.5 text-[18px] font-bold leading-tight">
-                          ₹{Number(brandDetail.subscriptionDetail.dueAmount).toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="relative mt-4 flex flex-wrap gap-1.5">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          brandDetail.subscriptionDetail.isActive ? "bg-white/20 text-white" : "bg-white/10 text-emerald-100"
-                        }`}
-                      >
-                        {brandDetail.subscriptionDetail.isActive ? "Active" : "Inactive"}
-                      </span>
-                      <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-emerald-100">
-                        {orText(brandDetail.subscriptionDetail.status, "No status")}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-                      <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-400/10 text-violet-600 dark:text-violet-400">
-                          <Receipt size={13} />
-                        </span>
-                        Subscription ID
-                      </span>
-                      <span className="font-mono text-[11.5px] tracking-tight text-neutral-800 dark:text-neutral-200">
-                        <ValueOr value={brandDetail.subscriptionDetail.subscriptionId} fallback={MISSING.id} />
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-                      <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-400/10 text-violet-600 dark:text-violet-400">
-                          <Receipt size={13} />
-                        </span>
-                        Transaction ID
-                      </span>
-                      <span className="font-mono text-[11.5px] tracking-tight text-neutral-800 dark:text-neutral-200">
-                        <ValueOr value={brandDetail.subscriptionDetail.transactionId} fallback={MISSING.id} />
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-                      <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 text-sky-600 dark:text-sky-400">
-                          <Calendar size={13} />
-                        </span>
-                        Start Date
-                      </span>
-                      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={brandDetail.subscriptionDetail.startDateDisplay} fallback={MISSING.date} /></span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-neutral-950/60">
-                      <span className="flex items-center gap-2.5 text-[12.5px] text-neutral-600 dark:text-neutral-400">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 text-sky-600 dark:text-sky-400">
-                          <Calendar size={13} />
-                        </span>
-                        End Date
-                      </span>
-                      <span className="text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200"><ValueOr value={brandDetail.subscriptionDetail.endDateDisplay} fallback="No end date" /></span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <EmptyState label="No subscription record for this brand yet." />
-              )}
-            </SectionCard>
-
-            {/* Brand */}
-            <SectionCard title="Brand">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <DetailTile icon={Hash} label="Merchant ID" value={brand.merchantId} fallback={MISSING.id} />
-                <DetailTile icon={Phone} label="Mobile" value={brand.mobile} fallback={MISSING.phone} />
-                <DetailTile icon={Phone} label="WhatsApp" value={brand.whatsappNumber} fallback={MISSING.phone} />
-                <DetailTile icon={Mail} label="Email" value={brand.email} fallback={MISSING.email} />
-                <DetailTile icon={Store} label="Entity Type" value={brand.businessEntityType} fallback="Not added" />
-                <DetailTile icon={Store} label="Registration" value={brand.businessRegistrationStatus} fallback="Not added" />
-                <DetailTile icon={RotateCcw} label="Verification Attempts" value={brand.verificationAttemptCount ?? 0} />
-              </div>
-            </SectionCard>
-
-            {/* Quick facts */}
-            <SectionCard title="Quick Facts">
-              <div className="space-y-2 text-[12.5px]">
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">Submissions</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{verification.submissionCount}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">Rejections</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{verification.rejectionCount}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">Revocations</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{verification.revocationCount}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">Submitted</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{formatDateTime(verification.createdAt)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">Last Updated</span>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{formatDateTime(verification.updatedAt)}</span>
-                </div>
-              </div>
-            </SectionCard>
-          </div>
-        </div>
-
-        {/* Match scores — full width, spanning past where the two columns
-            above end, instead of being squeezed into the narrower left
-            column. */}
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <SectionCard title="Name Match Scores">
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <ScoreRing label="PAN ↔ GST" value={nameMatch?.panGstScore ?? 0} />
-              <ScoreRing label="PAN ↔ Brand" value={nameMatch?.panBrandScore ?? 0} />
-              <ScoreRing label="GST ↔ Brand" value={nameMatch?.gstBrandScore ?? 0} />
-              <ScoreRing label="Average" value={nameMatch?.averageScore ?? 0} />
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Bank Name Match Scores">
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <ScoreRing label="Bank ↔ PAN" value={bankNameMatch?.bankPanScore ?? 0} />
-              <ScoreRing label="Bank ↔ GST" value={bankNameMatch?.bankGstScore ?? 0} />
-              <ScoreRing label="Bank ↔ Brand" value={bankNameMatch?.bankBrandScore ?? 0} />
-              <ScoreRing label="Highest" value={bankNameMatch?.highestScore ?? 0} />
-            </div>
-          </SectionCard>
-        </div>
+        <aside className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
+          {decisionPanel}
+          {planPanel}
+          {factsPanel}
+        </aside>
       </div>
 
       {showRejectBox && (
@@ -1136,9 +1309,8 @@ export default function VerificationDetails({
               <div>
                 <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-50">Reject Verification</h2>
                 <p className="mt-1 text-[12.5px] text-neutral-500">
-                  Tell the vendor why{" "}
-                  <span className="text-neutral-700 dark:text-neutral-300">{brand.brandName}</span> is being rejected.
-                  This reason is shown to them.
+                  Tell the vendor why <span className="text-neutral-700 dark:text-neutral-300">{brand.brandName}</span> is being
+                  rejected. This reason is shown to them.
                 </p>
               </div>
               <button
@@ -1155,9 +1327,7 @@ export default function VerificationDetails({
 
             <form onSubmit={handleRejectSubmit} className="space-y-3">
               <div>
-                <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                  Reason
-                </label>
+                <label className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Reason</label>
                 <select
                   value={rejectReasonChoice}
                   onChange={(e) => setRejectReasonChoice(e.target.value)}

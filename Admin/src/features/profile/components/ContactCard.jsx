@@ -2,14 +2,7 @@ import { useEffect, useState } from "react";
 import { BadgeCheck, Mail, MessageCircle, PencilLine, Phone, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { Button, IconInput, Notice, Pill, SectionCard } from "../../notification/components/NotificationUi";
 import { TINTS, innerTile } from "../../notification/components/notificationStyles";
-import {
-  sendEmailCode,
-  sendMobileCode,
-  sendWhatsappCode,
-  verifyEmailCode,
-  verifyMobileCode,
-  verifyWhatsappCode,
-} from "../services/ProfileApi";
+import { sendEmailCode, sendMobileCode, verifyEmailCode, verifyMobileCode } from "../services/ProfileApi";
 import { refreshMyProfile } from "../queries/profileQueries";
 import { EMAIL_RE, formatPhone, tenDigits } from "../profileUtils";
 import OtpCodeInput from "./OtpCodeInput";
@@ -31,7 +24,7 @@ const CHANNELS = {
     verify: ({ otp }) => verifyEmailCode({ otp }),
   },
   mobile: {
-    label: "Mobile",
+    label: "Contact Number",
     icon: Phone,
     tint: "sky",
     placeholder: "98765 43210",
@@ -42,17 +35,13 @@ const CHANNELS = {
     send: (value) => sendMobileCode({ mobile: value }),
     verify: ({ otp, value, sessionId }) => verifyMobileCode({ otp, sessionId, mobile: value }),
   },
+  // The admin's sign-in number — shown only, never changed or verified here.
   whatsapp: {
     label: "WhatsApp",
     icon: MessageCircle,
     tint: "emerald",
-    placeholder: "98765 43210",
-    inputType: "tel",
     display: formatPhone,
-    validate: (v) => (tenDigits(v).length === 10 ? "" : "Enter a 10-digit WhatsApp number."),
-    normalize: tenDigits,
-    send: (value) => sendWhatsappCode({ whatsappNumber: value }),
-    verify: ({ otp, value }) => verifyWhatsappCode({ otp, whatsappNumber: value }),
+    readOnly: true,
   },
 };
 
@@ -91,6 +80,10 @@ function ContactRow({ kind, value, verified, onSignedOut }) {
 
   const draftError = mode === "edit" && draft ? ch.validate(draft) : "";
   const sameAsCurrent = mode === "edit" && value && ch.normalize(draft) === ch.normalize(value);
+  // Typed the current value and it isn't verified yet → confirm it instead of blocking (body {}).
+  const confirmCurrent = sameAsCurrent && verified !== true;
+  const blockSame = sameAsCurrent && !confirmCurrent;
+  const submitEdit = () => (confirmCurrent ? send(null) : send(ch.normalize(draft)));
 
   const close = () => {
     setMode("idle");
@@ -174,25 +167,32 @@ function ContactRow({ kind, value, verified, onSignedOut }) {
         </div>
         {mode === "idle" && (
           <div className="flex w-full gap-1.5 sm:w-auto sm:shrink-0 [&>button]:flex-1 [&>button]:justify-center sm:[&>button]:flex-none">
-            {value && verified !== true && (
-              <Button variant="soft" size="sm" icon={ShieldCheck} loading={busy === "send"} disabled={cooldown > 0} onClick={() => send(null)}>
-                Verify
+            {!ch.readOnly && value && verified !== true && (
+              <Button variant="primary" size="sm" icon={ShieldCheck} loading={busy === "send"} disabled={cooldown > 0} onClick={() => send(null)}>
+                {cooldown > 0 ? `Wait ${cooldown}s` : "Verify"}
               </Button>
             )}
-            <Button size="sm" icon={PencilLine} onClick={() => setMode("edit")}>
-              {value ? "Change" : "Add"}
-            </Button>
+            {!ch.readOnly && (
+              <Button size="sm" icon={PencilLine} onClick={() => setMode("edit")}>
+                {value ? "Change" : "Add"}
+              </Button>
+            )}
           </div>
         )}
         {mode !== "idle" && <Button size="icon" icon={X} aria-label="Cancel" title="Cancel" onClick={close} />}
       </div>
+
+      {mode === "idle" && !ch.readOnly && value && verified === false && (
+        <p className="mt-2 text-[11px] normal-case text-amber-600 dark:text-amber-400">
+          Verify to confirm this {ch.label.toLowerCase()} — we'll send a one-time code to it.
+        </p>
+      )}
 
       {/* Edit */}
       {mode === "edit" && (
         <div className="mt-3 space-y-2 border-t border-neutral-200/70 pt-3 dark:border-neutral-800">
           <p className="text-[11.5px] normal-case text-neutral-500">
             We'll send a code to the new {ch.label.toLowerCase()}. Your account changes only after you enter it.
-            {kind === "whatsapp" && verified === true && " Your current number gets a code first, then the new one."}
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <IconInput
@@ -203,19 +203,25 @@ function ContactRow({ kind, value, verified, onSignedOut }) {
               placeholder={ch.placeholder}
               autoFocus
               className="flex-1"
-              onKeyDown={(e) => e.key === "Enter" && !draftError && draft && !sameAsCurrent && send(ch.normalize(draft))}
+              onKeyDown={(e) => e.key === "Enter" && !draftError && draft && !blockSame && cooldown <= 0 && submitEdit()}
             />
             <Button
               variant="primary"
+              icon={confirmCurrent ? ShieldCheck : undefined}
               loading={busy === "send"}
-              disabled={!draft || Boolean(draftError) || sameAsCurrent || cooldown > 0}
-              onClick={() => send(ch.normalize(draft))}
+              disabled={!draft || Boolean(draftError) || blockSame || cooldown > 0}
+              onClick={submitEdit}
             >
-              {cooldown > 0 ? `Wait ${cooldown}s` : "Send code"}
+              {cooldown > 0 ? `Wait ${cooldown}s` : confirmCurrent ? "Verify current" : "Send code"}
             </Button>
           </div>
-          {(draftError || sameAsCurrent) && (
+          {(draftError || blockSame) && (
             <p className="text-[11px] normal-case text-red-500">{draftError || `That's already your ${ch.label.toLowerCase()}.`}</p>
+          )}
+          {!draftError && confirmCurrent && (
+            <p className="text-[11px] normal-case text-amber-600 dark:text-amber-400">
+              This is your current {ch.label.toLowerCase()} and it isn't verified yet — we'll send a code to confirm it.
+            </p>
           )}
         </div>
       )}
@@ -253,7 +259,8 @@ function ContactRow({ kind, value, verified, onSignedOut }) {
   );
 }
 
-/* Email, mobile and WhatsApp — each verified with a one-time code. */
+/* Email and mobile — each changed / verified with a one-time code.
+ * WhatsApp (the sign-in number) is shown read-only. */
 export default function ContactCard({ profile, onSignedOut }) {
   return (
     <SectionCard icon={ShieldCheck} title="Contact & verification" subtitle="Where we reach you — every change is confirmed with a code">
@@ -264,7 +271,7 @@ export default function ContactCard({ profile, onSignedOut }) {
       </div>
       <Notice tone="warning" className="mt-3">
         <span className="normal-case">
-          WhatsApp is how you sign in. Changing it signs you out on every device, this one included — sign back in with the new number.
+          WhatsApp is how you sign in, so it can't be changed from here.
         </span>
       </Notice>
     </SectionCard>

@@ -537,6 +537,8 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
                   <input
                     type="number"
                     min={0}
+                    max={100}
+                    step="any"
                     value={form.discountPercent}
                     onChange={handleChange("discountPercent")}
                     placeholder="20"
@@ -550,6 +552,7 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
                   <input
                     type="number"
                     min={0}
+                    step="any"
                     value={form.discountAmount}
                     onChange={handleChange("discountAmount")}
                     placeholder="500"
@@ -572,6 +575,7 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
                 <input
                   type="number"
                   min={0}
+                  step="any"
                   value={form.maxDiscountAmount}
                   onChange={handleChange("maxDiscountAmount")}
                   placeholder="1000"
@@ -586,6 +590,7 @@ function PromoCodeFormModal({ open, initialData, saving, plans, vouchers, brands
               <input
                 type="number"
                 min={0}
+                step="any"
                 value={form.minOrderValue}
                 onChange={handleChange("minOrderValue")}
                 placeholder="1999"

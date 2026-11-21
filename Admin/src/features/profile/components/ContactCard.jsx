@@ -21,7 +21,8 @@ const CHANNELS = {
     validate: (v) => (EMAIL_RE.test(v.trim()) ? "" : "Enter a valid email address."),
     normalize: (v) => v.trim().toLowerCase(),
     send: (value) => sendEmailCode({ email: value }),
-    verify: ({ otp }) => verifyEmailCode({ otp }),
+    // Same address that send-verification got (none when confirming the current one).
+    verify: ({ otp, value }) => verifyEmailCode({ otp, email: value }),
   },
   mobile: {
     label: "Contact Number",

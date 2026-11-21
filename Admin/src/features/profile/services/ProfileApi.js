@@ -152,7 +152,10 @@ export async function updateMyProfile({ fullName, email, dob, image } = {}) {
  * (the account only changes once the code is verified). (doc #12a–12f)
  *
  *   Email:     POST /auth/email/send-verification   { email? }
- *              POST /auth/email/verify              { otp }
+ *              POST /auth/email/verify              { otp, email? }
+ *     When switching, verify MUST carry the same `email` that was sent —
+ *     with only { otp } the server looks for the code under the OLD address
+ *     and answers 401 "Please resend OTP! OTP is expired or missing".
  *   Mobile:    POST /auth/mobile/send-verification  { mobile? }  → data.sessionId
  *              POST /auth/mobile/verify             { otp, sessionId, mobile? }
  * WhatsApp is the admin's sign-in number — it's shown read-only and never
@@ -160,7 +163,8 @@ export async function updateMyProfile({ fullName, email, dob, image } = {}) {
  * ---------------------------------------------------------------------- */
 export const sendEmailCode = ({ email } = {}) =>
     call(() => api.post('/auth/email/send-verification', email ? { email } : {}));
-export const verifyEmailCode = ({ otp }) => call(() => api.post('/auth/email/verify', { otp }));
+export const verifyEmailCode = ({ otp, email }) =>
+    call(() => api.post('/auth/email/verify', email ? { otp, email } : { otp }));
 
 export const sendMobileCode = ({ mobile } = {}) =>
     call(() => api.post('/auth/mobile/send-verification', mobile ? { mobile } : {}));

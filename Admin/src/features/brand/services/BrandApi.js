@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { throwApiError as handleError } from '../../../lib/apiError';
 
 // ── Base URL ────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -26,15 +27,6 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Normalize error responses so callers get a consistent shape
-function handleError(error) {
-    const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Something went wrong. Please try again.';
-    throw new Error(message);
-}
-
 /* -------------------------------------------------------------------------
  * GET {{base_url}}/brands/get?brandId=...
  * Matches the "getBrandDetails" Postman request — returns ONE brand with

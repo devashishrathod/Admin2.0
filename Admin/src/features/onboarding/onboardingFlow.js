@@ -182,7 +182,7 @@ export function describeMissing(missing = []) {
     .join(", ");
 }
 
-/** One readable line for an OnboardingError. */
+/** One readable line for an ApiError (lib/apiError.js). */
 export function errorText(err) {
   if (!err) return "";
   if (err.code === "ONBOARDING_STEP_INCOMPLETE" && err.details?.missing?.length) {

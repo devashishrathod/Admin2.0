@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { throwApiError as handleError } from '../../../lib/apiError';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{base_url}}
@@ -27,15 +28,6 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Normalize error responses so callers get a consistent shape
-function handleError(error) {
-    const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Something went wrong. Please try again.';
-    throw new Error(message);
-}
-
 /* -------------------------------------------------------------------------
  * Grant / re-grant a subscription to a brand (admin action).
  * POST {{base_url}}/subscribeds/admin/grant

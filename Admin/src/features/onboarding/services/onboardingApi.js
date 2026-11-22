@@ -1,19 +1,11 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { throwApiError } from '../../../lib/apiError';
 
 /* -------------------------------------------------------------------------
  * Brand Onboarding v2 — admin side (admin onboards a brand for the vendor).
- *
- * Paths, bodies and response shapes match the vendor flow captured on
- * stage (VenderPanel/docs/onboarding-v2-baseline, 19–21 Nov 2026).
- *
- * ⚠️ NOT CONFIRMED on the backend yet — the admin-on-behalf part:
- *  - POST /brands/admin/onboarding/create, PUT /brands/admin/:brandId/deed and
- *    PUT /brands/admin/onboarding/documents/:id/review are not in any doc.
- *  - The /brands/onboarding/* and /verification/brands/onboarding/* routes
- *    were isVendor-only in the admin API doc (4 Nov): an admin got 403.
- *    This file sends `?brandId=` so the same routes can act on a brand
- *    for an admin once the backend allows it.
+ * Admin guide §5 / §6 · super admin API doc #25b–#25j · vendor API doc
+ * #20–#34 (the same routes, called by the admin with `?brandId=`).
  *
  * Rules:
  *  - Onboarding APIs take `?brandId=` as a QUERY param for the admin.
@@ -42,30 +34,13 @@ api.interceptors.request.use(async (config) => {
     return config;
 });
 
-/** Error with the backend's `details.code` attached — see guide §14. */
-export class OnboardingError extends Error {
-    constructor(message, { code, details, status } = {}, cause) {
-        super(message, { cause });
-        this.name = 'OnboardingError';
-        this.code = code || null;
-        this.details = details || null;
-        this.status = status || null;
-    }
-}
-
-function fail(error) {
-    const res = error?.response;
-    const data = res?.data || {};
-    const message = data.message || data.error || error?.message || 'Something went wrong. Please try again.';
-    throw new OnboardingError(message, { code: data?.details?.code || data?.code, details: data.details, status: res?.status }, error);
-}
-
+// Every error thrown here is an ApiError (status, code, details) — lib/apiError.js.
 async function call(fn) {
     try {
         const { data } = await fn();
         return data;
     } catch (error) {
-        return fail(error);
+        return throwApiError(error);
     }
 }
 
@@ -75,8 +50,9 @@ const multipart = { headers: { 'Content-Type': undefined } };
 
 /* ---- Create + status (guide §5.1, §4) ------------------------------ */
 
-// ⚠️ NOT CONFIRMED: POST /brands/admin/onboarding/create { whatsappNumber, brandName? }
-// → { brandId, userId, currentScreen: "BRAND_NAME" }. 409 VENDOR_ALREADY_EXISTS.
+// POST /brands/admin/onboarding/create { whatsappNumber, brandName? } (#25h) → 201
+// { userId, brandId, whatsappNumber, brandName, currentScreen, accountState, createdBy }.
+// 409 VENDOR_ALREADY_EXISTS with details { userId, brandId, accountState }.
 export const createOnboardingBrand = ({ whatsappNumber, brandName }) =>
     call(() => api.post('/brands/admin/onboarding/create', brandName ? { whatsappNumber, brandName } : { whatsappNumber }));
 
@@ -147,7 +123,7 @@ export const updateKycDocument = (brandId, documentId, { title, file }) => {
 export const deleteKycDocument = (brandId, documentId) =>
     call(() => api.delete(`/brands/onboarding/documents/${documentId}`, q(brandId)));
 
-// ⚠️ NOT CONFIRMED: PUT /brands/admin/onboarding/documents/:documentId/review { status: ACCEPTED } | { status: REJECTED, reason }
+// PUT /brands/admin/onboarding/documents/:documentId/review (#25d) { status: ACCEPTED } | { status: REJECTED, reason ≤ 500 }
 export const reviewKycDocument = (documentId, { status, reason }) =>
     call(() =>
         api.put(`/brands/admin/onboarding/documents/${documentId}/review`, status === 'REJECTED' ? { status, reason } : { status })
@@ -197,9 +173,8 @@ export const saveOwnerIdDocument = (brandId, { idType, file }) => {
 
 /* ---- Partnership deed, offline (guide §12) ------------------------- */
 
-// ⚠️ NOT CONFIRMED: PUT /brands/admin/:brandId/deed — multipart `file` (signed copy) + `note` (required) → { deed }.
-// status.deed already has mode OFFLINE / acceptedByType ADMIN / requiresDeedConfirmation,
-// and the vendor confirms with PUT accept-partnership — only this admin route is unseen.
+// PUT /brands/admin/:brandId/deed (#25g) — multipart `file` (signed copy) + `note` (2–1000) → { deed, currentScreen }.
+// 409 DEED_ALREADY_ACCEPTED when the vendor accepted it themselves; a repeat on an ADMIN deed replaces the proof.
 export const recordOfflineDeed = (brandId, { file, note }) => {
     const fd = new FormData();
     fd.append('file', file);

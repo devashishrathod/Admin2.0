@@ -3,7 +3,7 @@ import { errorText } from "./onboardingFlow";
 
 /**
  * Runs one save/verify/skip call for a step: tracks which action is busy,
- * turns OnboardingErrors into readable text, and on success hands the
+ * turns ApiErrors into readable text, and on success hands the
  * response to `onDone` (the page then re-reads the server's status).
  *
  *   const { run, busy, error } = useStepAction(onAdvance);

@@ -19,6 +19,7 @@ import {
   Hourglass,
   Check,
   X,
+  BadgeCheck,
 } from "lucide-react";
 import { VerifiedMark } from "../../BrandShared";
 import { brandCardFacts } from "../../brandCardUtils";
@@ -123,18 +124,27 @@ function StatusTile({ icon: Icon, label, value, tint }) {
 function StatusCard({ brand }) {
   const { onboardingDone, onboardingMissing } = brandCardFacts(brand);
   const total = onboardingDone + onboardingMissing || 1;
+  // Approval and the verified badge are separate things (§11): an approved
+  // brand is "Approved"; "Verified" is only the badge (isVerified).
   const approval =
     brand.status === "Active" || brand.status === "Deactive"
-      ? { value: "Verified", tint: "emerald" }
+      ? { value: "Approved", tint: "emerald" }
       : brand.status === "Rejected" || brand.status === "Revoked"
       ? { value: brand.status, tint: "red" }
       : { value: orText(brand.status, "Unknown"), tint: "amber" };
+  const badge = brand.isVerified
+    ? {
+        value: `Verified${brand.badgeGrantedAt ? ` · ${new Date(brand.badgeGrantedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : ""}${brand.badgeAtRisk ? " · at risk" : ""}`,
+        tint: brand.badgeAtRisk ? "amber" : "sky",
+      }
+    : { value: "No badge", tint: "neutral" };
 
   return (
     <div className={cardClass}>
       <CardHeader icon={ShieldCheck} tint="sky" title="Status & visibility" subtitle="How the brand appears right now" />
       <div className="grid grid-cols-2 gap-2">
         <StatusTile icon={ShieldCheck} label="Approval" value={approval.value} tint={approval.tint} />
+        <StatusTile icon={BadgeCheck} label="Verified badge" value={badge.value} tint={badge.tint} />
         {/* (Active/Inactive is the header switch — not repeated here.) */}
         <StatusTile
           icon={Hourglass}

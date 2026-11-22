@@ -441,6 +441,10 @@ export function mapBrandDetail(raw) {
     active: raw.isActive ?? status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
+    // Verified badge — a trust badge, separate from approval (§11).
+    isVerified: Boolean(raw.isVerified),
+    badgeGrantedAt: raw.badgeGrantedAt || null,
+    badgeAtRisk: Boolean(raw.badgeAtRisk),
 
     // The detail payload only carries the first outlet, so it can't count
     // them — null keeps the list's real "used/limit" (mergeKnown).

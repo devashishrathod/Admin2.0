@@ -71,7 +71,8 @@ import DateRangeFilter from "../../components/common/DateRangeFilter";
 const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Hidden Brand", "Top Brand"];
 const STATUS_TAB_LABELS = {
   All: "All",
-  "Active Brand": "Verified",
+  // "Verified" is the trust badge (isVerified), never approval / active (§11).
+  "Active Brand": "Active",
   "Deactive Brand": "Deactive",
   "Hidden Brand": "Hidden",
   "Top Brand": "Top Brand",
@@ -202,11 +203,24 @@ const BRAND_STATUS_STYLES = {
   Rejected: { pill: "bg-red-500/10 text-red-600 dark:text-red-400", dot: "bg-red-400" },
 };
 
-// Instagram-style verified tick: solid blue badge, white check. Every brand
-// on these pages is admin-approved, so it's shown on all of them.
-function VerifiedTick({ size = 16 }) {
+// Instagram-style verified tick: solid blue badge, white check. Only for the
+// verified BADGE (isVerified, PUT /brands/admin/:brandId/verified-badge) —
+// approval / an active account never earn it (§11). badgeAtRisk = the badge
+// is kept but the profile strength fell below 75.
+function VerifiedTick({ brand, size = 16 }) {
+  if (!brand?.isVerified) return null;
+  const since = brand.badgeGrantedAt ? new Date(brand.badgeGrantedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null;
   return (
-    <BadgeCheck size={size} className="shrink-0" fill="#0095F6" stroke="#ffffff" strokeWidth={2.2} aria-label="Verified brand" />
+    <>
+      <span title={since ? `Verified badge since ${since}` : "Verified badge"} className="inline-flex shrink-0">
+        <BadgeCheck size={size} className="shrink-0" fill="#0095F6" stroke="#ffffff" strokeWidth={2.2} aria-label="Verified badge" />
+      </span>
+      {brand.badgeAtRisk && (
+        <span title="Badge kept, but profile strength fell below 75" className="inline-flex shrink-0">
+          <AlertTriangle size={Math.max(12, size - 4)} className="text-amber-500" aria-label="Badge at risk" />
+        </span>
+      )}
+    </>
   );
 }
 
@@ -216,7 +230,7 @@ function BrandStatusBadge({ brand }) {
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${style.pill}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-      {label === "Active" ? "Verified" : label}
+      {label}
     </span>
   );
 }
@@ -676,8 +690,8 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
 
           {/* Pill tags */}
           <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5 pr-40">
-            {/* "Verified" is the blue tick next to the name below;
-                Expired / Deactive still get their own pill here. */}
+            {/* The verified BADGE is the blue tick next to the name below;
+                Expired / Deactive get their own pill here. */}
             {brand.isDummy && (
               <span className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[10.5px] font-semibold uppercase tracking-wide text-violet-600 shadow-sm dark:bg-neutral-900 dark:text-violet-400">
                 <FlaskConical size={12} />
@@ -722,7 +736,7 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
         <div className={`flex flex-1 flex-col px-2.5 pb-1 ${cover ? "pt-9" : "pt-4"}`}>
           <h3 className="flex items-center gap-1.5 text-[18px] font-bold leading-tight tracking-tight text-emerald-600 dark:text-emerald-400">
             <span className="truncate">{brand.brandName}</span>
-            <VerifiedTick size={18} />
+            <VerifiedTick brand={brand} size={18} />
           </h3>
           <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[12px] text-neutral-500 dark:text-neutral-400">
             {brand.categoryImage && (
@@ -1082,7 +1096,7 @@ export default function Brand({ scope = "live" }) {
     !isTileScope && !isExpiredScope
   );
   const statusMix = [
-    { name: "Verified", value: verifiedMixTotal ?? 0, color: "#2FDE8C" },
+    { name: "Active", value: verifiedMixTotal ?? 0, color: "#2FDE8C" },
     { name: "Deactive", value: deactiveMixTotal ?? 0, color: "#A3A3A3" },
     { name: "Expired", value: noPlanTotal ?? 0, color: "#F87171" },
   ].filter((s) => s.value > 0);
@@ -1170,7 +1184,7 @@ export default function Brand({ scope = "live" }) {
           <div className="min-w-0 flex-1">
             <p className="flex min-w-0 items-center gap-1 font-semibold text-neutral-900 group-hover:text-emerald-600 dark:text-neutral-50 dark:group-hover:text-emerald-400">
               <span className="truncate">{row.brandName}</span>
-              <VerifiedTick size={14} />
+              <VerifiedTick brand={row} size={14} />
             </p>
             <p className="mt-0.5 truncate text-[11px] text-neutral-500">
               <ValueOr value={row.category} fallback={MISSING.category} />
@@ -1371,7 +1385,7 @@ export default function Brand({ scope = "live" }) {
             />
             <StatTile
               icon={ShieldCheck}
-              label="Verified"
+              label="Active"
               value={countOrDash(tabTotals["Active Brand"])}
               hint="Active right now"
               tint="sky"

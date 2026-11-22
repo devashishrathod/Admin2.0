@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
+  Info,
   ArrowLeft,
   ShieldCheck,
   CheckCircle2,
@@ -38,6 +40,7 @@ import { useVerificationHistory } from "./queries/onboardingReviewQueries";
 import ShowcaseAlbums from "../brand/ShowcaseAlbums";
 import AccountDetailsTab from "../brand/BrandDetails/tabs/AccountDetailsTab";
 import SubmittedDetails from "./SubmittedDetails";
+import { REVIEW_TEXT_MAX } from "./reviewGate";
 import { isNotFoundMessage, MISSING, orText } from "../../utils/helpers";
 import Loader from "../../components/common/Loader";
 import ValueOr from "../../components/common/ValueOr";
@@ -54,18 +57,26 @@ const selectBrandDetail = (res) => {
 const CARD =
   "rounded-3xl border border-white/80 bg-white/65 shadow-[0_8px_30px_rgba(16,185,129,0.07)] backdrop-blur-xl dark:border-white/5 dark:bg-neutral-900/60 dark:shadow-black/30";
 
+// The ADMIN's decision (verificationData.deriveStatus). The system's verdict
+// is advice only and has its own labels below — never "Approved".
 const STATUS_LABELS = {
   APPROVED: "Approved",
   REJECTED: "Rejected",
   REVOKED: "Revoked",
-  MANUAL_REVIEW: "Manual Review",
+  PENDING: "Awaiting decision",
 };
 
 const STATUS_ACCENTS = {
   APPROVED: "from-emerald-400/40 via-emerald-400/5",
   REJECTED: "from-red-400/40 via-red-400/5",
   REVOKED: "from-orange-400/40 via-orange-400/5",
-  MANUAL_REVIEW: "from-amber-400/40 via-amber-400/5",
+  PENDING: "from-amber-400/40 via-amber-400/5",
+};
+
+const SYSTEM_VERDICT_LABELS = {
+  APPROVED: "looks good",
+  MANUAL_REVIEW: "needs a manual check",
+  REJECTED: "found problems",
 };
 
 function formatDateTime(iso) {
@@ -415,11 +426,13 @@ function TabBar({ tabs, active, onChange }) {
 export default function VerificationDetails({
   verification,
   onBack,
+  // Each resolves true on success; forms keep what was typed until then.
   onApprove,
   onReject,
-  onMarkReviewed,
-  onForceReviewed,
+  onSetReviewed,
   onRevoke,
+  // reviewGate.useReviewGate: { approveBlocked, rejectBlocked, deedMissing }.
+  gate = null,
   busyAction,
   actionError,
   // View only (New Onboarding) — no Approve / Reject / Revoke / Reviewed
@@ -446,12 +459,20 @@ export default function VerificationDetails({
   const [revokeError, setRevokeError] = useState("");
 
   // The admin's decision is driven by the brand itself, not the system's
-  // verdict (that's only advice — onboarding v2 guide §4): a brand whose
-  // vendor finished onboarding and that isn't approved yet can be approved
-  // or rejected; an approved brand can be revoked.
+  // verdict (that's only advice — onboarding v2 guide §4). Approve / Reject
+  // only on a live (not rejected / revoked) attempt of a brand that isn't
+  // approved — a rejected attempt waits for the vendor's resubmit, there is
+  // no override approve (#24). The gate adds "submitted" and "deed accepted".
+  // An approved brand can be revoked.
   const brandApproved = Boolean(verification.brand?.isApproved);
-  const canReview = !readOnly && !brandApproved;
+  const attemptClosed = verification.isRejected || verification.isRevoked;
+  const canReview = !readOnly && !brandApproved && !attemptClosed;
   const canRevoke = !readOnly && brandApproved;
+  const approveBlocked = gate?.approveBlocked || null;
+  const rejectBlocked = gate?.rejectBlocked || null;
+  const systemVerdictText = SYSTEM_VERDICT_LABELS[verification.systemVerdict];
+  // The re-score after a post-submit add (latestScore) wins over the submit one.
+  const adviceScore = verification.latestScore ?? verification.score;
   // No verification record yet (vendor hasn't submitted) — attemptNumber is 0.
   const attemptCaption = verification.attemptNumber ? `Attempt #${verification.attemptNumber}` : "Not submitted yet";
 
@@ -462,8 +483,6 @@ export default function VerificationDetails({
   const approveBusy = busyAction === "approve";
   const rejectBusy = busyAction === "reject";
   const reviewedBusy = busyAction === "reviewed";
-  const forceOnBusy = busyAction === "force-on";
-  const forceOffBusy = busyAction === "force-off";
   const revokeBusy = busyAction === "revoke";
 
   // Real audit trail — GET /brands/verifications/history?brandId=...
@@ -514,42 +533,55 @@ export default function VerificationDetails({
   const vouchersError =
     vouchersQuery.error && !isNotFoundMessage(vouchersQuery.error.message) ? vouchersQuery.error.message : "";
 
-  const handleApproveSubmit = (e) => {
+  // Forms are cleared only after the request succeeds; on a failure (e.g. a
+  // 409 — the page then re-reads the latest state) the typed text stays.
+  const handleApproveSubmit = async (e) => {
     e.preventDefault();
-    onApprove(approveNote.trim());
-    setApproveNote("");
-    setShowApproveBox(false);
+    if (approveBlocked) return;
+    if (await onApprove(approveNote.trim())) {
+      setApproveNote("");
+      setShowApproveBox(false);
+    }
   };
 
-  const handleRejectSubmit = (e) => {
+  const finalRejectReason =
+    rejectReasonChoice === "Other"
+      ? rejectNote.trim()
+      : rejectNote.trim()
+      ? `${rejectReasonChoice} — ${rejectNote.trim()}`
+      : rejectReasonChoice;
+  const rejectTooLong = finalRejectReason.length > REVIEW_TEXT_MAX;
+
+  const handleRejectSubmit = async (e) => {
     e.preventDefault();
+    if (rejectBlocked) return;
     if (rejectReasonChoice === "Other" && !rejectNote.trim()) {
       setRejectError("Describe the reason so the vendor knows what to fix.");
       return;
     }
-    const finalReason =
-      rejectReasonChoice === "Other"
-        ? rejectNote.trim()
-        : rejectNote.trim()
-        ? `${rejectReasonChoice} — ${rejectNote.trim()}`
-        : rejectReasonChoice;
-    onReject(finalReason);
-    setRejectReasonChoice(REJECTION_REASONS[0]);
-    setRejectNote("");
-    setShowRejectBox(false);
-    setRejectError("");
+    if (rejectTooLong) {
+      setRejectError(`The reason can be at most ${REVIEW_TEXT_MAX} characters.`);
+      return;
+    }
+    if (await onReject(finalRejectReason)) {
+      setRejectReasonChoice(REJECTION_REASONS[0]);
+      setRejectNote("");
+      setShowRejectBox(false);
+      setRejectError("");
+    }
   };
 
-  const handleRevokeSubmit = (e) => {
+  const handleRevokeSubmit = async (e) => {
     e.preventDefault();
     if (!revokeReason.trim()) {
       setRevokeError("A reason is required so there's a record of why approval was revoked.");
       return;
     }
-    onRevoke(revokeReason.trim());
-    setRevokeReason("");
-    setShowRevokeBox(false);
-    setRevokeError("");
+    if (await onRevoke(revokeReason.trim())) {
+      setRevokeReason("");
+      setShowRevokeBox(false);
+      setRevokeError("");
+    }
   };
 
   const duplicateGroups = [
@@ -908,16 +940,23 @@ export default function VerificationDetails({
           <p className="text-[12.5px] text-emerald-700 dark:text-emerald-300">This brand has been approved by admin.</p>
         </div>
       )}
-      {/* System check passed / pending, but the brand still needs the admin's call. */}
-      {!brandApproved && ["APPROVED", "PENDING"].includes(verification.derivedStatus) && (
+      {/* Awaiting the admin. The system's verdict is shown as advice only. */}
+      {!brandApproved && verification.derivedStatus === "PENDING" && (
         <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-sky-400/10 p-3.5">
           <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
           <p className="text-[12.5px] text-sky-700 dark:text-sky-300">
             {readOnly
               ? "The vendor is still onboarding — once they submit, approve or reject this brand from Brand Waiting."
-              : verification.derivedStatus === "APPROVED"
-              ? `System check passed (score ${verification.score}/100) — the vendor finished onboarding and this brand is awaiting your decision.`
-              : "The vendor finished onboarding — this brand is awaiting your decision."}
+              : "This brand is awaiting your decision."}
+          </p>
+        </div>
+      )}
+      {verification.attemptNumber > 0 && systemVerdictText && !attemptClosed && !brandApproved && (
+        <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-neutral-500/5 p-3.5">
+          <Info size={16} className="mt-0.5 shrink-0 text-neutral-500" />
+          <p className="text-[12.5px] text-neutral-600 dark:text-neutral-400">
+            <span className="font-medium">Advice only:</span> the system check {systemVerdictText}
+            {adviceScore != null ? ` (score ${adviceScore}/100)` : ""}. The decision is yours.
           </p>
         </div>
       )}
@@ -943,45 +982,60 @@ export default function VerificationDetails({
           </div>
         </div>
       )}
-      {verification.derivedStatus === "MANUAL_REVIEW" && (
-        <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-amber-400/10 p-3.5">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-[12.5px] text-amber-700 dark:text-amber-300">Flagged for manual review — awaiting an admin decision.</p>
-        </div>
+      {attemptClosed && !readOnly && (
+        <p className="mb-3.5 text-[12px] text-neutral-500">Waiting for the vendor to fix the details and resubmit — a new attempt then comes back here.</p>
       )}
 
-      {/* Approve / Reject — available while pending review, and as a
-          manual override on a previously rejected verification. */}
+      {/* Approve / Reject — only on a live attempt (no override approve on a
+          rejected one), after submit; Approve also needs the deed. */}
       {canReview && !showApproveBox && (
-        <div className="flex gap-2.5">
-          <button
-            onClick={() => setShowApproveBox(true)}
-            disabled={anyBusy}
-            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-            Approve
-          </button>
-          <button
-            onClick={() => setShowRejectBox(true)}
-            disabled={anyBusy}
-            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/40 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
-          >
-            {rejectBusy ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
-            Reject
-          </button>
-        </div>
+        <>
+          <div className="flex gap-2.5">
+            <button
+              onClick={() => setShowApproveBox(true)}
+              disabled={anyBusy || Boolean(approveBlocked)}
+              title={approveBlocked || "Approve"}
+              className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+              Approve
+            </button>
+            <button
+              onClick={() => setShowRejectBox(true)}
+              disabled={anyBusy || Boolean(rejectBlocked)}
+              title={rejectBlocked || "Reject"}
+              className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/40 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+            >
+              {rejectBusy ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
+              Reject
+            </button>
+          </div>
+          {approveBlocked && (
+            <p className="mt-2.5 text-[12px] text-amber-700 dark:text-amber-300">
+              {approveBlocked}
+              {gate?.deedMissing && (
+                <>
+                  {" "}
+                  <Link to={`/brand/onboard/${brandId}`} className="font-semibold underline">
+                    Open onboarding
+                  </Link>
+                </>
+              )}
+            </p>
+          )}
+        </>
       )}
 
       {canReview && showApproveBox && (
         <form onSubmit={handleApproveSubmit} className="space-y-3">
           <label className="mb-1.5 block text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
-            Note <span className="text-neutral-500">(optional — e.g. manual override reason)</span>
+            Note <span className="text-neutral-500">(optional — recorded in the history)</span>
           </label>
           <textarea
             value={approveNote}
             onChange={(e) => setApproveNote(e.target.value)}
             rows={3}
+            maxLength={REVIEW_TEXT_MAX}
             placeholder="e.g. Bank passbook manually verified over call"
             disabled={anyBusy}
             className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
@@ -1000,7 +1054,7 @@ export default function VerificationDetails({
             </button>
             <button
               type="submit"
-              disabled={anyBusy}
+              disabled={anyBusy || Boolean(approveBlocked)}
               className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
@@ -1035,6 +1089,7 @@ export default function VerificationDetails({
               if (revokeError) setRevokeError("");
             }}
             rows={3}
+            maxLength={REVIEW_TEXT_MAX}
             placeholder="e.g. GST was cancelled by the department after approval. Brand suspended pending fresh documents."
             disabled={anyBusy}
             className={`w-full resize-none rounded-xl border bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 disabled:opacity-60 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600 ${
@@ -1072,37 +1127,15 @@ export default function VerificationDetails({
         </form>
       )}
 
-      {/* Reviewed flag — Case D: { action: "REVIEWED" } flips it; Case D2:
-          { action: "REVIEWED", isReviewed } forces it either way. */}
-      {!readOnly && (
-        <div className="mt-4 flex items-center justify-between gap-2 border-t border-neutral-200/70 pt-4 dark:border-neutral-800">
-          <div className="flex items-center gap-2">
-            <BadgeCheck size={14} className={verification.isReviewed ? "text-sky-600 dark:text-sky-400" : "text-neutral-500"} />
-            <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Reviewed</span>
-            {reviewedBusy && <Loader2 size={11} className="animate-spin text-neutral-500" />}
-            <ToggleSwitch checked={Boolean(verification.isReviewed)} onChange={anyBusy ? undefined : onMarkReviewed} />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="mr-0.5 text-[11px] font-medium text-neutral-500">Force</span>
-            <button
-              onClick={() => onForceReviewed(true)}
-              disabled={anyBusy}
-              title="Force isReviewed = true"
-              aria-label="Force reviewed on"
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-400"
-            >
-              {forceOnBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-            </button>
-            <button
-              onClick={() => onForceReviewed(false)}
-              disabled={anyBusy}
-              title="Force isReviewed = false"
-              aria-label="Force reviewed off"
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-700/40"
-            >
-              {forceOffBusy ? <Loader2 size={13} className="animate-spin" /> : <XCircle size={13} />}
-            </button>
-          </div>
+      {/* Reviewed ("seen") flag — always sent as an explicit boolean
+          ({ action: "REVIEWED", isReviewed }, #24 note 3); it can't change on
+          an approved brand, and needs a submitted attempt. */}
+      {!readOnly && !brandApproved && verification.attemptNumber > 0 && (
+        <div className="mt-4 flex items-center gap-2 border-t border-neutral-200/70 pt-4 dark:border-neutral-800">
+          <BadgeCheck size={14} className={verification.isReviewed ? "text-sky-600 dark:text-sky-400" : "text-neutral-500"} />
+          <span className="text-[12.5px] font-medium text-neutral-700 dark:text-neutral-300">Reviewed</span>
+          {reviewedBusy && <Loader2 size={11} className="animate-spin text-neutral-500" />}
+          <ToggleSwitch checked={Boolean(verification.isReviewed)} onChange={anyBusy ? undefined : () => onSetReviewed(!verification.isReviewed)} />
         </div>
       )}
     </div>
@@ -1362,9 +1395,19 @@ export default function VerificationDetails({
                       : "border-neutral-200 focus:border-red-400/60 focus:ring-red-400/60 dark:border-neutral-800"
                   }`}
                 />
+                <p className={`mt-1 text-right text-[11px] ${rejectTooLong ? "text-red-600 dark:text-red-400" : "text-neutral-400"}`}>
+                  {finalRejectReason.length}/{REVIEW_TEXT_MAX}
+                </p>
                 {rejectError && (
                   <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-red-600 dark:text-red-400">
                     <AlertTriangle size={11} /> {rejectError}
+                  </p>
+                )}
+                {/* The page banner sits behind this overlay — repeat a failed
+                    request's error here (the reason stays as typed). */}
+                {actionError && (
+                  <p className="mt-1.5 flex items-start gap-1 text-[11.5px] text-red-600 dark:text-red-400">
+                    <AlertTriangle size={11} className="mt-0.5 shrink-0" /> {actionError}
                   </p>
                 )}
               </div>
@@ -1383,7 +1426,7 @@ export default function VerificationDetails({
                 </button>
                 <button
                   type="submit"
-                  disabled={anyBusy}
+                  disabled={anyBusy || rejectTooLong || Boolean(rejectBlocked)}
                   className="flex items-center gap-1.5 rounded-xl border border-red-500/50 bg-white px-4 py-2 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-500/40 dark:bg-neutral-900 dark:text-red-400 dark:hover:bg-red-500/10"
                 >
                   {rejectBusy && <Loader2 size={13} className="animate-spin" />}

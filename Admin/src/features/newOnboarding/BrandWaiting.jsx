@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Search, LayoutGrid, List, X, Check, AlertTriangle } from "lucide-react";
+import { queryKeys } from "../../lib/query";
 import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
 import Table from "../../components/common/Table";
@@ -14,14 +16,18 @@ import { WaitingChip } from "../brand/BrandStageChips";
 import { reviewBrandVerification } from "./services/NewOnboardingApi";
 import { mapVerification } from "./verificationData";
 import { useLatestVerification } from "./queries/onboardingReviewQueries";
+import { rowReviewBlock, useReviewGate, REVIEW_TEXT_MAX } from "./reviewGate";
 import OnboardingCard from "./OnboardingCard";
 import { onboardingTableColumns } from "./onboardingBrand";
 import VerificationDetails from "./VerificationDetails";
 
 /* Approve from the list — optional note, sent as { action: "APPROVED", note }
-   (same as the details page's Approve). */
+   (same as the details page's Approve). The deed is checked here (one status
+   read for this brand), so the list itself needs no per-row request. */
 function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
   const [note, setNote] = useState("");
+  const gate = useReviewGate(brand);
+  const blocked = gate.approveBlocked;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={busy ? undefined : onClose}>
       <form
@@ -30,7 +36,7 @@ function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
-          onConfirm(note.trim());
+          if (!blocked) onConfirm(note.trim());
         }}
         className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl dark:bg-neutral-900"
       >
@@ -49,9 +55,24 @@ function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
           rows={3}
           autoFocus
           disabled={busy}
+          maxLength={REVIEW_TEXT_MAX}
           placeholder="e.g. Bank passbook manually verified over call"
           className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 placeholder:text-neutral-400 focus:border-emerald-400/60 focus:outline-none focus:ring-1 focus:ring-emerald-400/60 disabled:opacity-60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 dark:placeholder:text-neutral-600"
         />
+
+        {blocked && (
+          <div className="mt-3 rounded-xl bg-amber-400/10 px-3.5 py-2.5 text-[12.5px] text-amber-700 dark:text-amber-300">
+            {blocked}
+            {gate.deedMissing && (
+              <>
+                {" "}
+                <Link to={`/brand/onboard/${brand.id}`} className="font-semibold underline">
+                  Open onboarding
+                </Link>
+              </>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] text-red-600 dark:text-red-400">
@@ -71,8 +92,8 @@ function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
           </button>
           <button
             type="submit"
-            disabled={busy}
-            className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-wait disabled:opacity-60"
+            disabled={busy || Boolean(blocked)}
+            className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-950/30 border-t-neutral-950" /> : <Check size={14} />}
             Approve
@@ -114,6 +135,7 @@ const TABS = [
  * ---------------------------------------------------------------------- */
 export default function BrandWaiting() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search.trim(), 400);
@@ -126,7 +148,7 @@ export default function BrandWaiting() {
 
   const [selectedBrand, setSelectedBrand] = useState(null);
   // Which single review action is in flight — "approve" | "reject" |
-  // "reviewed" | "force-on" | "force-off" | "revoke" | null.
+  // "reviewed" | "revoke" | null.
   const [busyAction, setBusyAction] = useState(null);
   const [actionError, setActionError] = useState("");
   const [approveTarget, setApproveTarget] = useState(null);
@@ -153,6 +175,8 @@ export default function BrandWaiting() {
   const tabCounts = { All: stageCounts?.WAITING, UnderReview: underReviewCount, Rejected: rejectedCount, Revoked: revokedCount };
 
   const latestQuery = useLatestVerification(selectedBrand?.id);
+  // Submit / deed / closed-attempt gate for the open brand (item 5).
+  const selectedGate = useReviewGate(selectedBrand, latestQuery.data, { enabled: Boolean(selectedBrand) });
 
   const tiles = [
     { icon: "hourglass", label: "Waiting brands", value: stageCounts?.WAITING, hint: "Submitted, not approved", tint: "amber", tabKey: "All" },
@@ -166,7 +190,12 @@ export default function BrandWaiting() {
     setPage(1);
   };
 
-  /* ---- Review workflow (Approve / Reject / Reviewed / Force / Revoke) --- */
+  /* ---- Review workflow (Approve / Reject / Reviewed / Revoke) ----------
+     Resolves true on success. Forms stay open (with what was typed) until
+     then. A 409 (SUBMIT_REQUIRED, DEED_NOT_ACCEPTED, a newer submission, or
+     another admin acting first) means our copy is stale: every ["brands"]
+     query — list, attempt, onboarding status — is re-read, and the form
+     keeps the typed reason so the admin can act on the fresh state. */
   const handleReview = async (brandId, payload, key) => {
     setActionError("");
     setBusyAction(key);
@@ -178,18 +207,23 @@ export default function BrandWaiting() {
       await listQuery.refetch({ cancelRefetch: false });
       return true;
     } catch (err) {
-      setActionError(err.message);
+      if (err?.status === 409) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.brands.all });
+        setActionError(`${err.message} The latest state is loaded — check it and try again.`);
+      } else {
+        setActionError(err.message);
+      }
       return false;
     } finally {
       setBusyAction(null);
     }
   };
 
-  const handleApprove = (brandId, note) => handleReview(brandId, { action: "APPROVED", note }, "approve");
+  const handleApprove = (brandId, note) => handleReview(brandId, { action: "APPROVED", ...(note ? { note } : {}) }, "approve");
   const handleReject = (brandId, rejectionReason) => handleReview(brandId, { action: "REJECTED", rejectionReason }, "reject");
-  const handleMarkReviewed = (brandId) => handleReview(brandId, { action: "REVIEWED" }, "reviewed");
-  const handleForceReviewed = (brandId, isReviewed) =>
-    handleReview(brandId, { action: "REVIEWED", isReviewed }, isReviewed ? "force-on" : "force-off");
+  // isReviewed is always sent explicitly (#24 note 3 — omitting it toggles,
+  // which double-flips when two admins click at once).
+  const handleSetReviewed = (brandId, isReviewed) => handleReview(brandId, { action: "REVIEWED", isReviewed: Boolean(isReviewed) }, "reviewed");
   const handleRevoke = (brandId, revokeReason) => handleReview(brandId, { action: "REVOKED", revokeReason }, "revoke");
 
   const isClosedRow = (row) => row.waitingChip === "REJECTED" || row.waitingChip === "REVOKED";
@@ -205,8 +239,8 @@ export default function BrandWaiting() {
         <StatusStepButton
           label={row.waitingChip === "RESUBMITTED" ? "Resubmitted" : "Under review"}
           tone="amber"
-          stepLabel="Approve"
-          disabled={Boolean(busyAction)}
+          stepLabel={rowReviewBlock(row) || "Approve"}
+          disabled={Boolean(busyAction) || Boolean(rowReviewBlock(row))}
           onClick={() => {
             setActionError("");
             setApproveTarget(row);
@@ -220,8 +254,8 @@ export default function BrandWaiting() {
             setActionError("");
             setRejectTarget(row);
           }}
-          disabled={Boolean(busyAction)}
-          title="Reject"
+          disabled={Boolean(busyAction) || Boolean(rowReviewBlock(row))}
+          title={rowReviewBlock(row) || "Reject"}
           aria-label={`Reject ${row.brandName}`}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 disabled:cursor-wait disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
         >
@@ -243,9 +277,9 @@ export default function BrandWaiting() {
         }}
         onApprove={(note) => handleApprove(brandId, note)}
         onReject={(reason) => handleReject(brandId, reason)}
-        onMarkReviewed={() => handleMarkReviewed(brandId)}
-        onForceReviewed={(isReviewed) => handleForceReviewed(brandId, isReviewed)}
+        onSetReviewed={(isReviewed) => handleSetReviewed(brandId, isReviewed)}
         onRevoke={(reason) => handleRevoke(brandId, reason)}
+        gate={selectedGate}
         busyAction={busyAction}
         actionError={actionError}
       />
@@ -300,8 +334,8 @@ export default function BrandWaiting() {
           </div>
         </div>
 
-        {/* A list Reject that failed (Approve shows its error in its modal). */}
-        {actionError && !approveTarget && (
+        {/* Approve / Reject show their errors in their own modals. */}
+        {actionError && !approveTarget && !rejectTarget && (
           <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />
             {actionError}
@@ -391,6 +425,9 @@ export default function BrandWaiting() {
                         ? undefined
                         : {
                             busy: Boolean(busyAction),
+                            // Deed is checked in the Approve modal (one status read).
+                            approveBlockedReason: rowReviewBlock(row),
+                            rejectBlockedReason: rowReviewBlock(row),
                             onApprove: (r) => {
                               setActionError("");
                               setApproveTarget(r);
@@ -439,15 +476,19 @@ export default function BrandWaiting() {
         />
       )}
 
-      {/* List Reject — reason is shown to the brand owner */}
+      {/* List Reject — reason is shown to the brand owner. The modal stays
+          open (with the typed reason) until the request succeeds. */}
       {rejectTarget && (
         <RejectReasonModal
           brand={rejectTarget}
-          onClose={() => setRejectTarget(null)}
-          onConfirm={(reason) => {
-            const target = rejectTarget;
+          busy={busyAction === "reject"}
+          error={actionError}
+          onClose={() => {
             setRejectTarget(null);
-            handleReject(target.id, reason);
+            setActionError("");
+          }}
+          onConfirm={async (reason) => {
+            if (await handleReject(rejectTarget.id, reason)) setRejectTarget(null);
           }}
         />
       )}

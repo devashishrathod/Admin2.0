@@ -80,14 +80,13 @@ export async function getBrandVerifications({ page = 1, limit = 10, ...filters }
 }
 
 // ── Review a brand verification (approve / reject / reviewed flag / revoke) ──
-// PUT {{TryDood2.0BaseUrl}}/brands/admin/verifications/:brandId/review
-// Confirmed from Postman for five actions:
-//   { action: "APPROVED" }                          — Case A: system already APPROVED
-//   { action: "APPROVED", note }                     — Case B: manual override, note optional
-//   { action: "REJECTED", rejectionReason }          — Case C: rejectionReason required
-//   { action: "REVIEWED" }                           — Case D: toggles the isReviewed flag
-//   { action: "REVIEWED", isReviewed }                — Case D2: force the isReviewed flag to true/false
-//   { action: "REVOKED", revokeReason }               — Case E: revoke a previously approved verification
+// PUT /brands/admin/verifications/:brandId/review (#24). The validator is
+// strict — send only the fields of the action:
+//   { action: "APPROVED", note? }                 — 409 SUBMIT_REQUIRED / DEED_NOT_ACCEPTED
+//   { action: "REJECTED", rejectionReason, note? } — reason ≤ 1000, shown to the vendor
+//   { action: "REVIEWED", isReviewed }             — always an explicit boolean (omitted = toggle)
+//   { action: "REVOKED", revokeReason, note? }     — only on an approved brand
+// 409 also = superseded attempt / another admin acted first → re-read and retry.
 export async function reviewBrandVerification(
     brandId,
     { action, note, rejectionReason, isReviewed, revokeReason } = {}
@@ -105,20 +104,6 @@ export async function reviewBrandVerification(
     } catch (error) {
         handleError(error);
     }
-}
-
-// ── Force the isReviewed flag to an explicit true/false ──────────
-// Convenience wrapper over Case D2 — used by a real two-way toggle in the UI
-// (plain Case D only ever sets the flag on, it can't turn it back off).
-export async function forceReviewedFlag(brandId, isReviewed) {
-    return reviewBrandVerification(brandId, { action: 'REVIEWED', isReviewed: Boolean(isReviewed) });
-}
-
-// ── Revoke a previously approved verification ─────────────────────
-// Convenience wrapper over Case E.
-export async function revokeVerification(brandId, revokeReason) {
-    if (!revokeReason) throw new Error('revokeReason is required');
-    return reviewBrandVerification(brandId, { action: 'REVOKED', revokeReason });
 }
 
 // ── Get Verification History (audit trail) ──────────────────────
@@ -157,7 +142,5 @@ export async function getVerificationHistory({
 export default {
     getBrandVerifications,
     reviewBrandVerification,
-    forceReviewedFlag,
-    revokeVerification,
     getVerificationHistory,
 };

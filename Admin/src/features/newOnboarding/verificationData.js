@@ -1,21 +1,21 @@
 /* -------------------------------------------------------------------------
  * Maps one API brand-verification record into the flat shape this page's
- * UI uses. `derivedStatus` is computed from the confirmed boolean flags
- * (isAdminApproved/isRejected/isRevoked) rather than the raw `status`
- * enum, since only "MANUAL_REVIEW" has been confirmed as a possible value
- * for that field so far.
+ * UI uses.
+ *
+ * `derivedStatus` is the ADMIN's decision only — REVOKED / REJECTED /
+ * APPROVED (isAdminApproved) / PENDING. The system's own verdict
+ * (`status` APPROVED / MANUAL_REVIEW / REJECTED, and `latestStatus` after a
+ * re-score) is advice for the admin, never a decision (guide §4, D81), so
+ * it's kept apart as `systemVerdict` and never shown as "Approved".
  * ---------------------------------------------------------------------- */
 export function deriveStatus(raw) {
-  const status = String(raw.status || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
   if (raw.isRevoked) return "REVOKED";
   if (raw.isRejected) return "REJECTED";
-  if (raw.isAdminApproved || status === "APPROVED") return "APPROVED";
-  if (status === "MANUAL_REVIEW") return "MANUAL_REVIEW";
-  if (["PENDING", "PENDING_APPROVAL", "WAITING", "UNDER_REVIEW", "IN_REVIEW"].includes(status)) {
-    return "PENDING";
-  }
-  return status || "PENDING";
+  if (raw.isAdminApproved) return "APPROVED";
+  return "PENDING";
 }
+
+const normalizeVerdict = (s) => String(s || "").trim().toUpperCase().replace(/[\s-]+/g, "_") || null;
 
 export function mapVerification(raw) {
   const brand = raw.brand || {};
@@ -27,6 +27,9 @@ export function mapVerification(raw) {
     score: raw.score ?? 0,
     status: raw.status,
     derivedStatus: deriveStatus(raw),
+    // The system's advice: the re-score after a post-submit add wins over
+    // the submit-time verdict.
+    systemVerdict: normalizeVerdict(raw.latestStatus || raw.status),
     flags: raw.flags || {},
     nameMatch: raw.nameMatch || {},
     bankNameMatch: raw.bankNameMatch || {},

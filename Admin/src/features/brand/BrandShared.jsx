@@ -472,7 +472,13 @@ export function RingStat({ pct, label, caption, tint = "emerald" }) {
  * captured. Offers a quick-pick list plus an optional free-text note.
  * ---------------------------------------------------------------------- */
 
-export function RejectReasonModal({ brand, onClose, onConfirm }) {
+// rejectionReason max (PUT /brands/admin/verifications/:brandId/review, #24).
+const REJECT_REASON_MAX = 1000;
+
+/* The modal stays open while the request runs (`busy`) and after a failure
+   (`error`), so the typed reason is never lost — the parent closes it on
+   success. */
+export function RejectReasonModal({ brand, onClose, onConfirm, busy = false, error = "" }) {
   const [reasonChoice, setReasonChoice] = useState(REJECTION_REASONS[0]);
   const [note, setNote] = useState("");
 
@@ -483,7 +489,8 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
       ? `${reasonChoice} — ${note.trim()}`
       : reasonChoice;
 
-  const canSubmit = reasonChoice !== "Other" || note.trim().length > 0;
+  const tooLong = finalReason.length > REJECT_REASON_MAX;
+  const canSubmit = !busy && !tooLong && (reasonChoice !== "Other" || note.trim().length > 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -499,8 +506,9 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
           </div>
           <button
             onClick={onClose}
+            disabled={busy}
             aria-label="Close"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             <X size={15} />
           </button>
@@ -511,6 +519,7 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
             <select
               value={reasonChoice}
               onChange={(e) => setReasonChoice(e.target.value)}
+              disabled={busy}
               className={inputClass}
             >
               {REJECTION_REASONS.map((r) => (
@@ -526,17 +535,28 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
+              disabled={busy}
               placeholder="Add specific details to help the owner fix the issue..."
               className={inputClass}
             />
           </Field>
+          <p className={`text-right text-[11px] ${tooLong ? "text-red-600 dark:text-red-400" : "text-neutral-400"}`}>
+            {finalReason.length}/{REJECT_REASON_MAX}
+            {tooLong ? " — shorten the reason" : ""}
+          </p>
+          {error && (
+            <p className="flex items-start gap-1.5 rounded-xl bg-red-500/5 px-3 py-2 text-[12px] text-red-600 dark:text-red-400">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {error}
+            </p>
+          )}
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+            disabled={busy}
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             Cancel
           </button>
@@ -546,7 +566,7 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
             onClick={() => onConfirm(finalReason)}
             className="rounded-xl bg-red-500 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Confirm Rejection
+            {busy ? "Rejecting…" : "Confirm Rejection"}
           </button>
         </div>
       </div>

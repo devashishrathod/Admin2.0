@@ -1,43 +1,30 @@
 import { Eye } from "lucide-react";
 import ValueOr from "../../components/common/ValueOr";
 import { MISSING } from "../../utils/helpers";
+import { KycPathChip, ScreenChip, StrengthChip, SubCategoryChips } from "../brand/BrandStageChips";
 
 /* -------------------------------------------------------------------------
- * Onboarding step helpers + table columns — shared by New Onboarding and
- * Brand Waiting. Rows are Brand list items (mapBrandListItem).
+ * Table columns shared by New Onboarding (NEW tab) and Brand Waiting
+ * (WAITING tab). Rows are brand list items (mapBrandListItem) — every value
+ * is the server's (admin guide §3); nothing is worked out from flags here.
  * ---------------------------------------------------------------------- */
 
-// Labels for the list payload's `onboarding` checklist (has* flags).
-export const ONBOARDING_STEPS = [
-  ["hasPan", "PAN"],
-  ["hasGst", "GST"],
-  ["hasBank", "Bank"],
-  ["hasLocation", "Location"],
-  ["hasWorkHours", "Work hours"],
-  ["hasFirstOutlet", "First outlet"],
-  ["hasSystemVerification", "Verification"],
-  ["hasAcceptedPartnershipDeed", "Partnership deed"],
-];
-
-export const doneStepCount = (b) => ONBOARDING_STEPS.filter(([key]) => b.onboardingFlags?.[key]).length;
-
-const normalizeStep = (value) =>
-  String(value || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
-
-export const isUnderReview = ({ status, currentScreen } = {}) =>
-  normalizeStep(status) === "UNDER_REVIEW" ||
-  normalizeStep(currentScreen) === "UNDER_REVIEW";
-
-// "PAN_VERIFICATION" -> "Pan verification"
-export const formatScreen = (screen) => {
-  const text = screen.replace(/_/g, " ").toLowerCase();
-  return text.charAt(0).toUpperCase() + text.slice(1);
-};
-
-// Table view — same information as the card, one row per brand.
 const DAY = 24 * 60 * 60 * 1000;
-export function onboardingTableColumns({ onOpen, now, renderStatus, renderActions }) {
-    return [
+
+const formatDate = (iso) =>
+  new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+/** Whole days between an ISO date and `now` (0 = today). */
+export const daysSince = (iso, now) => (iso ? Math.max(0, Math.floor((now - new Date(iso).getTime()) / DAY)) : null);
+
+/**
+ * @param {{ onOpen, now, dateField?: "joined" | "submitted", renderStatus?, renderActions? }} opts
+ * `dateField: "submitted"` (Brand Waiting) shows onboarding.submittedAt — the
+ * FIRST submit; it never moves on a resubmit.
+ */
+export function onboardingTableColumns({ onOpen, now, dateField = "joined", renderStatus, renderActions }) {
+  const dateOf = (b) => (dateField === "submitted" ? b.submittedAt : b.joinedDate);
+  return [
     {
       key: "brand",
       label: "Brand",
@@ -56,57 +43,35 @@ export function onboardingTableColumns({ onOpen, now, renderStatus, renderAction
         </button>
       ),
     },
+    // Optional — Brand Waiting shows the server's waitingChip here.
+    ...(renderStatus ? [{ key: "status", label: "Status", render: renderStatus }] : []),
     {
-      key: "progress",
-      label: "Progress",
-      render: (b) => {
-        const done = doneStepCount(b);
-        const pct = Math.round((done / ONBOARDING_STEPS.length) * 100);
-        return (
-          <div className="w-32">
-            <div className="flex items-baseline justify-between text-[11.5px]">
-              <span className="font-semibold text-neutral-800 dark:text-neutral-100">
-                {done}/{ONBOARDING_STEPS.length} steps
-              </span>
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">{pct}%</span>
-            </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
-              <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-emerald-500" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-        );
-      },
+      key: "screen",
+      label: "Current screen",
+      render: (b) => (b.onboardingScreen ? <ScreenChip screen={b.onboardingScreen} /> : <span className="text-neutral-400">Not started</span>),
     },
     {
-      key: "current",
-      label: "Current Step",
-      render: (b) => (
-        <span className="font-medium text-neutral-800 dark:text-neutral-100">
-          {b.onboardingScreen ? formatScreen(b.onboardingScreen) : "Hasn't started"}
-        </span>
-      ),
+      key: "path",
+      label: "KYC path",
+      render: (b) => (b.kycPath ? <KycPathChip kycPath={b.kycPath} /> : <span className="text-neutral-400">Not chosen</span>),
     },
     {
-      key: "next",
-      label: "Next Step",
-      render: (b) => {
-        const missing = ONBOARDING_STEPS.filter(([key]) => !b.onboardingFlags?.[key]).map(([, label]) => label);
-        return missing.length ? (
-          <div>
-            <p className="font-semibold text-amber-600 dark:text-amber-400">{missing[0]}</p>
-            <p className="text-[11px] text-neutral-500">{missing.length} pending</p>
-          </div>
-        ) : (
-          <span className="font-semibold text-emerald-600 dark:text-emerald-400">All done</span>
-        );
-      },
+      key: "strength",
+      label: "Strength",
+      render: (b) => (b.profileStrength ? <StrengthChip strength={b.profileStrength} /> : <span className="text-neutral-400">—</span>),
     },
     {
       key: "category",
       label: "Category",
+      cellClass: "whitespace-normal",
       render: (b) =>
         b.category && b.category !== "—" ? (
-          <span className="text-neutral-700 dark:text-neutral-300">{b.category}</span>
+          <div className="flex min-w-40 flex-col gap-1">
+            <span className="text-neutral-700 dark:text-neutral-300">{b.category}</span>
+            <span className="flex flex-wrap gap-1">
+              <SubCategoryChips names={b.subCategories} />
+            </span>
+          </div>
         ) : (
           <span className="italic text-neutral-400">Not selected yet</span>
         ),
@@ -117,17 +82,16 @@ export function onboardingTableColumns({ onOpen, now, renderStatus, renderAction
       render: (b) => <span className="text-neutral-700 dark:text-neutral-300"><ValueOr value={b.contactPhone} fallback={MISSING.phone} /></span>,
     },
     {
-      key: "joined",
-      label: "Joined",
+      key: "date",
+      label: dateField === "submitted" ? "Submitted" : "Joined",
       render: (b) => {
-        if (!b.joinedDate) return <span className="text-neutral-400">{MISSING.date}</span>;
-        const days = Math.max(0, Math.floor((now - new Date(b.joinedDate).getTime()) / DAY));
+        const iso = dateOf(b);
+        if (!iso) return <span className="text-neutral-400">{MISSING.date}</span>;
+        const days = daysSince(iso, now);
         const stale = days > 7;
         return (
           <div>
-            <p className={`font-medium ${stale ? "text-red-600 dark:text-red-400" : "text-neutral-800 dark:text-neutral-100"}`}>
-              {new Date(b.joinedDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-            </p>
+            <p className={`font-medium ${stale ? "text-red-600 dark:text-red-400" : "text-neutral-800 dark:text-neutral-100"}`}>{formatDate(iso)}</p>
             <p className={`text-[11px] ${stale ? "font-semibold text-red-500 dark:text-red-400" : "text-neutral-500"}`}>
               {days === 0 ? "Today" : `${days} day${days === 1 ? "" : "s"} ago`}
               {stale && " · follow up"}
@@ -136,8 +100,6 @@ export function onboardingTableColumns({ onOpen, now, renderStatus, renderAction
         );
       },
     },
-    // Optional — Brand Waiting adds a workflow status pill (Approve).
-    ...(renderStatus ? [{ key: "status", label: "Status", render: renderStatus }] : []),
     {
       key: "action",
       label: "Action",

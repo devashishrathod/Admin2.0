@@ -39,14 +39,11 @@ const PAGE_LIMIT = 50;
 const MAX_CONCURRENT_PAGES = 5;
 const NO_BRANDS = [];
 
-const UNAPPROVED_STATUSES = new Set(["Pending", "Rejected", "Revoked"]);
-
-// Live = approved by an admin. Approval wins over the vendor's onboarding
-// flag — some approved brands still have vendor.isOnBoardingCompleted false.
-// Pending brands live on Brand Waiting / New Onboarding, rejected ones on
-// New Onboarding. Dummy (isDummy) brands never go live — they only show
-// on the Dummy Brands page.
-const isLiveBrand = (b) => !b.isDummy && !UNAPPROVED_STATUSES.has(b.status);
+// The app-wide cache (dashboard charts, analytics, notification audience,
+// brand detail) — NOT the tab lists: New / Waiting / Live pages query
+// ?onboardingStage= themselves (useBrandStageList). Live = the server's
+// LIVE stage rule, isApproved (admin guide §3); dummy brands never count.
+const isLiveBrand = (b) => !b.isDummy && b.isApproved;
 
 // Merges a freshly fetched brand over the loaded one. List and detail
 // payloads each leave some fields empty ("—", null, []) that the other one

@@ -8,7 +8,7 @@ import { localDateStr } from "../../utils/overviewStats";
  *   payments — normalized GET /voucher-claims/payments rows
  *              (normalizeClaimPayment in transaction/transactionUtils.js)
  *   brands   — BrandContext (approved brands, with joinedDate)
- *   pending  — raw GET /brands/admin/verifications rows awaiting review
+ *   pending  — WAITING-tab brand rows awaiting a decision (mapBrandListItem)
  * Plain module (no JSX).
  * ---------------------------------------------------------------------- */
 
@@ -100,13 +100,14 @@ export function buildActivity({ payments = [], brands = [], pending = [] }, limi
   });
 
   pending.forEach((v) => {
-    const at = v.updatedAt || v.createdAt || v.submittedAt;
+    // onboarding.submittedAt is the FIRST submit (never moves on resubmit).
+    const at = v.submittedAt;
     if (!at) return;
     events.push({
-      id: `review-${v._id}`,
+      id: `review-${v.id}`,
       icon: ShieldCheck,
       tint: "amber",
-      who: v.brand?.brandName || "A new brand",
+      who: v.brandName || "A new brand",
       what: "submitted onboarding for review",
       at,
       link: "/brand-waiting",

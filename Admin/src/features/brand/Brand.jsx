@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,7 +8,6 @@ import {
   BadgeCheck,
   Crown,
   ChevronRight,
-  Trash2,
   FileDown,
   AlertTriangle,
   Check,
@@ -33,7 +32,6 @@ import {
   ChevronDown,
   ShieldCheck,
   ShieldX,
-  ListChecks,
   IdCard,
   Receipt,
   Landmark,
@@ -54,7 +52,12 @@ import {
 import Table from "../../components/common/Table";
 import { useBrands } from "./BrandContext";
 import { ToggleActiveConfirmModal, UsageBar } from "./BrandShared";
-import { ONBOARDING_FLAG_LABELS, compactCount, brandCardFacts } from "./brandCardUtils";
+import { compactCount, brandCardFacts } from "./brandCardUtils";
+import { useBrandStageList } from "./queries/brandQueries";
+import { getAllBrands } from "./services/BrandApi";
+import { mapBrandListItem } from "./brandMapper";
+import { KycPathChip, StrengthChip, SubCategoryChips } from "./BrandStageChips";
+import { useCategories } from "../category/queries/categoryQueries";
 import TopBrandModal from "./BrandDetails/modals/TopBrandModal";
 import ComingSoonModal from "./ComingSoonModal";
 import RdBadge from "./RdBadge";
@@ -64,7 +67,6 @@ import { formatBatch, MISSING } from "../../utils/helpers";
 import ValueOr from "../../components/common/ValueOr";
 import Loader from "../../components/common/Loader";
 import DateRangeFilter from "../../components/common/DateRangeFilter";
-import { localDateStr } from "../../utils/overviewStats";
 
 const STATUS_TABS = ["All", "Active Brand", "Deactive Brand", "Hidden Brand", "Top Brand"];
 const STATUS_TAB_LABELS = {
@@ -117,6 +119,77 @@ function exportBrandsToCsv(brandList) {
   URL.revokeObjectURL(url);
 }
 
+/* Every row the list's filters match (all server pages, 100 at a time) —
+   the CSV covers the whole result, not just the visible page. */
+async function fetchAllBrandRows(params) {
+  const rows = [];
+  for (let page = 1; ; page += 1) {
+    let res;
+    try {
+      res = await getAllBrands({ ...params, page, limit: 100 });
+    } catch (err) {
+      if (err?.status === 404) break; // no-stage list answers "none" with 404
+      throw err;
+    }
+    const d = res?.data ?? {};
+    rows.push(...(Array.isArray(d.data) ? d.data : []).map(mapBrandListItem));
+    if (page >= (d.totalPages ?? 1)) break;
+  }
+  return rows;
+}
+
+/* -------------------------------------------------------------------------
+ * Server filters (GET /brands/admin/get-all, API doc #25a). Paging, search,
+ * every filter and every count run on the server — nothing is filtered or
+ * counted in the browser.
+ * ---------------------------------------------------------------------- */
+
+// Which brands each list shows. LIVE = approved; dummy brands are never
+// approved, so D Brands sends no stage.
+const SCOPE_PARAMS = {
+  // RD brands have their own page (Real Dummy Brands).
+  live: { onboardingStage: "LIVE", isDummy: false, isRealDummy: false },
+  realDummy: { onboardingStage: "LIVE", isRealDummy: true },
+  dummy: { isDummy: true },
+  // Approved brands with no live plan (`subscription` is null then, so the
+  // list can't tell "plan ran out" from "never had one").
+  expired: { onboardingStage: "LIVE", isDummy: false, isSubscribed: false },
+};
+
+// Status tab → server filter. accountActive = the vendor account switch
+// (row isAccountActive → brand.active); isActive = the customer switch
+// (row isVisibleToCustomers → brand.hiddenFromCustomers).
+const TAB_PARAMS = {
+  All: {},
+  "Active Brand": { accountActive: true },
+  "Deactive Brand": { accountActive: false },
+  "Hidden Brand": { isActive: false },
+  "Top Brand": { isTopBrand: true },
+};
+
+// `params` narrowed by `extra`; null when both set one filter to different
+// values (e.g. the Deactive slice on the Active tab) — that is always empty.
+function narrowParams(params, extra) {
+  const clash = Object.entries(extra).some(([key, value]) => params[key] !== undefined && params[key] !== value);
+  return clash ? null : { ...params, ...extra };
+}
+
+// Server total for a filter set: asks for one row and reads `total`.
+// null params → 0 with no request; disabled → undefined (not shown).
+function useBrandTotal(params, enabled = true) {
+  const query = useBrandStageList({ ...params, page: 1, limit: 1 }, { enabled: enabled && params != null });
+  if (params == null) return 0;
+  return enabled ? query.data?.total : undefined;
+}
+
+// A count still loading shows a dash, never a made-up 0.
+const countOrDash = (n) => n ?? "—";
+
+// v2 list chips (sub-categories, KYC path, profile strength) — true when the
+// server sent at least one of them.
+const hasStageChips = (b) =>
+  Boolean(b.subCategories?.length || b.kycPath || b.profileStrength?.score != null);
+
 /* -------------------------------------------------------------------------
  * Small shared bits
  * ---------------------------------------------------------------------- */
@@ -146,15 +219,6 @@ function BrandStatusBadge({ brand }) {
       {label === "Active" ? "Verified" : label}
     </span>
   );
-}
-
-function useConfirmDelete(onConfirm) {
-  return (brand) => {
-    const ok = window.confirm(
-      `Delete "${brand.brandName}"? This will permanently remove the brand and cannot be undone.`
-    );
-    if (ok) onConfirm(brand);
-  };
 }
 
 /* -------------------------------------------------------------------------
@@ -318,6 +382,7 @@ function CollapsibleSearch({ value, onChange, placeholder }) {
       <input
         autoFocus
         value={value}
+        maxLength={120}
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => !value && setOpen(false)}
         onKeyDown={(e) => {
@@ -345,8 +410,8 @@ function CollapsibleSearch({ value, onChange, placeholder }) {
   );
 }
 
-// `onDelete` is still passed in but unused while Delete Brand is commented
-// out of the menu (there's no delete API yet — it only removed the card locally).
+// Delete Brand is commented out of the menu (there's no delete API yet — it
+// only removed the card locally).
 function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSetTopBrand, onSetComingSoon }) {
   // Dummy (isDummy) brands are view-only: no Edit, no Delete.
   const readOnly = Boolean(brand.isDummy);
@@ -357,13 +422,6 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
   // "Coming soon" on/off — its own modal (ComingSoonModal).
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  // Verification details (business, onboarding, KYC) start collapsed too.
-  const [verifyOpen, setVerifyOpen] = useState(false);
-  const toggleVerify = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setVerifyOpen((o) => !o);
-  };
   const [copied, setCopied] = useState(false);
   // Plan-usage meters start collapsed to keep the card compact.
   const [usageOpen, setUsageOpen] = useState(false);
@@ -380,12 +438,9 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
     outletCount,
     hasPlan,
     flags,
-    onboardingDone,
-    onboardingMissing,
     isRegistered,
     registrationLabel,
     entityTypeLabel,
-    subCategory,
     merchantId,
   } = brandCardFacts(brand);
 
@@ -675,9 +730,15 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
             )}
             <span className="truncate">
               <ValueOr value={brand.category} fallback={MISSING.category} />
-              {subCategory && <span className="text-neutral-400"> › {subCategory}</span>}
             </span>
           </p>
+          {hasStageChips(brand) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              <SubCategoryChips names={brand.subCategories} />
+              <KycPathChip kycPath={brand.kycPath} />
+              <StrengthChip strength={brand.profileStrength} />
+            </div>
+          )}
           {brand.isDummy && brand.dummyBatch && (
             <p className="mt-1 flex items-center gap-1 truncate font-mono text-[11px] text-violet-600 dark:text-violet-400">
               <Layers size={11} className="shrink-0" /> {formatBatch(brand.dummyBatch)}
@@ -694,61 +755,19 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
             <BrandStat icon={Store}>{outletCount} {outletCount === 1 ? "outlet" : "outlets"}</BrandStat>
           </div>
 
-          {/* Plan usage + Onboarding — side by side in one row. Each tile
-              toggles its panel, which opens full-width underneath (content
-              unchanged). Opening one closes the other. Spans with
-              role="button" (not <button>) because the whole card is already a
-              button; the toggles stopPropagation so the brand doesn't open. */}
-          <div className="mt-3.5 grid grid-cols-2 gap-1.5">
-            <span
-              role="button"
-              tabIndex={0}
-              aria-expanded={verifyOpen}
-              onClick={(e) => {
-                toggleVerify(e);
-                setUsageOpen(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  toggleVerify(e);
-                  setUsageOpen(false);
-                }
-              }}
-              className={`flex min-w-0 cursor-pointer flex-col gap-1 rounded-xl p-2.5 transition-colors ${
-                verifyOpen ? "bg-emerald-400/10 ring-1 ring-emerald-400/30" : "bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-800/50 dark:hover:bg-neutral-800"
-              }`}
-            >
-              <span className="flex items-center justify-between gap-1">
-                <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-                  <ListChecks size={11} /> Onboarding
-                </span>
-                <ChevronDown
-                  size={14}
-                  className={`shrink-0 text-neutral-500 transition-transform duration-200 ${verifyOpen ? "rotate-180" : ""}`}
-                />
-              </span>
-              <span className="flex items-center whitespace-nowrap text-[11.5px] font-semibold">
-                <span className="text-emerald-600 dark:text-emerald-400">{onboardingDone} done</span>
-                <span className={onboardingMissing ? "text-red-500 dark:text-red-400" : "text-neutral-400"}>
-                  &nbsp;· {onboardingMissing} missing
-                </span>
-              </span>
-            </span>
-
+          {/* Plan usage — the tile toggles its panel, which opens underneath.
+              A span with role="button" (not <button>) because the whole card
+              is already a button; the toggle stopPropagation so the brand
+              doesn't open. */}
+          <div className="mt-3.5">
             {usage ? (
               <span
                 role="button"
                 tabIndex={0}
                 aria-expanded={usageOpen}
-                onClick={(e) => {
-                  toggleUsage(e);
-                  setVerifyOpen(false);
-                }}
+                onClick={toggleUsage}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    toggleUsage(e);
-                    setVerifyOpen(false);
-                  }
+                  if (e.key === "Enter" || e.key === " ") toggleUsage(e);
                 }}
                 className={`flex min-w-0 cursor-pointer flex-col gap-1 rounded-xl p-2.5 transition-colors ${
                   usageOpen ? "bg-emerald-400/10 ring-1 ring-emerald-400/30" : "bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-800/50 dark:hover:bg-neutral-800"
@@ -773,26 +792,6 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
               </span>
             )}
           </div>
-
-          {verifyOpen && (
-            <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-800/50">
-              {ONBOARDING_FLAG_LABELS.map(([k, label]) => (
-                <span
-                  key={k}
-                  className={`flex min-w-0 items-center gap-1 text-[10.5px] ${
-                    flags[k] ? "text-neutral-700 dark:text-neutral-300" : "text-red-500 dark:text-red-400"
-                  }`}
-                >
-                  {flags[k] ? (
-                    <Check size={11} className="shrink-0 text-emerald-500" />
-                  ) : (
-                    <X size={11} className="shrink-0 text-red-500" />
-                  )}
-                  <span className="truncate">{label}</span>
-                </span>
-              ))}
-            </div>
-          )}
 
           {usage && usageOpen && (
             <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-800/50">
@@ -911,10 +910,6 @@ function writeSession(key, value) {
   }
 }
 
-// scope "live" = Live Brands (approved brands, minus RD and expired ones);
-// "expired" = Expired Brands (only approved brands whose plan has run out).
-const isExpired = (b) => b.status === "Expired" || isExpiredBrand(b);
-
 export default function Brand({ scope = "live" }) {
   const navigate = useNavigate();
   const isExpiredScope = scope === "expired";
@@ -923,41 +918,32 @@ export default function Brand({ scope = "live" }) {
   const isRealDummyScope = scope === "realDummy";
   // Pages that use the D-Brands layout (KPI tiles, 3 overview charts).
   const isTileScope = isDummyScope || isRealDummyScope;
+  // Row actions only — the list itself is read page by page from the server.
+  // Their writes refresh every ["brands", …] query (shared interceptor).
   const {
-    brands: liveBrands,
-    dummyBrands,
-    loading,
-    error,
+    error: actionError,
     fetchBrands,
-    deleteBrandById,
     toggleActive,
     setHiddenFromCustomers,
     setTopBrand,
     setComingSoon,
   } = useBrands();
-  // Everything below (charts, tabs, filters, table) works on this list.
-  const brands = isDummyScope
-    ? dummyBrands
-    : isRealDummyScope
-    ? liveBrands.filter((b) => b.isRealDummy === true)
-    : isExpiredScope
-    ? liveBrands.filter(isExpired)
-    : // Real-dummy and expired brands have their own pages (RD Brands /
-      // Expired Brands) — Live shows only brands that are live right now.
-      liveBrands.filter((b) => !b.isRealDummy && !isExpired(b));
 
   const [search, setSearch] = useState("");
+  // The search text actually sent — trails `search` by 300 ms.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusTab, setStatusTab] = useState("All");
   // Grid by default. View + page are remembered per list (Live / Expired /
   // Dummy) for the session, so Back from a brand returns to the same spot.
   const [view, setView] = useState(() => readSession(`brands:${scope}:view`) || "grid");
-  const [planFilter, setPlanFilter] = useState("All Plans");
-  const [planMenuOpen, setPlanMenuOpen] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState("All Categories");
+  // Category _id ("" = all) — sent as categoryId.
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
-  // Joined-date range ("YYYY-MM-DD", IST) — empty = no limit on that side.
+  // Joined-date range ("YYYY-MM-DD") — empty = no limit on that side.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [page, setPage] = useState(() => Number(readSession(`brands:${scope}:page`)) || 1);
   const [pageSize, setPageSize] = useState(() => {
     const savedPageSize = Number(readSession(`brands:${scope}:pageSize`));
@@ -969,71 +955,76 @@ export default function Brand({ scope = "live" }) {
     writeSession(`brands:${scope}:pageSize`, String(pageSize));
   }, [scope, view, page, pageSize]);
 
-  const hasValue = (v) => Boolean(v) && v !== "—";
-  const categories = [...new Set(brands.map((b) => b.category).filter(hasValue))].sort();
-  // Plans the live brands are actually on (Pro Plus, Free Trial, …) — a
-  // hard-coded list missed real plan names, so those could never be picked.
-  const plans = [...new Set(brands.map((b) => b.subscriptionPlan).filter(hasValue))]
-    .sort()
-    .map((name) => ({ name }));
+  // Debounced search; a new search goes back to page 1. Does nothing while
+  // the text matches what was sent, so a page restored from the session
+  // isn't reset on mount.
+  useEffect(() => {
+    const next = search.trim().slice(0, 120);
+    if (next === debouncedSearch) return undefined;
+    const t = setTimeout(() => {
+      setDebouncedSearch(next);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search, debouncedSearch]);
 
-  const matchesTab = (b, tab) =>
-    tab === "All"
-      ? true
-      : tab === "Active Brand"
-      ? b.active && !isExpiredBrand(b)
-      : tab === "Deactive Brand"
-      ? !b.active && !isExpiredBrand(b)
-      : tab === "Hidden Brand"
-      ? Boolean(b.hiddenFromCustomers)
-      : tab === "Top Brand"
-      ? Boolean(b.isTopBrand)
-      : true;
+  // Every category for the filter menu (the brand list is only one page, so
+  // it can't list them). A failure just leaves the menu with "All".
+  const categoriesQuery = useCategories({ page: 1, limit: 100 });
+  const categories = (categoriesQuery.data?.data?.data ?? []).map((c) => ({ id: c._id ?? c.id, name: c.name }));
+  const categoryName = categories.find((c) => c.id === categoryFilter)?.name;
 
-  // Search + plan + category + joined date — every filter except the status
-  // tab. The tab counts use this, so each tab's number is what that tab
-  // would show. A brand with no joined date drops out once a date is set.
-  const filterBase = brands.filter((b) => {
-    const matchesSearch =
-      b.brandName?.toLowerCase().includes(search.toLowerCase()) ||
-      b.location?.toLowerCase().includes(search.toLowerCase()) ||
-      b.category?.toLowerCase().includes(search.toLowerCase());
-    const matchesPlan = planFilter === "All Plans" || b.subscriptionPlan === planFilter;
-    const matchesCategory = categoryFilter === "All Categories" || b.category === categoryFilter;
-    const joined = localDateStr(b.joinedDate);
-    const matchesDate = (!dateFrom || (joined && joined >= dateFrom)) && (!dateTo || (joined && joined <= dateTo));
-    return matchesSearch && matchesPlan && matchesCategory && matchesDate;
-  });
-  const tabCount = (tab) => filterBase.filter((b) => matchesTab(b, tab)).length;
+  // scope + search / category / joined date (no status tab) → tab badges;
+  // + the status tab → the list, the charts and the CSV.
+  const baseParams = {
+    ...(SCOPE_PARAMS[scope] || SCOPE_PARAMS.live),
+    search: debouncedSearch || undefined,
+    categoryId: categoryFilter || undefined,
+    fromDate: dateFrom || undefined,
+    toDate: dateTo || undefined,
+  };
+  const viewParams = { ...baseParams, ...TAB_PARAMS[statusTab] };
 
-  const filtered = filterBase.filter((b) => matchesTab(b, statusTab))
-    // Top brands first in their topOrder (#1, #2, #3…), the rest keep the
-    // API order after them. sort() is stable, so ties stay put.
-    .sort((a, b) => {
-      const rank = (x) => (x.isTopBrand ? Number(x.topOrder) || Infinity : Infinity);
-      return rank(a) - rank(b) || 0;
-    });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const listQuery = useBrandStageList({ ...viewParams, page, limit: pageSize });
+  const rows = listQuery.data?.rows ?? [];
+  const total = listQuery.data?.total ?? 0;
+  const totalPages = listQuery.data?.totalPages ?? 1;
+  const loading = listQuery.isPending;
+  // Past the last page (the list shrank, or a page restored from the
+  // session) — jump to the last real one.
+  if (listQuery.data && !listQuery.isPlaceholderData && page > totalPages) setPage(totalPages);
   const safePage = Math.min(page, totalPages);
-  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const rangeStart = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
-  const rangeEnd = Math.min(safePage * pageSize, filtered.length);
+  const rangeStart = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(safePage * pageSize, total);
   const pageItems = paginationItems(safePage, totalPages);
+
+  // Tab badges / KPI tiles — one server total per visible tab.
+  const showTab = (tab) =>
+    !isExpiredScope && !(isDummyScope && tab === "Hidden Brand") && !(isRealDummyScope && tab === "Top Brand");
+  const allTotal = useBrandTotal(baseParams, showTab("All"));
+  const activeTabTotal = useBrandTotal(narrowParams(baseParams, TAB_PARAMS["Active Brand"]), showTab("Active Brand"));
+  const deactiveTabTotal = useBrandTotal(narrowParams(baseParams, TAB_PARAMS["Deactive Brand"]), showTab("Deactive Brand"));
+  const hiddenTabTotal = useBrandTotal(narrowParams(baseParams, TAB_PARAMS["Hidden Brand"]), showTab("Hidden Brand"));
+  const topTabTotal = useBrandTotal(narrowParams(baseParams, TAB_PARAMS["Top Brand"]), showTab("Top Brand"));
+  const tabTotals = {
+    All: allTotal,
+    "Active Brand": activeTabTotal,
+    "Deactive Brand": deactiveTabTotal,
+    "Hidden Brand": hiddenTabTotal,
+    "Top Brand": topTabTotal,
+  };
 
   const applyFilter = (setter) => (value) => { setter(value); setPage(1); };
   const setStatusTabAndReset = applyFilter(setStatusTab);
-  const setSearchAndReset = applyFilter(setSearch);
-  const setPlanFilterAndReset = applyFilter(setPlanFilter);
   const setCategoryFilterAndReset = applyFilter(setCategoryFilter);
   const setDateFromAndReset = applyFilter(setDateFrom);
   const setDateToAndReset = applyFilter(setDateTo);
 
   const resetFilters = () => {
     setSearch("");
+    setDebouncedSearch("");
     setStatusTab("All");
-    setPlanFilter("All Plans");
-    setCategoryFilter("All Categories");
+    setCategoryFilter("");
     setDateFrom("");
     setDateTo("");
     setPage(1);
@@ -1041,8 +1032,7 @@ export default function Brand({ scope = "live" }) {
   const filtersActive =
     Boolean(search) ||
     statusTab !== "All" ||
-    planFilter !== "All Plans" ||
-    categoryFilter !== "All Categories" ||
+    Boolean(categoryFilter) ||
     Boolean(dateFrom || dateTo);
 
   // Empty state for both views — wording follows the list and the filters.
@@ -1050,7 +1040,7 @@ export default function Brand({ scope = "live" }) {
     ? {
         icon: "search",
         title: "No brands match your filters",
-        description: "Try a different search, status, plan or category — or clear the filters to see every brand.",
+        description: "Try a different search, status, category or date — or clear the filters to see every brand.",
         action: { label: "Clear filters", onClick: resetFilters },
       }
     : isDummyScope
@@ -1078,43 +1068,49 @@ export default function Brand({ scope = "live" }) {
         action: { label: "Go to Brand Waiting", onClick: () => navigate("/brand-waiting") },
       };
 
-  // Overview charts — follow the current status tab, search, plan and
-  // category (every page of the result, not just the visible page), so
-  // they always describe the brands the list is showing.
-  const activeCount = filtered.filter((b) => b.active && !isExpiredBrand(b)).length;
-  const deactiveCount = filtered.filter((b) => !b.active && !isExpiredBrand(b)).length;
-  const expiredCount = filtered.filter(isExpiredBrand).length;
-  const hiddenFromCustomersCount = filtered.filter((b) => b.hiddenFromCustomers).length;
+  // Overview charts — server totals for the current status tab + filters
+  // (the whole result, not just the visible page), so they always describe
+  // the brands the list is showing. "Expired" = no live plan (isSubscribed
+  // false); Verified / Deactive split the brands that do have one.
+  const verifiedMixTotal = useBrandTotal(narrowParams(viewParams, { accountActive: true, isSubscribed: true }));
+  const deactiveMixTotal = useBrandTotal(narrowParams(viewParams, { accountActive: false, isSubscribed: true }));
+  const noPlanTotal = useBrandTotal(narrowParams(viewParams, { isSubscribed: false }));
+  const withPlanTotal = useBrandTotal(narrowParams(viewParams, { isSubscribed: true }));
+  // Hidden from Customers tile — Live Brands only.
+  const hiddenFromCustomersCount = useBrandTotal(
+    narrowParams(viewParams, { isActive: false }),
+    !isTileScope && !isExpiredScope
+  );
   const statusMix = [
-    { name: "Verified", value: activeCount, color: "#2FDE8C" },
-    { name: "Deactive", value: deactiveCount, color: "#A3A3A3" },
-    { name: "Expired", value: expiredCount, color: "#F87171" },
+    { name: "Verified", value: verifiedMixTotal ?? 0, color: "#2FDE8C" },
+    { name: "Deactive", value: deactiveMixTotal ?? 0, color: "#A3A3A3" },
+    { name: "Expired", value: noPlanTotal ?? 0, color: "#F87171" },
   ].filter((s) => s.value > 0);
 
-  const topBrandsByFollowers = [...filtered]
-    .sort((a, b) => (Number(b.followers) || 0) - (Number(a.followers) || 0))
+  // Top 5 by followers, sorted by the server. D Brands asks for up to 100
+  // rows (the API max) so the same request also feeds the Batches tile.
+  const followersQuery = useBrandStageList({
+    ...viewParams,
+    sortBy: "FOLLOWERS",
+    page: 1,
+    limit: isDummyScope ? 100 : 5,
+  });
+  const followerRows = followersQuery.data?.rows ?? [];
+  const topBrandsByFollowers = followerRows
     .slice(0, 5)
     .map((b) => ({ name: b.brandName, followers: Number(b.followers) || 0 }));
 
-  const sortedPlanMix = Object.entries(
-    filtered.reduce((acc, b) => {
-      const plan = b.subscriptionPlan && b.subscriptionPlan !== "—" ? b.subscriptionPlan : "No plan";
-      acc[plan] = (acc[plan] || 0) + 1;
-      return acc;
-    }, {})
-  )
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-  const planMix = sortedPlanMix.length > 6
-    ? [
-        ...sortedPlanMix.slice(0, 5),
-        { name: "Other plans", count: sortedPlanMix.slice(5).reduce((sum, plan) => sum + plan.count, 0) },
-      ]
-    : sortedPlanMix;
+  // Seed batches — the API has no batch count, so this is the distinct
+  // dummyBatch values in the first 100 rows ("N+" when there are more).
+  const batchCount = new Set(followerRows.map((b) => b.dummyBatch).filter(Boolean)).size;
+  const batchesPartial = (followersQuery.data?.total ?? 0) > followerRows.length;
 
-  const deleteBrand = useConfirmDelete((brand) => {
-    deleteBrandById(brand);
-  });
+  // Summary Report — the API can't count per plan name, so the bars are the
+  // server's live-plan / no-plan totals.
+  const planMix = [
+    { name: "Live plan", count: withPlanTotal ?? 0 },
+    { name: "No live plan", count: noPlanTotal ?? 0 },
+  ].filter((p) => p.count > 0);
 
   // Single source of truth for "open a brand" — always goes through the
   // router so the URL carries the id (/brands/:id), works with browser
@@ -1127,7 +1123,26 @@ export default function Brand({ scope = "live" }) {
     navigate(`/brands/${brand.id}`, { state: { openEdit: true } });
   };
 
-  const handleExport = () => exportBrandsToCsv(filtered);
+  // CSV of every row the current tab + filters match (all server pages).
+  const handleExport = async () => {
+    setExporting(true);
+    setExportError("");
+    try {
+      exportBrandsToCsv(await fetchAllBrandRows(viewParams));
+    } catch (err) {
+      setExportError(err?.message || "Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const error = exportError || listQuery.error?.message || actionError;
+  const retry = () => {
+    setExportError("");
+    listQuery.refetch();
+    // Clears a failed row action's message (BrandContext keeps it).
+    if (actionError) fetchBrands();
+  };
 
   // Table view — same look as the voucher table, filled only with fields
   // the brand list API actually returns (it has no location, so no
@@ -1159,8 +1174,14 @@ export default function Brand({ scope = "live" }) {
             </p>
             <p className="mt-0.5 truncate text-[11px] text-neutral-500">
               <ValueOr value={row.category} fallback={MISSING.category} />
-              {row.subCategory && row.subCategory !== row.category && <span className="text-neutral-400"> › {row.subCategory}</span>}
             </p>
+            {hasStageChips(row) && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <SubCategoryChips names={row.subCategories} />
+                <KycPathChip kycPath={row.kycPath} />
+                <StrengthChip strength={row.profileStrength} />
+              </div>
+            )}
             <div className="mt-1.5 flex flex-wrap items-center gap-1">
               <span className="rounded-md bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                 {row.brandId}
@@ -1289,8 +1310,10 @@ export default function Brand({ scope = "live" }) {
           >
             <Eye size={13} />
           </button>
-          {row.isDummy ? (
-            // Dummy brands are view-only — no Delete.
+          {/* No Delete: there's no delete API, and the old local-only removal
+              can't touch a server page (same as the card menu). */}
+          {row.isDummy && (
+            // Dummy brands are view-only.
             <span
               title="D brand — view only"
               aria-label="View only"
@@ -1298,15 +1321,6 @@ export default function Brand({ scope = "live" }) {
             >
               <Lock size={13} />
             </span>
-          ) : (
-            <button
-              onClick={() => deleteBrand(row)}
-              aria-label={`Delete ${row.brandName}`}
-              title="Delete"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
-            >
-              <Trash2 size={13} />
-            </button>
           )}
         </div>
       ),
@@ -1334,11 +1348,11 @@ export default function Brand({ scope = "live" }) {
           <div className="flex items-center gap-2">
             <button
               onClick={handleExport}
-              disabled={!filtered.length}
+              disabled={!total || exporting}
               className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-[12.5px] font-medium text-neutral-700 transition-colors hover:border-neutral-300 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-neutral-100"
             >
               <FileDown size={14} />
-              Export
+              {exporting ? "Exporting…" : "Export"}
             </button>
           </div>
         </div>
@@ -1349,7 +1363,7 @@ export default function Brand({ scope = "live" }) {
             <StatTile
               icon={isRealDummyScope ? Hourglass : Store}
               label={isRealDummyScope ? "RD Brands" : "Total D Brands"}
-              value={tabCount("All")}
+              value={countOrDash(tabTotals.All)}
               hint={isRealDummyScope ? "Marked as RD brand" : "Test / demo brands"}
               tint="emerald"
               active={statusTab === "All"}
@@ -1358,7 +1372,7 @@ export default function Brand({ scope = "live" }) {
             <StatTile
               icon={ShieldCheck}
               label="Verified"
-              value={tabCount("Active Brand")}
+              value={countOrDash(tabTotals["Active Brand"])}
               hint="Active right now"
               tint="sky"
               active={statusTab === "Active Brand"}
@@ -1367,7 +1381,7 @@ export default function Brand({ scope = "live" }) {
             <StatTile
               icon={Power}
               label="Deactive"
-              value={tabCount("Deactive Brand")}
+              value={countOrDash(tabTotals["Deactive Brand"])}
               hint="Switched off"
               tint="neutral"
               active={statusTab === "Deactive Brand"}
@@ -1378,7 +1392,7 @@ export default function Brand({ scope = "live" }) {
               <StatTile
                 icon={Sparkles}
                 label="Top Brands"
-                value={tabCount("Top Brand")}
+                value={countOrDash(tabTotals["Top Brand"])}
                 hint="Marked as top"
                 tint="amber"
                 active={statusTab === "Top Brand"}
@@ -1389,7 +1403,7 @@ export default function Brand({ scope = "live" }) {
               <StatTile
                 icon={EyeOff}
                 label="Hidden"
-                value={tabCount("Hidden Brand")}
+                value={countOrDash(tabTotals["Hidden Brand"])}
                 hint="Hidden from customers"
                 tint="violet"
                 active={statusTab === "Hidden Brand"}
@@ -1399,8 +1413,8 @@ export default function Brand({ scope = "live" }) {
               <StatTile
                 icon={Layers}
                 label="Batches"
-                value={new Set(filtered.map((b) => b.dummyBatch).filter(Boolean)).size}
-                hint="Seed batches"
+                value={followersQuery.data ? `${batchCount}${batchesPartial ? "+" : ""}` : "—"}
+                hint={batchesPartial ? "Seed batches · first 100 brands" : "Seed batches"}
                 tint="violet"
               />
             )}
@@ -1436,7 +1450,7 @@ export default function Brand({ scope = "live" }) {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-[16px] font-bold leading-none text-neutral-900 dark:text-neutral-50">{filtered.length}</span>
+                  <span className="text-[16px] font-bold leading-none text-neutral-900 dark:text-neutral-50">{listQuery.data ? total : "—"}</span>
                   <span className="mt-0.5 text-[9px] text-neutral-500">{filtersActive ? "Shown" : "Total"}</span>
                 </div>
               </div>
@@ -1489,11 +1503,11 @@ export default function Brand({ scope = "live" }) {
             <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-neutral-900 dark:text-neutral-50">
               <BarChart3 size={13} className="text-emerald-500" /> Summary Report
             </div>
-            <p className="mb-1 text-[10px] text-neutral-500">Brands per plan</p>
+            <p className="mb-1 text-[10px] text-neutral-500">Brands with / without a live plan</p>
             {planMix.length ? (
               <ResponsiveContainer width="100%" height={90}>
                 <BarChart data={planMix} margin={{ top: 2, right: 2, left: -22, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9 }} axisLine={false} tickLine={false} interval={0} tickFormatter={(v) => v.slice(0, 6)} />
+                  <XAxis dataKey="name" tick={{ fill: "#8C9A91", fontSize: 9 }} axisLine={false} tickLine={false} interval={0} />
                   <Tooltip />
                   <Bar dataKey="count" name="Brands" fill="#38BDF8" radius={[3, 3, 0, 0]} />
                 </BarChart>
@@ -1511,7 +1525,7 @@ export default function Brand({ scope = "live" }) {
               <p className="text-[10px] text-neutral-500">Brands hidden using the customer visibility toggle</p>
               <div className="mt-3 flex items-end gap-2">
                 <span className="text-3xl font-bold leading-none text-neutral-900 dark:text-neutral-50">
-                  {hiddenFromCustomersCount}
+                  {countOrDash(hiddenFromCustomersCount)}
                 </span>
                 <span className="pb-0.5 text-[11px] text-neutral-500">
                   {hiddenFromCustomersCount === 1 ? "brand" : "brands"}
@@ -1524,7 +1538,7 @@ export default function Brand({ scope = "live" }) {
         {error && (
           <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl bg-red-500/[0.06] px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <span className="flex items-center gap-2"><AlertTriangle size={14} /> {error}</span>
-            <button onClick={() => fetchBrands()} className="font-semibold underline underline-offset-2">
+            <button onClick={retry} className="font-semibold underline underline-offset-2">
               Retry
             </button>
           </div>
@@ -1537,10 +1551,8 @@ export default function Brand({ scope = "live" }) {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 xl:flex-nowrap">
           <div className="flex shrink-0 flex-wrap items-center gap-0.5">
             {/* Status tabs only on Live Brands — every row here is already expired */}
-            {!isExpiredScope && STATUS_TABS.filter(
-              (tab) => !(isDummyScope && tab === "Hidden Brand") && !(isRealDummyScope && tab === "Top Brand")
-            ).map((tab) => {
-              const count = tabCount(tab);
+            {STATUS_TABS.filter(showTab).map((tab) => {
+              const count = countOrDash(tabTotals[tab]);
               return (
                 <button
                   key={tab}
@@ -1572,81 +1584,44 @@ export default function Brand({ scope = "live" }) {
           </div>
 
           <div className="ml-auto flex flex-wrap items-center gap-2 xl:flex-nowrap">
-            <CollapsibleSearch value={search} onChange={setSearchAndReset} placeholder="Search brand, category..." />
+            {/* Server search: brand / legal name, brand ID, merchant ID, email, phone. */}
+            <CollapsibleSearch value={search} onChange={setSearch} placeholder="Search brand, ID, phone..." />
 
-            {/* z-30: above the brand cards' three-dot button (z-20), which
+            {/* No Plan filter: GET /brands/admin/get-all has no plan param.
+                z-30: above the brand cards' three-dot button (z-20), which
                 otherwise shows through the open menu. */}
-            <div className="relative z-30 shrink-0">
-              <button
-                onClick={() => setPlanMenuOpen((o) => !o)}
-                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
-                  planFilter !== "All Plans"
-                    ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                    : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700"
-                }`}
-              >
-                Plan: {planFilter === "All Plans" ? "All" : planFilter}
-              </button>
-
-              {planMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setPlanMenuOpen(false)} />
-                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
-                    <button
-                      onClick={() => { setPlanFilterAndReset("All Plans"); setPlanMenuOpen(false); }}
-                      className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                    >
-                      All Plans
-                      {planFilter === "All Plans" && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
-                    </button>
-                    <div className="h-px bg-neutral-200 dark:bg-neutral-800" />
-                    {plans.map((plan) => (
-                      <button
-                        key={plan.name}
-                        onClick={() => { setPlanFilterAndReset(plan.name); setPlanMenuOpen(false); }}
-                        className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                      >
-                        <span>{plan.name}</span>
-                        {planFilter === plan.name && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
             <div className="relative z-30 shrink-0">
               <button
                 onClick={() => setCategoryMenuOpen((o) => !o)}
                 className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors ${
-                  categoryFilter !== "All Categories"
+                  categoryFilter
                     ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                     : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700"
                 }`}
               >
-                Category: {categoryFilter === "All Categories" ? "All" : categoryFilter}
+                Category: {categoryFilter ? categoryName || "Selected" : "All"}
               </button>
 
               {categoryMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setCategoryMenuOpen(false)} />
-                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
+                  <div className="absolute right-0 z-20 mt-2 max-h-80 w-56 overflow-y-auto rounded-2xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
                     <button
-                      onClick={() => { setCategoryFilterAndReset("All Categories"); setCategoryMenuOpen(false); }}
+                      onClick={() => { setCategoryFilterAndReset(""); setCategoryMenuOpen(false); }}
                       className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                     >
                       All Categories
-                      {categoryFilter === "All Categories" && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
+                      {!categoryFilter && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
                     </button>
                     <div className="h-px bg-neutral-200 dark:bg-neutral-800" />
                     {categories.map((cat) => (
                       <button
-                        key={cat}
-                        onClick={() => { setCategoryFilterAndReset(cat); setCategoryMenuOpen(false); }}
+                        key={cat.id}
+                        onClick={() => { setCategoryFilterAndReset(cat.id); setCategoryMenuOpen(false); }}
                         className="flex w-full items-center justify-between px-4 py-2.5 text-left text-[13px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                       >
-                        {cat}
-                        {categoryFilter === cat && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
+                        {cat.name}
+                        {categoryFilter === cat.id && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
                       </button>
                     ))}
                   </div>
@@ -1677,8 +1652,8 @@ export default function Brand({ scope = "live" }) {
           <p className="text-[12.5px] text-neutral-500">
             {loading
               ? "Loading brands…"
-              : filtered.length
-              ? `Showing ${rangeStart}–${rangeEnd} of ${filtered.length} brand${filtered.length === 1 ? "" : "s"}`
+              : total
+              ? `Showing ${rangeStart}–${rangeEnd} of ${total} brand${total === 1 ? "" : "s"}`
               : "No brands to show"}
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -1728,21 +1703,20 @@ export default function Brand({ scope = "live" }) {
         {loading ? (
           <Loader label="Loading brands…" />
         ) : view === "grid" ? (
-          paged.length === 0 ? (
+          rows.length === 0 ? (
             <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
               <EmptyState {...brandEmpty} />
             </div>
           ) : (
             // items-start: each card keeps its own height, so expanding Plan
-            // usage / Onboarding on one card doesn't stretch its neighbours.
+            // usage on one card doesn't stretch its neighbours.
             <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {paged.map((brand) => (
+              {rows.map((brand) => (
                 <BrandCard
                   key={brand.id}
                   brand={brand}
                   onOpen={handleOpenBrand}
                   onEdit={handleEditBrand}
-                  onDelete={deleteBrand}
                   onToggleActive={toggleActive}
                   onToggleHidden={setHiddenFromCustomers}
                   onSetTopBrand={setTopBrand}
@@ -1752,13 +1726,13 @@ export default function Brand({ scope = "live" }) {
             </div>
           )
         ) : (
-          <Table columns={columns} data={paged} emptyTitle={brandEmpty.title} emptyDescription={brandEmpty.description} emptyIcon={brandEmpty.icon} emptyAction={brandEmpty.action} minWidth={1180} />
+          <Table columns={columns} data={rows} emptyTitle={brandEmpty.title} emptyDescription={brandEmpty.description} emptyIcon={brandEmpty.icon} emptyAction={brandEmpty.action} minWidth={1180} />
         )}
 
-        {!loading && filtered.length > 0 && (
+        {!loading && total > 0 && (
           <div className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <p className="text-[12.5px] text-neutral-500">
-              Showing {rangeStart} to {rangeEnd} of {filtered.length} brand{filtered.length === 1 ? "" : "s"}
+              Showing {rangeStart} to {rangeEnd} of {total} brand{total === 1 ? "" : "s"}
             </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-1.5">

@@ -311,20 +311,29 @@ export function mapBrandListItem(raw) {
         : status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
-    // The API field reports whether onboarding is completed. New Onboarding
-    // shows only brands where this flag is explicitly false.
-    isOnboarding:
-      raw.isOnboarding ??
-      raw.vendor?.isOnBoardingCompleted,
-    // Per-step checklist (hasPan, hasGst, hasBank, hasLocation, ...) —
-    // New Onboarding shows which steps are still missing.
+    // Onboarding v2 (admin guide §3, API #25a). The tab a brand belongs to
+    // is the server's `onboardingStage` — never worked out in the browser.
+    onboardingStage: raw.onboardingStage || null, // NEW · WAITING · LIVE
+    waitingChip: raw.waitingChip || null, // UNDER_REVIEW · REJECTED · REVOKED · RESUBMITTED (WAITING only)
+    kycPath: raw.onboarding?.kycPath || null, // GST · NO_GST · UNREGISTERED
+    submittedAt: raw.onboarding?.submittedAt || null, // FIRST submit; never moves on resubmit
+    profileStrength: raw.profileStrength || null, // { score, level }
+    isApproved: Boolean(raw.isApproved),
+    isVerified: Boolean(raw.isVerified), // verified badge — separate from approval (§11)
+    badgeGrantedAt: raw.badgeGrantedAt || null,
+    badgeAtRisk: Boolean(raw.badgeAtRisk),
+    accountState: raw.vendor?.accountState || null,
+    // Raw `has*` facts from the list (hasPan, hasBillingAddress …) — only
+    // facts, not onboarding steps; steps come from status.groups.
     onboardingFlags: raw.onboarding || {},
     // Screen the vendor is on in the onboarding flow, e.g. "PAN_VERIFICATION".
-    onboardingScreen: raw.currentScreen || raw.vendor?.currentScreen || '',
+    onboardingScreen: raw.vendor?.currentScreen || raw.currentScreen || '',
     // Keep the API workflow status distinct from the derived brand status.
     onboardingStatus: raw.status || raw.vendor?.status || '',
-    // Extra list fields for the Live Brand table.
-    subCategory: raw.subCategory?.name || '',
+    // Extra list fields for the Live Brand table. `subCategories` = every
+    // subcategory in the brand's order; `subCategory` = the first one.
+    subCategories: (raw.subCategories || []).map((s) => s?.name).filter(Boolean),
+    subCategory: raw.subCategories?.[0]?.name || raw.subCategory?.name || '',
     // Plan usage: { subBrands, franchises, vouchers, showcase } → { used, limit, isUnlimited }.
     usage: raw.usage || null,
     planEndDate: raw.subscription?.endDate || null,

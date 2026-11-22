@@ -1,5 +1,3 @@
-import { getBrandVerifications } from "./services/NewOnboardingApi";
-
 /* -------------------------------------------------------------------------
  * Maps one API brand-verification record into the flat shape this page's
  * UI uses. `derivedStatus` is computed from the confirmed boolean flags
@@ -35,6 +33,15 @@ export function mapVerification(raw) {
     entityMatch: raw.entityMatch || {},
     duplicateDetails: raw.duplicateDetails || {},
     remarks: Array.isArray(raw.remarks) ? raw.remarks : [],
+    // Onboarding v2 (#23 note 6): path-wise checks, what the vendor skipped,
+    // remark codes and the re-score after a post-submit add. Advisory only.
+    kycPath: raw.kycPath || null,
+    checks: Array.isArray(raw.checks) ? raw.checks : [],
+    skippedItems: Array.isArray(raw.skippedItems) ? raw.skippedItems : [],
+    remarkCodes: Array.isArray(raw.remarkCodes) ? raw.remarkCodes : [],
+    latestScore: raw.latestScore ?? null,
+    latestStatus: raw.latestStatus || null,
+    latestScoredAt: raw.latestScoredAt || null,
     verifiedAt: raw.verifiedAt,
     verifiedBy: raw.verifiedBy,
     rejectedAt: raw.rejectedAt,
@@ -98,39 +105,3 @@ export function mapVerification(raw) {
   };
 }
 
-/* -------------------------------------------------------------------------
- * The list endpoint only takes page/limit/search — it can't filter by
- * status or brand — so every server page is loaded and mapped here.
- * ---------------------------------------------------------------------- */
-export async function fetchAllVerifications(search = "") {
-  const PAGE = 100;
-  const first = await getBrandVerifications({ page: 1, limit: PAGE, search });
-  const payload = first?.data ?? {};
-  const rows = [...(payload.data ?? [])];
-  const rowTotal = payload.total ?? payload.totalCount ?? payload.count;
-  const serverPages = payload.totalPages ?? payload.pages ?? (rowTotal ? Math.ceil(rowTotal / PAGE) : 1);
-  if (serverPages > 1) {
-    const rest = await Promise.all(
-      Array.from({ length: serverPages - 1 }, (_, i) => getBrandVerifications({ page: i + 2, limit: PAGE, search }))
-    );
-    rest.forEach((r) => rows.push(...(r?.data?.data ?? [])));
-  }
-  return rows.map(mapVerification);
-}
-
-// One verification per brand — its latest attempt (highest attemptNumber,
-// newest createdAt on a tie). Returns a Map keyed by brand id.
-export function latestByBrand(verifications) {
-  const byBrand = new Map();
-  verifications.forEach((v) => {
-    const key = v.brandId || v.brand?.id || v.id;
-    const prev = byBrand.get(key);
-    const newer =
-      !prev ||
-      (v.attemptNumber ?? 0) > (prev.attemptNumber ?? 0) ||
-      ((v.attemptNumber ?? 0) === (prev.attemptNumber ?? 0) &&
-        new Date(v.createdAt || 0).getTime() > new Date(prev.createdAt || 0).getTime());
-    if (newer) byBrand.set(key, v);
-  });
-  return byBrand;
-}

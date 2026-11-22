@@ -59,18 +59,19 @@ api.interceptors.request.use(async (config) => {
  * ---------------------------------------------------------------------- */
 
 // ── List Brand Verifications ──────────────────────────────────
-// GET {{TryDood2.0BaseUrl}}/brands/admin/verifications?page=&limit=&search=
-// Confirmed from Postman. Query params:
-//   page   — number ≥ 1, default 1
-//   limit  — number 1-100, default 10
-//   search — regex across brand.brandName, brand.legalBusinessName (and
-//            possibly more fields — the Postman param description was cut
-//            off after "legalB...", so there may be additional fields
-//            matched server-side).
-export async function getBrandVerifications({ page = 1, limit = 10, search = '' } = {}) {
+// GET /brands/admin/verifications (super admin API doc #23). Every key
+// besides page / limit is a server filter, passed through when set:
+// search, brandId, status, isReviewed, isRejected, isRevoked,
+// isAdminApproved, isSuperseded, minScore / maxScore, attemptNumber,
+// reviewedByAdminId, fromDate / toDate, sortBy NEWEST|OLDEST|SCORE,
+// sortOrder ASC|DESC (uppercase). Superseded attempts are hidden unless
+// isSuperseded=true, so `brandId` alone gives the brand's current attempt.
+export async function getBrandVerifications({ page = 1, limit = 10, ...filters } = {}) {
     try {
         const params = { page, limit };
-        if (search) params.search = search;
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') params[key] = value;
+        });
         const { data } = await api.get('/brands/admin/verifications', { params });
         return data;
     } catch (error) {

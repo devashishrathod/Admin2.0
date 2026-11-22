@@ -39,7 +39,8 @@ import { useBrands } from "../brand/BrandContext";
 import { BrandAvatar } from "../brand/BrandShared";
 import { useTopBrands } from "../brand/queries/brandQueries";
 import { mapBrandListItem } from "../brand/brandMapper";
-import { useBrandVerifications } from "../newOnboarding/queries/onboardingReviewQueries";
+import { useBrandStageList } from "../brand/queries/brandQueries";
+import { StrengthChip, WaitingChip } from "../brand/BrandStageChips";
 import { useAllVoucherClaimPayments } from "../transaction/queries/transactionQueries";
 import { normalizeClaimPayment } from "../transaction/transactionUtils";
 import { buildActivity, buildWeekRevenue, timeAgo } from "./dashboardData";
@@ -159,13 +160,7 @@ const tints = {
   neutral: "bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
 };
 
-// Same lifecycle rule used by the New Onboarding page — kept local since
-// this widget only needs the status, not the full mapped verification shape.
-function derivePendingStatus(raw) {
-  if (raw.isRevoked || raw.isRejected || raw.isAdminApproved) return raw.status || null;
-  return raw.status || "PENDING";
-}
-const PENDING_STATUSES = new Set(["MANUAL_REVIEW", "PENDING"]);
+const NO_ROWS = [];
 
 const formatCompact = (n) =>
   n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : n >= 1000 ? `₹${(n / 1000).toFixed(1)}K` : `₹${n}`;
@@ -396,20 +391,19 @@ export default function Dashboard() {
   const totalVendors = brands.length;
   const activeVendors = brands.filter((b) => b.active).length;
 
-  // Real pending-approval count/list — GET /brands/admin/verifications,
-  // same lifecycle rule the New Onboarding page uses. The auto-refresh
-  // menu (below) sets its polling interval; brand reviews refresh it too.
+  // Brands awaiting a decision — the WAITING tab without rejected / revoked
+  // ones (admin guide §3). The count is the server's stageCounts.WAITING
+  // (stageCounts honour the other filters), the list its newest 5 rows.
+  // The auto-refresh menu (below) sets its polling interval; brand reviews
+  // refresh it too. A failed load shows as "no pending", not an error.
   const [refreshKey, setRefreshKey] = useState("off");
   const refreshOption = REFRESH_OPTIONS.find((o) => o.key === refreshKey) || REFRESH_OPTIONS[0];
-  const pendingQuery = useBrandVerifications(
-    { page: 1, limit: 20 },
+  const pendingQuery = useBrandStageList(
+    { onboardingStage: "WAITING", isRejected: false, isRevoked: false, page: 1, limit: 5 },
     { refetchInterval: refreshOption.ms || false }
   );
-  // A failed load shows as "no pending" (same as before), not an error.
-  const pending = useMemo(
-    () => (pendingQuery.data?.data?.data ?? []).filter((r) => PENDING_STATUSES.has(derivePendingStatus(r))),
-    [pendingQuery.data]
-  );
+  const pending = pendingQuery.data?.rows ?? NO_ROWS;
+  const pendingCount = pendingQuery.data?.stageCounts?.WAITING ?? 0;
   const pendingLoading = pendingQuery.isPending;
   const [refreshSpinning, setRefreshSpinning] = useState(false);
 
@@ -474,7 +468,7 @@ export default function Dashboard() {
   const activeRatio = totalVendors ? (activeVendors / totalVendors) * 100 : 0;
   // This week's share of payments that went through (0 when there were none).
   const paymentSuccessPct = week.successRate ?? 0;
-  const clearancePct = 100 - Math.min(100, (pending.length / 10) * 100);
+  const clearancePct = 100 - Math.min(100, (pendingCount / 10) * 100);
   const animatedTotal = useCountUp(totalVendors);
   const animatedActive = useCountUp(activeVendors);
 
@@ -567,21 +561,21 @@ export default function Dashboard() {
             <StatCard
               icon={ShieldCheck}
               label="Pending Reviews"
-              value={pendingLoading ? "…" : pending.length}
-              sub={pending.length ? "Brands waiting for approval" : "All caught up"}
+              value={pendingLoading ? "…" : pendingCount}
+              sub={pendingCount ? "Brands waiting for approval" : "All caught up"}
               tint="amber"
               onClick={() => navigate("/brand-waiting")}
             >
               {pending.length ? (
                 <div className="flex -space-x-2">
-                  {pending.slice(0, 5).map((v) => (
-                    <div key={v._id} className="rounded-lg ring-2 ring-white dark:ring-neutral-900">
-                      <BrandAvatar brand={{ brandName: v.brand?.brandName, logo: v.brand?.logo }} size="sm" />
+                  {pending.map((v) => (
+                    <div key={v.id} className="rounded-lg ring-2 ring-white dark:ring-neutral-900">
+                      <BrandAvatar brand={{ brandName: v.brandName, logo: v.logo }} size="sm" />
                     </div>
                   ))}
-                  {pending.length > 5 && (
+                  {pendingCount > pending.length && (
                     <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[11px] font-semibold text-neutral-500 ring-2 ring-white dark:bg-neutral-800 dark:ring-neutral-900">
-                      +{pending.length - 5}
+                      +{pendingCount - pending.length}
                     </span>
                   )}
                 </div>
@@ -730,7 +724,7 @@ export default function Dashboard() {
                   {[
                     ["Joined", `+${newInRange}`],
                     ["Live", `${Math.round(activeRatio)}%`],
-                    ["Pending", pendingLoading ? "…" : pending.length],
+                    ["Pending", pendingLoading ? "…" : pendingCount],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-2xl bg-white/20 px-2 py-2.5 text-center backdrop-blur-sm">
                       <p className="text-[17px] font-bold leading-none">{value}</p>
@@ -777,41 +771,30 @@ export default function Dashboard() {
                 icon={ShieldCheck}
                 iconClass="text-amber-500 dark:text-amber-400"
                 title="Needs Your Review"
-                subtitle={pending.length ? `${pending.length} brand${pending.length === 1 ? "" : "s"} awaiting approval` : "Onboarding queue"}
+                subtitle={pendingCount ? `${pendingCount} brand${pendingCount === 1 ? "" : "s"} awaiting approval` : "Onboarding queue"}
                 action={<ViewAllButton onClick={() => navigate("/brand-waiting")} />}
               />
               {pendingLoading ? (
                 <LoadingState />
               ) : pending.length ? (
                 <div className="space-y-1.5">
-                  {pending.slice(0, 5).map((v) => {
-                    const score = Number(v.score) || 0;
-                    const scoreClass =
-                      score >= 70
-                        ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                        : score >= 40
-                        ? "bg-amber-400/10 text-amber-600 dark:text-amber-400"
-                        : "bg-red-500/10 text-red-600 dark:text-red-400";
-                    return (
-                      <button
-                        key={v._id}
-                        onClick={() => navigate("/brand-waiting")}
-                        className={`group flex w-full items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition-colors hover:bg-white dark:hover:bg-neutral-800/60 ${innerTile}`}
-                      >
-                        <BrandAvatar brand={{ brandName: v.brand?.brandName, logo: v.brand?.logo }} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">
-                            {v.brand?.brandName || "Untitled Brand"}
-                          </p>
-                          <p className="text-[11px] text-neutral-500">Attempt #{v.attemptNumber}</p>
+                  {pending.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => navigate("/brand-waiting")}
+                      className={`group flex w-full items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition-colors hover:bg-white dark:hover:bg-neutral-800/60 ${innerTile}`}
+                    >
+                      <BrandAvatar brand={{ brandName: v.brandName, logo: v.logo }} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12.5px] font-semibold text-neutral-900 dark:text-neutral-50">{v.brandName}</p>
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          <WaitingChip chip={v.waitingChip} />
                         </div>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${scoreClass}`}>
-                          {score}/100
-                        </span>
-                        <ArrowRight size={13} className="shrink-0 text-neutral-300 transition-colors group-hover:text-emerald-500" />
-                      </button>
-                    );
-                  })}
+                      </div>
+                      <StrengthChip strength={v.profileStrength} />
+                      <ArrowRight size={13} className="shrink-0 text-neutral-300 transition-colors group-hover:text-emerald-500" />
+                    </button>
+                  ))}
                 </div>
               ) : (
                 <EmptyState icon={CheckCircle2} text="All caught up — nothing pending review." />

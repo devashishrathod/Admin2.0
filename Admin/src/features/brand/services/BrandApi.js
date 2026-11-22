@@ -47,14 +47,19 @@ export async function getBrandDetails(brandId) {
 export const getBrands = getBrandDetails;
 
 /* -------------------------------------------------------------------------
- * GET {{base_url}}/brands/admin/get-all
- * Paginated brand list for the admin panel (the "Brands" list page).
+ * GET {{base_url}}/brands/admin/get-all   (super admin API doc #25a)
+ * Paginated brand list. Every other key is passed through as a server
+ * filter (onboardingStage NEW / WAITING / LIVE, search, accountActive,
+ * isActive, isRejected, isRevoked, isTopBrand, isDummy, isRealDummy,
+ * isSubscribed …); empty values are left out. With `onboardingStage` an
+ * empty tab is 200 + data: [] and the response carries `stageCounts`.
  * ---------------------------------------------------------------------- */
-export async function getAllBrands({ page = 1, limit = 10, search = '', status } = {}) {
+export async function getAllBrands({ page = 1, limit = 10, ...filters } = {}) {
     try {
         const params = { page, limit };
-        if (search) params.search = search;
-        if (status) params.status = status;
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') params[key] = value;
+        });
         const { data } = await api.get('/brands/admin/get-all', { params });
         return data;
     } catch (error) {

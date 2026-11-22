@@ -26,7 +26,7 @@ import {
 import { SectionCard, EmptyState } from "../brand/BrandShared";
 import ValueOr from "../../components/common/ValueOr";
 import { MISSING } from "../../utils/helpers";
-import { formatScreen } from "./onboardingBrand";
+import { formatScreenLabel as formatScreen } from "../brand/brandStage";
 
 /* -------------------------------------------------------------------------
  * Business Details — everything the vendor filled in during onboarding, read

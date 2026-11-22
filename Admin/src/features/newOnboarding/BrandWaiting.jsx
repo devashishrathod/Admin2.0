@@ -1,25 +1,24 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { keepPreviousData } from "@tanstack/react-query";
 import { Search, LayoutGrid, List, X, Check, AlertTriangle } from "lucide-react";
 import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
 import Table from "../../components/common/Table";
 import StatusStepButton from "../../components/common/StatusStepButton";
-import { RejectReasonModal } from "../brand/BrandShared";
-import { reviewBrandVerification } from "./services/NewOnboardingApi";
-import { latestByBrand } from "./verificationData";
-import { useAllBrandVerifications } from "./queries/onboardingReviewQueries";
-import OnboardingCard from "./OnboardingCard";
-import { isUnderReview, onboardingTableColumns } from "./onboardingBrand";
-import VerificationDetails from "./VerificationDetails";
-import { useBrands } from "../brand/BrandContext";
 import Loader from "../../components/common/Loader";
+import { RejectReasonModal } from "../brand/BrandShared";
+import { PaginationBar } from "../category/CatalogShared";
+import { useDebouncedValue } from "../notification/hooks/useNotificationState";
+import { useBrandStageList } from "../brand/queries/brandQueries";
+import { WaitingChip } from "../brand/BrandStageChips";
+import { reviewBrandVerification } from "./services/NewOnboardingApi";
+import { mapVerification } from "./verificationData";
+import { useLatestVerification } from "./queries/onboardingReviewQueries";
+import OnboardingCard from "./OnboardingCard";
+import { onboardingTableColumns } from "./onboardingBrand";
+import VerificationDetails from "./VerificationDetails";
 
-// Which brands show here is decided by the brand itself, not the system
-// verdict: onboarding is complete, the status/screen is UNDER_REVIEW, and
-// brand.isApproved === false (see `waiting` in the component).
-/* Approve from the table — optional note, sent as { action: "APPROVED", note }
+/* Approve from the list — optional note, sent as { action: "APPROVED", note }
    (same as the details page's Approve). */
 function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
   const [note, setNote] = useState("");
@@ -84,142 +83,138 @@ function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
   );
 }
 
-/* -------------------------------------------------------------------------
- * Brand Waiting — brands waiting for admin approval (list + navigation into
- * the verification details page).
- * ---------------------------------------------------------------------- */
+/* A WAITING brand always has an attempt; this is only the fallback while
+   the attempt lookup failed, so the details page still opens. */
+function verificationFromBrand(b) {
+  return mapVerification({
+    brandId: b.id,
+    attemptNumber: 0,
+    brand: { _id: b.id, brandName: b.brandName, uniqueId: b.brandId, logo: b.logo, status: b.status, isApproved: b.isApproved },
+    vendor: { currentScreen: b.onboardingScreen },
+  });
+}
 
+const PAGE_SIZE = 12;
+
+// Sub-tabs = server filters on the WAITING stage (#25a brand flags). The
+// waitingChip itself is not a list filter (§3), so "Resubmitted" is a chip only.
+const TABS = [
+  { key: "All", label: "All", filters: {} },
+  { key: "UnderReview", label: "Under review", filters: { isRejected: false, isRevoked: false } },
+  { key: "Rejected", label: "Rejected", filters: { isRejected: true } },
+  { key: "Revoked", label: "Revoked", filters: { isRevoked: true } },
+];
+
+/* -------------------------------------------------------------------------
+ * Brand Waiting — the WAITING tab (admin guide §3):
+ * GET /brands/admin/get-all?onboardingStage=WAITING — submitted and not
+ * approved, rejected / revoked included, each with the server's waitingChip.
+ * Paging, search and the sub-tabs run on the server. Opening a brand loads
+ * its current verification attempt (GET /brands/admin/verifications?brandId).
+ * ---------------------------------------------------------------------- */
 export default function BrandWaiting() {
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
-  // The search actually sent to the API — trails `search` by 400ms.
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search.trim(), 400);
   const [page, setPage] = useState(1);
-  const [tab, setTab] = useState("All"); // All · Waiting · Rejected
-  const [limit] = useState(9); // 3×3 grid of cards per page
-
-
-  const [selectedId, setSelectedId] = useState(null);
-
-  // Which single review action is currently in flight — "approve" | "reject" |
-  // "reviewed" | "force-on" | "force-off" | "revoke" | null. Tracking this
-  // per-action (instead of one shared busy boolean) means clicking the
-  // Reviewed toggle only spins the Reviewed toggle, not the Approve button.
-  const [busyAction, setBusyAction] = useState(null);
-  const [actionError, setActionError] = useState("");
-  const { allBrands } = useBrands();
-  // Grid by default; switch to a table with the toggle above the list.
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [tab, setTab] = useState("All");
   const [view, setView] = useState("grid");
   // "Now" captured once when the page opens (render must stay pure).
   const [openedAt] = useState(() => Date.now());
-  // Table row Approve / Reject — the row whose modal is open.
+
+  const [selectedBrand, setSelectedBrand] = useState(null);
+  // Which single review action is in flight — "approve" | "reject" |
+  // "reviewed" | "force-on" | "force-off" | "revoke" | null.
+  const [busyAction, setBusyAction] = useState(null);
+  const [actionError, setActionError] = useState("");
   const [approveTarget, setApproveTarget] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
 
-  /* The list endpoint only takes page/limit/search — it can't filter to
-     "waiting" — and its pages mix approved/rejected rows in. Filtering one
-     server page at a time hid waiting brands on later pages (page 1 empty,
-     "Page 1 of 6"). So every page is loaded, the waiting ones kept, and
-     paging happens here over just those. */
-  const {
-    data: verifications = [],
-    isPending: loading,
-    error,
-    refetch: refetchVerifications,
-  } = useAllBrandVerifications(debouncedSearch, { placeholderData: keepPreviousData });
-  const loadError = error?.message ?? "";
-
-  // Debounce search so we don't hit the API on every keystroke
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1);
-      setDebouncedSearch(search);
-    }, 400);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  // Every waiting brand (all server pages), then this page's slice of them.
-  // Brand Waiting rule: the vendor finished onboarding (isOnBoardingCompleted)
-  // or is on the UNDER_REVIEW screen, and the brand isn't approved yet
-  // (isApproved false) → it waits here for the admin to approve or reject.
-  // One card per brand — its latest attempt.
-  const waiting = [...latestByBrand(verifications).values()].filter(
-    (v) =>
-      (v.vendor?.isOnBoardingCompleted ||
-        isUnderReview({ status: v.status, currentScreen: v.vendor?.currentScreen }) ||
-        isUnderReview({ status: v.brand?.status })) &&
-      !v.brand?.isApproved
-  );
-  // Tabs — rejected (and revoked) brands moved here from New Onboarding.
-  const isRejectedV = (v) =>
-    ["REJECTED", "REVOKED"].includes(v.derivedStatus) || Boolean(v.brand?.isRejected);
-  const pendingOnly = waiting.filter((v) => !isRejectedV(v));
-  const rejectedOnly = waiting.filter(isRejectedV);
-  const TAB_ROWS = { All: waiting, Waiting: pendingOnly, Rejected: rejectedOnly };
-  const tabRows = TAB_ROWS[tab] || waiting;
-  const totalPages = Math.max(1, Math.ceil(tabRows.length / limit));
-
-  // KPI tiles (same tile as Live Vouchers). Waiting / Rejected switch the tab.
-  const waitingTiles = [
-    { icon: "hourglass", label: "Waiting", value: pendingOnly.length, hint: "Needs your decision", tint: "amber", tabKey: "Waiting" },
-    { icon: "alert", label: "Rejected", value: rejectedOnly.length, hint: "Rejected / revoked", tint: "red", tabKey: "Rejected" },
-    { icon: "up", label: "High Score", value: pendingOnly.filter((v) => v.score >= 70).length, hint: "Score 70+ · likely safe", tint: "emerald" },
-    { icon: "down", label: "Low Score", value: pendingOnly.filter((v) => v.score < 40).length, hint: "Under 40 · check carefully", tint: "violet" },
-    { icon: "repeat", label: "Resubmitted", value: waiting.filter((v) => (v.attemptNumber ?? 1) > 1).length, hint: "Fixed & sent back", tint: "sky" },
-  ];
-  const safePage = Math.min(page, totalPages);
-  const filtered = tabRows.slice((safePage - 1) * limit, safePage * limit);
-
-  // Card + table are the New Onboarding ones, which read the Brand list item
-  // (steps, category, phone, joined). Join each verification to its brand;
-  // fall back to the verification's own brand snapshot if it isn't loaded.
-  const brandsById = new Map(allBrands.map((b) => [b.id, b]));
-  const toRow = (v) => {
-    const brandId = v.brandId || v.brand?.id;
-    const listed = brandsById.get(brandId);
-    const base = listed || {
-      id: brandId,
-      brandId: v.brand?.uniqueId,
-      brandName: v.brand?.brandName,
-      logo: v.brand?.logo,
-      onboardingFlags: {},
-      onboardingScreen: v.vendor?.currentScreen,
-      joinedDate: v.createdAt,
-      category: "—",
-      contactPhone: v.brand?.whatsappNumber ? `+91 ${v.brand.whatsappNumber}` : "—",
-    };
-    return { ...base, verificationId: v.id, review: statusFor(v), rejected: isRejectedV(v) };
-  };
-  function statusFor(v) {
-    return isRejectedV(v)
-      ? { label: v.derivedStatus === "REVOKED" ? "Revoked" : "Rejected", tone: "red" }
-      : { label: "Waiting for approval", tone: "amber" };
+  // A new search starts from page 1 (state adjusted during render, no effect).
+  const [searchedFor, setSearchedFor] = useState(debouncedSearch);
+  if (searchedFor !== debouncedSearch) {
+    setSearchedFor(debouncedSearch);
+    setPage(1);
   }
-  const openRow = (row) => setSelectedId(row.verificationId);
-  const verificationOf = (row) => verifications.find((v) => v.id === row.verificationId);
 
-  // Table workflow (same as Settlement): the status pill turns into
-  // "Approve ›" on hover; Reject sits next to View in the Action column.
-  // Approve stays available on rejected rows as a manual override — same
-  // rule as the details page (canReview = brand not approved).
+  const activeTab = TABS.find((t) => t.key === tab) || TABS[0];
+  const listQuery = useBrandStageList({ onboardingStage: "WAITING", page, limit, search: debouncedSearch, ...activeTab.filters });
+  const { rows = [], total = 0, totalPages = 1, stageCounts } = listQuery.data ?? {};
+  const loading = listQuery.isPending;
+  const loadError = listQuery.error?.message ?? "";
+
+  // Per-tab counts: one-row server queries (read `total`), same search.
+  const countParams = (filters) => ({ onboardingStage: "WAITING", page: 1, limit: 1, search: debouncedSearch, ...filters });
+  const underReviewCount = useBrandStageList(countParams(TABS[1].filters)).data?.total;
+  const rejectedCount = useBrandStageList(countParams(TABS[2].filters)).data?.total;
+  const revokedCount = useBrandStageList(countParams(TABS[3].filters)).data?.total;
+  const tabCounts = { All: stageCounts?.WAITING, UnderReview: underReviewCount, Rejected: rejectedCount, Revoked: revokedCount };
+
+  const latestQuery = useLatestVerification(selectedBrand?.id);
+
+  const tiles = [
+    { icon: "hourglass", label: "Waiting brands", value: stageCounts?.WAITING, hint: "Submitted, not approved", tint: "amber", tabKey: "All" },
+    { icon: "scan", label: "Under review", value: underReviewCount, hint: "Needs your decision", tint: "sky", tabKey: "UnderReview" },
+    { icon: "alert", label: "Rejected", value: rejectedCount, hint: "Vendor is fixing", tint: "red", tabKey: "Rejected" },
+    { icon: "repeat", label: "Revoked", value: revokedCount, hint: "Approval taken back", tint: "violet", tabKey: "Revoked" },
+  ];
+
+  const switchTab = (key) => {
+    setTab(key);
+    setPage(1);
+  };
+
+  /* ---- Review workflow (Approve / Reject / Reviewed / Force / Revoke) --- */
+  const handleReview = async (brandId, payload, key) => {
+    setActionError("");
+    setBusyAction(key);
+    try {
+      await reviewBrandVerification(brandId, payload);
+      // The interceptor refreshes every ["brands"] query (this list, the open
+      // attempt, the app-wide brand list). Wait for the list so the buttons
+      // re-enable only once the new state is on screen.
+      await listQuery.refetch({ cancelRefetch: false });
+      return true;
+    } catch (err) {
+      setActionError(err.message);
+      return false;
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleApprove = (brandId, note) => handleReview(brandId, { action: "APPROVED", note }, "approve");
+  const handleReject = (brandId, rejectionReason) => handleReview(brandId, { action: "REJECTED", rejectionReason }, "reject");
+  const handleMarkReviewed = (brandId) => handleReview(brandId, { action: "REVIEWED" }, "reviewed");
+  const handleForceReviewed = (brandId, isReviewed) =>
+    handleReview(brandId, { action: "REVIEWED", isReviewed }, isReviewed ? "force-on" : "force-off");
+  const handleRevoke = (brandId, revokeReason) => handleReview(brandId, { action: "REVOKED", revokeReason }, "revoke");
+
+  const isClosedRow = (row) => row.waitingChip === "REJECTED" || row.waitingChip === "REVOKED";
+
   const tableColumns = onboardingTableColumns({
-    onOpen: openRow,
+    onOpen: setSelectedBrand,
     now: openedAt,
-    renderStatus: (row) => (
-      <StatusStepButton
-        label={row.review.tone === "red" ? row.review.label : "Waiting"}
-        tone={row.review.tone}
-        stepLabel="Approve"
-        disabled={Boolean(busyAction)}
-        onClick={() => {
-          setActionError("");
-          setApproveTarget(row);
-        }}
-      />
-    ),
+    dateField: "submitted",
+    renderStatus: (row) =>
+      isClosedRow(row) ? (
+        <WaitingChip chip={row.waitingChip} />
+      ) : (
+        <StatusStepButton
+          label={row.waitingChip === "RESUBMITTED" ? "Resubmitted" : "Under review"}
+          tone="amber"
+          stepLabel="Approve"
+          disabled={Boolean(busyAction)}
+          onClick={() => {
+            setActionError("");
+            setApproveTarget(row);
+          }}
+        />
+      ),
     renderActions: (row) =>
-      !row.rejected && (
+      !isClosedRow(row) && (
         <button
           onClick={() => {
             setActionError("");
@@ -235,53 +230,22 @@ export default function BrandWaiting() {
       ),
   });
 
-  const selected = verifications.find((v) => v.id === selectedId) || null;
-
-  /* ---- Review workflow (Approve / Reject / Reviewed / Force / Revoke) --- */
-  const handleReview = async (verification, payload, key) => {
-    setActionError("");
-    setBusyAction(key);
-    try {
-      const brandId = verification.brandId || verification.brand?.id;
-      await reviewBrandVerification(brandId, payload);
-      // The interceptor already refreshes every ["brands"] query (this list,
-      // the open detail view, the app-wide brand list). Wait for this list
-      // so the buttons only re-enable once the new status is on screen —
-      // cancelRefetch: false joins that refetch instead of restarting it.
-      await refetchVerifications({ cancelRefetch: false });
-      return true;
-    } catch (err) {
-      setActionError(err.message);
-      return false;
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleApprove = (verification, note) => handleReview(verification, { action: "APPROVED", note }, "approve");
-  const handleReject = (verification, rejectionReason) =>
-    handleReview(verification, { action: "REJECTED", rejectionReason }, "reject");
-  // Case D — plain toggle, no explicit direction (server flips isReviewed).
-  const handleMarkReviewed = (verification) => handleReview(verification, { action: "REVIEWED" }, "reviewed");
-  // Case D2 — force isReviewed to an explicit true/false.
-  const handleForceReviewed = (verification, isReviewed) =>
-    handleReview(verification, { action: "REVIEWED", isReviewed }, isReviewed ? "force-on" : "force-off");
-  const handleRevoke = (verification, revokeReason) =>
-    handleReview(verification, { action: "REVOKED", revokeReason }, "revoke");
-
-  if (selected) {
+  if (selectedBrand) {
+    if (latestQuery.isPending) return <Loader label="Loading brand details…" />;
+    const verification = latestQuery.data || verificationFromBrand(selectedBrand);
+    const brandId = selectedBrand.id;
     return (
       <VerificationDetails
-        verification={selected}
+        verification={verification}
         onBack={() => {
-          setSelectedId(null);
+          setSelectedBrand(null);
           setActionError("");
         }}
-        onApprove={(note) => handleApprove(selected, note)}
-        onReject={(reason) => handleReject(selected, reason)}
-        onMarkReviewed={() => handleMarkReviewed(selected)}
-        onForceReviewed={(isReviewed) => handleForceReviewed(selected, isReviewed)}
-        onRevoke={(reason) => handleRevoke(selected, reason)}
+        onApprove={(note) => handleApprove(brandId, note)}
+        onReject={(reason) => handleReject(brandId, reason)}
+        onMarkReviewed={() => handleMarkReviewed(brandId)}
+        onForceReviewed={(isReviewed) => handleForceReviewed(brandId, isReviewed)}
+        onRevoke={(reason) => handleRevoke(brandId, reason)}
         busyAction={busyAction}
         actionError={actionError}
       />
@@ -293,33 +257,17 @@ export default function BrandWaiting() {
       <div className="w-full">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">
-            Brand Waiting
-          </h1>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-50">Brand Waiting</h1>
           <p className="mt-1 text-[13px] text-neutral-500">
-            Brands waiting for admin approval — review scores and checks, then open a card to approve
-            or reject. {pendingOnly.length} waiting · {rejectedOnly.length} rejected.
+            Brands that submitted for review and aren't approved yet — rejected and revoked ones included. Open a card to review the checks and decide.
           </p>
         </div>
 
-        {/* KPI tiles */}
+        {/* KPI tiles — server counts; each switches the sub-tab */}
         {!loadError && (
-          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-            {waitingTiles.map(({ tabKey, ...t }) => (
-              <StatTile
-                key={t.label}
-                {...t}
-                value={loading ? "…" : t.value}
-                active={tabKey ? tab === tabKey : false}
-                onClick={
-                  tabKey
-                    ? () => {
-                        setTab(tabKey);
-                        setPage(1);
-                      }
-                    : undefined
-                }
-              />
+          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {tiles.map(({ tabKey, ...t }) => (
+              <StatTile key={t.label} {...t} value={t.value ?? "…"} active={tab === tabKey} onClick={() => switchTab(tabKey)} />
             ))}
           </div>
         )}
@@ -331,37 +279,28 @@ export default function BrandWaiting() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search brand name..."
+              placeholder="Search brand, ID or phone..."
               className="w-full bg-transparent text-[13.5px] text-neutral-800 placeholder:text-neutral-500 focus:outline-none dark:text-neutral-200"
             />
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto rounded-xl border border-neutral-200 bg-white p-1.5 dark:border-neutral-800 dark:bg-neutral-900">
-            {[
-              ["All", waiting.length],
-              ["Waiting", pendingOnly.length],
-              ["Rejected", rejectedOnly.length],
-            ].map(([key, count]) => (
+            {TABS.map((t) => (
               <button
-                key={key}
-                onClick={() => {
-                  setTab(key);
-                  setPage(1);
-                }}
+                key={t.key}
+                onClick={() => switchTab(t.key)}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                  tab === key
-                    ? "bg-emerald-400 text-neutral-950"
-                    : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
+                  tab === t.key ? "bg-emerald-400 text-neutral-950" : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200"
                 }`}
               >
-                {key}
-                <span className="text-[10.5px] opacity-70">{count}</span>
+                {t.label}
+                <span className="text-[10.5px] opacity-70">{tabCounts[t.key] ?? "…"}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* A table Reject that failed (Approve shows its error in its modal). */}
+        {/* A list Reject that failed (Approve shows its error in its modal). */}
         {actionError && !approveTarget && (
           <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
             <AlertTriangle size={14} className="shrink-0" />
@@ -369,11 +308,9 @@ export default function BrandWaiting() {
           </div>
         )}
 
-        {/* Grid / table switch — right above the list it controls (same as New Onboarding). */}
+        {/* Grid / table switch */}
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-[12.5px] text-neutral-500">
-            {loading ? "Loading brands…" : `${tabRows.length} brand${tabRows.length === 1 ? "" : "s"}`}
-          </p>
+          <p className="text-[12.5px] text-neutral-500">{loading ? "Loading brands…" : `${total} brand${total === 1 ? "" : "s"}`}</p>
           <div className="flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
             {[
               ["grid", LayoutGrid, "Grid"],
@@ -395,110 +332,98 @@ export default function BrandWaiting() {
           </div>
         </div>
 
-        {/* Load state */}
-        {loading && (
-          <Loader label="Loading verifications…" />
-        )}
+        {loading && <Loader label="Loading brands…" />}
 
         {!loading && loadError && (
           <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
             <EmptyState
               tone="error"
               icon="error"
-              title="Couldn't load the approval queue"
+              title="Couldn't load the waiting brands"
               description={`${loadError} — check your connection and try again.`}
-              action={{ label: "Try again", onClick: () => refetchVerifications() }}
+              action={{ label: "Try again", onClick: () => listQuery.refetch() }}
             />
           </div>
         )}
 
         {!loading && !loadError && (
           <>
-            {filtered.length === 0 ? (
+            {rows.length === 0 ? (
               <div className="rounded-3xl bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] dark:bg-neutral-900 dark:shadow-black/20">
-                {search ? (
+                {debouncedSearch ? (
                   <EmptyState
                     icon="search"
                     title="No waiting brands match your search"
                     description="Check the spelling or try another brand name — or clear the search to see the whole queue."
                     action={{ label: "Clear search", onClick: () => setSearch("") }}
                   />
+                ) : tab !== "All" ? (
+                  <EmptyState
+                    icon="onboarding"
+                    title={`No ${activeTab.label.toLowerCase()} brands`}
+                    description="Nothing in this part of the queue right now."
+                    action={{ label: "See all waiting", onClick: () => switchTab("All") }}
+                  />
                 ) : (
-                  tab === "Rejected" ? (
-                    <EmptyState
-                      icon="onboarding"
-                      title="No rejected brands"
-                      description="Brands you reject (or revoke) show up here so you can review them again once the vendor fixes things."
-                      action={{ label: "See Waiting", onClick: () => setTab("Waiting") }}
-                    />
-                  ) : (
-                    <EmptyState
-                      icon="onboarding"
-                      title="No brands waiting for approval"
-                      description="You're all caught up. Brands land here once a vendor finishes onboarding."
-                      action={{ label: "See New Onboarding", onClick: () => navigate("/new-onboarding") }}
-                      secondaryAction={{ label: "Live Brands", onClick: () => navigate("/brand") }}
-                    />
-                  )
+                  <EmptyState
+                    icon="onboarding"
+                    title="No brands waiting for approval"
+                    description="You're all caught up. Brands land here once a vendor submits for review."
+                    action={{ label: "See New Onboarding", onClick: () => navigate("/new-onboarding") }}
+                    secondaryAction={{ label: "Live Brands", onClick: () => navigate("/brand") }}
+                  />
                 )}
               </div>
             ) : view === "table" ? (
-              <Table columns={tableColumns} data={filtered.map(toRow)} minWidth={1080} emptyTitle="No brands waiting for approval" emptyIcon="onboarding" />
+              <Table columns={tableColumns} data={rows} minWidth={1240} emptyTitle="No brands waiting for approval" emptyIcon="onboarding" />
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filtered.map((v) => (
+                {rows.map((row) => (
                   <OnboardingCard
-                    key={v.id}
-                    brand={toRow(v)}
-                    onOpen={openRow}
+                    key={row.id}
+                    brand={row}
+                    onOpen={setSelectedBrand}
                     now={openedAt}
-                    status={statusFor(v)}
-                    // Same modals as the table; no Reject on already-rejected rows.
-                    actions={{
-                      busy: Boolean(busyAction),
-                      onApprove: (row) => {
-                        setActionError("");
-                        setApproveTarget(row);
-                      },
-                      onReject: isRejectedV(v)
+                    dateField="submitted"
+                    // Rejected / revoked rows wait for the vendor — no quick actions.
+                    actions={
+                      isClosedRow(row)
                         ? undefined
-                        : (row) => {
-                            setActionError("");
-                            setRejectTarget(row);
-                          },
-                    }}
+                        : {
+                            busy: Boolean(busyAction),
+                            onApprove: (r) => {
+                              setActionError("");
+                              setApproveTarget(r);
+                            },
+                            onReject: (r) => {
+                              setActionError("");
+                              setRejectTarget(r);
+                            },
+                          }
+                    }
                   />
                 ))}
               </div>
             )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Prev
-                </button>
-                <span className="text-[12.5px] text-neutral-500">
-                  Page {safePage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12.5px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-                >
-                  Next
-                </button>
-              </div>
-            )}
+            <div className="mt-6">
+              <PaginationBar
+                page={page}
+                limit={limit}
+                total={total}
+                totalPages={totalPages}
+                onPage={setPage}
+                onLimit={(n) => {
+                  setLimit(n);
+                  setPage(1);
+                }}
+              />
+            </div>
           </>
         )}
       </div>
 
-      {/* Table row Approve — optional note */}
+      {/* List Approve — optional note */}
       {approveTarget && (
         <ApproveNoteModal
           brand={approveTarget}
@@ -509,21 +434,20 @@ export default function BrandWaiting() {
             setActionError("");
           }}
           onConfirm={async (note) => {
-            const v = verificationOf(approveTarget);
-            if (v && (await handleApprove(v, note))) setApproveTarget(null);
+            if (await handleApprove(approveTarget.id, note)) setApproveTarget(null);
           }}
         />
       )}
 
-      {/* Table row Reject — reason is shown to the brand owner */}
+      {/* List Reject — reason is shown to the brand owner */}
       {rejectTarget && (
         <RejectReasonModal
           brand={rejectTarget}
           onClose={() => setRejectTarget(null)}
           onConfirm={(reason) => {
-            const v = verificationOf(rejectTarget);
+            const target = rejectTarget;
             setRejectTarget(null);
-            if (v) handleReject(v, reason);
+            handleReject(target.id, reason);
           }}
         />
       )}

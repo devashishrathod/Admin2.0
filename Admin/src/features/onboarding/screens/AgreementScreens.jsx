@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Upload, FileText, CheckCircle2, Check, Lock, ExternalLink, Info } from "lucide-react";
+import { Upload, FileText, CheckCircle2, Check, Lock } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { recordOfflineDeed, saveBillingAddress, grantPlan } from "../services/onboardingApi";
@@ -9,10 +9,7 @@ import {
   PIN_RE,
   GRANT_PAYMENT_MODES,
   GRANT_RULES,
-  PARTNER_AGREEMENT_URL,
-  PARTNER_TERMS,
-  SUPPORT_EMAIL,
-  TERMS_URL,
+  DEED_NOTE,
   DOCUMENT_RULES,
   errorText,
 } from "../onboardingFlow";
@@ -21,153 +18,109 @@ import Loader from "../../../components/common/Loader";
 
 const payload = (res) => res?.data ?? res ?? {};
 
-/* ---- Partnership deed text (same as the vendor panel) ------------- */
-const DEED_LINK_CLASS = "font-semibold text-emerald-600 hover:text-emerald-700 hover:underline dark:text-emerald-400";
-
-/** Document link, terms summary and the T&C note — the vendor's DeedContent. */
-function DeedContent({ intro }) {
-  return (
-    <>
-      <div className="rounded-[14px] bg-gray-50 p-4 ring-1 ring-inset ring-gray-200 dark:bg-gray-800/50 dark:ring-gray-700">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Partnership Deed Document</p>
-        {intro && <p className="mb-3 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{intro}</p>}
-        <a href={PARTNER_AGREEMENT_URL} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1.5 text-sm ${DEED_LINK_CLASS}`}>
-          <ExternalLink size={14} aria-hidden="true" />
-          Open Trydood Partner Agreement ↗
-        </a>
-      </div>
-
-      <div className="flex flex-col gap-4 rounded-[14px] bg-gray-50 p-5 ring-1 ring-inset ring-gray-200 dark:bg-gray-800/50 dark:ring-gray-700">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Terms &amp; Conditions Summary</p>
-        <ol className="m-0 flex list-none flex-col gap-3 p-0">
-          {PARTNER_TERMS.map((term, i) => (
-            <li key={term.title} className="flex gap-3">
-              <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-emerald-100 text-[9px] font-bold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-                {i + 1}
-              </span>
-              <div>
-                <p className="mb-0.5 text-xs font-semibold text-gray-700 dark:text-gray-300">{term.title}</p>
-                <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{term.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-        <p className="border-t border-gray-200 pt-3 text-xs leading-relaxed text-gray-500 dark:border-gray-700 dark:text-gray-400">
-          For the full legal document, open the partner agreement link. Contact{" "}
-          <a href={`mailto:${SUPPORT_EMAIL}`} className={DEED_LINK_CLASS}>
-            {SUPPORT_EMAIL}
-          </a>{" "}
-          for any queries.
-        </p>
-      </div>
-
-      <p className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
-        <Info size={14} className="mr-1 shrink-0 text-emerald-500" aria-hidden="true" />
-        Also review the full{" "}
-        <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" className={DEED_LINK_CLASS}>
-          Terms &amp; Conditions
-        </a>{" "}
-        before accepting.
-      </p>
-    </>
-  );
-}
-
-/** The vendor's "I have read and agree" checkbox, worded for the admin confirming it for the vendor. */
-function DeedAgreeCheckbox({ checked, disabled = false, onChange }) {
-  return (
-    <label
-      className={`flex min-h-11 items-start gap-3 rounded-xl p-4 transition ${
-        disabled
-          ? "cursor-not-allowed bg-emerald-50/60 dark:bg-emerald-500/10"
-          : `cursor-pointer hover:bg-emerald-50/40 dark:hover:bg-emerald-500/10 ${checked ? "bg-emerald-50/60 dark:bg-emerald-500/10" : "bg-gray-50 dark:bg-gray-800/50"}`
-      }`}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 size-[18px] shrink-0 cursor-pointer accent-emerald-500 disabled:cursor-not-allowed"
-      />
-      <span className="text-sm text-gray-600 dark:text-gray-300">
-        The vendor has read and agreed to the{" "}
-        <a href={PARTNER_AGREEMENT_URL} target="_blank" rel="noopener noreferrer" className={DEED_LINK_CLASS}>
-          Trydood Partner Agreement
-        </a>{" "}
-        and all associated{" "}
-        <a href={TERMS_URL} target="_blank" rel="noopener noreferrer" className={DEED_LINK_CLASS}>
-          terms and conditions
-        </a>
-        .
-      </span>
-    </label>
-  );
-}
-
 /* ---- PARTNERSHIP_DEED --------------------------------------------- */
-// Same screen as the vendor's, but the admin can't accept online for the
-// vendor (PUT accept-partnership is the vendor's). The admin records an
-// OFFLINE acceptance — PUT /brands/admin/:brandId/deed with the signed copy
-// as proof + a note; status.deed.requiresDeedConfirmation then asks the
-// vendor to confirm on their next login. Accepted = status.deed.accepted.
+// The deed text lives only in the vendor panel (Q6, D57). The admin can't
+// accept online for the vendor (accept-partnership is the vendor's); they
+// only RECORD the offline signed deed — PUT /brands/admin/:brandId/deed with
+// the signed copy as proof + a note (#25g). On PARTNERSHIP_DEED that moves
+// the screen; on a later screen it only replaces the admin's own record /
+// proof. A deed the VENDOR accepted is never replaced (D102 → 409
+// DEED_ALREADY_ACCEPTED). status.deed.requiresDeedConfirmation then asks
+// the vendor to confirm on their next login.
+function DeedRecord({ deed }) {
+  return (
+    <Note tone="ok">
+      Accepted by {String(deed.acceptedByType || "unknown").toLowerCase()} ({String(deed.mode || "not recorded").toLowerCase()})
+      {deed.isLegacy ? " · legacy record" : deed.acceptedAt ? ` on ${new Date(deed.acceptedAt).toLocaleDateString("en-IN")}` : ""}
+      {deed.version && !deed.isLegacy ? ` · ${deed.version}` : ""}
+      {deed.proofUrl ? (
+        <>
+          {" · "}
+          <a href={deed.proofUrl} target="_blank" rel="noreferrer" className="font-semibold underline">signed copy</a>
+        </>
+      ) : null}
+      {deed.note ? <span className="mt-1 block text-[13px] opacity-90">Note: {deed.note}</span> : null}
+    </Note>
+  );
+}
+
 export function DeedScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
   const deed = status.deed;
-  const locked = Boolean(deed?.accepted);
-  const [agreed, setAgreed] = useState(locked);
+  const accepted = Boolean(deed?.accepted);
+  // Only an admin's own offline record may be replaced (D102).
+  const vendorAccepted = accepted && deed?.acceptedByType !== "ADMIN";
   const [file, setFile] = useState(null);
   const [note, setNote] = useState("");
   const { run, busy, error } = useStepAction(onAdvance);
   const fileError =
     file && file.size > DOCUMENT_RULES.maxSizeBytes ? "Max 5 MB." : file && !DOCUMENT_RULES.types.test(file.type) ? "PDF, JPG or PNG only." : "";
-  const ready = !locked && agreed && file && !fileError && note.trim();
+  const noteLen = note.trim().length;
+  const noteOk = noteLen >= DEED_NOTE.min && noteLen <= DEED_NOTE.max;
+  const ready = !vendorAccepted && file && !fileError && noteOk;
+  const save = () =>
+    run("save", async () => {
+      const res = await recordOfflineDeed(brandId, { file, note: note.trim() });
+      setFile(null);
+      setNote("");
+      return res;
+    });
 
   return (
     <ScreenShell
       eyebrow={eyebrow}
-      title="Partner Deed Agreement"
-      intro={locked ? "Agreement already accepted" : "Review and accept to continue"}
+      title="Partnership deed"
+      intro={
+        vendorAccepted
+          ? "The vendor accepted the deed themselves. It can't be replaced."
+          : accepted
+            ? "An offline deed is already recorded. You can replace the signed copy and note."
+            : "Record the deed the vendor signed offline: upload the signed copy and add a note. The deed text itself is only in the vendor panel."
+      }
       error={error}
       footer={
         <StepFooter
           onBack={onBack}
           primary={
-            <PrimaryButton busy={busy === "save"} disabled={!ready} onClick={() => run("save", () => recordOfflineDeed(brandId, { file, note: note.trim() }))}>
-              {locked ? <Lock size={15} /> : busy !== "save" && <Check size={15} />}
-              {busy === "save" ? "Processing..." : locked ? "Accepted" : "Accept & continue"}
-            </PrimaryButton>
+            vendorAccepted ? null : (
+              <PrimaryButton busy={busy === "save"} disabled={!ready} onClick={save}>
+                {busy !== "save" && (accepted ? <Upload size={15} /> : <Check size={15} />)}
+                {busy === "save" ? "Saving…" : accepted ? "Replace proof" : "Record deed & continue"}
+              </PrimaryButton>
+            )
           }
         />
       }
     >
-      <DeedContent intro="Review the partner agreement below with the vendor. Their acceptance is recorded offline, with the signed copy as proof." />
-      <DeedAgreeCheckbox checked={locked || agreed} disabled={locked} onChange={setAgreed} />
-
-      {locked ? (
-        <Note tone="ok">
-          Accepted by {String(deed.acceptedByType || "unknown").toLowerCase()} ({String(deed.mode || "not recorded").toLowerCase()})
-          {deed.acceptedAt ? ` on ${new Date(deed.acceptedAt).toLocaleDateString("en-IN")}` : ""}
-          {deed.version ? ` · ${deed.version}` : ""}
-          {deed.proofUrl ? (
-            <>
-              {" · "}
-              <a href={deed.proofUrl} target="_blank" rel="noreferrer" className="font-semibold underline">signed copy</a>
-            </>
-          ) : null}
-          .
+      {accepted && <DeedRecord deed={deed} />}
+      {vendorAccepted ? (
+        <Note tone="muted">
+          <Lock size={13} className="mr-1 inline" />
+          The vendor's own acceptance is the record of truth — no offline deed is needed.
         </Note>
       ) : (
         <div className="flex flex-col gap-4 rounded-[14px] p-5 ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
-          <p className="m-0 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Offline acceptance</p>
-          <Field label="Signed deed copy" hint="PDF or a clear photo of the signed deed — required as proof" error={fileError}>
+          <p className="m-0 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            {accepted ? "Replace the offline record" : "Offline acceptance"}
+          </p>
+          <Field label="Signed deed copy" hint="PDF or a clear photo of the signed deed — required as proof · max 5 MB" error={fileError}>
             <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[#CFD1CA] px-4 py-5 hover:border-[#0B6E5A] dark:border-neutral-700">
               {file ? <FileText size={18} className="text-[#0B6E5A]" /> : <Upload size={18} className="text-[#5B616E]" />}
               <span className="min-w-0 flex-1 truncate text-[14px] font-normal">{file ? file.name : "Choose the signed copy"}</span>
               <input type="file" accept={DOCUMENT_RULES.accept} className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </label>
           </Field>
-          <Field label="Note" hint="Required — e.g. who signed, where the original is kept">
-            <textarea className={`${inputCls} h-24 py-2`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Signed by owner at office visit, original filed" />
+          <Field
+            label="Note"
+            hint={`Required · ${DEED_NOTE.min}–${DEED_NOTE.max} characters — e.g. who signed, where the original is kept`}
+            error={note && !noteOk ? `${DEED_NOTE.min}–${DEED_NOTE.max} characters` : ""}
+          >
+            <textarea
+              className={`${inputCls} h-24 py-2`}
+              value={note}
+              maxLength={DEED_NOTE.max}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Signed by owner at office visit, original filed"
+            />
           </Field>
         </div>
       )}
@@ -221,7 +174,11 @@ export function SubscribePlanScreen(props) {
   return <SubscribePlanForm {...props} billing={billing} plans={plans} />;
 }
 
-function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans }) {
+function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans, isCurrent = true }) {
+  // A back-edit (the vendor is already past SUBSCRIBE_PLAN) means a plan is
+  // live: only the billing address is editable here; a second grant would
+  // stack another plan, so plan changes stay on the Subscriptions page.
+  const planDone = !isCurrent;
   // Prefilled once, on mount — a later billing refetch (e.g. after saving
   // it) must not overwrite what the admin has typed.
   const [form, setForm] = useState(() => toForm(billing?.billingAddress) || toForm(billing?.suggestedAddress) || EMPTY_ADDRESS);
@@ -300,9 +257,18 @@ function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans
     <ScreenShell
       eyebrow={eyebrow}
       title="Choose the plan"
-      intro="First confirm the billing address — it goes on every invoice and statement. Then grant a plan."
+      intro={
+        planDone
+          ? "A plan is already granted. You can still correct the billing address — it goes on every invoice and statement."
+          : "First confirm the billing address — it goes on every invoice and statement. Then grant a plan."
+      }
       error={error}
-      footer={<StepFooter onBack={onBack} primary={<PrimaryButton busy={busy === "grant"} disabled={!grantReady} onClick={grant}>Grant plan & continue</PrimaryButton>} />}
+      footer={
+        <StepFooter
+          onBack={onBack}
+          primary={planDone ? null : <PrimaryButton busy={busy === "grant"} disabled={!grantReady} onClick={grant}>Grant plan & continue</PrimaryButton>}
+        />
+      }
     >
       {/* 1 · Billing address */}
       <div className="flex flex-col gap-4 rounded-xl border border-[#E2E3DE] p-5 dark:border-neutral-800">
@@ -346,6 +312,9 @@ function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans
       </div>
 
       {/* 2 · Plan */}
+      {planDone ? (
+        <Note tone="ok">The plan is granted. To change or extend it, use the brand's Subscriptions page.</Note>
+      ) : (
       <div className={`flex flex-col gap-4 rounded-xl border border-[#E2E3DE] p-5 dark:border-neutral-800 ${savedBilling ? "" : "opacity-60"}`}>
         <h2 className="m-0 text-[17px] font-semibold">2 · Plan</h2>
         {!plans.length ? (
@@ -390,6 +359,7 @@ function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans
           </div>
         </div>
       </div>
+      )}
     </ScreenShell>
   );
 }

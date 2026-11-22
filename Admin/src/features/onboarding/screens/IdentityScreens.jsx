@@ -2,60 +2,105 @@ import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
-import { addBasicDetails } from "../services/onboardingApi";
-import { ENTITY_TYPES, KYC_PATHS, entityLabel } from "../onboardingFlow";
+import { addBasicDetails, updateBasicDetails } from "../services/onboardingApi";
+import { ENTITY_TYPES, KYC_PATHS, entityLabel, kycPathLabel } from "../onboardingFlow";
 import { useCategories } from "../../category/queries/categoryQueries";
 import { useSubCategories } from "../../subcategory/queries/subCategoryQueries";
 import Loader from "../../../components/common/Loader";
 
 /* Basic details: brand name, category, business status, then (registered
-   paths) business type. All four save through add-basic-details with
-   `step` = this screen; the response's currentScreen is re-read from status. */
+   paths) business type.
+   - On the vendor's CURRENT screen → POST add-basic-details { step, … }
+     (moves the vendor's screen).
+   - A back-edit of a screen the vendor already passed → PUT
+     update-basic-details (#27): the screen doesn't move, and the vendor's
+     locks (status lock, legal locks) don't apply to the admin (#25h note 2).
+   Either way the page re-reads status afterwards. */
 
 const listOf = (res) => {
   const l = res?.data?.data ?? res?.data ?? [];
   return Array.isArray(l) ? l : [];
 };
 const idOf = (x) => (x && typeof x === "object" ? x._id || x.id : x) || "";
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
+// Admin-only legal-name correction (#27 legalBusinessName, 2–200).
+const LEGAL_NAME = { min: 2, max: 200 };
 
 /* ---- BRAND_NAME --------------------------------------------------- */
-// Only the brand name. The legal name is filled by the server from the
-// PAN / GST record (or the owner's PAN on the not-registered path).
-export function BrandNameScreen({ brandId, brand, status, eyebrow, onAdvance, onBack }) {
+// The brand name, plus — once the server has filled it from PAN / GST /
+// owner verification — the admin's correction of the legal name.
+export function BrandNameScreen({ brandId, brand, status, eyebrow, onAdvance, onBack, isCurrent = true }) {
   const min = status.limits.brandNameMinLength ?? 2;
   const max = status.limits.brandNameMaxLength ?? 25;
-  const [name, setName] = useState(brand?.brandName || "");
+  const savedName = brand?.brandName || "";
+  const savedLegal = brand?.legalBusinessName || "";
+  const [name, setName] = useState(savedName);
+  const [legal, setLegal] = useState(savedLegal);
   const { run, busy, error } = useStepAction(onAdvance);
+
   const len = name.trim().length;
-  const ok = len >= min && len <= max;
+  const nameOk = len >= min && len <= max;
+  const legalLen = legal.trim().length;
+  const legalChanged = Boolean(savedLegal) && legal.trim() !== savedLegal;
+  const legalOk = !legalChanged || (legalLen >= LEGAL_NAME.min && legalLen <= LEGAL_NAME.max);
+  const nameChanged = name.trim() !== savedName;
+  const ok = nameOk && legalOk && (isCurrent || nameChanged || legalChanged);
+
+  const save = () =>
+    run("save", async () => {
+      if (isCurrent) {
+        const res = await addBasicDetails(brandId, "BRAND_NAME", { brandName: name.trim() });
+        if (legalChanged) await updateBasicDetails(brandId, { legalBusinessName: legal.trim() });
+        return res;
+      }
+      return updateBasicDetails(brandId, {
+        ...(nameChanged ? { brandName: name.trim() } : {}),
+        ...(legalChanged ? { legalBusinessName: legal.trim() } : {}),
+      });
+    });
 
   return (
     <ScreenShell
       eyebrow={eyebrow}
       title="What do customers call the brand?"
-      intro="The name shown on the app, vouchers and the brand page. The legal name is taken from the PAN or GST record later."
+      intro="The name shown on the app, vouchers and the brand page. The legal name comes from the PAN, GST or owner record; you can correct it here once it's filled."
       error={error}
       footer={
         <StepFooter
           onBack={onBack}
-          primary={<PrimaryButton busy={busy === "save"} disabled={!ok} onClick={() => run("save", () => addBasicDetails(brandId, "BRAND_NAME", { brandName: name.trim() }))}>Save & continue</PrimaryButton>}
+          primary={<PrimaryButton busy={busy === "save"} disabled={!ok} onClick={save}>{isCurrent ? "Save & continue" : "Save changes"}</PrimaryButton>}
         />
       }
     >
-      <Field label="Brand name" hint={`${min}–${max} characters · ${len}/${max}`} error={name && !ok ? `${min}–${max} characters` : ""}>
+      <Field label="Brand name" hint={`${min}–${max} characters · ${len}/${max}`} error={name && !nameOk ? `${min}–${max} characters` : ""}>
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Cafe Mocha" maxLength={max} autoFocus />
       </Field>
-      {brand?.legalBusinessName && <Note tone="muted">Legal name on record: {brand.legalBusinessName}</Note>}
+      {savedLegal ? (
+        <Field
+          label="Legal name"
+          hint={`Admin correction only · ${LEGAL_NAME.min}–${LEGAL_NAME.max} characters`}
+          error={!legalOk ? `${LEGAL_NAME.min}–${LEGAL_NAME.max} characters` : ""}
+        >
+          <input className={inputCls} value={legal} maxLength={LEGAL_NAME.max} onChange={(e) => setLegal(e.target.value)} />
+        </Field>
+      ) : (
+        <Note tone="muted">The legal name is filled from the PAN / GST / owner record in the verification steps.</Note>
+      )}
     </ScreenShell>
   );
 }
 
 /* ---- BUSINESS_CATEGORY -------------------------------------------- */
-// One category, then 1..limits.maxSubCategories of its subcategories.
-export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdvance, onBack }) {
-  const maxSubs = status.limits.maxSubCategories ?? 3;
-  const [categoryId, setCategoryId] = useState(idOf(brand?.categoryId) || idOf(brand?.category));
-  const [subIds, setSubIds] = useState(() => (brand?.subCategoryIds || []).map(idOf).filter(Boolean));
+// One category, then 1..status.limits.maxSubCategories of its
+// subcategories. The limit is the server's (Setting); without it the server
+// enforces it (422 SUBCATEGORY_LIMIT).
+export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  const maxSubs = Number.isFinite(status.limits.maxSubCategories) ? status.limits.maxSubCategories : null;
+  const savedCategory = idOf(brand?.categoryId) || idOf(brand?.category);
+  const savedSubs = useMemo(() => (brand?.subCategoryIds || []).map(idOf).filter(Boolean), [brand]);
+  const [categoryId, setCategoryId] = useState(savedCategory);
+  const [subIds, setSubIds] = useState(savedSubs);
   const [search, setSearch] = useState("");
   const { run, busy, error } = useStepAction(onAdvance);
 
@@ -67,7 +112,8 @@ export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdva
     const all = listOf(subsQuery.data);
     return q ? all.filter((s) => String(s.name).toLowerCase().includes(q)) : all;
   }, [subsQuery.data, search]);
-  const atLimit = subIds.length >= maxSubs;
+  const atLimit = maxSubs != null && subIds.length >= maxSubs;
+  const changed = categoryId !== savedCategory || !sameSet(subIds, savedSubs);
 
   const pickCategory = (id) => {
     if (id === categoryId) return;
@@ -82,6 +128,13 @@ export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdva
         ? "border-[#0B6E5A] bg-[#0B6E5A] text-white"
         : "border-[#CFD1CA] bg-white text-[#15171C] hover:border-[#0B6E5A] dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
     }`;
+  // categoryId + subCategoryIds always go together (#27).
+  const save = () =>
+    run("save", () =>
+      isCurrent
+        ? addBasicDetails(brandId, "BUSINESS_CATEGORY", { categoryId, subCategoryIds: subIds })
+        : updateBasicDetails(brandId, { categoryId, subCategoryIds: subIds })
+    );
 
   return (
     <ScreenShell
@@ -93,12 +146,8 @@ export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdva
         <StepFooter
           onBack={onBack}
           primary={
-            <PrimaryButton
-              busy={busy === "save"}
-              disabled={!categoryId || !subIds.length}
-              onClick={() => run("save", () => addBasicDetails(brandId, "BUSINESS_CATEGORY", { categoryId, subCategoryIds: subIds }))}
-            >
-              Save & continue
+            <PrimaryButton busy={busy === "save"} disabled={!categoryId || !subIds.length || (!isCurrent && !changed)} onClick={save}>
+              {isCurrent ? "Save & continue" : "Save changes"}
             </PrimaryButton>
           }
         />
@@ -122,7 +171,10 @@ export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdva
       {categoryId && (
         <div className="flex flex-col gap-2">
           <span className="text-[14px] font-medium">
-            Subcategories <span className="font-normal text-[#5B616E]">· pick up to {maxSubs} ({subIds.length} picked)</span>
+            Subcategories{" "}
+            <span className="font-normal text-[#5B616E]">
+              · {maxSubs != null ? `pick up to ${maxSubs} ` : ""}({subIds.length} picked)
+            </span>
           </span>
           <div className="relative">
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA0A9]" />
@@ -146,16 +198,26 @@ export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdva
           )}
         </div>
       )}
-      <Note tone="muted">Can be changed until the brand is approved; after approval only an admin can change it.</Note>
     </ScreenShell>
   );
 }
 
 /* ---- REGISTRATION_STATUS → kycPath -------------------------------- */
-export function RegistrationStatusScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
-  const [value, setValue] = useState(status.kycPath || "");
+// The vendor's status lock (after PAN / GST is saved) doesn't apply to the
+// admin: a back-edit switches the path through update-basic-details. Before
+// submit the vendor then lands on the new path's first verification screen;
+// leaving the GST path drops the brand's GSTIN (D110).
+export function RegistrationStatusScreen({ brandId, status, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  const saved = status.kycPath || "";
+  const [value, setValue] = useState(saved);
   const { run, busy, error } = useStepAction(onAdvance);
-  const locked = status.raw.registrationStatusLocked === true && status.editable.registrationStatus === false;
+  const switching = !isCurrent && value && value !== saved;
+  const leavingGst = switching && saved === "GST";
+
+  const save = () =>
+    run("save", () =>
+      isCurrent ? addBasicDetails(brandId, "REGISTRATION_STATUS", { kycPath: value }) : updateBasicDetails(brandId, { kycPath: value })
+    );
 
   return (
     <ScreenShell
@@ -167,8 +229,8 @@ export function RegistrationStatusScreen({ brandId, status, eyebrow, onAdvance, 
         <StepFooter
           onBack={onBack}
           primary={
-            <PrimaryButton busy={busy === "save"} disabled={!value || locked} onClick={() => run("save", () => addBasicDetails(brandId, "REGISTRATION_STATUS", { kycPath: value }))}>
-              Save & continue
+            <PrimaryButton busy={busy === "save"} disabled={!value || (!isCurrent && !switching)} onClick={save}>
+              {isCurrent ? "Save & continue" : "Switch path"}
             </PrimaryButton>
           }
         />
@@ -181,26 +243,37 @@ export function RegistrationStatusScreen({ brandId, status, eyebrow, onAdvance, 
             name="kycPath"
             checked={value === p.value}
             onChange={() => setValue(p.value)}
-            disabled={locked}
             title={p.label}
             description={p.description}
             extra={<span className="mt-1 text-[12.5px] font-medium text-[#1F4FB8]">Next: {p.next}</span>}
           />
         ))}
       </div>
-      {locked ? (
-        <Note tone="warn">The business status is locked now that PAN / GST is saved.</Note>
-      ) : (
-        <Note tone="info">Picked the wrong one? Come back and switch before the PAN / GST is saved.</Note>
+      {switching && (
+        <Note tone="warn">
+          Switching {kycPathLabel(saved)} → {kycPathLabel(value)} sends the vendor to the first verification screen of the new path.
+          {leavingGst ? " The GSTIN is removed from the brand; coming back to GST needs it verified and saved again." : ""}
+        </Note>
       )}
     </ScreenShell>
   );
 }
 
 /* ---- REGISTRATION_ENTITY_TYPE (registered paths) ------------------ */
-export function EntityTypeScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
-  const [value, setValue] = useState(brand?.businessEntityType || "");
-  const { run, busy, error } = useStepAction(onAdvance);
+// On the GST path the entity must match the GST constitution: 409
+// ENTITY_FROM_GST lists the allowed values in details.acceptedEntityTypes.
+export function EntityTypeScreen({ brandId, brand, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  const saved = brand?.businessEntityType || "";
+  const [value, setValue] = useState(saved);
+  const { run, busy, error, errorInfo } = useStepAction(onAdvance);
+  const accepted = errorInfo?.code === "ENTITY_FROM_GST" && Array.isArray(errorInfo.details?.acceptedEntityTypes) ? errorInfo.details.acceptedEntityTypes : null;
+
+  const save = () =>
+    run("save", () =>
+      isCurrent
+        ? addBasicDetails(brandId, "REGISTRATION_ENTITY_TYPE", { businessEntityType: value })
+        : updateBasicDetails(brandId, { businessEntityType: value })
+    );
 
   return (
     <ScreenShell
@@ -211,14 +284,31 @@ export function EntityTypeScreen({ brandId, brand, eyebrow, onAdvance, onBack })
       footer={
         <StepFooter
           onBack={onBack}
-          primary={<PrimaryButton busy={busy === "save"} disabled={!value} onClick={() => run("save", () => addBasicDetails(brandId, "REGISTRATION_ENTITY_TYPE", { businessEntityType: value }))}>Save & continue</PrimaryButton>}
+          primary={
+            <PrimaryButton busy={busy === "save"} disabled={!value || (!isCurrent && value === saved)} onClick={save}>
+              {isCurrent ? "Save & continue" : "Save changes"}
+            </PrimaryButton>
+          }
         />
       }
     >
-      {brand?.businessEntityType && <Note tone="muted">Saved: {entityLabel(brand.businessEntityType)}</Note>}
+      {saved && <Note tone="muted">Saved: {entityLabel(saved)}</Note>}
+      {accepted && (
+        <Note tone="warn">
+          The GST record allows: {accepted.length ? accepted.map(entityLabel).join(", ") : "none of these types"}.
+        </Note>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {ENTITY_TYPES.map((t) => (
-          <RadioCard key={t.value} name="entity" checked={value === t.value} onChange={() => setValue(t.value)} title={t.label} description={t.hint} />
+          <RadioCard
+            key={t.value}
+            name="entity"
+            checked={value === t.value}
+            onChange={() => setValue(t.value)}
+            disabled={Boolean(accepted) && !accepted.includes(t.value)}
+            title={t.label}
+            description={t.hint}
+          />
         ))}
       </div>
     </ScreenShell>

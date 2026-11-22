@@ -39,9 +39,6 @@ const SCREEN_COMPONENTS = {
   ONBOARDING_REVIEW: ReviewScreen,
 };
 
-// Once the plan is granted, the screens before it are locked (guide: no going back to payment).
-const LOCK_BEFORE = ["BRAND_BASIC_DETAILS", "BRAND_PROFESSIONAL_DETAILS", "OUTLET_DETAILS", "ONBOARDING_REVIEW"];
-
 /* ---- Step 1 · create ---------------------------------------------- */
 function CreateBrandStep() {
   const navigate = useNavigate();
@@ -49,19 +46,23 @@ function CreateBrandStep() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // 409 VENDOR_ALREADY_EXISTS → details { userId, brandId, accountState } (#25h).
+  const [existing, setExisting] = useState(null);
   const ok = WHATSAPP_RE.test(number) && (!name.trim() || name.trim().length >= 2);
 
   const create = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError("");
+    setExisting(null);
     try {
       const res = await createOnboardingBrand({ whatsappNumber: number, brandName: name.trim() || undefined });
       const d = res?.data ?? res;
-      const id = d?.brandId || d?.brand?._id || d?._id;
+      const id = d?.brandId;
       if (!id) throw new Error("The server didn't return a brandId.");
       navigate(`/brand/onboard/${id}`, { replace: true });
     } catch (err) {
+      if (err?.code === "VENDOR_ALREADY_EXISTS" && err.details?.brandId) setExisting(err.details);
       setError(errorText(err));
       setBusy(false);
     }
@@ -104,7 +105,26 @@ function CreateBrandStep() {
         <Field label="Brand name" optional hint="Can be filled on the next screen too · 2–25 characters">
           <input className={inputCls} value={name} maxLength={25} onChange={(e) => setName(e.target.value)} placeholder="e.g. Cafe Mocha" />
         </Field>
-        <Note tone="muted">If a vendor already exists on this number, find their brand in New Onboarding or Brand Waiting instead.</Note>
+        {existing ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-[#E2E3DE] p-4 dark:border-neutral-800">
+            <span className="text-[14px]">
+              A vendor already exists on this number
+              {existing.accountState === "PENDING" ? " (never signed in — hidden from the lists by default)" : ""}.
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <PrimaryButton tone="dark" onClick={() => navigate(`/brand/onboard/${existing.brandId}`)}>Open onboarding</PrimaryButton>
+              <button
+                type="button"
+                onClick={() => navigate(`/brands/${existing.brandId}`)}
+                className="inline-flex min-h-11 items-center rounded-lg border border-[#CFD1CA] px-4 text-[14px] font-medium hover:bg-[#F5F5F2] dark:border-neutral-700 dark:hover:bg-neutral-800"
+              >
+                Open brand
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Note tone="muted">If a vendor already exists on this number, you'll get a link to their brand.</Note>
+        )}
         <Note tone="info">Next: brand name → category → business status, then verification, payout, agreement & plan, brand setup and submit.</Note>
       </ScreenShell>
     </form>
@@ -219,18 +239,16 @@ function OnboardingWizard({ brandId }) {
     );
   }
 
+  // The vendor's locks don't apply to the admin (guide §2.3, §6): every screen
+  // up to the vendor's current one can be reopened and edited. Only after
+  // submit does the wizard hand over to the review (legal edits then = §6).
   const afterSubmit = AFTER_SUBMIT.includes(status.currentScreen);
-  const planDone = LOCK_BEFORE.includes(status.currentScreen) || afterSubmit;
-  const rows = buildStepper(status, viewing).map((r) => ({
-    ...r,
-    // after the plan is granted, earlier steps are read-only for this flow
-    locked: afterSubmit || (planDone && !LOCK_BEFORE.includes(r.key)),
-  }));
+  const rows = buildStepper(status, viewing).map((r) => ({ ...r, locked: afterSubmit }));
 
   const lane = rows.map((r) => r.key);
   const viewIdx = lane.indexOf(viewing);
   const prevKey = viewIdx > 0 ? lane[viewIdx - 1] : null;
-  const canGoBack = prevKey && !(planDone && !LOCK_BEFORE.includes(prevKey));
+  const canGoBack = Boolean(prevKey);
 
   const Screen = SCREEN_COMPONENTS[viewing];
   const row = rows.find((r) => r.key === viewing);
@@ -272,6 +290,8 @@ function OnboardingWizard({ brandId }) {
               brandId={brandId}
               brand={brand}
               status={status}
+              // false = a back-edit of a screen the vendor already passed
+              isCurrent={viewing === status.currentScreen}
               eyebrow={eyebrow}
               onAdvance={load}
               onBack={canGoBack ? () => setPicked(prevKey) : undefined}

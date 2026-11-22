@@ -156,12 +156,30 @@ export const ERROR_HELP = {
   OUTLET_NOT_VERIFIED: "The outlet manager hasn't verified their WhatsApp yet — address and hours open after that.",
   OUTLET_ALREADY_VERIFIED: "This outlet is already registered and verified on that number.",
   WHATSAPP_UNCHANGED: "That is already this outlet's WhatsApp number.",
+  // Admin guide §15 — the rest of the codes the wizard can meet.
+  REGISTRATION_STATUS_LOCKED: "The business status is locked for the vendor — as admin, change it from this screen (it saves as an edit).",
+  GSTIN_NOT_ACTIVE: "This GSTIN isn't active. Pick \"Registered, no GST\" as the business status instead.",
+  ENTITY_FROM_GST: "On the GST path the business type must match the GST constitution.",
+  KYC_DOCUMENT_LIMIT: "The document limit for this brand is reached.",
+  OWNER_NUMBER_NOT_VERIFIED: "The owner hasn't verified their WhatsApp yet (they never signed in). Use the outlet manager's number and their code instead.",
+  VERIFICATION_FAILED: "That check failed and a failed result is never saved. Verify again with the right number.",
+  DETAIL_ALREADY_PROVIDED: "This detail is already saved for the brand.",
+  OWNER_ID_DOCUMENT: "The owner's ID can't be changed here — use the owner verification step.",
+  OWNER_PAN_NOT_PERSONAL: "Not registered needs the owner's personal PAN (4th letter P). For a company / firm PAN pick \"Registered, no GST\".",
+  KYC_FILE_TYPE: "Only PDF, JPG or PNG files are accepted.",
+  KYC_IMAGE_TOO_SMALL: "The image is too small — its short side must be at least 800 px.",
+  KYC_STORAGE_UNAVAILABLE: "Document storage is unavailable right now. Try again in a while.",
+  FEATURE_LIMIT: "The active feature limit for this brand is reached.",
+  DEED_ALREADY_ACCEPTED: "The vendor accepted the deed themselves — no offline deed is needed.",
+  USE_BILLING_ADDRESS_ENDPOINT: "The brand's address is its billing address — edit it in the billing form.",
 };
 
 // "missing" codes from 422 ONBOARDING_STEP_INCOMPLETE → readable labels.
 const MISSING_LABELS = {
   DOCUMENT: "at least one business document",
   LOGO: "a logo",
+  EMAIL: "a business email",
+  MOBILE: "a contact number",
   OUTLET: "at least one outlet",
   LEGAL_NAMES: "the legal / brand name",
   CATEGORY: "the category",
@@ -240,26 +258,6 @@ export const BANK_ACCOUNT_TYPES = [
   { value: "OTHER", label: "Other" },
 ];
 
-// Partnership deed text — the same as the vendor panel's PARTNERSHIP_DEED
-// screen (VenderPanel onboarding-v2/constants/onboardingOptions.js).
-export const PARTNER_AGREEMENT_URL = "https://trydood.com/partner-agreement";
-export const TERMS_URL = "https://trydood.com/terms-of-service";
-export const SUPPORT_EMAIL = "support@trydood.com";
-export const PARTNER_TERMS = [
-  {
-    title: "Partnership Scope",
-    body: "This agreement governs the relationship between Trydood and the Partner for the purpose of delivering services as outlined in the onboarding documentation.",
-  },
-  {
-    title: "Roles & Responsibilities",
-    body: "The Partner agrees to maintain accurate business information, comply with applicable laws, and fulfil all obligations as described in the Trydood Partner Handbook.",
-  },
-  {
-    title: "Revenue & Payments",
-    body: "Payouts will be processed per the agreed schedule. Trydood reserves the right to withhold payments in case of policy violations or disputed transactions.",
-  },
-];
-
 // POST /subscribeds/admin/grant `paymentMode` — exactly what the backend accepts:
 // FREE | CASH | BANK_TRANSFER | CHEQUE | UPI_OFFLINE (same list as SubscriptionCenter).
 export const GRANT_PAYMENT_MODES = [
@@ -271,6 +269,9 @@ export const GRANT_PAYMENT_MODES = [
 ];
 // Grant note 3–500 characters; reference number optional, up to 80.
 export const GRANT_RULES = { noteMin: 3, noteMax: 500, referenceMax: 80 };
+
+// Offline deed note (#25g): 2–1000 characters.
+export const DEED_NOTE = { min: 2, max: 1000 };
 
 // File rules the server applies to KYC files (checked here only to save a failed upload).
 export const DOCUMENT_RULES = {

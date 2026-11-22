@@ -11,9 +11,6 @@ const STATE_ICON = {
   UPCOMING: <CircleDashed size={16} className="text-[#9AA0A9]" />,
 };
 
-// After the plan is granted only the brand setup screens can be reopened from here.
-const EDITABLE_FROM_REVIEW = ["BRAND_BASIC_DETAILS", "BRAND_PROFESSIONAL_DETAILS", "OUTLET_DETAILS"];
-
 const CHECK_LABELS = {
   GST_VERIFIED: "GST verified",
   GST_ACTIVE: "GST active",
@@ -114,7 +111,8 @@ export function ReviewScreen({ brandId, brand, status, eyebrow, onAdvance, onBac
                     {STATE_ICON[r.state]} {r.label}
                     {r.state === "SKIPPED" && <span className="rounded-full bg-[#FFF4E0] px-2 py-0.5 text-[11.5px] font-semibold text-[#7A4800]">Skipped</span>}
                   </span>
-                  {r.reachable && EDITABLE_FROM_REVIEW.includes(r.key) && (
+                  {/* The vendor's locks don't bind the admin: every passed screen can be reopened (#25h note 2). */}
+                  {r.reachable && (
                     <button type="button" onClick={() => onGoTo(r.key)} className="inline-flex items-center gap-1 text-[13px] font-medium text-[#0B6E5A] hover:underline">
                       <Pencil size={13} /> Edit
                     </button>

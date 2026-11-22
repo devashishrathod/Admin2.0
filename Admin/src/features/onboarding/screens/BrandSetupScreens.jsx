@@ -13,6 +13,7 @@ import {
   saveOutletHours,
 } from "../services/onboardingApi";
 import { INDIAN_STATES, WEEK_DAYS, WHATSAPP_RE, PIN_RE, errorText } from "../onboardingFlow";
+import { verifyOutletOtp, resendOutletOtp } from "../../brand/services/BrandApi";
 import ShowcaseAlbums from "../../brand/ShowcaseAlbums";
 import Loader from "../../../components/common/Loader";
 
@@ -42,30 +43,75 @@ function ImagePick({ label, current, file, onPick, required, wide }) {
   );
 }
 
-export function BrandBasicsScreen({ brandId, brand, eyebrow, onAdvance }) {
+// continue needs LOGO, EMAIL and MOBILE (D83; 422 missing[]). Email / mobile
+// are the vendor ACCOUNT's keys: the admin enters them (Q4), they stay
+// unverified until the vendor verifies them, so they're sent only when they
+// changed. "Use the owner's WhatsApp" sends useWhatsappAsMobile instead of a
+// mobile — refused (422 OWNER_NUMBER_NOT_VERIFIED) while the owner has never
+// signed in, which is every admin-created vendor until their first login.
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+
+export function BrandBasicsScreen({ brandId, brand, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  const savedEmail = brand?.email || "";
+  const savedMobile = brand?.mobile || "";
+  const savedDescription = brand?.description || "";
   const [logo, setLogo] = useState(null);
   const [cover, setCover] = useState(null);
-  const [description, setDescription] = useState(brand?.description || "");
-  const [email, setEmail] = useState(brand?.email || "");
-  const [mobile, setMobile] = useState(brand?.mobile || "");
+  const [description, setDescription] = useState(savedDescription);
+  const [email, setEmail] = useState(savedEmail);
+  const [mobile, setMobile] = useState(savedMobile);
+  const [useWa, setUseWa] = useState(false);
+  const [waBlocked, setWaBlocked] = useState(false);
   const { run, busy, error } = useStepAction(onAdvance);
+
   const hasLogo = Boolean(logo || brand?.logo);
-  const emailOk = !email || /^\S+@\S+\.\S+$/.test(email);
-  const mobileOk = !mobile || WHATSAPP_RE.test(mobile);
+  const emailOk = EMAIL_RE.test(email.trim());
+  const mobileOk = useWa || WHATSAPP_RE.test(mobile);
+  const descChanged = description.trim() !== savedDescription;
+  const emailChanged = email.trim() !== savedEmail;
+  const mobileChanged = !useWa && mobile !== savedMobile;
+  const changed = Boolean(logo || cover) || descChanged || emailChanged || mobileChanged || useWa;
 
   const save = () =>
     run("save", async () => {
-      await updateBrandBasics(brandId, { logo, coverImage: cover, description: description.trim(), email: email.trim(), mobile });
-      return continueOnboarding(brandId);
+      let res = null;
+      if (changed) {
+        try {
+          res = await updateBrandBasics(brandId, {
+            logo,
+            coverImage: cover,
+            ...(descChanged ? { description: description.trim() } : {}),
+            ...(emailChanged ? { email: email.trim() } : {}),
+            ...(useWa ? { useWhatsappAsMobile: true } : mobileChanged ? { mobile } : {}),
+          });
+        } catch (err) {
+          if (err?.code === "OWNER_NUMBER_NOT_VERIFIED") {
+            setUseWa(false);
+            setWaBlocked(true);
+          }
+          throw err;
+        }
+      }
+      // continue only moves the vendor's screen from BRAND_BASIC_DETAILS.
+      return isCurrent ? continueOnboarding(brandId) : res;
     });
 
   return (
     <ScreenShell
       eyebrow={eyebrow}
       title="How customers will see the brand"
-      intro="The logo is required. The rest makes the brand page look complete and raises the profile strength."
+      intro="Logo, business email and a contact number are required. The rest makes the brand page look complete and raises the profile strength."
       error={error}
-      footer={<StepFooter primary={<PrimaryButton busy={busy === "save"} disabled={!hasLogo || !emailOk || !mobileOk} onClick={save}>Save & continue</PrimaryButton>} />}
+      footer={
+        <StepFooter
+          onBack={onBack}
+          primary={
+            <PrimaryButton busy={busy === "save"} disabled={!hasLogo || !emailOk || !mobileOk || (!isCurrent && !changed)} onClick={save}>
+              {isCurrent ? "Save & continue" : "Save changes"}
+            </PrimaryButton>
+          }
+        />
+      }
     >
       <div className="flex flex-wrap gap-6">
         <ImagePick label="Logo" required current={brand?.logo} file={logo} onPick={setLogo} />
@@ -75,16 +121,25 @@ export function BrandBasicsScreen({ brandId, brand, eyebrow, onAdvance }) {
         <textarea className={`${inputCls} h-28 py-2`} value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Business email" optional error={!emailOk ? "Enter a valid email" : ""}><input className={inputCls} type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        <Field label="Business mobile" optional error={!mobileOk ? "10 digits, starts with 6–9" : ""}><input className={inputCls} type="tel" maxLength={10} value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))} /></Field>
+        <Field label="Business email" error={email && !emailOk ? "Enter a valid email" : ""}>
+          <input className={inputCls} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <Field label="Contact number" hint={useWa ? "The owner's verified WhatsApp number is used" : "10 digits"} error={!useWa && mobile && !mobileOk ? "10 digits, starts with 6–9" : ""}>
+          <input className={inputCls} type="tel" maxLength={10} value={useWa ? "" : mobile} disabled={useWa} onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))} />
+        </Field>
       </div>
-      <Note tone="muted">The plan is active now — this step can't go back to payment.</Note>
+      <label className={`flex items-center gap-2 text-[14px] ${waBlocked ? "opacity-60" : ""}`}>
+        <input type="checkbox" checked={useWa} disabled={waBlocked} onChange={(e) => setUseWa(e.target.checked)} className="h-4 w-4 accent-[#0B6E5A]" />
+        Use the owner's WhatsApp number as the contact number
+      </label>
+      {waBlocked && <Note tone="warn">The owner hasn't verified their WhatsApp yet (they never signed in). Enter a contact number instead.</Note>}
+      <Note tone="muted">The email and number stay unverified until the vendor verifies them from their panel.</Note>
     </ScreenShell>
   );
 }
 
 /* ---- 13 · BRAND_PROFESSIONAL_DETAILS (skippable) ------------------ */
-export function ProfessionalScreen({ brandId, eyebrow, onAdvance, onBack }) {
+export function ProfessionalScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = true }) {
   // Features added in this session — shown when the list endpoint
   // (optional) fails, so the admin still sees what they added.
   const [added, setAdded] = useState([]);
@@ -123,9 +178,10 @@ export function ProfessionalScreen({ brandId, eyebrow, onAdvance, onBack }) {
       footer={
         <StepFooter
           onBack={onBack}
-          onSkip={() => run("skip", () => skipOnboardingScreen(brandId, "BRAND_PROFESSIONAL_DETAILS"))}
+          // Skip / continue move the vendor's screen — only on the current one.
+          onSkip={isCurrent ? () => run("skip", () => skipOnboardingScreen(brandId, "BRAND_PROFESSIONAL_DETAILS")) : undefined}
           skipBusy={busy === "skip"}
-          primary={<PrimaryButton busy={busy === "continue"} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue</PrimaryButton>}
+          primary={isCurrent ? <PrimaryButton busy={busy === "continue"} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue</PrimaryButton> : null}
         />
       }
     >
@@ -283,20 +339,99 @@ function OutletHoursForm({ subBrandId, onSaved, onCancel }) {
   );
 }
 
-export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
+// Row state comes from the server (#29 / vendor #35 note 5): verificationState
+// NEVER_VERIFIED · VERIFIED · REVERIFY (never the raw flags), locationId and
+// workHoursId (null until saved).
+const outletState = (o) => o.verificationState || (o.manager?.isWhatsappVerified === false ? "NEVER_VERIFIED" : "VERIFIED");
+
+/** The manager's WhatsApp code, entered by the admin (Q3). The manager reads
+ *  the code out; POST /auth/verify-otp-whatsapp { role: SUB_VENDOR } marks
+ *  their account verified. That call returns a SUB_VENDOR token —
+ *  verifyOutletOtp DISCARDS it (never stored, the admin token is untouched). */
+function OutletOtp({ brandId, outlet, onVerified }) {
+  const [otp, setOtp] = useState("");
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const canResend = outlet.manager?.isActive !== false;
+
+  const verify = async () => {
+    setBusy("verify");
+    setError("");
+    setInfo("");
+    try {
+      await verifyOutletOtp(outlet.whatsappNumber, otp);
+      setOtp("");
+      await onVerified();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+  // Repeating signUp-with-whatsapp for an unverified outlet resends the code
+  // (no new outlet, no new slot).
+  const resend = async () => {
+    setBusy("resend");
+    setError("");
+    setInfo("");
+    try {
+      const res = payload(await resendOutletOtp(brandId, outlet.whatsappNumber));
+      setInfo(res?.otpSent === false ? res?.otpError || "The code couldn't be sent. Try again in a minute." : "A new code was sent to the manager's WhatsApp.");
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-[#FFF8EC] p-4 dark:bg-amber-500/10">
+      <p className="m-0 text-[13.5px]">
+        Waiting for the manager's code. Ask them to read out the 6-digit code sent to +91 {outlet.whatsappNumber}.
+        {outlet.holdExpiresAt ? ` The outlet is cancelled automatically if not verified by ${new Date(outlet.holdExpiresAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}.` : ""}
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Manager's code">
+          <input
+            className={`${inputCls} w-40 font-mono tracking-widest`}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+            placeholder="••••••"
+          />
+        </Field>
+        <PrimaryButton busy={busy === "verify"} disabled={otp.length !== 6 || Boolean(busy)} onClick={verify}>Verify outlet</PrimaryButton>
+        {canResend && (
+          <SecondaryButton busy={busy === "resend"} disabled={Boolean(busy)} onClick={resend}>Resend code</SecondaryButton>
+        )}
+      </div>
+      {!canResend && <Note tone="warn">The manager's account is deactivated — reactivate it before sending a new code.</Note>}
+      {error && <Note tone="error">{error}</Note>}
+      {info && <Note tone="ok">{info}</Note>}
+    </div>
+  );
+}
+
+export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = true }) {
   // A failed load shows an empty list (no error), as before.
   const outletsQuery = useOnboardingOutlets(brandId);
   const outlets = listOf(outletsQuery.data);
   const loading = outletsQuery.isPending;
-  const [done, setDone] = useState({}); // subBrandId → { address, hours } saved in this session
   const [open, setOpen] = useState(null); // { id, kind: "address" | "hours" }
   const [newNumber, setNewNumber] = useState("");
   const [useOwner, setUseOwner] = useState(false);
+  const [ownerBlocked, setOwnerBlocked] = useState(false);
   const [newType, setNewType] = useState("OUTLET");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
   const [addInfo, setAddInfo] = useState("");
   const { run, busy, error } = useStepAction(onAdvance);
+  // verify-otp is a bare call (no interceptor) and location / hours saves
+  // aren't under /subBrands — re-read the list ourselves.
+  const refresh = () => outletsQuery.refetch({ cancelRefetch: false });
 
   const add = async () => {
     setAdding(true);
@@ -306,73 +441,97 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
       const res = payload(
         await addOutlet({ brandId, whatsappNumber: newNumber, useOwnerNumber: useOwner, isFirstOutlet: outlets.length === 0, outletType: newType })
       );
-      // Owner number → verified at once. A new manager number gets a WhatsApp
-      // code; address and hours open only after they verify (409 OUTLET_NOT_VERIFIED).
+      // Owner number → verified at once (verifiedVia OWNER_NUMBER). A manager
+      // number gets a WhatsApp code; address and hours open only after the
+      // manager's code is verified (409 OUTLET_NOT_VERIFIED).
+      const verified = res?.user?.isWhatsappVerified === true || res?.subBrand?.verifiedVia === "OWNER_NUMBER";
       setAddInfo(
-        res?.isVerified
+        verified
           ? "Outlet added and verified — add its address and opening hours."
           : res?.otpSent
-            ? "Login code sent to the manager's WhatsApp. Address and hours open after they verify."
-            : res?.otpError || "Outlet added."
+            ? "Code sent to the manager's WhatsApp — enter it on the outlet below."
+            : res?.otpError || "Outlet added, but the code couldn't be sent — use Resend code on the outlet."
       );
       setNewNumber("");
       // The next add's isFirstOutlet is read from this list, so keep the
       // button busy until it's fresh. The interceptor already started the
       // refetch (/subBrands write); cancelRefetch: false joins it.
-      await outletsQuery.refetch({ cancelRefetch: false });
+      await refresh();
     } catch (err) {
+      if (err?.code === "OWNER_NUMBER_NOT_VERIFIED") {
+        setUseOwner(false);
+        setOwnerBlocked(true);
+      }
       setAddError(errorText(err));
     } finally {
       setAdding(false);
     }
   };
 
-  const hasAddress = (o) => done[o._id]?.address || Boolean(o.location || o.locationId || o.address);
-  const hasHours = (o) => done[o._id]?.hours || Boolean(o.workHours || o.workHoursId);
-  const mark = (id, kind) => {
-    setDone((d) => ({ ...d, [id]: { ...d[id], [kind]: true } }));
+  const saved = async () => {
     setOpen(null);
+    await refresh();
   };
 
   return (
     <ScreenShell
       eyebrow={eyebrow}
       title="Add the outlets"
-      intro="Add at least one outlet. Each outlet needs its address and opening hours. More outlets can be added up to the plan's limit."
+      intro="Add at least one outlet. Each outlet needs a verified manager, its address and opening hours before submit. More outlets can be added up to the plan's limit."
       error={error}
-      footer={<StepFooter onBack={onBack} primary={<PrimaryButton busy={busy === "continue"} disabled={!outlets.length} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue to review</PrimaryButton>} />}
+      footer={
+        <StepFooter
+          onBack={onBack}
+          primary={
+            isCurrent ? (
+              <PrimaryButton busy={busy === "continue"} disabled={!outlets.length} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue to review</PrimaryButton>
+            ) : null
+          }
+        />
+      }
     >
       {loading ? (
         <Loader variant="inline" label="Loading outlets…" />
       ) : (
         outlets.map((o, i) => {
-          const complete = hasAddress(o) && hasHours(o);
+          const state = outletState(o);
+          const verified = state !== "NEVER_VERIFIED";
+          const hasAddress = Boolean(o.locationId);
+          const hasHours = Boolean(o.workHoursId);
+          const complete = verified && hasAddress && hasHours;
           return (
             <div key={o._id} className="flex flex-col gap-3 rounded-xl border border-[#E2E3DE] p-4 dark:border-neutral-800">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="flex items-start gap-3">
                   <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#E3F1EC] text-[#08513F]"><Store size={17} /></span>
                   <div>
-                    <p className="m-0 text-[15px] font-semibold">Outlet {i + 1}{o.name ? ` · ${o.name}` : ""}</p>
+                    <p className="m-0 text-[15px] font-semibold">Outlet {i + 1}{o.storeId ? ` · ${o.storeId}` : ""}</p>
                     <p className="m-0 text-[13px] text-[#5B616E]">
                       {i === 0 ? "First outlet · " : ""}Manager WhatsApp {o.whatsappNumber ? `+91 ${o.whatsappNumber}` : "not added"} · {o.outletType || "OUTLET"}
                     </p>
                   </div>
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${complete ? "bg-[#E3F1EC] text-[#08513F]" : "bg-[#FFF4E0] text-[#7A4800]"}`}>
-                  {complete ? "Complete" : !hasAddress(o) ? "Address missing" : "Hours missing"}
+                  {!verified ? "Manager not verified" : complete ? "Complete" : !hasAddress ? "Address missing" : "Hours missing"}
                 </span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <SecondaryButton onClick={() => setOpen({ id: o._id, kind: "address" })}>
-                  {hasAddress(o) ? <CheckCircle2 size={14} className="text-[#0B6E5A]" /> : <MapPin size={14} />} {hasAddress(o) ? "Edit address" : "Add address"}
-                </SecondaryButton>
-                <SecondaryButton onClick={() => setOpen({ id: o._id, kind: "hours" })}>
-                  {hasHours(o) ? <CheckCircle2 size={14} className="text-[#0B6E5A]" /> : <Clock size={14} />} {hasHours(o) ? "Edit hours" : "Add opening hours"}
-                </SecondaryButton>
-              </div>
-              {open?.id === o._id && open.kind === "address" && <OutletAddressForm subBrandId={o._id} onSaved={() => mark(o._id, "address")} onCancel={() => setOpen(null)} />}
-              {open?.id === o._id && open.kind === "hours" && <OutletHoursForm subBrandId={o._id} onSaved={() => mark(o._id, "hours")} onCancel={() => setOpen(null)} />}
+              {!verified ? (
+                <OutletOtp brandId={brandId} outlet={o} onVerified={refresh} />
+              ) : (
+                <>
+                  {state === "REVERIFY" && <Note tone="warn">The number was changed — the outlet is hidden from customers until the manager verifies the new number.</Note>}
+                  <div className="flex flex-wrap gap-2">
+                    <SecondaryButton onClick={() => setOpen({ id: o._id, kind: "address" })}>
+                      {hasAddress ? <CheckCircle2 size={14} className="text-[#0B6E5A]" /> : <MapPin size={14} />} {hasAddress ? "Edit address" : "Add address"}
+                    </SecondaryButton>
+                    <SecondaryButton onClick={() => setOpen({ id: o._id, kind: "hours" })}>
+                      {hasHours ? <CheckCircle2 size={14} className="text-[#0B6E5A]" /> : <Clock size={14} />} {hasHours ? "Edit hours" : "Add opening hours"}
+                    </SecondaryButton>
+                  </div>
+                </>
+              )}
+              {open?.id === o._id && open.kind === "address" && <OutletAddressForm subBrandId={o._id} onSaved={saved} onCancel={() => setOpen(null)} />}
+              {open?.id === o._id && open.kind === "hours" && <OutletHoursForm subBrandId={o._id} onSaved={saved} onCancel={() => setOpen(null)} />}
             </div>
           );
         })
@@ -380,10 +539,11 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
 
       <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[#CFD1CA] p-4 dark:border-neutral-700">
         <p className="m-0 text-[15px] font-semibold">{outlets.length ? "Add another outlet" : "Add the first outlet"}</p>
-        <label className="flex items-center gap-2 text-[14px]">
-          <input type="checkbox" checked={useOwner} onChange={(e) => setUseOwner(e.target.checked)} className="h-4 w-4 accent-[#0B6E5A]" />
-          The owner manages this outlet on their own WhatsApp number (no code needed)
+        <label className={`flex items-center gap-2 text-[14px] ${ownerBlocked ? "opacity-60" : ""}`}>
+          <input type="checkbox" checked={useOwner} disabled={ownerBlocked} onChange={(e) => setUseOwner(e.target.checked)} className="h-4 w-4 accent-[#0B6E5A]" />
+          The owner manages this outlet on their own verified WhatsApp number (no code needed)
         </label>
+        {ownerBlocked && <Note tone="muted">The owner hasn't signed in yet, so their number isn't verified. Use the manager's number — they'll read the code out to you.</Note>}
         <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <Field label="Outlet manager's WhatsApp" hint={useOwner ? "Uses the owner's number" : "A login code is sent to this number"} error={!useOwner && newNumber && !WHATSAPP_RE.test(newNumber) ? "10 digits, starts with 6–9" : ""}>
             <input className={inputCls} type="tel" maxLength={10} value={useOwner ? "" : newNumber} disabled={useOwner} onChange={(e) => setNewNumber(e.target.value.replace(/\D/g, ""))} />

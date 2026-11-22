@@ -81,6 +81,13 @@ export const getOnboardingHistory = (brandId) =>
 export const addBasicDetails = (brandId, step, fields) =>
     call(() => api.post('/brands/onboarding/add-basic-details', { step, ...fields }, q(brandId)));
 
+// PUT /brands/onboarding/update-basic-details?brandId= (vendor #27, admin guide §6) — edits a
+// screen the vendor already passed (back-edit), any state. Fields (at least one): brandName,
+// categoryId + subCategoryIds (together), kycPath, businessEntityType, legalBusinessName (admin
+// only, 2–200). The screen doesn't move, except a business-status switch before submit.
+export const updateBasicDetails = (brandId, fields) =>
+    call(() => api.put('/brands/onboarding/update-basic-details', fields, q(brandId)));
+
 /* ---- Moving on (continue / skip / submit) -------------------------- */
 
 // POST /brands/onboarding/continue?brandId= → { currentScreen } · 422 ONBOARDING_STEP_INCOMPLETE { screen, missing }
@@ -196,15 +203,19 @@ export const grantPlan = (payload) => call(() => api.post('/subscribeds/admin/gr
 
 /* ---- Brand setup (design 12–14) ------------------------------------ */
 
-// PUT /brands/update?brandId= — multipart logo / coverImage + description, email, mobile.
-// Doesn't move the screen; call continueOnboarding after.
-export const updateBrandBasics = (brandId, { logo, coverImage, description, email, mobile }) => {
+// PUT /brands/update?brandId= (vendor #32) — multipart logo / coverImage + description, email,
+// mobile, or useWhatsappAsMobile (the owner's VERIFIED WhatsApp as the contact number; never with
+// `mobile`; 422 OWNER_NUMBER_NOT_VERIFIED for an owner who never signed in). Email / mobile are the
+// vendor ACCOUNT's keys and stay unverified until the vendor verifies them — send them only when
+// they changed. Doesn't move the screen; call continueOnboarding after.
+export const updateBrandBasics = (brandId, { logo, coverImage, description, email, mobile, useWhatsappAsMobile }) => {
     const fd = new FormData();
     if (logo) fd.append('logo', logo);
     if (coverImage) fd.append('coverImage', coverImage);
     if (description !== undefined) fd.append('description', description);
     if (email) fd.append('email', email);
-    if (mobile) fd.append('mobile', mobile);
+    if (useWhatsappAsMobile) fd.append('useWhatsappAsMobile', 'true');
+    else if (mobile) fd.append('mobile', mobile);
     return call(() => api.put('/brands/update', fd, { ...q(brandId), ...multipart }));
 };
 

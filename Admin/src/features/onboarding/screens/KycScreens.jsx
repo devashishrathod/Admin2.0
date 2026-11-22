@@ -212,7 +212,10 @@ function AddDocumentForm({ brandId, hints }) {
   );
 }
 
-export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
+// Skip / continue move the vendor's screen, so they're offered only on the
+// vendor's CURRENT screen; on a back-edit each upload / replace / delete
+// already saves by itself.
+export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack, isCurrent = true }) {
   // A failed load just shows an empty list (no error).
   const { data: docsRes, isPending: loading } = useKycDocuments(brandId);
   const docsData = docsRes ? payload(docsRes) : {};
@@ -226,14 +229,22 @@ export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack 
     <ScreenShell
       eyebrow={eyebrow}
       title="Business documents"
-      intro="Licences or shop proof help the verification team approve faster. This step can be skipped and filled later."
+      intro={
+        isCurrent
+          ? "Licences or shop proof help the verification team approve faster. This step can be skipped and filled later."
+          : "Each upload, replace or delete saves straight away."
+      }
       error={error}
       footer={
         <StepFooter
           onBack={onBack}
-          onSkip={() => run("skip", () => skipOnboardingScreen(brandId, "KYC_DOCUMENTS"))}
+          onSkip={isCurrent ? () => run("skip", () => skipOnboardingScreen(brandId, "KYC_DOCUMENTS")) : undefined}
           skipBusy={busy === "skip"}
-          primary={<PrimaryButton busy={busy === "continue"} disabled={!docs.length} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue</PrimaryButton>}
+          primary={
+            isCurrent ? (
+              <PrimaryButton busy={busy === "continue"} disabled={!docs.length} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue</PrimaryButton>
+            ) : null
+          }
         />
       }
     >
@@ -257,24 +268,35 @@ export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack 
 
 /* ---- Shared verify-then-save pattern (PAN / GST / bank) ------------ */
 // verify-* is paid: only on an explicit press, never retried automatically.
+// `verifyErrorInfo` keeps the ApiError for its details (PAN_NOT_IN_GSTIN …).
 function useVerify() {
   const [result, setResult] = useState(null);
   const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState("");
+  const [errorInfo, setErrorInfo] = useState(null);
   const verify = async (fn) => {
     setVerifying(true);
-    setError("");
+    setErrorInfo(null);
     setResult(null);
     try {
       setResult(payload(await fn()));
     } catch (err) {
-      setError(errorText(err));
+      setErrorInfo(err);
     } finally {
       setVerifying(false);
     }
   };
-  return { result, verifying, verifyError: error, verify, reset: () => setResult(null) };
+  return {
+    result,
+    verifying,
+    verifyError: errorInfo ? errorText(errorInfo) : "",
+    verifyErrorInfo: errorInfo,
+    verify,
+    reset: () => setResult(null),
+  };
 }
+
+/** details.<key> of whichever error carries `code` (verify or save). */
+const detailOf = (code, key, ...errors) => errors.find((e) => e?.code === code && e.details?.[key])?.details[key] || null;
 
 /** Result box under a verify button. */
 function VerifyResult({ result, children }) {
@@ -294,13 +316,15 @@ function VerifyResult({ result, children }) {
 const PAID_NOTE = "Each check is a paid provider call — verify once, after the number is final.";
 
 /* ---- GST_VERIFICATION (GST path) ---------------------------------- */
-export function GstScreen({ brandId, eyebrow, onAdvance, onBack }) {
+export function GstScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = true }) {
   const [gst, setGst] = useState("");
-  const { result, verifying, verifyError, verify, reset } = useVerify();
-  const { run, busy, error } = useStepAction(onAdvance);
+  const { result, verifying, verifyError, verifyErrorInfo, verify, reset } = useVerify();
+  const { run, busy, error, errorInfo } = useStepAction(onAdvance);
   const valid = GST_RE.test(gst);
   const addr = result?.addressOnRecord || result?.details?.address;
   const addrText = typeof addr === "string" ? addr : addr ? [addr.location, addr.city, addr.state, addr.pin].filter(Boolean).join(", ") : "";
+  // verify-gst / add-gst-details: the GSTIN isn't the brand's saved PAN (no charge).
+  const panOnBrand = detailOf("PAN_NOT_IN_GSTIN", "panOnBrand", verifyErrorInfo, errorInfo);
 
   return (
     <ScreenShell
@@ -311,10 +335,15 @@ export function GstScreen({ brandId, eyebrow, onAdvance, onBack }) {
       footer={
         <StepFooter
           onBack={onBack}
-          primary={<PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => saveGst(brandId, result.verificationId))}>Save & continue</PrimaryButton>}
+          primary={
+            <PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => saveGst(brandId, result.verificationId))}>
+              {isCurrent ? "Save & continue" : "Save GSTIN"}
+            </PrimaryButton>
+          }
         />
       }
     >
+      {panOnBrand && <Note tone="warn">The brand's saved PAN is {panOnBrand} — the GSTIN must contain it.</Note>}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1">
           <Field label="GSTIN" error={gst && !valid ? "15-character GSTIN, e.g. 27AABCM1234K1Z5" : ""}>
@@ -338,12 +367,15 @@ export function GstScreen({ brandId, eyebrow, onAdvance, onBack }) {
 }
 
 /* ---- PAN_VERIFICATION (GST / NO_GST paths) ------------------------ */
-export function PanScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
+export function PanScreen({ brandId, status, eyebrow, onAdvance, onBack, isCurrent = true }) {
   const [pan, setPan] = useState("");
-  const { result, verifying, verifyError, verify, reset } = useVerify();
-  const { run, busy, error } = useStepAction(onAdvance);
+  const { result, verifying, verifyError, verifyErrorInfo, verify, reset } = useVerify();
+  const { run, busy, error, errorInfo } = useStepAction(onAdvance);
   const valid = PAN_RE.test(pan);
   const gstPath = status.kycPath === "GST";
+  // GST path: the PAN must be the one inside the GSTIN (verify-pan refuses
+  // before the paid call; add-pan-details too) → details.panFromGstin.
+  const panFromGstin = detailOf("PAN_NOT_IN_GSTIN", "panFromGstin", verifyErrorInfo, errorInfo);
 
   return (
     <ScreenShell
@@ -354,10 +386,24 @@ export function PanScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
       footer={
         <StepFooter
           onBack={onBack}
-          primary={<PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => savePan(brandId, result.verificationId))}>Save & continue</PrimaryButton>}
+          primary={
+            <PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => savePan(brandId, result.verificationId))}>
+              {isCurrent ? "Save & continue" : "Save PAN"}
+            </PrimaryButton>
+          }
         />
       }
     >
+      {panFromGstin && (
+        <Note tone="warn">
+          The PAN inside the GSTIN is <span className="font-mono font-semibold">{panFromGstin}</span>.{" "}
+          {pan !== panFromGstin && (
+            <button type="button" className="font-semibold underline" onClick={() => { setPan(panFromGstin); reset(); }}>
+              Use it
+            </button>
+          )}
+        </Note>
+      )}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1">
           <Field label="PAN number" error={pan && !valid ? "Format: ABCDE1234F" : ""}>
@@ -378,7 +424,34 @@ export function PanScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
 
 /* ---- OWNER_VERIFICATION (not-registered path) --------------------- */
 // The owner's personal PAN (verify, then save) or an ID document upload.
-export function OwnerVerificationScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
+// The owner's ID document is reviewed (accept / reject) only on the brand's
+// detail page (Q5); this screen just shows where that review stands.
+const OWNER_ID_STATUS = {
+  UPLOADED: { tone: "info", text: "Uploaded — waiting for review on the brand page." },
+  ACCEPTED: { tone: "ok", text: "Accepted by the verification team." },
+  REJECTED: { tone: "error", text: "Rejected" },
+};
+
+function OwnerIdStatus({ brandId }) {
+  const { data } = useKycDocuments(brandId);
+  const doc = (payload(data).documents || []).find((d) => d.purpose === "OWNER_ID");
+  if (!doc) return null;
+  const s = OWNER_ID_STATUS[doc.status] || OWNER_ID_STATUS.UPLOADED;
+  return (
+    <Note tone={s.tone}>
+      Owner ID ({OWNER_ID_TYPES.find((t) => t.value === doc.idType)?.label || doc.title || "document"}): {s.text}
+      {doc.status === "REJECTED" && doc.reason ? ` — ${doc.reason}. Upload a new one below.` : ""}
+      {doc.fileUrl ? (
+        <>
+          {" "}
+          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="font-semibold underline">Open</a>
+        </>
+      ) : null}
+    </Note>
+  );
+}
+
+export function OwnerVerificationScreen({ brandId, status, eyebrow, onAdvance, onBack, isCurrent = true }) {
   const [method, setMethod] = useState(status.items.ownerVerificationMethod || "PAN");
   const [pan, setPan] = useState("");
   const [idType, setIdType] = useState(OWNER_ID_TYPES[0].value);
@@ -400,11 +473,12 @@ export function OwnerVerificationScreen({ brandId, status, eyebrow, onAdvance, o
       title="Verify the owner"
       intro="Not registered is fine — we only need to know who runs the shop. The owner's name becomes the legal name."
       error={error || verifyError}
-      footer={<StepFooter onBack={onBack} primary={<PrimaryButton busy={busy === "save"} disabled={!ready} onClick={save}>Save & continue</PrimaryButton>} />}
+      footer={<StepFooter onBack={onBack} primary={<PrimaryButton busy={busy === "save"} disabled={!ready} onClick={save}>{isCurrent ? "Save & continue" : "Save & replace"}</PrimaryButton>} />}
     >
       {status.items.ownerVerification === "PROVIDED" && (
         <Note tone="ok">Already verified by {String(status.items.ownerVerificationMethod || "").replace("_", " ").toLowerCase() || "the owner"}. Saving again replaces it.</Note>
       )}
+      {status.items.ownerVerificationMethod === "ID_DOCUMENT" && <OwnerIdStatus brandId={brandId} />}
       <div className="grid gap-3 sm:grid-cols-2">
         <RadioCard name="ownerMethod" checked={method === "PAN"} onChange={() => setMethod("PAN")} title="Personal PAN" description="Checked with the income-tax records. Fastest." />
         <RadioCard name="ownerMethod" checked={method === "ID_DOCUMENT"} onChange={() => setMethod("ID_DOCUMENT")} title="Upload an ID" description="Aadhaar (masked), driving licence, passport or voter ID." />
@@ -447,7 +521,7 @@ export function OwnerVerificationScreen({ brandId, status, eyebrow, onAdvance, o
 }
 
 /* ---- BANK_VERIFICATION (skippable) -------------------------------- */
-export function BankScreen({ brandId, eyebrow, onAdvance, onBack }) {
+export function BankScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = true }) {
   const [account, setAccount] = useState("");
   const [ifsc, setIfsc] = useState("");
   const [accountType, setAccountType] = useState("CURRENT");
@@ -465,11 +539,11 @@ export function BankScreen({ brandId, eyebrow, onAdvance, onBack }) {
       footer={
         <StepFooter
           onBack={onBack}
-          onSkip={() => run("skip", () => skipOnboardingScreen(brandId, "BANK_VERIFICATION"))}
+          onSkip={isCurrent ? () => run("skip", () => skipOnboardingScreen(brandId, "BANK_VERIFICATION")) : undefined}
           skipBusy={busy === "skip"}
           primary={
             <PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => saveBank(brandId, { verificationId: result.verificationId, accountType }))}>
-              Save & continue
+              {isCurrent ? "Save & continue" : "Save bank account"}
             </PrimaryButton>
           }
         />

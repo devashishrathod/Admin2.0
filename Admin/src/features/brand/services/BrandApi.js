@@ -63,37 +63,9 @@ export async function getAllBrands({ page = 1, limit = 10, search = '', status }
 }
 
 /* -------------------------------------------------------------------------
- * PUT {{base_url}}/brands/admin/:brandId/status
- * Used for approve / reject / activate / deactivate from the admin panel.
- * `reason` is only sent when present (e.g. rejection reason).
- *
- * Backend requires both:
- *   - isActive (boolean)         → derived from `status` unless passed explicitly
- *   - hideFromCustomers (boolean) → always sent, defaults to false
- * ---------------------------------------------------------------------- */
-export async function updateBrandStatus(brandId, status, reason = '', isActive, hideFromCustomers = false) {
-    try {
-        const resolvedIsActive =
-            isActive !== undefined
-                ? isActive
-                : ['ACTIVE', 'APPROVED'].includes(status);
-
-        const body = {
-            status,
-            isActive: resolvedIsActive,
-            hideFromCustomers,
-        };
-        if (reason) body.reason = reason;
-
-        const { data } = await api.put(`/brands/admin/${brandId}/status`, body);
-        return data;
-    } catch (error) {
-        handleError(error);
-    }
-}
-
-/* -------------------------------------------------------------------------
  * PUT {{base_url}}/brands/admin/:brandId/status — Active / Deactive / Hide.
+ * Never for approve / reject: those go only through
+ * PUT /brands/admin/verifications/:brandId/review (#24).
  * Body per the super admin API doc ("Brands — status aur curation"):
  *   { isActive, hideFromCustomers, reason? }
  * Two different switches: isActive:false shuts the vendor out;
@@ -307,7 +279,6 @@ export default {
     getBrandDetails,
     getBrands,
     getAllBrands,
-    updateBrandStatus,
     getTopBrands,
     updateTopBrand,
     updateBrand,

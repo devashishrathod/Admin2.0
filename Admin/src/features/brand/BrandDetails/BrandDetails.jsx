@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   MapPin,
   ShieldCheck,
@@ -29,7 +29,6 @@ import {
   ToggleSwitch,
   ToggleActiveConfirmModal,
   OnboardingBadge,
-  ApprovalDropdown,
   StatusBadge,
 } from "../BrandShared";
 import { compactCount, brandCardFacts } from "../brandCardUtils";
@@ -196,12 +195,14 @@ const TAB_ICONS = {
  *  - brand           : the brand object to display
  *  - onBack()         : go back to the list page
  *  - onToggleActive(brand)
- *        → calls BrandContext.toggleActive(brand), which sends
- *          { status, isActive, hideFromCustomers: false } to the backend
+ *        → BrandContext.toggleActive → PUT /brands/admin/:brandId/status
+ *          { isActive, hideFromCustomers } (deactivate / hide only)
  *  - onDelete(brand)
  *  - onUpdate(id, updates)               : save edits from "Edit Brand Details"
- *  - onDecision(brand, status, reason)   : approve/reject a Pending brand
  *  - onSetTopBrand(brand, { isTopBrand, topOrder })
+ *
+ * Approve / reject / revoke are NOT here: they go only through
+ * PUT /brands/admin/verifications/:brandId/review (Brand Waiting).
  *        : PUT /brands/admin/top-brands/:brandId
  *          body -> { brandId, isTopBrand, topOrder }
  * ---------------------------------------------------------------------- */
@@ -213,7 +214,6 @@ export default function BrandDetails({
   onBack,
   onToggleActive,
   onUpdate,
-  onDecision,
   onSetTopBrand,
 }) {
   // The open tab lives in the URL (?tab=Voucher), so it survives a page
@@ -418,8 +418,14 @@ export default function BrandDetails({
                   <h1 className="text-[17px] font-semibold capitalize leading-tight text-neutral-900 dark:text-neutral-50">{brand.brandName}</h1>
                   {incomplete ? (
                     <OnboardingBadge brand={brand} />
-                  ) : brand.status === "Pending" && onDecision && !readOnly ? (
-                    <ApprovalDropdown brand={brand} onDecision={onDecision} size="sm" />
+                  ) : brand.status === "Pending" && !readOnly ? (
+                    // The decision is made on Brand Waiting (review endpoint #24), never here.
+                    <Link
+                      to="/brand-waiting"
+                      className="rounded-full bg-amber-400/10 px-2.5 py-1 text-[11.5px] font-semibold text-amber-600 transition-colors hover:bg-amber-400/20 dark:text-amber-400"
+                    >
+                      Awaiting review · open Brand Waiting
+                    </Link>
                   ) : (
                     <StatusBadge status={brand.status} activeLabel="Active" />
                   )}

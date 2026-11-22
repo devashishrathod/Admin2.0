@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAllBrands,
   getBrandDetails,
-  updateBrandStatus,
   setBrandAccess,
   setBrandComingSoon,
   updateTopBrand,
@@ -17,9 +16,11 @@ import { queryKeys } from "../../lib/query";
 /* -------------------------------------------------------------------------
  * BrandContext.jsx
  * Backed by the real admin API, cached with TanStack Query. Public
- * interface (brands, toggleActive, handleApprovalDecision,
+ * interface (brands, toggleActive, setHiddenFromCustomers,
  * updateBrandDetails, deleteBrandById, addBrand, …) is unchanged so
- * BrandDetailsPage / any other consumer doesn't need edits.
+ * BrandDetailsPage / any other consumer doesn't need edits. Approve /
+ * reject / revoke never go through here — only the review endpoint
+ * (Brand Waiting) decides a brand.
  *
  * The full brand list (every page, mapped through mapBrandListItem) lives
  * in the query cache under ALL_BRANDS_KEY. Any successful /brands write
@@ -266,45 +267,6 @@ export function BrandProvider({ children }) {
     }
   }, [patchBrand, syncAfterUpdate]);
 
-  /* Approve -> status: "Active", active: true, rejectionReason cleared.
-     Reject  -> status: "Rejected", active: false, rejectionReason stored.
-     Untouched — updateBrandStatus derives `isActive` from `apiStatus`
-     internally and always sends `hideFromCustomers: false` by default. */
-  const handleApprovalDecision = useCallback(async (brand, newStatus, reason = "") => {
-    if (brand?.isDummy) return; // dummy brands are view-only
-    const apiStatus = newStatus === "Active" ? "APPROVED" : "REJECTED";
-    patchBrand(brand.id, {
-      status: newStatus,
-      active: newStatus === "Active",
-      rejectionReason: newStatus === "Rejected" ? reason : "",
-    });
-    // "Already in the requested state" means the backend already has this
-    // decision — that's the outcome we wanted, so it counts as success
-    // whether it comes back as a 200 body or as an error response.
-    const alreadyDone = (message) => /already in the requested state/i.test(message || "");
-    try {
-      let response;
-      try {
-        response = await updateBrandStatus(brand.id, apiStatus, reason);
-      } catch (err) {
-        if (!alreadyDone(err.message)) throw err;
-      }
-      const result = response?.data ?? response;
-      if (result?.success === false && !alreadyDone(result.message)) {
-        throw new Error(result.message || "Unable to update brand approval status.");
-      }
-      // Also covers the "already done" error path, which the interceptor
-      // never sees as a successful write.
-      await syncAfterUpdate(brand.id);
-      return true;
-    } catch (err) {
-      // roll back on failure
-      patchBrand(brand.id, { status: brand.status, active: brand.active, rejectionReason: brand.rejectionReason });
-      setActionError(err.message);
-      return false;
-    }
-  }, [patchBrand, syncAfterUpdate]);
-
   /* No "update brand details" endpoint has been provided yet — this stays
      local-only (cache only) until one exists, so the next list refresh
      shows the server's values again. */
@@ -376,7 +338,6 @@ export function BrandProvider({ children }) {
     syncAfterUpdate,
     toggleActive,
     setHiddenFromCustomers,
-    handleApprovalDecision,
     updateBrandDetails,
     setTopBrand,
     setComingSoon,

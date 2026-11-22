@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import {
-  Check,
   X,
-  ChevronRight,
   ChevronDown,
   AlertTriangle,
   MessageSquareWarning,
@@ -552,80 +550,6 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
- * Approve / Reject dropdown shown for brands that finished onboarding and
- * are waiting for super admin approval (the "Complete Listing" tab).
- *
- * onDecision(brand, newStatus, reason) is called with:
- *   - newStatus = "Active"   and reason = ""             on approve
- *   - newStatus = "Rejected" and reason = "<typed text>"  on reject
- * ---------------------------------------------------------------------- */
-
-export function ApprovalDropdown({ brand, onDecision, size = "md" }) {
-  const [open, setOpen] = useState(false);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-
-  const isPending = brand.status === "Pending";
-  const pad = size === "sm" ? "px-2.5 py-1 text-[11.5px]" : "px-3 py-1.5 text-[12.5px]";
-
-  return (
-    <div className="relative inline-block" onClick={(e) => e.stopPropagation()}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 rounded-full font-semibold transition-colors ${pad} ${
-          isPending
-            ? "bg-amber-400/10 text-amber-600 hover:bg-amber-400/20 dark:text-amber-400"
-            : brand.status === "Active"
-            ? "bg-emerald-400/10 text-emerald-600 hover:bg-emerald-400/20 dark:text-emerald-400"
-            : "bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
-        }`}
-      >
-        {isPending ? "Awaiting Approval" : brand.status}
-        <ChevronRight size={11} className={`transition-transform ${open ? "rotate-90" : ""}`} />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-20 mt-2 w-44 overflow-hidden rounded-xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
-            <button
-              onClick={() => {
-                onDecision(brand, "Active", "");
-                setOpen(false);
-              }}
-              className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-emerald-600 transition-colors hover:bg-neutral-100 dark:text-emerald-400 dark:hover:bg-neutral-800"
-            >
-              <Check size={13} />
-              Approve
-            </button>
-            <button
-              onClick={() => {
-                setOpen(false);
-                setShowRejectModal(true);
-              }}
-              className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
-            >
-              <X size={13} />
-              Reject
-            </button>
-          </div>
-        </>
-      )}
-
-      {showRejectModal && (
-        <RejectReasonModal
-          brand={brand}
-          onClose={() => setShowRejectModal(false)}
-          onConfirm={(reason) => {
-            onDecision(brand, "Rejected", reason);
-            setShowRejectModal(false);
-          }}
-        />
-      )}
     </div>
   );
 }

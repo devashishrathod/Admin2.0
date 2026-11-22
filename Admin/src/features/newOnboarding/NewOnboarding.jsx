@@ -1,9 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import EmptyState from "../../components/common/EmptyState";
 import StatTile from "../../components/common/StatTile";
 import Table from "../../components/common/Table";
-// import { useNavigate } from "react-router-dom"; // only for the commented-out Add Brand button
-import { Search, /* Plus, */ AlertTriangle, LayoutGrid, List } from "lucide-react";
+import { Search, Plus, AlertTriangle, LayoutGrid, List } from "lucide-react";
 import { useBrands } from "../brand/BrandContext";
 import Loader from "../../components/common/Loader";
 import VerificationDetails from "./VerificationDetails";
@@ -54,7 +54,7 @@ const TABS = [
 
 
 export default function NewOnboarding() {
-  // const navigate = useNavigate(); // only for the commented-out Add Brand button
+  const navigate = useNavigate();
   const { allBrands: everyBrand, loading, error: contextError, fetchBrands } = useBrands();
   // Only replace the list with an error when the brands couldn't be loaded.
   const error = everyBrand.length === 0 ? contextError : "";
@@ -139,17 +139,15 @@ export default function NewOnboarding() {
             Only brands with onboarding incomplete are shown here. Each card shows the vendor's current screen.
           </p>
         </div>
-        {/* Add Brand — commented out for now; brands come in through the
-            vendor's own onboarding. Restore this button (and the Plus /
-            useNavigate imports + `navigate` above) to bring it back.
+        {/* Admin onboards a brand for the vendor (Onboarding v2 wizard). */}
         <button
+          type="button"
           onClick={() => navigate("/brand/onboard")}
           className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-400 px-3.5 py-2 text-[12.5px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300"
         >
           <Plus size={14} />
           Add Brand
         </button>
-        */}
       </div>
 
       {/* KPI tiles */}

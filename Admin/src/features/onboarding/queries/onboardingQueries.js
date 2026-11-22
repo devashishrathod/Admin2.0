@@ -5,7 +5,6 @@ import {
   getOnboardingBrand,
   getKycDocuments,
   getBillingAddress,
-  getProfileStrength,
   getBrandFeatures,
   getOutlets,
 } from "../services/onboardingApi";
@@ -17,7 +16,7 @@ import {
  * /subBrands. Named views (not detail/list) because other screens read the
  * same URLs through other services and params. */
 
-/** Server-side progress: currentScreen, steps, kycPath, editMode, deed … */
+/** Server-side progress: currentScreen, groups, kycPath, editMode, deed, profileStrength … */
 export function useOnboardingStatus(brandId, options = {}) {
   return useQuery({
     queryKey: queryKeys.brands.view("onboarding-status", { brandId }),
@@ -50,15 +49,6 @@ export function useBillingAddress(brandId, options = {}) {
   return useQuery({
     queryKey: queryKeys.brands.view("billing-address", { brandId }),
     queryFn: () => getBillingAddress(brandId),
-    enabled: Boolean(brandId),
-    ...options,
-  });
-}
-
-export function useProfileStrength(brandId, options = {}) {
-  return useQuery({
-    queryKey: queryKeys.brands.view("profile-strength", { brandId }),
-    queryFn: () => getProfileStrength(brandId),
     enabled: Boolean(brandId),
     ...options,
   });

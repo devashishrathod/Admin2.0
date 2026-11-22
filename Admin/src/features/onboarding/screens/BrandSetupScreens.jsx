@@ -170,9 +170,9 @@ export function ProfessionalScreen({ brandId, eyebrow, onAdvance, onBack }) {
   );
 }
 
-/* ---- 14 · OUTLET_DETAILS ------------------------------------------ */
-// Each outlet: signUp-with-whatsapp → locations/create → workHours/upsert.
-// continue → 422 missing OUTLET · OUTLET_LOCATION:<id> · OUTLET_WORK_HOURS:<id>.
+/* ---- OUTLET_DETAILS ----------------------------------------------- */
+// Each outlet: signUp-with-whatsapp → (manager verifies) → locations/create → workHours/upsert.
+// continue → 422 missing OUTLET; submit → 422 OUTLET_NOT_VERIFIED:<id> · OUTLET_LOCATION:<id> · OUTLET_WORK_HOURS:<id>.
 const EMPTY_ADDR = { addressLine1: "", addressLine2: "", landmark: "", city: "", state: "", zipcode: "", lat: "", lng: "" };
 const DEFAULT_HOURS = Object.fromEntries(WEEK_DAYS.map((d) => [d, { isOpen: d !== "sunday", start: "10:00", end: "22:00" }]));
 
@@ -291,16 +291,30 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
   const [done, setDone] = useState({}); // subBrandId → { address, hours } saved in this session
   const [open, setOpen] = useState(null); // { id, kind: "address" | "hours" }
   const [newNumber, setNewNumber] = useState("");
+  const [useOwner, setUseOwner] = useState(false);
   const [newType, setNewType] = useState("OUTLET");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
+  const [addInfo, setAddInfo] = useState("");
   const { run, busy, error } = useStepAction(onAdvance);
 
   const add = async () => {
     setAdding(true);
     setAddError("");
+    setAddInfo("");
     try {
-      await addOutlet({ brandId, whatsappNumber: newNumber, isFirstOutlet: outlets.length === 0, outletType: newType });
+      const res = payload(
+        await addOutlet({ brandId, whatsappNumber: newNumber, useOwnerNumber: useOwner, isFirstOutlet: outlets.length === 0, outletType: newType })
+      );
+      // Owner number → verified at once. A new manager number gets a WhatsApp
+      // code; address and hours open only after they verify (409 OUTLET_NOT_VERIFIED).
+      setAddInfo(
+        res?.isVerified
+          ? "Outlet added and verified — add its address and opening hours."
+          : res?.otpSent
+            ? "Login code sent to the manager's WhatsApp. Address and hours open after they verify."
+            : res?.otpError || "Outlet added."
+      );
       setNewNumber("");
       // The next add's isFirstOutlet is read from this list, so keep the
       // button busy until it's fresh. The interceptor already started the
@@ -366,9 +380,13 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
 
       <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[#CFD1CA] p-4 dark:border-neutral-700">
         <p className="m-0 text-[15px] font-semibold">{outlets.length ? "Add another outlet" : "Add the first outlet"}</p>
+        <label className="flex items-center gap-2 text-[14px]">
+          <input type="checkbox" checked={useOwner} onChange={(e) => setUseOwner(e.target.checked)} className="h-4 w-4 accent-[#0B6E5A]" />
+          The owner manages this outlet on their own WhatsApp number (no code needed)
+        </label>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-          <Field label="Outlet manager's WhatsApp" hint="A login code is sent to this number" error={newNumber && !WHATSAPP_RE.test(newNumber) ? "10 digits, starts with 6–9" : ""}>
-            <input className={inputCls} type="tel" maxLength={10} value={newNumber} onChange={(e) => setNewNumber(e.target.value.replace(/\D/g, ""))} />
+          <Field label="Outlet manager's WhatsApp" hint={useOwner ? "Uses the owner's number" : "A login code is sent to this number"} error={!useOwner && newNumber && !WHATSAPP_RE.test(newNumber) ? "10 digits, starts with 6–9" : ""}>
+            <input className={inputCls} type="tel" maxLength={10} value={useOwner ? "" : newNumber} disabled={useOwner} onChange={(e) => setNewNumber(e.target.value.replace(/\D/g, ""))} />
           </Field>
           <Field label="Type">
             <select className={`${inputCls} w-40`} value={newType} onChange={(e) => setNewType(e.target.value)}>
@@ -376,9 +394,10 @@ export function OutletsScreen({ brandId, eyebrow, onAdvance, onBack }) {
               <option value="FRANCHISE">Franchise</option>
             </select>
           </Field>
-          <PrimaryButton busy={adding} disabled={!WHATSAPP_RE.test(newNumber)} onClick={add}><Plus size={15} /> Add outlet</PrimaryButton>
+          <PrimaryButton busy={adding} disabled={!useOwner && !WHATSAPP_RE.test(newNumber)} onClick={add}><Plus size={15} /> Add outlet</PrimaryButton>
         </div>
         {addError && <Note tone="error">{addError}</Note>}
+        {addInfo && <Note tone="ok">{addInfo}</Note>}
       </div>
     </ScreenShell>
   );

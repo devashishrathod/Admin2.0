@@ -3,10 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, RefreshCw } from "lucide-react";
 import { createOnboardingBrand } from "./services/onboardingApi";
 import { useOnboardingStatus, useOnboardingBrand } from "./queries/onboardingQueries";
-import { normalizeStatus, buildStepper, screenMeta, laneScreens, AFTER_SUBMIT, errorText, WHATSAPP_RE } from "./onboardingFlow";
+import { normalizeStatus, buildStepper, laneScreens, kycPathLabel, AFTER_SUBMIT, GROUP_LABELS, errorText, WHATSAPP_RE } from "./onboardingFlow";
 import { ScreenShell, Field, Note, PrimaryButton, inputCls } from "./ui";
-import { BusinessNameScreen, BusinessCategoryScreen, RegistrationStatusScreen, EntityTypeScreen } from "./screens/IdentityScreens";
-import { KycDocumentsScreen, PanScreen, GstScreen, BankScreen } from "./screens/KycScreens";
+import { BrandNameScreen, BusinessCategoryScreen, RegistrationStatusScreen, EntityTypeScreen } from "./screens/IdentityScreens";
+import { KycDocumentsScreen, PanScreen, GstScreen, OwnerVerificationScreen, BankScreen } from "./screens/KycScreens";
 import { DeedScreen, SubscribePlanScreen } from "./screens/AgreementScreens";
 import { BrandBasicsScreen, ProfessionalScreen, OutletsScreen } from "./screens/BrandSetupScreens";
 import { ReviewScreen, UnderReviewScreen } from "./screens/ReviewScreens";
@@ -22,13 +22,14 @@ import EmptyState from "../../components/common/EmptyState";
  * ---------------------------------------------------------------------- */
 
 const SCREEN_COMPONENTS = {
-  BUSINESS_NAME: BusinessNameScreen,
+  BRAND_NAME: BrandNameScreen,
   BUSINESS_CATEGORY: BusinessCategoryScreen,
   REGISTRATION_STATUS: RegistrationStatusScreen,
-  REGISTRATION_ENTITY_TYPE: EntityTypeScreen,
-  KYC_DOCUMENTS: KycDocumentsScreen,
-  PAN_VERIFICATION: PanScreen,
   GST_VERIFICATION: GstScreen,
+  PAN_VERIFICATION: PanScreen,
+  REGISTRATION_ENTITY_TYPE: EntityTypeScreen,
+  OWNER_VERIFICATION: OwnerVerificationScreen,
+  KYC_DOCUMENTS: KycDocumentsScreen,
   BANK_VERIFICATION: BankScreen,
   PARTNERSHIP_DEED: DeedScreen,
   SUBSCRIBE_PLAN: SubscribePlanScreen,
@@ -67,10 +68,10 @@ function CreateBrandStep() {
   };
 
   // Preview of the whole flow: this step is current, the rest come after create.
-  // The KYC steps shown are the registered lane; "Not registered" swaps them on step 4.
+  // The verification steps shown are the GST path; the business status answer swaps them.
   const preview = [
-    { key: "OWNER", label: "Owner number", group: "Business", num: 1, state: "CURRENT", isViewing: true, reachable: true },
-    ...laneScreens("REGISTERED").map((s, i) => ({ ...s, num: i + 2, state: "UPCOMING", isViewing: false, reachable: false })),
+    { key: "OWNER", label: "Owner number", group: GROUP_LABELS.BASIC_DETAILS, num: 1, state: "CURRENT", isViewing: true, reachable: true },
+    ...laneScreens("GST").map((s, i) => ({ ...s, group: GROUP_LABELS[s.group], num: i + 2, state: "UPCOMING", isViewing: false, reachable: false })),
   ];
 
   return (
@@ -78,12 +79,12 @@ function CreateBrandStep() {
       <div className="flex flex-col gap-3">
         <Stepper rows={preview} onPick={() => {}} />
         <p className="m-0 px-1 text-[12px] leading-snug text-[#5B616E]">
-          KYC steps depend on the registration answer — a business that isn't registered gets KYC documents instead of entity type and GST.
+          Verification steps depend on the business status: without GST there's no GST step, and a business that isn't registered verifies the owner instead of PAN and business type.
         </p>
       </div>
     <form onSubmit={create} className="min-w-0">
       <ScreenShell
-        eyebrow={`Step 1 of ${preview.length} · Business`}
+        eyebrow={`Step 1 of ${preview.length} · ${GROUP_LABELS.BASIC_DETAILS}`}
         title="Add a new brand"
         intro="Enter the owner's WhatsApp number. A vendor account is created on it and the owner can log in with it later to continue or manage the brand."
         error={error}
@@ -100,11 +101,11 @@ function CreateBrandStep() {
             <input className={`${inputCls} rounded-l-none`} type="tel" inputMode="numeric" maxLength={10} autoFocus value={number} onChange={(e) => setNumber(e.target.value.replace(/\D/g, ""))} />
           </div>
         </Field>
-        <Field label="Brand name" optional hint="Can be filled on the next screen too">
-          <input className={inputCls} value={name} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="e.g. Cafe Mocha" />
+        <Field label="Brand name" optional hint="Can be filled on the next screen too · 2–25 characters">
+          <input className={inputCls} value={name} maxLength={25} onChange={(e) => setName(e.target.value)} placeholder="e.g. Cafe Mocha" />
         </Field>
         <Note tone="muted">If a vendor already exists on this number, find their brand in New Onboarding or Brand Waiting instead.</Note>
-        <Note tone="info">Next: business name → category → registration, then KYC, agreement & plan, brand setup and submit.</Note>
+        <Note tone="info">Next: brand name → category → business status, then verification, payout, agreement & plan, brand setup and submit.</Note>
       </ScreenShell>
     </form>
     </div>
@@ -226,15 +227,14 @@ function OnboardingWizard({ brandId }) {
     locked: afterSubmit || (planDone && !LOCK_BEFORE.includes(r.key)),
   }));
 
-  const lane = laneScreens(status.kycPath).map((s) => s.key);
+  const lane = rows.map((r) => r.key);
   const viewIdx = lane.indexOf(viewing);
   const prevKey = viewIdx > 0 ? lane[viewIdx - 1] : null;
   const canGoBack = prevKey && !(planDone && !LOCK_BEFORE.includes(prevKey));
 
   const Screen = SCREEN_COMPONENTS[viewing];
-  const meta = screenMeta(viewing);
   const row = rows.find((r) => r.key === viewing);
-  const eyebrow = meta ? `Step ${row?.num ?? ""} of ${rows.length} · ${meta.group}${viewing !== status.currentScreen ? " · editing" : ""}` : "";
+  const eyebrow = row ? `Step ${row.num} of ${rows.length} · ${row.group}${viewing !== status.currentScreen ? " · editing" : ""}` : "";
 
   const brandTitle = brand?.brandName || brand?.legalBusinessName || "New brand";
 
@@ -242,7 +242,10 @@ function OnboardingWizard({ brandId }) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col">
-          <span className="text-[13px] text-[#5B616E]">Onboarding · {status.kycPath === "UNREGISTERED" ? "Not registered" : "Registered"} lane</span>
+          <span className="text-[13px] text-[#5B616E]">
+            Onboarding · {kycPathLabel(status.kycPath)}
+            {status.progress?.percent != null ? ` · ${status.progress.percent}% done` : ""}
+          </span>
           <h1 className="m-0 text-[22px] font-semibold tracking-tight text-[#15171C] dark:text-neutral-50">{brandTitle}</h1>
         </div>
         <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-[#CFD1CA] px-3 py-2 text-[13px] font-medium hover:bg-[#F5F5F2] dark:border-neutral-700 dark:hover:bg-neutral-800">
@@ -250,8 +253,11 @@ function OnboardingWizard({ brandId }) {
         </button>
       </div>
 
-      {status.editMode && (
-        <Note tone="warn">Sent back by the verification team ({String(status.editMode).toLowerCase().replace(/_/g, " ")}). Fix the marked steps and submit again.</Note>
+      {/* editMode: FIRST_PASS (normal) · LOCKED (under review) · REMEDIATION (sent back / revoked) */}
+      {status.editMode === "REMEDIATION" && (
+        <Note tone="warn">
+          Sent back by the verification team{status.verification.rejectionReason ? `: ${status.verification.rejectionReason}` : status.verification.revokeReason ? `: ${status.verification.revokeReason}` : ""}. Fix the details and submit again.
+        </Note>
       )}
       {loadError && <Note tone="error">{loadError}</Note>}
 

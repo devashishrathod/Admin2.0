@@ -1,26 +1,41 @@
 /* -------------------------------------------------------------------------
- * Onboarding v2 — screen order, stepper, status normalizing and copy.
- * The server decides the current screen; this only describes the screens
- * and turns `GET /brands/onboarding/status` into what the UI needs.
+ * Onboarding v2 — screens, stepper, status normalizing and copy.
+ * The server decides the current screen and which screens apply to the
+ * brand (`status.groups`); this only labels them and turns
+ * `GET /brands/onboarding/status` into what the UI needs.
+ *
+ * Shapes follow the stage captures in the vendor panel repo
+ * (VenderPanel/docs/onboarding-v2-baseline — GST, NO_GST, UNREGISTERED runs).
  * ---------------------------------------------------------------------- */
 
-// Every screen, in order, with its stepper group and lane.
-// lane: null = both lanes · REGISTERED / UNREGISTERED = that KYC lane only.
+// Server group keys (status.groups[].key) → stepper headings.
+export const GROUP_LABELS = {
+  BASIC_DETAILS: "Basic details",
+  BUSINESS_VERIFICATION: "Business verification",
+  PAYOUT: "Payout",
+  AGREEMENT_PLAN: "Agreement & plan",
+  BRAND_OUTLET: "Brand & outlets",
+  SUBMIT: "Submit",
+};
+
+// Every screen the panel can show. `group` is only the fallback when the
+// status has no groups; `skippable` = POST /brands/onboarding/skip accepts it.
 export const SCREENS = [
-  { key: "BUSINESS_NAME", label: "Business name", group: "Business" },
-  { key: "BUSINESS_CATEGORY", label: "Category", group: "Business" },
-  { key: "REGISTRATION_STATUS", label: "Registration", group: "Business" },
-  { key: "REGISTRATION_ENTITY_TYPE", label: "Entity type", group: "KYC", lane: "REGISTERED" },
-  { key: "KYC_DOCUMENTS", label: "KYC documents", group: "KYC", lane: "UNREGISTERED", skippable: true },
-  { key: "PAN_VERIFICATION", label: "PAN", group: "KYC", skippable: true },
-  { key: "GST_VERIFICATION", label: "GST", group: "KYC", lane: "REGISTERED", skippable: true },
-  { key: "BANK_VERIFICATION", label: "Bank account", group: "KYC", skippable: true },
-  { key: "PARTNERSHIP_DEED", label: "Partnership deed", group: "Agreement & plan" },
-  { key: "SUBSCRIBE_PLAN", label: "Plan & billing", group: "Agreement & plan" },
-  { key: "BRAND_BASIC_DETAILS", label: "Brand basics", group: "Brand setup" },
-  { key: "BRAND_PROFESSIONAL_DETAILS", label: "Showcase & features", group: "Brand setup", skippable: true },
-  { key: "OUTLET_DETAILS", label: "Outlets", group: "Brand setup" },
-  { key: "ONBOARDING_REVIEW", label: "Review & submit", group: "Submit" },
+  { key: "BRAND_NAME", label: "Brand name", group: "BASIC_DETAILS" },
+  { key: "BUSINESS_CATEGORY", label: "Category", group: "BASIC_DETAILS" },
+  { key: "REGISTRATION_STATUS", label: "Business status", group: "BASIC_DETAILS" },
+  { key: "GST_VERIFICATION", label: "GST", group: "BUSINESS_VERIFICATION" },
+  { key: "PAN_VERIFICATION", label: "PAN", group: "BUSINESS_VERIFICATION" },
+  { key: "REGISTRATION_ENTITY_TYPE", label: "Business type", group: "BUSINESS_VERIFICATION" },
+  { key: "OWNER_VERIFICATION", label: "Owner verification", group: "BUSINESS_VERIFICATION" },
+  { key: "KYC_DOCUMENTS", label: "Business documents", group: "BUSINESS_VERIFICATION", skippable: true },
+  { key: "BANK_VERIFICATION", label: "Bank account", group: "PAYOUT", skippable: true },
+  { key: "PARTNERSHIP_DEED", label: "Partnership deed", group: "AGREEMENT_PLAN" },
+  { key: "SUBSCRIBE_PLAN", label: "Plan & billing", group: "AGREEMENT_PLAN" },
+  { key: "BRAND_BASIC_DETAILS", label: "Brand basics", group: "BRAND_OUTLET" },
+  { key: "BRAND_PROFESSIONAL_DETAILS", label: "Showcase & features", group: "BRAND_OUTLET", skippable: true },
+  { key: "OUTLET_DETAILS", label: "Outlets", group: "BRAND_OUTLET" },
+  { key: "ONBOARDING_REVIEW", label: "Review & submit", group: "SUBMIT" },
 ];
 
 // Screens after submit — not form steps.
@@ -28,76 +43,129 @@ export const AFTER_SUBMIT = ["UNDER_REVIEW", "DASHBOARD"];
 
 export const screenMeta = (key) => SCREENS.find((s) => s.key === key) || null;
 
-/** The screens that apply to this brand's KYC lane, in order. */
-export function laneScreens(kycPath) {
-  const lane = kycPath === "UNREGISTERED" ? "UNREGISTERED" : "REGISTERED";
-  return SCREENS.filter((s) => !s.lane || s.lane === lane);
-}
+/* kycPath (chosen on REGISTRATION_STATUS) decides the verification screens.
+   Lists match the stage status.groups for each path; used before the first
+   status load and when a status comes without groups. */
+export const KYC_PATHS = [
+  {
+    value: "GST",
+    label: "Has GST",
+    description: "Registered business with a GST number.",
+    next: "GST → PAN → business type → documents",
+  },
+  {
+    value: "NO_GST",
+    label: "Registered, no GST",
+    description: "Registered company, LLP, partnership, trust or society without GST.",
+    next: "PAN → business type → documents",
+  },
+  {
+    value: "UNREGISTERED",
+    label: "Not registered",
+    description: "A local shop without GST or company registration.",
+    next: "Owner ID → documents",
+  },
+];
+export const kycPathLabel = (path) => KYC_PATHS.find((p) => p.value === path)?.label || "Not chosen yet";
 
-/* `status.steps` may come as a map { SCREEN: "DONE" } or a list
-   [{ screen|key, status }] — accept both (the guide only names the values). */
-function stepStatusMap(steps) {
-  if (!steps) return {};
-  if (Array.isArray(steps)) {
-    return Object.fromEntries(steps.map((s) => [s.screen || s.key || s.name, s.status]).filter(([k]) => k));
-  }
-  return steps;
+const LANE_VERIFICATION = {
+  GST: ["GST_VERIFICATION", "PAN_VERIFICATION", "REGISTRATION_ENTITY_TYPE", "KYC_DOCUMENTS"],
+  NO_GST: ["PAN_VERIFICATION", "REGISTRATION_ENTITY_TYPE", "KYC_DOCUMENTS"],
+  UNREGISTERED: ["OWNER_VERIFICATION", "KYC_DOCUMENTS"],
+};
+
+/** The screens for a kycPath, in order (fallback when the status has no groups). */
+export function laneScreens(kycPath) {
+  const verification = (LANE_VERIFICATION[kycPath] || LANE_VERIFICATION.GST).map(screenMeta);
+  const basics = SCREENS.filter((s) => s.group === "BASIC_DETAILS");
+  const rest = SCREENS.filter((s) => s.group !== "BASIC_DETAILS" && s.group !== "BUSINESS_VERIFICATION");
+  return [...basics, ...verification, ...rest];
 }
 
 /** Normalizes the status payload so screens can rely on one shape. */
 export function normalizeStatus(raw) {
   const data = raw?.data ?? raw ?? {};
-  const status = data.status && typeof data.status === "object" ? { ...data, ...data.status } : data;
+  const groups = Array.isArray(data.groups) ? data.groups : [];
+  // Ordered screen list + per-screen server status (DONE / SKIPPED / MISSING).
+  const order = [];
+  const steps = {};
+  groups.forEach((g) =>
+    (g.screens || []).forEach((s) => {
+      order.push({ key: s.screen, group: g.key });
+      steps[s.screen] = s.status;
+    })
+  );
+  const verification = data.verification || {};
   return {
-    currentScreen: status.currentScreen || data.currentScreen || "BUSINESS_NAME",
-    kycPath: status.kycPath || (status.businessRegistrationStatus === "UNREGISTERED" ? "UNREGISTERED" : "REGISTERED"),
-    editMode: status.editMode || null,
-    steps: stepStatusMap(status.steps),
-    items: status.items || {},
-    deed: status.deed || null,
-    editable: status.editable || {},
-    submittedAt: status.submittedAt || status.onboarding?.submittedAt || null,
+    brandId: data.brandId || null,
+    currentScreen: data.currentScreen || "BRAND_NAME",
+    kycPath: data.kycPath || null,
+    editMode: data.editMode || null, // FIRST_PASS · LOCKED · REMEDIATION
+    editLock: data.editLock || null,
+    order,
+    steps,
+    progress: data.progress || null,
+    items: data.items || {},
+    editable: data.editable || {},
+    deed: data.deed || null,
+    verification,
+    systemChecks: data.systemChecks || [],
+    hasBillingAddress: Boolean(data.hasBillingAddress),
+    profileStrength: data.profileStrength || null,
+    limits: data.limits || {},
+    submittedAt: verification.submittedAt || null,
     raw: data,
   };
 }
 
-/** Stepper rows: DONE / SKIPPED / CURRENT / UPCOMING per screen of the lane. */
+/** Stepper rows: DONE / SKIPPED / CURRENT / UPCOMING for the brand's screens. */
 export function buildStepper(status, viewing) {
-  const list = laneScreens(status.kycPath);
+  const fromServer = status.order.length
+    ? [...status.order, { key: "ONBOARDING_REVIEW", group: "SUBMIT" }]
+    : laneScreens(status.kycPath).map((s) => ({ key: s.key, group: s.group }));
+  const list = fromServer.map((s) => ({ ...(screenMeta(s.key) || { key: s.key, label: s.key }), group: GROUP_LABELS[s.group] || s.group }));
   const curIdx = list.findIndex((s) => s.key === status.currentScreen);
   const past = curIdx === -1 ? list.length : curIdx; // after submit → all past
   return list.map((s, i) => {
     const server = status.steps[s.key];
     let state = i < past ? "DONE" : i === past ? "CURRENT" : "UPCOMING";
-    if (server === "SKIPPED") state = "SKIPPED";
+    if (server === "SKIPPED" && state !== "CURRENT") state = "SKIPPED";
     else if (server === "DONE" && state !== "CURRENT") state = "DONE";
     return { ...s, num: i + 1, state, isViewing: s.key === viewing, reachable: i <= past };
   });
 }
 
-/* ---- Copy for error codes (guide §14) ------------------------------ */
+/* ---- Copy for error codes ------------------------------------------ */
 export const ERROR_HELP = {
   ONBOARDING_SCREEN_MISMATCH: "The vendor or another admin changed this brand meanwhile. Refreshed to the latest step.",
   ONBOARDING_STEP_INCOMPLETE: "Some required details are missing on this step.",
+  ONBOARDING_LOCKED: "Onboarding is locked while the brand is under review.",
+  LEGAL_FIELD_LOCKED: "This legal detail is locked after approval.",
   SCREEN_NOT_SKIPPABLE: "This step can't be skipped.",
-  BRANCH_SWITCH_GST_SAVED: "A GST number is saved — correct the GST first, then switch to Not registered.",
+  SUBCATEGORY_LIMIT: "Too many subcategories picked.",
+  BRANCH_SWITCH_GST_SAVED: "A GST number is saved — correct the GST first, then switch the business status.",
   VERIFICATION_NOT_FOUND: "That verification expired or wasn't found. Verify again.",
   DOCUMENT_IN_USE: "This PAN / GST / bank account is already used by another brand on Trydood.",
+  PAN_NOT_IN_GSTIN: "On the GST path the PAN must be the one inside the GSTIN.",
+  PROVIDER_ERROR: "The verification provider couldn't check this right now. Try again in a while.",
   VENDOR_ALREADY_EXISTS: "A vendor already exists on this WhatsApp number — find the brand in the lists.",
   BILLING_ADDRESS_REQUIRED: "Save the billing address first, then grant the plan.",
   BILLING_STATE_GSTIN_MISMATCH: "The billing address state must match the GSTIN's state.",
   BILLING_ADDRESS_NOT_DELETABLE: "The billing address can't be deleted.",
   DEED_PROOF_REQUIRED: "Upload the signed deed copy as proof.",
+  OUTLET_NOT_VERIFIED: "The outlet manager hasn't verified their WhatsApp yet — address and hours open after that.",
+  OUTLET_ALREADY_VERIFIED: "This outlet is already registered and verified on that number.",
+  WHATSAPP_UNCHANGED: "That is already this outlet's WhatsApp number.",
 };
 
 // "missing" codes from 422 ONBOARDING_STEP_INCOMPLETE → readable labels.
 const MISSING_LABELS = {
-  DOCUMENT: "at least one KYC document",
+  DOCUMENT: "at least one business document",
   LOGO: "a logo",
   OUTLET: "at least one outlet",
   LEGAL_NAMES: "the legal / brand name",
   CATEGORY: "the category",
-  REGISTRATION: "the registration status",
+  REGISTRATION: "the business status",
   BILLING_ADDRESS: "the billing address",
   LIVE_PLAN: "an active plan",
 };
@@ -105,8 +173,10 @@ export function describeMissing(missing = []) {
   return missing
     .map((m) => {
       const [code, id] = String(m).split(":");
-      if (code === "OUTLET_LOCATION") return `an address for outlet ${id}`;
-      if (code === "OUTLET_WORK_HOURS") return `opening hours for outlet ${id}`;
+      const short = id ? `…${id.slice(-6)}` : "";
+      if (code === "OUTLET_LOCATION") return `an address for outlet ${short}`;
+      if (code === "OUTLET_WORK_HOURS") return `opening hours for outlet ${short}`;
+      if (code === "OUTLET_NOT_VERIFIED") return `manager verification for outlet ${short}`;
       return MISSING_LABELS[code] || code.toLowerCase().replace(/_/g, " ");
     })
     .join(", ");
@@ -124,56 +194,92 @@ export function errorText(err) {
 /* ---- Options ------------------------------------------------------- */
 
 export const ENTITY_TYPES = [
-  { value: "PROPRIETORSHIP", label: "Proprietorship", hint: "One owner, business in the owner's name" },
-  { value: "PARTNERSHIP", label: "Partnership", hint: "Two or more partners with a partnership deed" },
+  { value: "PROPRIETORSHIP", label: "Proprietorship", hint: "One owner runs the business" },
+  { value: "PARTNERSHIP", label: "Partnership", hint: "Two or more partners" },
   { value: "LLP", label: "LLP", hint: "Limited liability partnership" },
   { value: "PRIVATE_LIMITED", label: "Private Limited", hint: "Private limited company (Pvt Ltd)" },
   { value: "PUBLIC_LIMITED", label: "Public Limited", hint: "Public limited company (Ltd)" },
   { value: "ONE_PERSON_COMPANY", label: "One Person Company", hint: "OPC" },
-  { value: "TRUST", label: "Trust", hint: "" },
-  { value: "NGO", label: "NGO", hint: "" },
-  { value: "SOCIETY", label: "Society", hint: "" },
-  { value: "OTHERS", label: "Others", hint: "" },
+  { value: "TRUST", label: "Trust", hint: "Registered trust" },
+  { value: "NGO", label: "NGO", hint: "Non-profit organisation" },
+  { value: "SOCIETY", label: "Society", hint: "Registered society" },
+  { value: "OTHERS", label: "Others", hint: "Any other structure" },
+];
+export const entityLabel = (v) => ENTITY_TYPES.find((t) => t.value === v)?.label || v || "";
+
+// Business document `docType` codes. GET /brands/onboarding/documents
+// returns `hints` (codes suggested for the category); anything else is OTHER.
+export const DOC_TYPE_LABELS = {
+  FSSAI: "FSSAI licence",
+  DRUG_LICENCE: "Drug licence",
+  SHOP_ESTABLISHMENT: "Shop & Establishment",
+  TRADE_LICENCE: "Trade licence",
+  UDYAM: "Udyam registration",
+  SHOP_PHOTO: "Shop photo",
+  ELECTRICITY_BILL: "Electricity bill",
+  RENT_AGREEMENT: "Rent agreement",
+  OTHER: "Other",
+};
+export const docTypeLabel = (t) => (t ? DOC_TYPE_LABELS[t] || t : "");
+
+// owner-verification `idType` values (not-registered path). Aadhaar must be masked.
+export const OWNER_ID_TYPES = [
+  { value: "AADHAAR", label: "Aadhaar (masked)" },
+  { value: "DRIVING_LICENCE", label: "Driving licence" },
+  { value: "PASSPORT", label: "Passport" },
+  { value: "VOTER_ID", label: "Voter ID" },
 ];
 
-// KYC document slots (guide §7). docType values are NOT CONFIRMED by the
-// guide (it only names the documents) — adjust to the backend enum.
-export const DOC_SLOTS = [
+export const BANK_ACCOUNT_TYPES = [
+  { value: "SAVINGS", label: "Savings" },
+  { value: "CURRENT", label: "Current" },
+  { value: "NRE", label: "NRE" },
+  { value: "NRO", label: "NRO" },
+  { value: "OD", label: "OD" },
+  { value: "CC", label: "CC" },
+  { value: "OTHER", label: "Other" },
+];
+
+// Partnership deed text — the same as the vendor panel's PARTNERSHIP_DEED
+// screen (VenderPanel onboarding-v2/constants/onboardingOptions.js).
+export const PARTNER_AGREEMENT_URL = "https://trydood.com/partner-agreement";
+export const TERMS_URL = "https://trydood.com/terms-of-service";
+export const SUPPORT_EMAIL = "support@trydood.com";
+export const PARTNER_TERMS = [
   {
-    slot: "OWNER_ID",
-    title: "Owner ID",
-    hint: "Aadhaar (masked — only last 4 digits visible), PAN card, Voter ID, Driving licence or Passport",
-    types: [
-      ["AADHAAR_MASKED", "Aadhaar (masked)"],
-      ["PAN_CARD", "PAN card"],
-      ["VOTER_ID", "Voter ID"],
-      ["DRIVING_LICENCE", "Driving licence"],
-      ["PASSPORT", "Passport"],
-    ],
+    title: "Partnership Scope",
+    body: "This agreement governs the relationship between Trydood and the Partner for the purpose of delivering services as outlined in the onboarding documentation.",
   },
   {
-    slot: "BUSINESS_LICENSE",
-    title: "Business licence",
-    hint: "FSSAI, Drug licence, Udyam (MSME), Shop & Establishment or Trade licence",
-    types: [
-      ["FSSAI", "FSSAI registration"],
-      ["DRUG_LICENCE", "Drug licence"],
-      ["UDYAM", "Udyam (MSME)"],
-      ["SHOP_ESTABLISHMENT", "Shop & Establishment"],
-      ["TRADE_LICENCE", "Trade licence"],
-    ],
+    title: "Roles & Responsibilities",
+    body: "The Partner agrees to maintain accurate business information, comply with applicable laws, and fulfil all obligations as described in the Trydood Partner Handbook.",
   },
   {
-    slot: "SHOP_PROOF",
-    title: "Shop proof",
-    hint: "Shop photo with signboard, electricity bill or rent agreement",
-    types: [
-      ["SHOP_PHOTO", "Shop photo with signboard"],
-      ["ELECTRICITY_BILL", "Electricity bill"],
-      ["RENT_AGREEMENT", "Rent agreement"],
-    ],
+    title: "Revenue & Payments",
+    body: "Payouts will be processed per the agreed schedule. Trydood reserves the right to withhold payments in case of policy violations or disputed transactions.",
   },
 ];
+
+// POST /subscribeds/admin/grant `paymentMode` — exactly what the backend accepts:
+// FREE | CASH | BANK_TRANSFER | CHEQUE | UPI_OFFLINE (same list as SubscriptionCenter).
+export const GRANT_PAYMENT_MODES = [
+  { value: "FREE", label: "Free / complimentary" },
+  { value: "BANK_TRANSFER", label: "Offline — Bank transfer (NEFT / IMPS / RTGS)" },
+  { value: "UPI_OFFLINE", label: "Offline — UPI (collected outside the app)" },
+  { value: "CASH", label: "Offline — Cash" },
+  { value: "CHEQUE", label: "Offline — Cheque" },
+];
+// Grant note 3–500 characters; reference number optional, up to 80.
+export const GRANT_RULES = { noteMin: 3, noteMax: 500, referenceMax: 80 };
+
+// File rules the server applies to KYC files (checked here only to save a failed upload).
+export const DOCUMENT_RULES = {
+  maxSizeBytes: 5 * 1024 * 1024,
+  accept: ".pdf,.jpg,.jpeg,.png",
+  types: /^(application\/pdf|image\/jpe?g|image\/png)$/i,
+  minTitle: 2,
+  maxTitle: 80,
+};
 
 export const INDIAN_STATES = [
   "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh",

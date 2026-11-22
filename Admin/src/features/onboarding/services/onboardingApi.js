@@ -2,20 +2,25 @@ import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
 
 /* -------------------------------------------------------------------------
- * Brand Onboarding v2 — admin side.
- * Source: brand_onboarding_v2_admin_panel_guide.md (+ the vendor panel
- * design's per-screen notes).
+ * Brand Onboarding v2 — admin side (admin onboards a brand for the vendor).
  *
- * ⚠️ The guide is marked "DESIGN — not implemented yet / planned contract".
- * Paths and bodies follow it exactly; once the backend ships, check the
- * live responses (especially the `status` shape) against the normalizers
- * in onboardingFlow.js.
+ * Paths, bodies and response shapes match the vendor flow captured on
+ * stage (VenderPanel/docs/onboarding-v2-baseline, 19–21 Nov 2026).
  *
- * Rules from the guide:
+ * ⚠️ NOT CONFIRMED on the backend yet — the admin-on-behalf part:
+ *  - POST /brands/admin/onboarding/create, PUT /brands/admin/:brandId/deed and
+ *    PUT /brands/admin/onboarding/documents/:id/review are not in any doc.
+ *  - The /brands/onboarding/* and /verification/brands/onboarding/* routes
+ *    were isVendor-only in the admin API doc (4 Nov): an admin got 403.
+ *    This file sends `?brandId=` so the same routes can act on a brand
+ *    for an admin once the backend allows it.
+ *
+ * Rules:
  *  - Onboarding APIs take `?brandId=` as a QUERY param for the admin.
  *  - Existing APIs (subBrands, locations, workHours, brandFeatures,
  *    showcase, grant) take `brandId` / `subBrandId` in the BODY.
- *  - The panel never sends currentScreen; it follows the server's.
+ *  - The panel never sends currentScreen or legalBusinessName — the server
+ *    owns both (the legal name comes from the PAN / GST record).
  *  - Branch on `details.code`, never on the message — every error thrown
  *    here carries `code`, `details` and `status`.
  * ---------------------------------------------------------------------- */
@@ -70,12 +75,13 @@ const multipart = { headers: { 'Content-Type': undefined } };
 
 /* ---- Create + status (guide §5.1, §4) ------------------------------ */
 
-// POST /brands/admin/onboarding/create { whatsappNumber, brandName? }
-// → { brandId, userId, currentScreen: "BUSINESS_NAME" }. 409 VENDOR_ALREADY_EXISTS.
+// ⚠️ NOT CONFIRMED: POST /brands/admin/onboarding/create { whatsappNumber, brandName? }
+// → { brandId, userId, currentScreen: "BRAND_NAME" }. 409 VENDOR_ALREADY_EXISTS.
 export const createOnboardingBrand = ({ whatsappNumber, brandName }) =>
     call(() => api.post('/brands/admin/onboarding/create', brandName ? { whatsappNumber, brandName } : { whatsappNumber }));
 
-// GET /brands/onboarding/status?brandId= → currentScreen, steps, kycPath, editMode, items, deed …
+// GET /brands/onboarding/status?brandId= → currentScreen, kycPath, editMode, groups[].screens[],
+// progress, items, editable, deed, verification, systemChecks, profileStrength, limits
 export const getOnboardingStatus = (brandId) => call(() => api.get('/brands/onboarding/status', q(brandId)));
 
 // GET /brands/get?brandId= — full brand (names, category, legal, outlets …)
@@ -85,80 +91,115 @@ export const getOnboardingBrand = (brandId) => call(() => api.get('/brands/get',
 export const getOnboardingHistory = (brandId) =>
     call(() => api.get('/brands/verifications/history', { params: { brandId, page: 1, limit: 50 } }));
 
-// GET /brands/profile-strength?brandId= → { score, level, sections[].items[] }
-export const getProfileStrength = (brandId) => call(() => api.get('/brands/profile-strength', q(brandId)));
+// Profile strength comes inside the status (status.profileStrength); GET /brands/profile-strength isn't needed.
 
-/* ---- Business identity (design 02–05) ------------------------------ */
+/* ---- Basic details (BRAND_NAME → REGISTRATION_ENTITY_TYPE) ---------- */
 
-// POST /brands/onboarding/add-basic-details?brandId= { step, … }
-//   BUSINESS_NAME            { legalBusinessName (3–120), brandName? (2–120) }
-//   BUSINESS_CATEGORY        { subCategoryId }
-//   REGISTRATION_STATUS      { businessRegistrationStatus }
+// POST /brands/onboarding/add-basic-details?brandId= { step, … } → { brand, currentScreen }
+//   BRAND_NAME               { brandName }                    (limits.brandNameMin/MaxLength)
+//   BUSINESS_CATEGORY        { categoryId, subCategoryIds[] } (≤ limits.maxSubCategories, one category)
+//   REGISTRATION_STATUS      { kycPath: GST | NO_GST | UNREGISTERED }
 //   REGISTRATION_ENTITY_TYPE { businessEntityType }
-// `step` = the screen being saved (not the next one).
+// `step` = the screen being saved (not the next one). Saving an earlier
+// screen again is fine — the current screen doesn't move.
 export const addBasicDetails = (brandId, step, fields) =>
     call(() => api.post('/brands/onboarding/add-basic-details', { step, ...fields }, q(brandId)));
 
 /* ---- Moving on (continue / skip / submit) -------------------------- */
 
-// POST /brands/onboarding/continue?brandId= → 422 ONBOARDING_STEP_INCOMPLETE { missing }
+// POST /brands/onboarding/continue?brandId= → { currentScreen } · 422 ONBOARDING_STEP_INCOMPLETE { screen, missing }
 export const continueOnboarding = (brandId) => call(() => api.post('/brands/onboarding/continue', {}, q(brandId)));
 
-// POST /brands/onboarding/skip?brandId= { screen } — skippable screens only (422 SCREEN_NOT_SKIPPABLE)
+// POST /brands/onboarding/skip?brandId= { screen } — only KYC_DOCUMENTS, BANK_VERIFICATION,
+// BRAND_PROFESSIONAL_DETAILS, and only the current screen (409 ONBOARDING_SCREEN_MISMATCH).
 export const skipOnboardingScreen = (brandId, screen) =>
     call(() => api.post('/brands/onboarding/skip', { screen }, q(brandId)));
 
-// POST /brands/onboarding/submit?brandId= → UNDER_REVIEW (system verify runs here)
+// POST /brands/onboarding/submit?brandId= → { currentScreen: UNDER_REVIEW, attemptNumber, submittedAt, systemChecks }
+// 422 ONBOARDING_STEP_INCOMPLETE missing[] (e.g. OUTLET_NOT_VERIFIED:<id>, OUTLET_LOCATION:<id>).
 export const submitOnboarding = (brandId) => call(() => api.post('/brands/onboarding/submit', {}, q(brandId)));
 
-/* ---- KYC documents (design 06, guide §7) --------------------------- */
+/* ---- Business documents (KYC_DOCUMENTS) ---------------------------- */
 
-// GET /brands/onboarding/documents?brandId= → { documents, slotHint }
+// GET /brands/onboarding/documents?brandId= → { documents[], hints[] (docType codes), limit, count }
 export const getKycDocuments = (brandId) => call(() => api.get('/brands/onboarding/documents', q(brandId)));
 
-// POST /brands/onboarding/documents?brandId= — multipart file + slot + docType. Filled slot = replace.
-export const uploadKycDocument = (brandId, { file, slot, docType }) => {
+// POST /brands/onboarding/documents?brandId= — multipart `file` + `title` (2–80)
+// + `docType` only when picked from a hint (a custom title is stored as OTHER).
+export const addKycDocument = (brandId, { file, title, docType }) => {
     const fd = new FormData();
-    fd.append('file', file);
-    fd.append('slot', slot);
+    fd.append('title', title);
     if (docType) fd.append('docType', docType);
+    fd.append('file', file);
     return call(() => api.post('/brands/onboarding/documents', fd, { ...q(brandId), ...multipart }));
 };
 
-// PUT /brands/admin/onboarding/documents/:documentId/review { status: ACCEPTED } | { status: REJECTED, reason }
+// PUT /brands/onboarding/documents/:documentId?brandId= — rename and / or replace the file
+// (a new file comes back with a NEW _id).
+export const updateKycDocument = (brandId, documentId, { title, file }) => {
+    const fd = new FormData();
+    if (title) fd.append('title', title);
+    if (file) fd.append('file', file);
+    return call(() => api.put(`/brands/onboarding/documents/${documentId}`, fd, { ...q(brandId), ...multipart }));
+};
+
+// DELETE /brands/onboarding/documents/:documentId?brandId= → { documentsStatus, count }
+export const deleteKycDocument = (brandId, documentId) =>
+    call(() => api.delete(`/brands/onboarding/documents/${documentId}`, q(brandId)));
+
+// ⚠️ NOT CONFIRMED: PUT /brands/admin/onboarding/documents/:documentId/review { status: ACCEPTED } | { status: REJECTED, reason }
 export const reviewKycDocument = (documentId, { status, reason }) =>
     call(() =>
         api.put(`/brands/admin/onboarding/documents/${documentId}/review`, status === 'REJECTED' ? { status, reason } : { status })
     );
 
-/* ---- PAN / GST / bank (design 07–09) ------------------------------- */
-// verify-* (paid provider call) → { verificationId, isVerified, nameOnRecord, … }
-// then add-*-details { verificationId } — only that. isVerified is never sent.
+/* ---- PAN / GST / bank ---------------------------------------------- */
+// verify-* is a PAID provider call (only on an explicit "Verify" press; the
+// same value within the reuse window comes back `reused: true` for free).
+// A failed check is still 200 with isVerified: false + the provider message.
+// Then add-*-details { verificationId } — never isVerified or provider data.
 
+// → { verificationId, isVerified, nameOnRecord, panType, suggestedEntity }. 422 PAN_NOT_IN_GSTIN on the GST path.
 export const verifyPan = (brandId, pan) =>
     call(() => api.post('/verification/brands/onboarding/verify-pan', { pan }, q(brandId)));
 export const savePan = (brandId, verificationId) =>
     call(() => api.post('/brands/onboarding/add-pan-details', { verificationId }, q(brandId)));
 
+// → { verificationId, isVerified, nameOnRecord, isActive, constitution, suggestedEntity, panFromGstin, gstStateCode, details.address }
 export const verifyGst = (brandId, gstNumber) =>
     call(() => api.post('/verification/brands/onboarding/verify-gst', { gstNumber }, q(brandId)));
 export const saveGst = (brandId, verificationId) =>
     call(() => api.post('/brands/onboarding/add-gst-details', { verificationId }, q(brandId)));
 
-export const verifyBank = (brandId, { accountNumber, ifscCode, beneficiaryName }) =>
+// ₹1 penny drop. Never send beneficiaryName — stage rejects it ("beneficiaryName" is not allowed).
+export const verifyBank = (brandId, { accountNumber, ifscCode }) =>
+    call(() => api.post('/verification/brands/onboarding/verify-bank', { accountNumber, ifscCode }, q(brandId)));
+export const saveBank = (brandId, { verificationId, accountType }) =>
     call(() =>
-        api.post(
-            '/verification/brands/onboarding/verify-bank',
-            beneficiaryName ? { accountNumber, ifscCode, beneficiaryName } : { accountNumber, ifscCode },
-            q(brandId)
-        )
+        api.post('/brands/onboarding/add-bank-details', accountType ? { verificationId, accountType } : { verificationId }, q(brandId))
     );
-export const saveBank = (brandId, verificationId) =>
-    call(() => api.post('/brands/onboarding/add-bank-details', { verificationId }, q(brandId)));
+
+/* ---- Owner verification (OWNER_VERIFICATION, not-registered path) --- */
+// POST /brands/onboarding/owner-verification?brandId= → { ownerVerification, legalBusinessName, currentScreen }
+
+// PAN: verify-pan first, then { method: "PAN", verificationId }.
+export const saveOwnerPan = (brandId, verificationId) =>
+    call(() => api.post('/brands/onboarding/owner-verification', { method: 'PAN', verificationId }, q(brandId)));
+
+// ID document: multipart { method: "ID_DOCUMENT", idType, file } (PDF / JPG / PNG, max 5 MB).
+export const saveOwnerIdDocument = (brandId, { idType, file }) => {
+    const fd = new FormData();
+    fd.append('method', 'ID_DOCUMENT');
+    fd.append('idType', idType);
+    fd.append('file', file);
+    return call(() => api.post('/brands/onboarding/owner-verification', fd, { ...q(brandId), ...multipart }));
+};
 
 /* ---- Partnership deed, offline (guide §12) ------------------------- */
 
-// PUT /brands/admin/:brandId/deed — multipart `file` (signed copy) + `note` (required) → { deed }
+// ⚠️ NOT CONFIRMED: PUT /brands/admin/:brandId/deed — multipart `file` (signed copy) + `note` (required) → { deed }.
+// status.deed already has mode OFFLINE / acceptedByType ADMIN / requiresDeedConfirmation,
+// and the vendor confirms with PUT accept-partnership — only this admin route is unseen.
 export const recordOfflineDeed = (brandId, { file, note }) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -208,9 +249,19 @@ export const getBrandFeatures = (brandId) => call(() => api.get('/brandFeatures/
 // GET /subBrands/get-all?brandId= — the brand's outlets
 export const getOutlets = (brandId) => call(() => api.get('/subBrands/get-all', { params: { brandId, page: 1, limit: 50 } }));
 
-// POST /subBrands/signUp-with-whatsapp { brandId, whatsappNumber, isFirstOutlet, outletType }
-export const addOutlet = ({ brandId, whatsappNumber, isFirstOutlet, outletType = 'OUTLET' }) =>
-    call(() => api.post('/subBrands/signUp-with-whatsapp', { brandId, whatsappNumber, isFirstOutlet: Boolean(isFirstOutlet), outletType }));
+// POST /subBrands/signUp-with-whatsapp { brandId, whatsappNumber | useOwnerNumber, isFirstOutlet, outletType }
+// → { isNewOutlet, otpSent, isVerified, verifiedVia, subBrand … }. useOwnerNumber: the owner
+// manages the outlet on their own number (verified at once, no OTP).
+// 403 OUTLET_ALREADY_VERIFIED. Location / hours return 409 OUTLET_NOT_VERIFIED until the manager verifies.
+export const addOutlet = ({ brandId, whatsappNumber, useOwnerNumber, isFirstOutlet, outletType = 'OUTLET' }) =>
+    call(() =>
+        api.post('/subBrands/signUp-with-whatsapp', {
+            brandId,
+            ...(useOwnerNumber ? { useOwnerNumber: true } : { whatsappNumber }),
+            isFirstOutlet: Boolean(isFirstOutlet),
+            outletType,
+        })
+    );
 
 // POST /locations/create { subBrandId, isSubBrandAddress: true, addressLine1, city, state, zipcode, coordinates[lng,lat], … }
 export const addOutletAddress = (subBrandId, address) =>

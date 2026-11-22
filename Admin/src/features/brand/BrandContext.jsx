@@ -17,7 +17,7 @@ import { queryKeys } from "../../lib/query";
  * BrandContext.jsx
  * Backed by the real admin API, cached with TanStack Query. Public
  * interface (brands, toggleActive, setHiddenFromCustomers,
- * updateBrandDetails, deleteBrandById, addBrand, …) is unchanged so
+ * updateBrandDetails, deleteBrandById, …) is unchanged so
  * BrandDetailsPage / any other consumer doesn't need edits. Approve /
  * reject / revoke never go through here — only the review endpoint
  * (Brand Waiting) decides a brand.
@@ -322,10 +322,6 @@ export function BrandProvider({ children }) {
     patchBrands((prev) => prev.filter((b) => b.id !== brand.id));
   }, [patchBrands]);
 
-  const addBrand = useCallback((newBrand) => {
-    queryClient.setQueryData(ALL_BRANDS_KEY, (prev = []) => [newBrand, ...prev]);
-  }, [queryClient]);
-
   const value = {
     brands,
     allBrands,
@@ -342,7 +338,6 @@ export function BrandProvider({ children }) {
     setTopBrand,
     setComingSoon,
     deleteBrandById,
-    addBrand,
   };
 
   return <BrandContext.Provider value={value}>{children}</BrandContext.Provider>;

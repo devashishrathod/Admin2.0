@@ -26,7 +26,6 @@ import RefundDetails from './features/refund/RefundDetails'
 import VoucherDetails from './features/voucher/VoucherDetails'
 import VoucherListing from './features/voucher/VoucherList'
 import BrandDetailsPage from './features/brand/BrandDetailsPage'
-import AddBrand from './features/brand/add/AddBrand'
 import AdminOnboarding from './features/onboarding/AdminOnboarding'
 import { BrandProvider } from './features/brand/BrandContext'
 import FeatureCampaign from './features/featurecampaign/page/FeatureCampaign'
@@ -128,14 +127,6 @@ function App() {
           }
         />
 
-        <Route
-          path="/brand/add"
-          element={
-            <Layout>
-              <AddBrand />
-            </Layout>
-          }
-        />
 
         <Route
           path="/brand/onboard"

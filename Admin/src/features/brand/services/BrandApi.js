@@ -129,24 +129,6 @@ export async function updateTopBrand(brandId, { isTopBrand, topOrder }) {
 }
 
 /* -------------------------------------------------------------------------
- * POST {{base_url}}/brands/admin/create
- * multipart/form-data: `data` (full brand body as a JSON string) + files
- * (logo, listingFeatures[i].icon, showcase[i].files) — see
- * buildBrandFormData in features/brand/add/brandFormConfig.js.
- * NOTE: path and file keys not confirmed yet — match them to the backend.
- * ---------------------------------------------------------------------- */
-export async function createBrand(formData) {
-    try {
-        const { data } = await api.post('/brands/admin/create', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        return data;
-    } catch (error) {
-        handleError(error);
-    }
-}
-
-/* -------------------------------------------------------------------------
  * PUT {{base_url}}/brands/update?brandId=   (super admin API doc #27, A-11)
  * multipart — every field optional: brandName, email, mobile, description,
  * logo (file). 🔴 `email` / `mobile` are the vendor ACCOUNT's keys and
@@ -275,7 +257,6 @@ export async function verifyOutletOtp(whatsappNumber, otp) {
 }
 
 export default {
-    createBrand,
     getBrandDetails,
     getBrands,
     getAllBrands,

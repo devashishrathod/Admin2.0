@@ -190,38 +190,6 @@ function mapSubscriptionDetail(subscribed) {
   };
 }
 
-/* Full raw system-verification record — powers the dedicated "System
-   Verification" tab. */
-function mapSystemVerify(sv) {
-  if (!sv) return null;
-  return {
-    attemptNumber: sv.attemptNumber ?? '—',
-    score: sv.score ?? null,
-    status: sv.status || '—',
-    flags: sv.flags || {},
-    nameMatch: sv.nameMatch || null,
-    bankNameMatch: sv.bankNameMatch || null,
-    entityMatch: sv.entityMatch || null,
-    remarks: sv.remarks || [],
-    remarkCodes: Array.isArray(sv.remarkCodes) ? sv.remarkCodes : [],
-    verifiedBy: sv.verifiedBy || '—',
-    verifiedAtDisplay: formatDateTime(sv.verifiedAt),
-    isRevoked: Boolean(sv.isRevoked),
-    isRejected: Boolean(sv.isRejected),
-    isReviewed: Boolean(sv.isReviewed),
-    isAdminApproved: Boolean(sv.isAdminApproved),
-    isSuperseded: Boolean(sv.isSuperseded),
-    createdAtDisplay: formatDateTime(sv.createdAt),
-    updatedAtDisplay: formatDateTime(sv.updatedAt),
-    adminApprovedAtDisplay: sv.adminApprovedAt ? formatDateTime(sv.adminApprovedAt) : null,
-    reviewedAtDisplay: sv.reviewedAt ? formatDateTime(sv.reviewedAt) : null,
-    rejectedAtDisplay: sv.rejectedAt ? formatDateTime(sv.rejectedAt) : null,
-    rejectionReason: sv.rejectionReason || null,
-    revokedAtDisplay: sv.revokedAt ? formatDateTime(sv.revokedAt) : null,
-    revokeReason: sv.revokeReason || null,
-  };
-}
-
 function computeRemainderPercentFromDates(startDate, endDate) {
   if (!startDate || !endDate) return 0;
   const start = new Date(startDate).getTime();
@@ -564,9 +532,6 @@ export function mapBrandDetail(raw) {
     bankVerificationMessage: raw.bank?.verificationMessage || '—',
     bankVerificationProvider: raw.bank?.verificationProvider || '—',
     bankVerifiedAtDisplay: raw.bank?.verifiedAt ? formatDateTime(raw.bank.verifiedAt) : '—',
-
-    // Dedicated "System Verification" tab
-    systemVerify: mapSystemVerify(raw.systemVerify),
 
     // Dedicated "Subscription Details" card on the Subscription tab
     subscriptionDetail: mapSubscriptionDetail(subscribed),

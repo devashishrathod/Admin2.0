@@ -460,7 +460,6 @@ export const DETAIL_TABS = [
   "Refunds",
   "Voucher",
   "Subscription",
-  "System Verification",
   "Account Details",
 ];
 

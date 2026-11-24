@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   MapPin,
-  ShieldCheck,
   ArrowLeft,
   Image as ImageIcon,
   Store,
@@ -38,7 +37,7 @@ import { TransactionsTab, RefundsTab } from "../BrandMoneyTabs";
 import { formatBatch, isMissing, MISSING } from "../../../utils/helpers";
 import ValueOr from "../../../components/common/ValueOr";
 import ListingFeaturesTab from "../ListingFeaturesTab";
-import { VerificationHistory, LiveSubscriptionPanel } from "../BrandAdminExtras";
+import { LiveSubscriptionPanel } from "../BrandAdminExtras";
 import { BrandDebtSection } from "../../settlement/Settlement";
 import { useBrands } from "../BrandContext";
 import ComingSoonModal from "../ComingSoonModal";
@@ -54,7 +53,6 @@ import ListingsTab from "./tabs/ListingsTab";
 import SettlementsTab from "./tabs/SettlementsTab";
 import VoucherTab from "./tabs/VoucherTab";
 import AccountDetailsTab from "./tabs/AccountDetailsTab";
-import SystemVerificationTab from "./tabs/SystemVerificationTab";
 import OnboardingTab from "../v2/OnboardingTab";
 import BrandV2HeaderChips from "../v2/BrandV2HeaderChips";
 
@@ -188,7 +186,6 @@ const TAB_ICONS = {
   Refunds: Undo2,
   Voucher: Ticket,
   Subscription: Repeat,
-  "System Verification": ShieldCheck,
   "Account Details": UserCog,
 };
 
@@ -272,12 +269,6 @@ export default function BrandDetails({
       <>
         <SubscriptionTab brand={brand} onUpdate={onUpdate} readOnly={readOnly} />
         <LiveSubscriptionPanel brandId={brand.id} readOnly={readOnly} />
-      </>
-    ),
-    "System Verification": (
-      <>
-        <SystemVerificationTab brand={brand} />
-        <VerificationHistory brandId={brand.id} />
       </>
     ),
     "Account Details": <AccountDetailsTab brand={brand} />,

@@ -30,7 +30,7 @@ import {
   History,
   Eye,
 } from "lucide-react";
-import { BrandAvatar, StatusBadge, SectionCard, EmptyState, ToggleSwitch, StatChip, RingStat } from "../brand/BrandShared";
+import { BrandAvatar, StatusBadge, SectionCard, EmptyState, ToggleSwitch, StatChip } from "../brand/BrandShared";
 import CommonEmptyState from "../../components/common/EmptyState";
 import { REJECTION_REASONS } from "../brand/data/BrandData";
 import { useBrandDetails } from "../brand/queries/brandQueries";
@@ -41,7 +41,9 @@ import ShowcaseAlbums from "../brand/ShowcaseAlbums";
 import AccountDetailsTab from "../brand/BrandDetails/tabs/AccountDetailsTab";
 import SubmittedDetails from "./SubmittedDetails";
 import { REVIEW_TEXT_MAX } from "./reviewGate";
-import { OWNER_ID_MANUAL_NOTE, ownerIdManual } from "./verificationData";
+import SystemVerifyCard from "../brand/v2/SystemVerifyCard";
+import { useStatusRaw } from "../brand/v2/hooks";
+import { approvalState } from "../brand/v2/util";
 import { isNotFoundMessage, MISSING, orText } from "../../utils/helpers";
 import Loader from "../../components/common/Loader";
 import ValueOr from "../../components/common/ValueOr";
@@ -58,15 +60,9 @@ const selectBrandDetail = (res) => {
 const CARD =
   "rounded-3xl border border-white/80 bg-white/65 shadow-[0_8px_30px_rgba(16,185,129,0.07)] backdrop-blur-xl dark:border-white/5 dark:bg-neutral-900/60 dark:shadow-black/30";
 
-// The ADMIN's decision (verificationData.deriveStatus). The system's verdict
-// is advice only and has its own labels below — never "Approved".
-const STATUS_LABELS = {
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  REVOKED: "Revoked",
-  PENDING: "Awaiting decision",
-};
-
+// Hero glow per admin decision (approvalState key, from
+// GET /brands/onboarding/status → verification). The system's verdict is
+// advice only and has its own labels below — never "Approved".
 const STATUS_ACCENTS = {
   APPROVED: "from-emerald-400/40 via-emerald-400/5",
   REJECTED: "from-red-400/40 via-red-400/5",
@@ -85,12 +81,6 @@ function formatDateTime(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return MISSING.date;
   return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function scoreColor(score) {
-  if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
-  if (score >= 50) return "text-amber-600 dark:text-amber-400";
-  return "text-red-600 dark:text-red-400";
 }
 
 // Local bento-tile variant of BrandShared's InfoRow. Not reusing InfoRow
@@ -137,29 +127,6 @@ function MetaPill({ icon: Icon, children, className = "" }) {
   );
 }
 
-// Every automated check the backend ran for this attempt — the duplicate
-// flags are inverted (a duplicate = bad), so "ok" always means "good".
-// `note` explains a failure the admin resolves by hand (OWNER_ID_MANUAL).
-function buildChecklist(flags = {}, remarkCodes = []) {
-  const panNote = !flags.panVerified && ownerIdManual(remarkCodes) ? OWNER_ID_MANUAL_NOTE : null;
-  return [
-    { label: "PAN Verified", ok: Boolean(flags.panVerified), note: panNote },
-    { label: "GST Verified", ok: Boolean(flags.gstVerified) },
-    { label: "Bank Verified", ok: Boolean(flags.bankVerified) },
-    { label: "PAN Matched With GST", ok: Boolean(flags.panMatchedWithGST) },
-    { label: "PAN Matched With Brand", ok: Boolean(flags.panMatchedWithBrand) },
-    { label: "GST Matched With Brand", ok: Boolean(flags.gstMatchedWithBrand) },
-    { label: "Bank Name Matched", ok: Boolean(flags.bankMatched) },
-    { label: "Business Entity Matched", ok: Boolean(flags.businessEntityMatched) },
-    { label: "GST Active", ok: Boolean(flags.gstActive) },
-    { label: "No Duplicate PAN", ok: !flags.duplicatePAN },
-    { label: "No Duplicate GST", ok: !flags.duplicateGST },
-    { label: "No Duplicate Bank", ok: !flags.duplicateBank },
-    { label: "No Duplicate WhatsApp", ok: !flags.duplicateWhatsapp },
-    { label: "No Duplicate Email", ok: !flags.duplicateEmail },
-  ];
-}
-
 // "APPROVAL_ACKNOWLEDGED" -> "Approval Acknowledged"
 function formatAction(action) {
   if (!action) return "Unknown action";
@@ -188,35 +155,6 @@ function summarizeMetadata(entry) {
     parts.push(`${meta.previousScreen || "None"} → ${meta.newScreen || "None"}`);
   }
   return parts.length ? parts.join(", ") : null;
-}
-
-function ScoreRing({ label, value }) {
-  const pct = Math.min(100, Math.max(0, value ?? 0));
-  const radius = 24;
-  const dash = 2 * Math.PI * radius;
-  const ringColor = pct >= 80 ? "stroke-emerald-400" : pct >= 50 ? "stroke-amber-400" : "stroke-red-400";
-
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-      <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
-        <svg className="absolute inset-0 h-16 w-16 -rotate-90" viewBox="0 0 64 64">
-          <circle cx="32" cy="32" r={radius} className="fill-none stroke-neutral-200 dark:stroke-neutral-800" strokeWidth="6" />
-          <circle
-            cx="32"
-            cy="32"
-            r={radius}
-            className={`fill-none transition-[stroke-dashoffset] duration-700 ease-out ${ringColor}`}
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeDasharray={dash}
-            strokeDashoffset={dash * (1 - pct / 100)}
-          />
-        </svg>
-        <span className={`text-[13px] font-bold ${scoreColor(value)}`}>{value ?? 0}%</span>
-      </div>
-      <p className="text-center text-[11px] leading-tight text-neutral-500">{label}</p>
-    </div>
-  );
 }
 
 // Per-action visual identity + plain-English copy, matched to the real
@@ -442,13 +380,17 @@ export default function VerificationDetails({
   // controls; decisions happen on Brand Waiting.
   readOnly = false,
 }) {
-  const { brand, flags, nameMatch, bankNameMatch, entityMatch, duplicateDetails } = verification;
-  const checklist = buildChecklist(flags, verification.remarkCodes);
-  const passedCount = checklist.filter((c) => c.ok).length;
-  const failedChecks = checklist.filter((c) => !c.ok);
-  const statusLabel = STATUS_LABELS[verification.derivedStatus] || verification.derivedStatus;
-  const accent = STATUS_ACCENTS[verification.derivedStatus] || "from-neutral-500/20 via-neutral-500/0";
-  const checksPassedPct = checklist.length ? (passedCount / checklist.length) * 100 : 0;
+  const { brand } = verification;
+  const brandId = verification.brandId || brand?.id;
+
+  // The admin's decision comes from the server (GET /brands/onboarding/status
+  // → verification), never from the system score or our own rules.
+  const statusQuery = useStatusRaw(brandId);
+  const serverVerification = statusQuery.data?.verification ?? null;
+  const approval = approvalState(serverVerification);
+  const statusLabel = statusQuery.isPending ? "Loading…" : approval.label;
+  const accent = STATUS_ACCENTS[approval.key] || "from-neutral-500/20 via-neutral-500/0";
+  const awaitingDecision = !statusQuery.isPending && (approval.key === "PENDING" || approval.key === "NOT_SUBMITTED");
 
   const [tab, setTab] = useState("overview");
   const [approveNote, setApproveNote] = useState("");
@@ -474,7 +416,9 @@ export default function VerificationDetails({
   const canRevoke = !readOnly && brandApproved;
   const approveBlocked = gate?.approveBlocked || null;
   const rejectBlocked = gate?.rejectBlocked || null;
-  const systemVerdictText = SYSTEM_VERDICT_LABELS[verification.systemVerdict];
+  // The system's advice: the re-score after a post-submit add (latestStatus)
+  // wins over the submit-time verdict.
+  const systemVerdictText = SYSTEM_VERDICT_LABELS[verification.latestStatus || verification.status];
   // The re-score after a post-submit add (latestScore) wins over the submit one.
   const adviceScore = verification.latestScore ?? verification.score;
   // No verification record yet (vendor hasn't submitted) — attemptNumber is 0.
@@ -492,7 +436,6 @@ export default function VerificationDetails({
   // Real audit trail — GET /brands/verifications/history?brandId=...
   // Review actions are PUTs under /brands, so the interceptor refreshes this
   // and the brand snapshot below on its own.
-  const brandId = verification.brandId || brand?.id;
   const [historyPage, setHistoryPage] = useState(1);
   const historyQuery = useVerificationHistory(
     { brandId, page: historyPage, limit: 20 },
@@ -588,14 +531,6 @@ export default function VerificationDetails({
     }
   };
 
-  const duplicateGroups = [
-    { label: "PAN", ids: duplicateDetails?.panBrandIds },
-    { label: "GST", ids: duplicateDetails?.gstBrandIds },
-    { label: "Bank", ids: duplicateDetails?.bankBrandIds },
-    { label: "WhatsApp", ids: duplicateDetails?.whatsappBrandIds },
-    { label: "Email", ids: duplicateDetails?.emailBrandIds },
-  ].filter((g) => g.ids?.length);
-
   // Brand-card values — the verification record first, then GET /brands/get
   // (most onboarding brands have no verification record yet).
   const brandEmail = brand.email || brandDetail?.contactEmail;
@@ -606,7 +541,6 @@ export default function VerificationDetails({
     { key: "overview", label: "Overview", icon: LayoutDashboard },
     { key: "business", label: "Business Details", icon: Store },
     { key: "account", label: "Account Details", icon: Landmark },
-    { key: "verification", label: "Verification", icon: ShieldCheck, count: failedChecks.length, alert: true },
     { key: "listings", label: "Listings & Showcase", icon: Tag, count: vouchers.length },
     { key: "timeline", label: "Timeline", icon: History, count: currentAttemptHistory.length },
   ];
@@ -633,169 +567,8 @@ export default function VerificationDetails({
     <div className="space-y-4">
       {brandCard}
 
-      <SectionCard title="Verification Snapshot">
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-            <p className="text-[10.5px] text-neutral-500">Score</p>
-            <p className={`mt-1 text-[18px] font-bold leading-none ${scoreColor(verification.score)}`}>
-              {verification.score ?? 0}
-              <span className="ml-0.5 text-[11px] font-medium text-neutral-500">/100</span>
-            </p>
-          </div>
-          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-            <p className="text-[10.5px] text-neutral-500">Checks Passed</p>
-            <p className="mt-1 text-[18px] font-bold leading-none text-neutral-900 dark:text-neutral-50">
-              {passedCount}
-              <span className="ml-0.5 text-[11px] font-medium text-neutral-500">/{checklist.length}</span>
-            </p>
-          </div>
-          <div className="rounded-xl bg-neutral-50 p-3 dark:bg-neutral-950/60">
-            <p className="text-[10.5px] text-neutral-500">Duplicates</p>
-            <p className={`mt-1 text-[18px] font-bold leading-none ${duplicateGroups.length ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-              {duplicateGroups.length}
-            </p>
-          </div>
-        </div>
-
-        {failedChecks.length ? (
-          <div className="mt-4">
-            <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-neutral-500">Needs attention</p>
-            <div className="flex flex-wrap gap-1.5">
-              {failedChecks.map((c) => (
-                <span
-                  key={c.label}
-                  className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11.5px] font-medium text-red-700 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400"
-                >
-                  <XCircle size={12} /> {c.label}
-                  {c.note && <span className="font-normal text-red-600/80 dark:text-red-400/80">· {c.note}</span>}
-                </span>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setTab("verification")}
-              className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
-            >
-              View full checklist <ChevronRight size={13} />
-            </button>
-          </div>
-        ) : (
-          <p className="mt-4 flex items-center gap-1.5 text-[12.5px] text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 size={13} /> All automated checks passed.
-          </p>
-        )}
-      </SectionCard>
-
-      {verification.remarks?.length > 0 && (
-        <SectionCard title="Remarks">
-          <ul className="space-y-2">
-            {verification.remarks.map((r, i) => (
-              <li key={i} className="flex items-start gap-2 rounded-xl bg-amber-400/10 px-3 py-2 text-[12.5px] text-amber-700 dark:text-amber-300">
-                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                {r}
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-      )}
-    </div>
-  );
-
-  const verificationTab = (
-    <div className="space-y-4">
-      <SectionCard title="Verification Checklist">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {checklist.map((c) => (
-            <div
-              key={c.label}
-              className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] ${
-                c.ok
-                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/5"
-                  : "border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/5"
-              }`}
-            >
-              <span className="min-w-0 text-neutral-700 dark:text-neutral-300">
-                {c.label}
-                {c.note && <span className="mt-0.5 block text-[11.5px] text-amber-700 dark:text-amber-300">{c.note}</span>}
-              </span>
-              {c.ok ? (
-                <span className="flex shrink-0 items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 size={13} /> Pass
-                </span>
-              ) : (
-                <span className="flex shrink-0 items-center gap-1 font-semibold text-red-600 dark:text-red-400">
-                  <XCircle size={13} /> Fail
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <SectionCard title="Name Match Scores">
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            <ScoreRing label="PAN ↔ GST" value={nameMatch?.panGstScore ?? 0} />
-            <ScoreRing label="PAN ↔ Brand" value={nameMatch?.panBrandScore ?? 0} />
-            <ScoreRing label="GST ↔ Brand" value={nameMatch?.gstBrandScore ?? 0} />
-            <ScoreRing label="Average" value={nameMatch?.averageScore ?? 0} />
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Bank Name Match Scores">
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            <ScoreRing label="Bank ↔ PAN" value={bankNameMatch?.bankPanScore ?? 0} />
-            <ScoreRing label="Bank ↔ GST" value={bankNameMatch?.bankGstScore ?? 0} />
-            <ScoreRing label="Bank ↔ Brand" value={bankNameMatch?.bankBrandScore ?? 0} />
-            <ScoreRing label="Highest" value={bankNameMatch?.highestScore ?? 0} />
-          </div>
-        </SectionCard>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <SectionCard title="Business Entity Match" icon={Store}>
-          <div className="space-y-2">
-            <FactRow icon={Store} label="GST Constitution" tint="bg-sky-400/10 text-sky-600 dark:text-sky-400">
-              <ValueOr value={entityMatch?.gstConstitution} fallback="Not added" />
-            </FactRow>
-            <FactRow icon={Store} label="Brand Entity Type" tint="bg-sky-400/10 text-sky-600 dark:text-sky-400">
-              <ValueOr value={entityMatch?.brandEntityType} fallback="Not added" />
-            </FactRow>
-            <FactRow
-              icon={entityMatch?.matched ? CheckCircle2 : XCircle}
-              label="Matched"
-              tint={entityMatch?.matched ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400" : "bg-red-400/10 text-red-500 dark:text-red-400"}
-            >
-              <span
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                  entityMatch?.matched
-                    ? "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
-                    : "bg-red-400/10 text-red-500 dark:text-red-400"
-                }`}
-              >
-                {entityMatch?.matched ? "Yes" : "No"}
-              </span>
-            </FactRow>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Duplicate Detection">
-          {duplicateGroups.length ? (
-            <div className="space-y-2.5">
-              {duplicateGroups.map((g) => (
-                <div key={g.label} className="rounded-xl border border-red-500/30 bg-red-500/5 p-3">
-                  <p className="mb-1 text-[11.5px] font-semibold text-red-700 dark:text-red-300">Duplicate {g.label}</p>
-                  <p className="break-all text-[11.5px] text-red-700/80 dark:text-red-300/80">{g.ids.join(", ")}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="flex items-center gap-1.5 text-[12.5px] text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 size={13} /> No duplicates found across PAN, GST, bank, WhatsApp or email.
-            </p>
-          )}
-        </SectionCard>
-      </div>
+      {/* GET /brands/get → systemVerify (status.systemChecks before submit) */}
+      {brandId && <SystemVerifyCard brandId={brandId} />}
     </div>
   );
 
@@ -924,7 +697,6 @@ export default function VerificationDetails({
   const tabContent = {
     overview: overviewTab,
     business: businessTab,
-    verification: verificationTab,
     account: accountTab,
     listings: listingsTab,
     timeline: timelineTab,
@@ -949,7 +721,7 @@ export default function VerificationDetails({
         </div>
       )}
       {/* Awaiting the admin. The system's verdict is shown as advice only. */}
-      {!brandApproved && verification.derivedStatus === "PENDING" && (
+      {!brandApproved && awaitingDecision && (
         <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-sky-400/10 p-3.5">
           <ShieldCheck size={16} className="mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
           <p className="text-[12.5px] text-sky-700 dark:text-sky-300">
@@ -968,24 +740,24 @@ export default function VerificationDetails({
           </p>
         </div>
       )}
-      {verification.derivedStatus === "REJECTED" && (
+      {approval.key === "REJECTED" && (
         <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-red-500/10 p-3.5">
           <XCircle size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
           <div>
             <p className="text-[12.5px] font-medium text-red-700 dark:text-red-300">Rejected</p>
             <p className="mt-0.5 text-[12.5px] text-red-700/80 dark:text-red-300/80">
-              {verification.rejectionReason || "No reason recorded."}
+              {serverVerification?.rejectionReason || verification.rejectionReason || "No reason recorded."}
             </p>
           </div>
         </div>
       )}
-      {verification.derivedStatus === "REVOKED" && (
+      {approval.key === "REVOKED" && (
         <div className="mb-3.5 flex items-start gap-2.5 rounded-xl bg-orange-400/10 p-3.5">
           <RotateCcw size={16} className="mt-0.5 shrink-0 text-orange-600 dark:text-orange-400" />
           <div>
             <p className="text-[12.5px] font-medium text-orange-700 dark:text-orange-300">Revoked</p>
             <p className="mt-0.5 text-[12.5px] text-orange-700/80 dark:text-orange-300/80">
-              {verification.revokeReason || "No reason recorded."}
+              {serverVerification?.revokeReason || verification.revokeReason || "No reason recorded."}
             </p>
           </div>
         </div>
@@ -1318,15 +1090,17 @@ export default function VerificationDetails({
             </div>
           </div>
 
-          <div className="grid shrink-0 grid-cols-2 gap-2.5">
-            <RingStat
-              pct={verification.score ?? 0}
-              label="Verification Score"
-              caption={attemptCaption}
-              tint={verification.score >= 80 ? "emerald" : verification.score >= 50 ? "amber" : "red"}
-            />
-            <RingStat pct={checksPassedPct} label="Checks Passed" caption={`${passedCount}/${checklist.length}`} tint="sky" />
-          </div>
+          {/* The system's score, as sent — advice only, no colours / thresholds. */}
+          {verification.attemptNumber > 0 && (
+            <div className="shrink-0 rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-neutral-200/60 dark:bg-neutral-950/50 dark:ring-white/5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">System check · advice only</p>
+              <p className="mt-1 text-[18px] font-bold leading-none tabular-nums text-neutral-900 dark:text-neutral-50">
+                {adviceScore ?? "—"}
+                <span className="ml-0.5 text-[11px] font-medium text-neutral-500">/100</span>
+              </p>
+              {systemVerdictText && <p className="mt-1 text-[11.5px] text-neutral-500">The system {systemVerdictText}.</p>}
+            </div>
+          )}
         </div>
       </div>
 

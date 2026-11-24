@@ -1,4 +1,6 @@
 import OnboardingSummaryCard from "./OnboardingSummaryCard";
+import SystemVerifyCard from "./SystemVerifyCard";
+import { VerificationHistory } from "../BrandAdminExtras";
 
 /* -------------------------------------------------------------------------
  * Brand detail → "Onboarding & KYC" tab (admin guide §4): one column of
@@ -10,6 +12,8 @@ export default function OnboardingTab({ brand }) {
   return (
     <div className="space-y-4">
       <OnboardingSummaryCard brandId={brand.id} />
+      <SystemVerifyCard brandId={brand.id} />
+      <VerificationHistory brandId={brand.id} />
     </div>
   );
 }

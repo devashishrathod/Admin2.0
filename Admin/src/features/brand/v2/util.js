@@ -43,12 +43,13 @@ export const fmtDateTime = (iso) => {
 };
 
 /** The admin's decision, read off status.verification (never the system score). */
-export function approvalState(verification = {}) {
-  if (verification.isApproved) return { label: "Approved", tone: "emerald" };
-  if (verification.isRevoked) return { label: "Revoked", tone: "red" };
-  if (verification.isRejected) return { label: "Rejected", tone: "red" };
-  if (verification.submittedAt) return { label: verification.attemptNumber > 1 ? "Resubmitted" : "Under review", tone: "amber" };
-  return { label: "Not submitted", tone: "neutral" };
+export function approvalState(verification) {
+  const v = verification || {};
+  if (v.isApproved) return { key: "APPROVED", label: "Approved", tone: "emerald" };
+  if (v.isRevoked) return { key: "REVOKED", label: "Revoked", tone: "red" };
+  if (v.isRejected) return { key: "REJECTED", label: "Rejected", tone: "red" };
+  if (v.submittedAt) return { key: "PENDING", label: v.attemptNumber > 1 ? "Resubmitted" : "Under review", tone: "amber" };
+  return { key: "NOT_SUBMITTED", label: "Not submitted", tone: "neutral" };
 }
 
 /**

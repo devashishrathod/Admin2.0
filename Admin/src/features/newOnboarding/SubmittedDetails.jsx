@@ -10,29 +10,26 @@ import {
   Hash,
   ImageIcon,
   Layers,
-  ListChecks,
   Mail,
   MapPin,
   MessageCircle,
   Monitor,
-  Navigation,
   Phone,
   ScrollText,
   Store,
   Tag,
   UserRound,
-  XCircle,
 } from "lucide-react";
 import { SectionCard, EmptyState } from "../brand/BrandShared";
 import ValueOr from "../../components/common/ValueOr";
 import { MISSING } from "../../utils/helpers";
-import { formatScreenLabel as formatScreen } from "../brand/brandStage";
+import OnboardingSummaryCard from "../brand/v2/OnboardingSummaryCard";
 
 /* -------------------------------------------------------------------------
  * Business Details — everything the vendor filled in during onboarding, read
  * straight from GET /brands/get?brandId=… (the raw payload, so nothing the
  * vendor entered is dropped by a mapper):
- *   Onboarding progress · Business profile (logo, cover, about, category)
+ *   Onboarding steps (server status) · Business profile (logo, cover, about, category)
  *   · Owner & contact · First outlet (address, map) · Working hours
  * PAN / GST / Bank live on the Account Details tab; the plan in the sidebar.
  * ---------------------------------------------------------------------- */
@@ -151,26 +148,6 @@ export default function SubmittedDetails({ raw }) {
   const workHours = obj(outlet?.workHours) || obj(user.workHours) || obj(raw.workHours);
   const category = obj(raw.category);
   const subCategory = obj(raw.subCategory);
-  const unregistered = raw.businessRegistrationStatus === "UNREGISTERED";
-
-  // Each onboarding step and whether the vendor has done it — from the data
-  // itself, so it's right even when the vendor's screen pointer isn't.
-  const steps = [
-    { label: "Business name", done: Boolean(raw.brandName), detail: raw.brandName },
-    { label: "Registration status", done: Boolean(raw.businessRegistrationStatus), detail: humanize(raw.businessRegistrationStatus) },
-    { label: "Entity type", done: Boolean(raw.businessEntityType), detail: humanize(raw.businessEntityType) },
-    { label: "PAN verified", done: Boolean(obj(raw.pan)?.isVerified), detail: obj(raw.pan)?.pan },
-    ...(unregistered ? [] : [{ label: "GST verified", done: Boolean(obj(raw.gst)?.isVerified), detail: obj(raw.gst)?.gstNumber }]),
-    { label: "Bank verified", done: Boolean(obj(raw.bank)?.isVerified), detail: obj(raw.bank)?.bankName },
-    { label: "System verification", done: Boolean(raw.systemVerify), detail: raw.systemVerify ? `Score ${raw.systemVerify.score ?? 0}` : null },
-    { label: "Partnership deed", done: Boolean(raw.hasAcceptedPartnershipDeed), detail: raw.hasAcceptedPartnershipDeed ? "Accepted" : null },
-    { label: "Plan subscribed", done: Boolean(obj(raw.subscribed) || raw.isSubscribed), detail: obj(raw.subscribed)?.status ? humanize(raw.subscribed.status) : null },
-    { label: "First outlet", done: Boolean(outlet), detail: outlet?.storeId },
-    { label: "Outlet location", done: Boolean(location), detail: location?.city },
-    { label: "Working hours", done: Boolean(workHours), detail: null },
-  ];
-  const doneCount = steps.filter((s) => s.done).length;
-  const pct = Math.round((doneCount / steps.length) * 100);
 
   const coords = Array.isArray(location?.geo?.coordinates)
     ? location.geo.coordinates
@@ -186,52 +163,8 @@ export default function SubmittedDetails({ raw }) {
 
   return (
     <div className="space-y-4">
-      {/* Onboarding progress */}
-      <SectionCard title="Onboarding Progress" icon={ListChecks} tint="emerald">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between text-[12px]">
-              <span className="font-medium text-neutral-600 dark:text-neutral-300">
-                {doneCount} of {steps.length} steps done
-              </span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">{pct}%</span>
-            </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-neutral-200/80 dark:bg-neutral-800">
-              <div className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-amber-500"}`} style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-          {user.currentScreen && (
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sky-400/10 px-3 py-1.5 text-[11.5px] font-semibold text-sky-700 dark:text-sky-300">
-              <Navigation size={12} /> On: {formatScreen(user.currentScreen)}
-            </span>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {steps.map((s) => (
-            <div
-              key={s.label}
-              className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] ${
-                s.done
-                  ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/5"
-                  : "border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950/60"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                {s.done ? (
-                  <CheckCircle2 size={14} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <XCircle size={14} className="shrink-0 text-neutral-400" />
-                )}
-                <span className="truncate text-neutral-700 dark:text-neutral-300">{s.label}</span>
-              </span>
-              <span className={`min-w-0 truncate text-right text-[11.5px] font-medium ${s.done ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-400"}`}>
-                {s.done ? s.detail || "Done" : "Pending"}
-              </span>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
+      {/* Onboarding steps — the server's status.groups / items (guide §4), never counted here */}
+      {raw._id && <OnboardingSummaryCard brandId={raw._id} />}
 
       {/* Business profile */}
       <SectionCard title="Business Profile" icon={Building2} tint="violet">

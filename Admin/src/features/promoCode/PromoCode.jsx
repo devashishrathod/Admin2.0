@@ -77,8 +77,7 @@ function formatDate(iso) {
 }
 
 // Effective display status, folded from the two real flags the API gives us
-// (isExpired, isActive) into one badge — same idea as deriveStatus() in
-// features/newOnboarding/BrandWaiting.jsx.
+// (isExpired, isActive) into one badge.
 function deriveDisplayStatus(row) {
   if (row.isExpired) return { label: "Expired", className: "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400" };
   if (!row.isActive) return { label: "Inactive", className: "bg-amber-400/10 text-amber-600 dark:text-amber-400" };

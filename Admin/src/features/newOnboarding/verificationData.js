@@ -1,26 +1,14 @@
 /* -------------------------------------------------------------------------
  * Maps one API brand-verification record into the flat shape this page's
- * UI uses.
- *
- * `derivedStatus` is the ADMIN's decision only — REVOKED / REJECTED /
- * APPROVED (isAdminApproved) / PENDING. The system's own verdict
- * (`status` APPROVED / MANUAL_REVIEW / REJECTED, and `latestStatus` after a
- * re-score) is advice for the admin, never a decision (guide §4, D81), so
- * it's kept apart as `systemVerdict` and never shown as "Approved".
+ * UI uses. No status is derived here: the admin's decision is read from
+ * GET /brands/onboarding/status → verification, and the system's verdict
+ * (`latestStatus` / `status`) is advice only (guide §4, D81).
  * ---------------------------------------------------------------------- */
-export function deriveStatus(raw) {
-  if (raw.isRevoked) return "REVOKED";
-  if (raw.isRejected) return "REJECTED";
-  if (raw.isAdminApproved) return "APPROVED";
-  return "PENDING";
-}
-
-const normalizeVerdict = (s) => String(s || "").trim().toUpperCase().replace(/[\s-]+/g, "_") || null;
 
 // UNREGISTERED owner verified by an uploaded ID: the system can't read the
 // ID, so PAN_VERIFIED fails by design and the attempt carries the remark
 // code OWNER_ID_MANUAL (backend, Milestone A). Shown next to "PAN not verified".
-export const OWNER_ID_MANUAL_NOTE = "The owner gave an ID document — check it manually.";
+export const OWNER_ID_MANUAL_NOTE = "The owner gave an ID — check it by hand.";
 export const ownerIdManual = (remarkCodes) => Array.isArray(remarkCodes) && remarkCodes.includes("OWNER_ID_MANUAL");
 
 export function mapVerification(raw) {
@@ -32,10 +20,6 @@ export function mapVerification(raw) {
     attemptNumber: raw.attemptNumber,
     score: raw.score ?? 0,
     status: raw.status,
-    derivedStatus: deriveStatus(raw),
-    // The system's advice: the re-score after a post-submit add wins over
-    // the submit-time verdict.
-    systemVerdict: normalizeVerdict(raw.latestStatus || raw.status),
     flags: raw.flags || {},
     nameMatch: raw.nameMatch || {},
     bankNameMatch: raw.bankNameMatch || {},

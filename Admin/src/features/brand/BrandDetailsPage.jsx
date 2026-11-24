@@ -16,6 +16,7 @@ export default function BrandDetailsPage() {
     error,
     refreshBrandDetail,
     toggleActive,
+    setHiddenFromCustomers,
     updateBrandDetails,
     deleteBrandById,
     setTopBrand,
@@ -80,6 +81,7 @@ export default function BrandDetailsPage() {
         brand={brand}
         onBack={goBack}
         onToggleActive={toggleActive}
+        onToggleHidden={setHiddenFromCustomers}
         onDelete={deleteBrand}
         onUpdate={updateBrandDetails}
         onSetTopBrand={setTopBrand}

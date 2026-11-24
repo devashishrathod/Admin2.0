@@ -642,8 +642,8 @@ function BrandCard({ brand, onOpen, onEdit, onToggleActive, onToggleHidden, onSe
                 brand={brand}
                 willActivate={!brand.active}
                 onClose={() => setShowActiveConfirm(false)}
-                onConfirm={(hideFromCustomers) => {
-                  onToggleActive?.(brand, hideFromCustomers);
+                onConfirm={(hideFromCustomers, reason) => {
+                  onToggleActive?.(brand, hideFromCustomers, reason);
                   setShowActiveConfirm(false);
                 }}
               />

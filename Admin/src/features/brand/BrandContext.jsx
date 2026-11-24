@@ -225,7 +225,8 @@ export function BrandProvider({ children }) {
      choice. An expired brand stays "Expired" — the plan, not this switch,
      decides that. Waits for the refresh so every screen ends on the
      server's values. */
-  const toggleActive = useCallback(async (brand, hideFromCustomers) => {
+  // `reason` is sent only on deactivate (the API refuses it on activate).
+  const toggleActive = useCallback(async (brand, hideFromCustomers, reason) => {
     // Allowed on dummy brands too — Active/Inactive is one of their two actions.
     const nextActive = !brand.active;
     const nextHidden = nextActive ? Boolean(brand.hiddenFromCustomers) : Boolean(hideFromCustomers);
@@ -235,7 +236,7 @@ export function BrandProvider({ children }) {
     // optimistic update — `status` too, so the status badge flips at once
     patchBrand(brand.id, { active: nextActive, status: nextStatus, hiddenFromCustomers: nextHidden });
     try {
-      const res = await setBrandAccess(brand.id, { isActive: nextActive, hideFromCustomers: nextHidden });
+      const res = await setBrandAccess(brand.id, { isActive: nextActive, hideFromCustomers: nextHidden, reason: nextActive ? undefined : reason });
       const saved = savedAccess(res);
       if (Object.keys(saved).length) patchBrand(brand.id, saved);
       await syncAfterUpdate(brand.id);

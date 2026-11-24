@@ -579,19 +579,25 @@ export function RejectReasonModal({ brand, onClose, onConfirm, busy = false, err
  * Shown before flipping a brand's active state, so a super admin sees the
  * consequence before committing.
  *
- * On deactivate, a "Hide from Customers" checkbox lets the admin choose:
- *   - unchecked (default): brand is deactivated in the admin panel, but its
- *     existing listings/vouchers keep showing on the customer-facing app.
- *   - checked: brand is also hidden from customers entirely.
+ * What deactivate really does (admin guide §13, PUT
+ * /brands/admin/:brandId/status { isActive: false, reason }): the VENDOR
+ * PANEL is locked (401, logged out); outlet staff keep working; customers
+ * still see the brand and its vouchers unless it's also hidden — hide is a
+ * separate switch. A reason is required here (the server keeps it; it's
+ * only accepted on deactivate — never sent on activate).
  *
- * onConfirm(hideFromCustomers) is called with that boolean. It's ignored
- * for the activate path since only deactivate exposes this choice.
+ * onConfirm(hideFromCustomers, reason). Activate ignores both.
  * ---------------------------------------------------------------------- */
+
+const DEACTIVATE_REASON_MAX = 500;
 
 export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfirm }) {
   // Starts from the brand's current visibility, so deactivating a hidden
   // brand doesn't quietly make it visible again.
   const [hideFromCustomers, setHideFromCustomers] = useState(Boolean(brand.hiddenFromCustomers));
+  const [reason, setReason] = useState("");
+  const reasonText = reason.trim();
+  const reasonBad = !willActivate && (!reasonText || reasonText.length > DEACTIVATE_REASON_MAX);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -611,21 +617,45 @@ export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfi
             <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
               {willActivate ? (
                 <>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> will regain
-                  full access and be able to perform actions in the admin panel again.
+                  The vendor of <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> can
+                  sign in to the vendor panel again. Whether customers see the brand stays as it is.
                 </>
               ) : (
                 <>
-                  While deactivated,{" "}
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> won't be able
-                  to perform any actions in the admin panel — no new listings, updates, or transactions.
-                  By default, its existing content, including vouchers and offers, will keep showing
-                  exactly as it is on the customer-facing app.
+                  The vendor panel of{" "}
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> is locked — the
+                  vendor is signed out and can't sign in until you activate it again.
                 </>
               )}
             </p>
+            {!willActivate && (
+              <ul className="mt-2 space-y-1 text-[12px] text-neutral-500 dark:text-neutral-400">
+                <li>• Outlet staff keep working — redemptions don't stop.</li>
+                <li>• Customers still see the brand and its vouchers, unless you also hide it below.</li>
+                <li>• Paid claims and settlements carry on.</li>
+                <li>• Not the same as revoke — approval stays as it is.</li>
+              </ul>
+            )}
           </div>
         </div>
+
+        {!willActivate && (
+          <label className="mt-4 block">
+            <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+              Reason <span className="text-red-600 dark:text-red-400">*</span>
+            </span>
+            <textarea
+              rows={2}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Payment dispute — account on hold until resolved"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 outline-none focus:border-amber-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+            />
+            <span className={`mt-0.5 block text-right text-[10.5px] tabular-nums ${reasonText.length > DEACTIVATE_REASON_MAX ? "text-red-500" : "text-neutral-400"}`}>
+              {reasonText.length}/{DEACTIVATE_REASON_MAX}
+            </span>
+          </label>
+        )}
 
         {!willActivate && (
           <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
@@ -640,8 +670,8 @@ export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfi
                 Also hide from customers
               </span>
               <span className="mt-0.5 block text-[11.5px] text-neutral-500">
-                Removes {brand.brandName} entirely from the customer-facing app — its listings and
-                offers won't be visible until it's re-activated.
+                A separate switch: customers stop seeing {brand.brandName} and its vouchers, and it stays
+                hidden after you activate it again — unhide it with the "Hidden from customers" switch.
               </span>
             </span>
           </label>
@@ -657,8 +687,9 @@ export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfi
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(willActivate ? false : hideFromCustomers)}
-            className={`rounded-xl px-4 py-2 text-[13px] font-semibold transition-colors ${
+            onClick={() => (willActivate ? onConfirm(false) : !reasonBad && onConfirm(hideFromCustomers, reasonText))}
+            disabled={reasonBad}
+            className={`rounded-xl px-4 py-2 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               willActivate
                 ? "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
                 : "bg-amber-400 text-neutral-950 hover:bg-amber-300"

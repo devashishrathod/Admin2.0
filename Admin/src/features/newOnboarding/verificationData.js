@@ -17,6 +17,12 @@ export function deriveStatus(raw) {
 
 const normalizeVerdict = (s) => String(s || "").trim().toUpperCase().replace(/[\s-]+/g, "_") || null;
 
+// UNREGISTERED owner verified by an uploaded ID: the system can't read the
+// ID, so PAN_VERIFIED fails by design and the attempt carries the remark
+// code OWNER_ID_MANUAL (backend, Milestone A). Shown next to "PAN not verified".
+export const OWNER_ID_MANUAL_NOTE = "The owner gave an ID document — check it manually.";
+export const ownerIdManual = (remarkCodes) => Array.isArray(remarkCodes) && remarkCodes.includes("OWNER_ID_MANUAL");
+
 export function mapVerification(raw) {
   const brand = raw.brand || {};
   const vendor = raw.vendor || {};

@@ -41,6 +41,7 @@ import ShowcaseAlbums from "../brand/ShowcaseAlbums";
 import AccountDetailsTab from "../brand/BrandDetails/tabs/AccountDetailsTab";
 import SubmittedDetails from "./SubmittedDetails";
 import { REVIEW_TEXT_MAX } from "./reviewGate";
+import { OWNER_ID_MANUAL_NOTE, ownerIdManual } from "./verificationData";
 import { isNotFoundMessage, MISSING, orText } from "../../utils/helpers";
 import Loader from "../../components/common/Loader";
 import ValueOr from "../../components/common/ValueOr";
@@ -138,9 +139,11 @@ function MetaPill({ icon: Icon, children, className = "" }) {
 
 // Every automated check the backend ran for this attempt — the duplicate
 // flags are inverted (a duplicate = bad), so "ok" always means "good".
-function buildChecklist(flags = {}) {
+// `note` explains a failure the admin resolves by hand (OWNER_ID_MANUAL).
+function buildChecklist(flags = {}, remarkCodes = []) {
+  const panNote = !flags.panVerified && ownerIdManual(remarkCodes) ? OWNER_ID_MANUAL_NOTE : null;
   return [
-    { label: "PAN Verified", ok: Boolean(flags.panVerified) },
+    { label: "PAN Verified", ok: Boolean(flags.panVerified), note: panNote },
     { label: "GST Verified", ok: Boolean(flags.gstVerified) },
     { label: "Bank Verified", ok: Boolean(flags.bankVerified) },
     { label: "PAN Matched With GST", ok: Boolean(flags.panMatchedWithGST) },
@@ -440,7 +443,7 @@ export default function VerificationDetails({
   readOnly = false,
 }) {
   const { brand, flags, nameMatch, bankNameMatch, entityMatch, duplicateDetails } = verification;
-  const checklist = buildChecklist(flags);
+  const checklist = buildChecklist(flags, verification.remarkCodes);
   const passedCount = checklist.filter((c) => c.ok).length;
   const failedChecks = checklist.filter((c) => !c.ok);
   const statusLabel = STATUS_LABELS[verification.derivedStatus] || verification.derivedStatus;
@@ -664,6 +667,7 @@ export default function VerificationDetails({
                   className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11.5px] font-medium text-red-700 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400"
                 >
                   <XCircle size={12} /> {c.label}
+                  {c.note && <span className="font-normal text-red-600/80 dark:text-red-400/80">· {c.note}</span>}
                 </span>
               ))}
             </div>
@@ -710,7 +714,10 @@ export default function VerificationDetails({
                   : "border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/5"
               }`}
             >
-              <span className="text-neutral-700 dark:text-neutral-300">{c.label}</span>
+              <span className="min-w-0 text-neutral-700 dark:text-neutral-300">
+                {c.label}
+                {c.note && <span className="mt-0.5 block text-[11.5px] text-amber-700 dark:text-amber-300">{c.note}</span>}
+              </span>
               {c.ok ? (
                 <span className="flex shrink-0 items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 size={13} /> Pass

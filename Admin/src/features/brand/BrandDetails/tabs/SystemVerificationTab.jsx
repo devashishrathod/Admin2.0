@@ -18,6 +18,7 @@ import { EmptyState } from "../../BrandShared";
 import { CardHeader } from "../components/Bento";
 import { cardClass, heroClass, innerTile, tints, has } from "../components/bentoStyles";
 import ValueOr from "../../../../components/common/ValueOr";
+import { OWNER_ID_MANUAL_NOTE, ownerIdManual } from "../../../newOnboarding/verificationData";
 
 /* -------------------------------------------------------------------------
  * System Verification — the automated KYC check (brand.systemVerify), in
@@ -105,8 +106,11 @@ export default function SystemVerificationTab({ brand }) {
   if (!sv) return <EmptyState label="No system verification record yet." />;
 
   const flags = sv.flags || {};
+  // OWNER_ID_MANUAL: the owner verified with an uploaded ID, which the
+  // system can't read — PAN fails by design; the admin checks the ID.
+  const panNote = !flags.panVerified && ownerIdManual(sv.remarkCodes) ? OWNER_ID_MANUAL_NOTE : null;
   const checks = [
-    ["PAN verified", flags.panVerified],
+    ["PAN verified", flags.panVerified, panNote],
     ["GST verified", flags.gstVerified],
     ["Bank verified", flags.bankVerified],
     ["PAN ↔ GST", flags.panMatchedWithGST],
@@ -189,10 +193,11 @@ export default function SystemVerificationTab({ brand }) {
         <div className={`${cardClass} lg:col-span-7`}>
           <CardHeader icon={ListChecks} tint={passed === checks.length ? "emerald" : "amber"} title="Checks" subtitle={`${passed}/${checks.length} passed · ${dupFlagged}/${duplicates.length} duplicates`} />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {checks.map(([label, ok]) => (
-              <div key={label} className={`${innerTile} flex items-center gap-2 px-3 py-2`}>
+            {checks.map(([label, ok, note]) => (
+              <div key={label} className={`${innerTile} flex items-center gap-2 px-3 py-2 ${note ? "col-span-2 sm:col-span-3" : ""}`}>
                 {ok ? <BadgeCheck size={15} className="shrink-0 text-emerald-500" /> : <BadgeX size={15} className="shrink-0 text-red-500" />}
                 <span className={`truncate text-[12px] font-medium ${ok ? "text-neutral-700 dark:text-neutral-200" : "text-red-600 dark:text-red-400"}`}>{label}</span>
+                {note && <span className="truncate text-[11.5px] text-amber-700 dark:text-amber-300">· {note}</span>}
               </div>
             ))}
           </div>

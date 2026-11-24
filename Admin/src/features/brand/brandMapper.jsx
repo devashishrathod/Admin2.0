@@ -203,6 +203,7 @@ function mapSystemVerify(sv) {
     bankNameMatch: sv.bankNameMatch || null,
     entityMatch: sv.entityMatch || null,
     remarks: sv.remarks || [],
+    remarkCodes: Array.isArray(sv.remarkCodes) ? sv.remarkCodes : [],
     verifiedBy: sv.verifiedBy || '—',
     verifiedAtDisplay: formatDateTime(sv.verifiedAt),
     isRevoked: Boolean(sv.isRevoked),

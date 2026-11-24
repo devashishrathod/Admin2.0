@@ -86,11 +86,14 @@ function describe(row) {
       if (m.latestScore != null) parts.push(`new score ${m.latestScore}${m.latestStatus ? ` (${humanize(m.latestStatus)})` : ""}`);
       break;
     case "REMEDIATION_UPDATED":
-    case "LEGAL_EDIT_BY_ADMIN":
+    case "LEGAL_EDIT_BY_ADMIN": {
       if (m.section) parts.push(humanize(m.section));
-      if (m.changeType) parts.push(humanize(m.changeType).toLowerCase());
+      const change = m.changeType || m.details?.changeType;
+      if (change) parts.push(humanize(change).toLowerCase());
       if (m.fields?.length) parts.push(`fields: ${list(m.fields)}`);
+      if (m.latestScore != null) parts.push(`re-scored ${m.latestScore}${m.latestStatus ? ` (${humanize(m.latestStatus)})` : ""}`);
       break;
+    }
     case "APPROVED":
     case "REJECTED":
     case "REVOKED":
@@ -113,8 +116,13 @@ function describe(row) {
       if (m.replaced) parts.push("proof replaced");
       break;
     case "DOCUMENT_REVIEWED":
-      if (m.documentType || m.type) parts.push(humanize(m.documentType || m.type));
-      if (m.status || m.reviewStatus) parts.push(humanize(m.status || m.reviewStatus));
+      if (m.purpose === "OWNER_ID") parts.push(`Owner ID${m.title ? ` (${m.title})` : ""}`);
+      else if (m.title) parts.push(m.title);
+      if (m.status) parts.push(humanize(m.status));
+      break;
+    case "BILLING_ADDRESS_CHANGED":
+      parts.push(m.created ? "added" : "updated");
+      if (m.city || m.state) parts.push([m.city, m.state].filter(Boolean).join(", "));
       break;
     default:
       break;

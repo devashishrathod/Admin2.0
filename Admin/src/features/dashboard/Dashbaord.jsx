@@ -391,23 +391,22 @@ export default function Dashboard() {
   const totalVendors = brands.length;
   const activeVendors = brands.filter((b) => b.active).length;
 
-  // Brands awaiting a decision — the WAITING tab without rejected / revoked
-  // ones (under review + resubmitted). The count is the server's
-  // stageCounts.WAITING (stageCounts honour the other filters), the list its
-  // newest 5 rows. The verification-queue formula (isAdminApproved=false …)
-  // over-counts legacy approved brands whose attempts were never flagged, so
-  // it's not used. TODO(backend): once get-all takes the waitingChip filter,
-  // count = onboardingStage=WAITING&waitingChip=UNDER_REVIEW,RESUBMITTED&limit=1.
+  // "Pending review" = brands whose decision is the admin's (D118):
+  // GET /brands/admin/get-all?onboardingStage=WAITING&waitingChip=
+  // UNDER_REVIEW,RESUBMITTED — the count is that query's `total` (the
+  // waitingChip filter doesn't touch stageCounts), the list its newest 5
+  // rows. The verification-queue formula (isAdminApproved=false …) counted
+  // brands approved before v2, so it isn't used.
   // The auto-refresh menu (below) sets its polling interval; brand reviews
   // refresh it too. A failed load shows as "no pending", not an error.
   const [refreshKey, setRefreshKey] = useState("off");
   const refreshOption = REFRESH_OPTIONS.find((o) => o.key === refreshKey) || REFRESH_OPTIONS[0];
   const pendingQuery = useBrandStageList(
-    { onboardingStage: "WAITING", isRejected: false, isRevoked: false, page: 1, limit: 5 },
+    { onboardingStage: "WAITING", waitingChip: "UNDER_REVIEW,RESUBMITTED", page: 1, limit: 5 },
     { refetchInterval: refreshOption.ms || false }
   );
   const pending = pendingQuery.data?.rows ?? NO_ROWS;
-  const pendingCount = pendingQuery.data?.stageCounts?.WAITING ?? 0;
+  const pendingCount = pendingQuery.data?.total ?? 0;
   const pendingLoading = pendingQuery.isPending;
   const [refreshSpinning, setRefreshSpinning] = useState(false);
 

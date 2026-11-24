@@ -122,13 +122,14 @@ function verificationFromBrand(b) {
 
 const PAGE_SIZE = 12;
 
-// Sub-tabs = server filters on the WAITING stage (#25a brand flags). The
-// waitingChip itself is not a list filter (§3), so "Resubmitted" is a chip only.
+// Sub-tabs = the server's waitingChip filter (#25a, D118). "Needs decision"
+// = UNDER_REVIEW + RESUBMITTED — the dashboard's "pending review" count.
 const TABS = [
   { key: "All", label: "All", filters: {} },
-  { key: "UnderReview", label: "Under review", filters: { isRejected: false, isRevoked: false } },
-  { key: "Rejected", label: "Rejected", filters: { isRejected: true } },
-  { key: "Revoked", label: "Revoked", filters: { isRevoked: true } },
+  { key: "NeedsDecision", label: "Needs decision", filters: { waitingChip: "UNDER_REVIEW,RESUBMITTED" } },
+  { key: "Resubmitted", label: "Resubmitted", filters: { waitingChip: "RESUBMITTED" } },
+  { key: "Rejected", label: "Rejected", filters: { waitingChip: "REJECTED" } },
+  { key: "Revoked", label: "Revoked", filters: { waitingChip: "REVOKED" } },
 ];
 
 /* -------------------------------------------------------------------------
@@ -174,10 +175,17 @@ export default function BrandWaiting() {
 
   // Per-tab counts: one-row server queries (read `total`), same search.
   const countParams = (filters) => ({ onboardingStage: "WAITING", page: 1, limit: 1, search: debouncedSearch, ...filters });
-  const underReviewCount = useBrandStageList(countParams(TABS[1].filters)).data?.total;
-  const rejectedCount = useBrandStageList(countParams(TABS[2].filters)).data?.total;
-  const revokedCount = useBrandStageList(countParams(TABS[3].filters)).data?.total;
-  const tabCounts = { All: stageCounts?.WAITING, UnderReview: underReviewCount, Rejected: rejectedCount, Revoked: revokedCount };
+  const needsDecisionCount = useBrandStageList(countParams(TABS[1].filters)).data?.total;
+  const resubmittedCount = useBrandStageList(countParams(TABS[2].filters)).data?.total;
+  const rejectedCount = useBrandStageList(countParams(TABS[3].filters)).data?.total;
+  const revokedCount = useBrandStageList(countParams(TABS[4].filters)).data?.total;
+  const tabCounts = {
+    All: stageCounts?.WAITING,
+    NeedsDecision: needsDecisionCount,
+    Resubmitted: resubmittedCount,
+    Rejected: rejectedCount,
+    Revoked: revokedCount,
+  };
 
   const latestQuery = useLatestVerification(selectedBrand?.id);
   // Submit / deed / closed-attempt gate for the open brand (item 5).
@@ -185,7 +193,7 @@ export default function BrandWaiting() {
 
   const tiles = [
     { icon: "hourglass", label: "Waiting brands", value: stageCounts?.WAITING, hint: "Submitted, not approved", tint: "amber", tabKey: "All" },
-    { icon: "scan", label: "Under review", value: underReviewCount, hint: "Needs your decision", tint: "sky", tabKey: "UnderReview" },
+    { icon: "scan", label: "Needs decision", value: needsDecisionCount, hint: "Under review or resubmitted", tint: "sky", tabKey: "NeedsDecision" },
     { icon: "alert", label: "Rejected", value: rejectedCount, hint: "Vendor is fixing", tint: "red", tabKey: "Rejected" },
     { icon: "repeat", label: "Revoked", value: revokedCount, hint: "Approval taken back", tint: "violet", tabKey: "Revoked" },
   ];

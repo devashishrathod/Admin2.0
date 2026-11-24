@@ -153,7 +153,7 @@ export const ERROR_HELP = {
   BILLING_STATE_GSTIN_MISMATCH: "The billing address state must match the GSTIN's state.",
   BILLING_ADDRESS_NOT_DELETABLE: "The billing address can't be deleted.",
   DEED_PROOF_REQUIRED: "Upload the signed deed copy as proof.",
-  OUTLET_NOT_VERIFIED: "The outlet manager hasn't verified their WhatsApp yet — address and hours open after that.",
+  OUTLET_NOT_VERIFIED: "This outlet's WhatsApp number isn't verified yet. Address and hours open after that.",
   OUTLET_ALREADY_VERIFIED: "This outlet is already registered and verified on that number.",
   WHATSAPP_UNCHANGED: "That is already this outlet's WhatsApp number.",
   // Admin guide §15 — the rest of the codes the wizard can meet.
@@ -194,7 +194,7 @@ export function describeMissing(missing = []) {
       const short = id ? `…${id.slice(-6)}` : "";
       if (code === "OUTLET_LOCATION") return `an address for outlet ${short}`;
       if (code === "OUTLET_WORK_HOURS") return `opening hours for outlet ${short}`;
-      if (code === "OUTLET_NOT_VERIFIED") return `manager verification for outlet ${short}`;
+      if (code === "OUTLET_NOT_VERIFIED") return `WhatsApp verification for outlet ${short}`;
       return MISSING_LABELS[code] || code.toLowerCase().replace(/_/g, " ");
     })
     .join(", ");

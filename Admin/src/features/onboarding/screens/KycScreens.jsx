@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Upload, FileText, CheckCircle2, XCircle, Loader2, ExternalLink, Trash2, RefreshCw } from "lucide-react";
-import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Field, Note, KeyValue, RadioCard, inputCls } from "../ui";
+import { FileText, CheckCircle2, XCircle, Loader2, ExternalLink, Trash2, RefreshCw, Plus } from "lucide-react";
+import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Field, Note, KeyValue, RadioCard, Section, StatusBadge, ChoiceChip, FileDrop, tileCls, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { useKycDocuments } from "../queries/onboardingQueries";
 import {
@@ -48,11 +48,25 @@ function fileProblem(file) {
 // A list of business documents (up to `limit`), each with a title, an
 // optional docType (from the category's hints) and a file. ≥1 → continue;
 // none → skip. The admin can also accept / reject each one.
-const REVIEW_TONE = {
-  ACCEPTED: "text-[#08513F] bg-[#E3F1EC]",
-  REJECTED: "text-[#7F1D14] bg-[#FDECEA]",
-  UPLOADED: "text-[#1F4FB8] bg-[#E8EEFB]",
+const REVIEW_BADGE = {
+  ACCEPTED: { tone: "ok", label: "Accepted" },
+  REJECTED: { tone: "error", label: "Rejected" },
+  UPLOADED: { tone: "info", label: "Waiting for review" },
 };
+
+// Small action button used on the document rows.
+const rowBtn =
+  "inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
+
+/** A field + its verify button, the button lined up with the input. */
+function VerifyRow({ children, button }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+      {children}
+      <div className="sm:mt-[26px]">{button}</div>
+    </div>
+  );
+}
 
 // Uploads, replaces, deletes and reviews are writes under /brands, so the
 // list refreshes itself afterwards (shared interceptor).
@@ -96,54 +110,59 @@ function DocumentRow({ brandId, doc }) {
     }
   };
 
+  const badge = REVIEW_BADGE[doc.status] || REVIEW_BADGE.UPLOADED;
+
   return (
-    <li className="flex flex-col gap-3 rounded-xl border border-[#E2E3DE] p-4 dark:border-neutral-800">
+    <li className={`${tileCls} flex flex-col gap-3 p-4`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-3">
-          <FileText size={18} className="mt-0.5 shrink-0 text-[#5B616E]" />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-400/10 dark:text-sky-300">
+            <FileText size={18} />
+          </span>
           <div className="min-w-0">
-            <p className="m-0 truncate text-[15px] font-semibold text-[#15171C] dark:text-neutral-50">{doc.title}</p>
-            <p className="m-0 mt-0.5 truncate text-[12.5px] text-[#5B616E]">
+            <p className="m-0 truncate text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">{doc.title}</p>
+            <p className="m-0 mt-0.5 truncate text-[12.5px] text-neutral-500 dark:text-neutral-400">
               {[docTypeLabel(doc.docType), doc.file?.originalName, doc.uploadedByType ? `by ${doc.uploadedByType.toLowerCase()}` : ""].filter(Boolean).join(" · ")}
             </p>
           </div>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${REVIEW_TONE[doc.status] || REVIEW_TONE.UPLOADED}`}>{doc.status || "UPLOADED"}</span>
+        <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
       </div>
       {doc.status === "REJECTED" && doc.reason && <Note tone="error">Rejected: {doc.reason}</Note>}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-3 dark:border-white/5">
         {doc.fileUrl && (
-          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#CFD1CA] px-3 text-[13.5px] font-medium text-[#0B6E5A] dark:border-neutral-700">
-            Open <ExternalLink size={13} />
+          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className={`${rowBtn} text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-400/10`}>
+            <ExternalLink size={13} /> Open
           </a>
         )}
-        <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-[#CFD1CA] px-3 text-[13.5px] font-medium hover:bg-[#F5F5F2] dark:border-neutral-700">
-          {busy === "replace" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Replace
-          <input type="file" accept={DOCUMENT_RULES.accept} onChange={replace} className="hidden" disabled={Boolean(busy)} />
+        <label className={`${rowBtn} cursor-pointer text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800`}>
+          {busy === "replace" ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Replace
+          <input type="file" accept={DOCUMENT_RULES.accept} onChange={replace} className="sr-only" disabled={Boolean(busy)} />
         </label>
-        <button type="button" onClick={remove} disabled={Boolean(busy)} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium text-[#7F1D14] hover:bg-[#FDECEA] disabled:opacity-50">
+        <button type="button" onClick={remove} disabled={Boolean(busy)} className={`${rowBtn} text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10`}>
           {busy === "delete" ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete
         </button>
+        <span className="flex-1" />
         {doc.status !== "ACCEPTED" && (
-          <button type="button" onClick={() => review("ACCEPTED")} disabled={Boolean(busy)} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[#E3F1EC] px-3 text-[13px] font-semibold text-[#08513F] disabled:opacity-50">
+          <button type="button" onClick={() => review("ACCEPTED")} disabled={Boolean(busy)} className={`${rowBtn} bg-emerald-50 font-semibold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-300`}>
             {busy === "ACCEPTED" ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Accept
           </button>
         )}
         {doc.status !== "REJECTED" && !rejecting && (
-          <button type="button" onClick={() => setRejecting(true)} disabled={Boolean(busy)} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[#FDECEA] px-3 text-[13px] font-semibold text-[#7F1D14] disabled:opacity-50">
+          <button type="button" onClick={() => setRejecting(true)} disabled={Boolean(busy)} className={`${rowBtn} bg-red-50 font-semibold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300`}>
             <XCircle size={13} /> Reject
           </button>
         )}
       </div>
       {rejecting && (
         <div className="flex flex-wrap items-center gap-2">
-          <input className={`${inputCls} h-10 min-w-0 flex-1`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. Photo is not clear" />
+          <input className={`${inputCls} min-w-0 flex-1`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. Photo is not clear" autoFocus />
           <SecondaryButton onClick={() => setRejecting(false)}>Cancel</SecondaryButton>
           <PrimaryButton tone="dark" busy={busy === "REJECTED"} onClick={() => review("REJECTED")}>Reject</PrimaryButton>
         </div>
       )}
-      {error && <p className="m-0 text-[12.5px] text-red-600">{error}</p>}
+      {error && <Note tone="error">{error}</Note>}
     </li>
   );
 }
@@ -177,38 +196,34 @@ function AddDocumentForm({ brandId, hints }) {
       setBusy(false);
     }
   };
-  const chip = (on) =>
-    `min-h-9 rounded-full border px-3.5 text-[13.5px] font-medium transition ${
-      on ? "border-[#0B6E5A] bg-[#0B6E5A] text-white" : "border-[#CFD1CA] bg-white hover:border-[#0B6E5A] dark:border-neutral-700 dark:bg-neutral-900"
-    }`;
-
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[#CFD1CA] p-4 dark:border-neutral-700">
-      <p className="m-0 text-[15px] font-semibold">Add a document</p>
+    <Section dashed title="Add a document" description="Pick a suggested type or write your own title, then choose the file.">
       <div className="flex flex-wrap gap-2">
         {hints.map((code) => (
-          <button key={code} type="button" onClick={() => pickType(code)} aria-pressed={docType === code} className={chip(docType === code)}>
+          <ChoiceChip key={code} active={docType === code} onClick={() => pickType(code)}>
             {docTypeLabel(code)}
-          </button>
+          </ChoiceChip>
         ))}
-        <button type="button" onClick={() => pickType("")} aria-pressed={!docType} className={chip(!docType)}>
+        <ChoiceChip active={!docType} onClick={() => pickType("")}>
           Something else
-        </button>
+        </ChoiceChip>
       </div>
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Title" hint={`${DOCUMENT_RULES.minTitle}–${DOCUMENT_RULES.maxTitle} characters`} error={title && !titleOk ? `${DOCUMENT_RULES.minTitle}–${DOCUMENT_RULES.maxTitle} characters` : ""}>
           <input className={inputCls} value={title} maxLength={DOCUMENT_RULES.maxTitle} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. GST certificate" />
         </Field>
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-[#CFD1CA] px-3 text-[13.5px] font-medium hover:bg-[#F5F5F2] dark:border-neutral-700">
-          <Upload size={14} /> <span className="max-w-40 truncate">{file ? file.name : "Choose file"}</span>
-          <input type="file" accept={DOCUMENT_RULES.accept} className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        </label>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">File</span>
+          <FileDrop file={file} onPick={setFile} accept={DOCUMENT_RULES.accept} label="Choose the document" hint="PDF, JPG or PNG · max 5 MB" />
+        </div>
       </div>
       {error && <Note tone="error">{error}</Note>}
       <div>
-        <PrimaryButton tone="dark" busy={busy} disabled={!titleOk || !file} onClick={add}>Upload document</PrimaryButton>
+        <PrimaryButton tone="dark" busy={busy} disabled={!titleOk || !file} onClick={add}>
+          {!busy && <Plus size={15} />} Upload document
+        </PrimaryButton>
       </div>
-    </div>
+    </Section>
   );
 }
 
@@ -302,14 +317,19 @@ const detailOf = (code, key, ...errors) => errors.find((e) => e?.code === code &
 function VerifyResult({ result, children }) {
   if (!result) return null;
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[#E2E3DE] p-4 dark:border-neutral-800">
-      <Note tone={result.isVerified ? "ok" : "warn"}>
-        {result.isVerified ? "Verified" : "Not verified"}
-        {result.message ? ` — ${result.message}` : ""}
-        {result.reused ? " · reused an earlier check (no charge)" : ""}
-      </Note>
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
-    </div>
+    <Section
+      title={result.isVerified ? "Verified" : "Not verified"}
+      description={[result.message, result.reused ? "Reused an earlier check, no charge" : ""].filter(Boolean).join(" · ") || undefined}
+      badge={
+        result.isVerified ? (
+          <StatusBadge tone="ok" icon={CheckCircle2}>Ready to save</StatusBadge>
+        ) : (
+          <StatusBadge tone="warn" icon={XCircle}>Check the number</StatusBadge>
+        )
+      }
+    >
+      <div className="grid gap-4 border-t border-neutral-100 pt-4 sm:grid-cols-2 dark:border-white/5">{children}</div>
+    </Section>
   );
 }
 
@@ -344,14 +364,11 @@ export function GstScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = tru
       }
     >
       {panOnBrand && <Note tone="warn">The brand's saved PAN is {panOnBrand} — the GSTIN must contain it.</Note>}
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <Field label="GSTIN" error={gst && !valid ? "15-character GSTIN, e.g. 27AABCM1234K1Z5" : ""}>
-            <input className={`${inputCls} font-mono uppercase`} value={gst} maxLength={15} onChange={(e) => { setGst(e.target.value.toUpperCase().trim()); reset(); }} placeholder="27AABCM1234K1Z5" />
-          </Field>
-        </div>
-        <PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyGst(brandId, gst))}>Verify GST</PrimaryButton>
-      </div>
+      <VerifyRow button={<PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyGst(brandId, gst))}>Verify GST</PrimaryButton>}>
+        <Field label="GSTIN" error={gst && !valid ? "15-character GSTIN, e.g. 27AABCM1234K1Z5" : ""}>
+          <input className={`${inputCls} font-mono uppercase tracking-wider`} value={gst} maxLength={15} onChange={(e) => { setGst(e.target.value.toUpperCase().trim()); reset(); }} placeholder="27AABCM1234K1Z5" />
+        </Field>
+      </VerifyRow>
       <VerifyResult result={result}>
         <KeyValue label="Legal name" value={result?.nameOnRecord || result?.details?.legalName} />
         <KeyValue label="Trade name" value={result?.details?.tradeName} />
@@ -404,14 +421,11 @@ export function PanScreen({ brandId, status, eyebrow, onAdvance, onBack, isCurre
           )}
         </Note>
       )}
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <Field label="PAN number" error={pan && !valid ? "Format: ABCDE1234F" : ""}>
-            <input className={`${inputCls} font-mono uppercase`} value={pan} maxLength={10} onChange={(e) => { setPan(e.target.value.toUpperCase().trim()); reset(); }} placeholder="ABCDE1234F" />
-          </Field>
-        </div>
-        <PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyPan(brandId, pan))}>Verify PAN</PrimaryButton>
-      </div>
+      <VerifyRow button={<PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyPan(brandId, pan))}>Verify PAN</PrimaryButton>}>
+        <Field label="PAN number" error={pan && !valid ? "Format: ABCDE1234F" : ""}>
+          <input className={`${inputCls} font-mono uppercase tracking-wider`} value={pan} maxLength={10} onChange={(e) => { setPan(e.target.value.toUpperCase().trim()); reset(); }} placeholder="ABCDE1234F" />
+        </Field>
+      </VerifyRow>
       <VerifyResult result={result}>
         <KeyValue label="Name on PAN" value={result?.nameOnRecord} />
         <KeyValue label="PAN type" value={result?.panType} />
@@ -486,14 +500,11 @@ export function OwnerVerificationScreen({ brandId, status, eyebrow, onAdvance, o
 
       {method === "PAN" ? (
         <>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-0 flex-1">
-              <Field label="Owner's PAN" error={pan && !panValid ? "Format: ABCDE1234F" : ""}>
-                <input className={`${inputCls} font-mono uppercase`} value={pan} maxLength={10} onChange={(e) => { setPan(e.target.value.toUpperCase().trim()); reset(); }} placeholder="ABCDE1234F" />
-              </Field>
-            </div>
-            <PrimaryButton tone="dark" busy={verifying} disabled={!panValid} onClick={() => verify(() => verifyPan(brandId, pan))}>Verify PAN</PrimaryButton>
-          </div>
+          <VerifyRow button={<PrimaryButton tone="dark" busy={verifying} disabled={!panValid} onClick={() => verify(() => verifyPan(brandId, pan))}>Verify PAN</PrimaryButton>}>
+            <Field label="Owner's PAN" error={pan && !panValid ? "Format: ABCDE1234F" : ""}>
+              <input className={`${inputCls} font-mono uppercase tracking-wider`} value={pan} maxLength={10} onChange={(e) => { setPan(e.target.value.toUpperCase().trim()); reset(); }} placeholder="ABCDE1234F" />
+            </Field>
+          </VerifyRow>
           <VerifyResult result={result}>
             <KeyValue label="Name on PAN" value={result?.nameOnRecord} />
             <KeyValue label="PAN type" value={result?.panType} />
@@ -507,12 +518,11 @@ export function OwnerVerificationScreen({ brandId, status, eyebrow, onAdvance, o
               {OWNER_ID_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </Field>
-          <Field label="ID file" hint="PDF, or a clear JPG / PNG · max 5 MB" error={fileError}>
-            <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-[#CFD1CA] px-3 text-[13.5px] font-normal hover:bg-[#F5F5F2] dark:border-neutral-700">
-              <Upload size={14} /> <span className="truncate">{file ? file.name : "Choose file"}</span>
-              <input type="file" accept={DOCUMENT_RULES.accept} className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </label>
-          </Field>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">ID file</span>
+            <FileDrop file={file} onPick={setFile} accept={DOCUMENT_RULES.accept} label="Choose the ID" hint="PDF, or a clear JPG / PNG · max 5 MB" />
+            {fileError && <span className="text-[12.5px] font-medium text-red-600 dark:text-red-400">{fileError}</span>}
+          </div>
           {idType === "AADHAAR" && <div className="sm:col-span-2"><Note tone="warn">Only a masked Aadhaar — just the last 4 digits visible.</Note></div>}
         </div>
       )}
@@ -562,10 +572,11 @@ export function BankScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = tr
           </select>
         </Field>
       </div>
-      <div>
+      <div className="flex flex-wrap items-center gap-3">
         <PrimaryButton tone="dark" busy={verifying} disabled={!accountOk || !ifscOk} onClick={() => verify(() => verifyBank(brandId, { accountNumber: account, ifscCode: ifsc }))}>
           Verify account (₹1 test)
         </PrimaryButton>
+        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">{PAID_NOTE}</span>
       </div>
       <VerifyResult result={result}>
         <KeyValue label="Name at bank" value={result?.nameOnRecord} />

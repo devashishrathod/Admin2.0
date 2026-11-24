@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Upload, FileText, CheckCircle2, Check, Lock } from "lucide-react";
-import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
+import { Upload, CheckCircle2, Check, Lock } from "lucide-react";
+import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, Section, StatusBadge, FileDrop, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { recordOfflineDeed, saveBillingAddress, grantPlan } from "../services/onboardingApi";
 import { useBillingAddress } from "../queries/onboardingQueries";
@@ -98,17 +98,16 @@ export function DeedScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
           The vendor's own acceptance is the record of truth — no offline deed is needed.
         </Note>
       ) : (
-        <div className="flex flex-col gap-4 rounded-[14px] p-5 ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
-          <p className="m-0 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-            {accepted ? "Replace the offline record" : "Offline acceptance"}
-          </p>
-          <Field label="Signed deed copy" hint="PDF or a clear photo of the signed deed — required as proof · max 5 MB" error={fileError}>
-            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[#CFD1CA] px-4 py-5 hover:border-[#0B6E5A] dark:border-neutral-700">
-              {file ? <FileText size={18} className="text-[#0B6E5A]" /> : <Upload size={18} className="text-[#5B616E]" />}
-              <span className="min-w-0 flex-1 truncate text-[14px] font-normal">{file ? file.name : "Choose the signed copy"}</span>
-              <input type="file" accept={DOCUMENT_RULES.accept} className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </label>
-          </Field>
+        <Section
+          title={accepted ? "Replace the offline record" : "Offline acceptance"}
+          description="Both the signed copy and a note are required."
+          badge={<StatusBadge tone={ready ? "ok" : "muted"}>{ready ? "Ready to save" : "2 things needed"}</StatusBadge>}
+        >
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">Signed deed copy</span>
+            <FileDrop file={file} onPick={setFile} accept={DOCUMENT_RULES.accept} label="Choose the signed copy" hint="PDF or a clear photo of the signed deed · max 5 MB" />
+            {fileError && <span className="text-[12.5px] font-medium text-red-600 dark:text-red-400">{fileError}</span>}
+          </div>
           <Field
             label="Note"
             hint={`Required · ${DEED_NOTE.min}–${DEED_NOTE.max} characters — e.g. who signed, where the original is kept`}
@@ -122,7 +121,7 @@ export function DeedScreen({ brandId, status, eyebrow, onAdvance, onBack }) {
               placeholder="e.g. Signed by owner at office visit, original filed"
             />
           </Field>
-        </div>
+        </Section>
       )}
       {deed?.requiresDeedConfirmation && <Note tone="info">Waiting for the vendor to confirm this offline deed on their next login.</Note>}
     </ScreenShell>
@@ -271,18 +270,15 @@ function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans
       }
     >
       {/* 1 · Billing address */}
-      <div className="flex flex-col gap-4 rounded-xl border border-[#E2E3DE] p-5 dark:border-neutral-800">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="m-0 text-[17px] font-semibold">1 · Billing address</h2>
-          {savedBilling ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#E3F1EC] px-2.5 py-1 text-[12px] font-semibold text-[#08513F]"><CheckCircle2 size={12} /> Saved</span>
-          ) : (
-            <span className="rounded-full bg-[#FFF4E0] px-2.5 py-1 text-[12px] font-semibold text-[#7A4800]">Required before the plan</span>
-          )}
-        </div>
+      <Section
+        number={1}
+        title="Billing address"
+        description="Printed on every invoice and statement."
+        badge={savedBilling ? <StatusBadge tone="ok" icon={CheckCircle2}>Saved</StatusBadge> : <StatusBadge tone="warn">Required before the plan</StatusBadge>}
+      >
         {billing?.gstAddress && (
           <label className="flex items-center gap-2 text-[14px]">
-            <input type="checkbox" checked={sameAsGst} onChange={(e) => toggleGst(e.target.checked)} className="h-4 w-4 accent-[#0B6E5A]" />
+            <input type="checkbox" checked={sameAsGst} onChange={(e) => toggleGst(e.target.checked)} className="h-4 w-4 accent-emerald-700" />
             Same as GST address
           </label>
         )}
@@ -308,17 +304,26 @@ function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans
           <Note tone="info">GSTIN {billing.gstin}{billing.gstStateCode ? ` (state ${billing.gstStateCode})` : ""} — the billing address must be in the same state.</Note>
         )}
         {billingError && <Note tone="error">{billingError}</Note>}
-        <div><PrimaryButton tone="dark" busy={billingBusy} disabled={!billingValid || savedBilling} onClick={saveBilling}>{savedBilling ? "Billing address saved" : "Save billing address"}</PrimaryButton></div>
-      </div>
+        <div>
+          <PrimaryButton tone="dark" busy={billingBusy} disabled={!billingValid || savedBilling} onClick={saveBilling}>
+            {savedBilling ? <><Check size={15} /> Billing address saved</> : "Save billing address"}
+          </PrimaryButton>
+        </div>
+      </Section>
 
       {/* 2 · Plan */}
       {planDone ? (
         <Note tone="ok">The plan is granted. To change or extend it, use the brand's Subscriptions page.</Note>
       ) : (
-      <div className={`flex flex-col gap-4 rounded-xl border border-[#E2E3DE] p-5 dark:border-neutral-800 ${savedBilling ? "" : "opacity-60"}`}>
-        <h2 className="m-0 text-[17px] font-semibold">2 · Plan</h2>
+      <Section
+        number={2}
+        title="Plan"
+        dimmed={!savedBilling}
+        description={savedBilling ? "Pick the plan and how it was paid." : "Save the billing address first."}
+        badge={!savedBilling ? <StatusBadge tone="muted" icon={Lock}>Locked</StatusBadge> : planId ? <StatusBadge tone="ok">Plan picked</StatusBadge> : null}
+      >
         {!plans.length ? (
-          <p className="m-0 text-[14px] text-[#5B616E]">No active plans found.</p>
+          <p className="m-0 text-[14px] text-neutral-500">No active plans found.</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {plans.map((p) => (
@@ -358,7 +363,7 @@ function SubscribePlanForm({ brandId, eyebrow, onAdvance, onBack, billing, plans
             </Field>
           </div>
         </div>
-      </div>
+      </Section>
       )}
     </ScreenShell>
   );

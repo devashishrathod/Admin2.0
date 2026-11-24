@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, inputCls } from "../ui";
+import { ScreenShell, StepFooter, PrimaryButton, Field, RadioCard, Note, Section, ChoiceChip, StatusBadge, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { addBasicDetails, updateBasicDetails } from "../services/onboardingApi";
 import { ENTITY_TYPES, KYC_PATHS, entityLabel, kycPathLabel } from "../onboardingFlow";
@@ -122,12 +122,6 @@ export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdva
     setSearch("");
   };
   const toggleSub = (id) => setSubIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : atLimit ? cur : [...cur, id]));
-  const chip = (active) =>
-    `min-h-10 rounded-full border px-4 text-[14px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
-      active
-        ? "border-[#0B6E5A] bg-[#0B6E5A] text-white"
-        : "border-[#CFD1CA] bg-white text-[#15171C] hover:border-[#0B6E5A] dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-    }`;
   // categoryId + subCategoryIds always go together (#27).
   const save = () =>
     run("save", () =>
@@ -153,51 +147,52 @@ export function BusinessCategoryScreen({ brandId, brand, status, eyebrow, onAdva
         />
       }
     >
-      <div className="flex flex-col gap-2">
-        <span className="text-[14px] font-medium">Category</span>
+      <Section number={1} title="Category" description="Pick the one that fits best.">
         {categoriesQuery.isPending ? (
           <Loader variant="inline" label="Loading categories…" />
         ) : (
           <div className="flex flex-wrap gap-2">
             {categories.map((c) => (
-              <button key={idOf(c)} type="button" onClick={() => pickCategory(idOf(c))} aria-pressed={categoryId === idOf(c)} className={chip(categoryId === idOf(c))}>
+              <ChoiceChip key={idOf(c)} active={categoryId === idOf(c)} onClick={() => pickCategory(idOf(c))}>
                 {c.name}
-              </button>
+              </ChoiceChip>
             ))}
           </div>
         )}
-      </div>
+      </Section>
 
-      {categoryId && (
-        <div className="flex flex-col gap-2">
-          <span className="text-[14px] font-medium">
-            Subcategories{" "}
-            <span className="font-normal text-[#5B616E]">
-              · {maxSubs != null ? `pick up to ${maxSubs} ` : ""}({subIds.length} picked)
-            </span>
-          </span>
-          <div className="relative">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA0A9]" />
-            <input className={`${inputCls} pl-9`} type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search subcategories" aria-label="Search subcategories" />
-          </div>
-          {subsQuery.isPending ? (
-            <Loader variant="inline" label="Loading subcategories…" />
-          ) : subs.length === 0 ? (
-            <p className="m-0 text-[14px] text-[#5B616E]">{search ? `No subcategory matches “${search}”.` : "This category has no active subcategories — pick another one."}</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {subs.map((s) => {
-                const on = subIds.includes(idOf(s));
-                return (
-                  <button key={idOf(s)} type="button" onClick={() => toggleSub(idOf(s))} aria-pressed={on} disabled={!on && atLimit} className={chip(on)}>
-                    {s.name}
-                  </button>
-                );
-              })}
+      <Section
+        number={2}
+        title="Subcategories"
+        dimmed={!categoryId}
+        description={!categoryId ? "Pick a category first." : maxSubs != null ? `Pick up to ${maxSubs}.` : "Pick at least one."}
+        badge={categoryId ? <StatusBadge tone={subIds.length ? "ok" : "muted"}>{subIds.length}{maxSubs != null ? ` / ${maxSubs}` : ""} picked</StatusBadge> : null}
+      >
+        {categoryId && (
+          <>
+            <div className="relative">
+              <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <input className={`${inputCls} pl-10`} type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search subcategories" aria-label="Search subcategories" />
             </div>
-          )}
-        </div>
-      )}
+            {subsQuery.isPending ? (
+              <Loader variant="inline" label="Loading subcategories…" />
+            ) : subs.length === 0 ? (
+              <p className="m-0 text-[14px] text-neutral-500">{search ? `No subcategory matches “${search}”.` : "This category has no active subcategories. Pick another one."}</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {subs.map((s) => {
+                  const on = subIds.includes(idOf(s));
+                  return (
+                    <ChoiceChip key={idOf(s)} active={on} disabled={!on && atLimit} onClick={() => toggleSub(idOf(s))}>
+                      {s.name}
+                    </ChoiceChip>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </Section>
     </ScreenShell>
   );
 }
@@ -245,7 +240,11 @@ export function RegistrationStatusScreen({ brandId, status, eyebrow, onAdvance, 
             onChange={() => setValue(p.value)}
             title={p.label}
             description={p.description}
-            extra={<span className="mt-1 text-[12.5px] font-medium text-[#1F4FB8]">Next: {p.next}</span>}
+            extra={
+              <span className="mt-2 rounded-lg bg-neutral-100 px-2 py-1 text-[12px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                Next: {p.next}
+              </span>
+            }
           />
         ))}
       </div>

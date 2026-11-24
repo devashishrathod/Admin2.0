@@ -232,9 +232,6 @@ export const addBrandFeature = (brandId, { title, description, icon }) => {
 // GET /brandFeatures/get-all?brandId=
 export const getBrandFeatures = (brandId) => call(() => api.get('/brandFeatures/get-all', q(brandId)));
 
-// GET /subBrands/get-all?brandId= — the brand's outlets
-export const getOutlets = (brandId) => call(() => api.get('/subBrands/get-all', { params: { brandId, page: 1, limit: 50 } }));
-
 // POST /subBrands/signUp-with-whatsapp { brandId, whatsappNumber | useOwnerNumber, isFirstOutlet, outletType }
 // → { isNewOutlet, otpSent, isVerified, verifiedVia, subBrand … }. useOwnerNumber: the owner
 // manages the outlet on their own number (verified at once, no OTP).
@@ -249,9 +246,17 @@ export const addOutlet = ({ brandId, whatsappNumber, useOwnerNumber, isFirstOutl
         })
     );
 
+// PATCH /subBrands/:subBrandId/cancel (#28b, no body) — removes a never-verified outlet; its plan
+// slot comes back and the number is free. 409 OUTLET_ALREADY_VERIFIED / OUTLET_STATE_CHANGED.
+export const cancelOutlet = (subBrandId) => call(() => api.patch(`/subBrands/${subBrandId}/cancel`));
+
 // POST /locations/create { subBrandId, isSubBrandAddress: true, addressLine1, city, state, zipcode, coordinates[lng,lat], … }
 export const addOutletAddress = (subBrandId, address) =>
     call(() => api.post('/locations/create', { ...address, subBrandId, isSubBrandAddress: true, addressType: 'WORK' }));
+
+// PUT /locations/update/:id (#34) — edits the outlet's saved address (a second create would add
+// another one). The type flags / subBrandId aren't re-sent.
+export const updateOutletAddress = (locationId, address) => call(() => api.put(`/locations/update/${locationId}`, address));
 
 // POST /workHours/upsert { subBrandId, monday … sunday: { isOpen, start, end } }
 export const saveOutletHours = (subBrandId, days) => call(() => api.post('/workHours/upsert', { subBrandId, ...days }));

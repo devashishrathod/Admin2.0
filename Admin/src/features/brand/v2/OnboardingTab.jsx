@@ -4,6 +4,7 @@ import VerificationTimeline from "./VerificationTimeline";
 import KycDocumentsCard from "./KycDocumentsCard";
 import BillingAddressCard from "./BillingAddressCard";
 import DeedCard from "./DeedCard";
+import BadgeCard from "./BadgeCard";
 
 /* -------------------------------------------------------------------------
  * Brand detail → "Onboarding & KYC" tab (admin guide §4): one column of
@@ -19,6 +20,7 @@ export default function OnboardingTab({ brand, readOnly = false }) {
       <KycDocumentsCard brandId={brand.id} readOnly={readOnly} />
       <BillingAddressCard brandId={brand.id} readOnly={readOnly} />
       <DeedCard brandId={brand.id} readOnly={readOnly} />
+      <BadgeCard brand={brand} readOnly={readOnly} />
       <VerificationTimeline brandId={brand.id} />
     </div>
   );

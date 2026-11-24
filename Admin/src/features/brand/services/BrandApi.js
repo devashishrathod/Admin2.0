@@ -89,6 +89,39 @@ export async function setBrandAccess(brandId, { isActive, hideFromCustomers, rea
 }
 
 /* -------------------------------------------------------------------------
+ * GET {{base_url}}/brands/profile-strength?brandId=   (#25j → vendor #32c)
+ * → { brandId, isVerified, score, level, sections[{ key, items[{ key,
+ *     label, done, available, earned, max, points, action }] }],
+ *     badgeEligible, badgeBlockers[] }
+ * ---------------------------------------------------------------------- */
+export async function getProfileStrength(brandId) {
+    try {
+        const { data } = await api.get('/brands/profile-strength', { params: { brandId } });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * PUT {{base_url}}/brands/admin/:brandId/verified-badge   (#25i)
+ * body { isVerified: boolean, note? (≤ 1000) } → { brandId, isVerified,
+ * badgeGrantedAt, badgeGrantedByAdminId, profileStrength }.
+ * 409 BADGE_NOT_ELIGIBLE → details.badgeBlockers[], details.profileStrength.
+ * The badge is trust only — never approval.
+ * ---------------------------------------------------------------------- */
+export async function setVerifiedBadge(brandId, { isVerified, note } = {}) {
+    try {
+        const body = { isVerified: Boolean(isVerified) };
+        if (note && note.trim()) body.note = note.trim();
+        const { data } = await api.put(`/brands/admin/${brandId}/verified-badge`, body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+/* -------------------------------------------------------------------------
  * PUT {{base_url}}/brands/admin/real-dummy/:brandId — "Coming soon" on a
  * real, approved brand (super admin API doc, 2026-10-23). Customers see it
  * like a dummy brand until launch; the DB's isDummy never changes.

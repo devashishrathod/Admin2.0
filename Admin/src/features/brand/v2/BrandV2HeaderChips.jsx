@@ -48,7 +48,7 @@ export default function BrandV2HeaderChips({ brand }) {
             {progress.percent}% done
           </Chip>
         )}
-        <VerifiedBadgeChips isVerified={raw?.isVerified ?? status?.isVerified} badgeGrantedAt={raw?.badgeGrantedAt} badgeAtRisk={raw?.badgeAtRisk ?? brand.badgeAtRisk} />
+        <VerifiedBadgeChips isVerified={raw?.isVerified ?? status?.isVerified} badgeGrantedAt={raw?.badgeGrantedAt} badgeAtRisk={Boolean(raw?.badgeAtRisk ?? brand.badgeAtRisk) || (status?.profileStrength?.badgeBlockers || []).includes("STRENGTH_BELOW_75")} />
         <StrengthChip strength={status?.profileStrength} />
       </div>
     </div>

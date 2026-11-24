@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../../../lib/query";
-import { getAllBrands, getBrandDetails, getTopBrands } from "../services/BrandApi";
+import { getAllBrands, getBrandDetails, getTopBrands, getProfileStrength } from "../services/BrandApi";
 import { isNotFoundMessage } from "../../../utils/helpers";
 import { mapBrandListItem } from "../brandMapper";
 import { EMPTY_STAGE_COUNTS } from "../brandStage";
@@ -73,6 +73,16 @@ export function useBrandDetails(brandId, options = {}) {
   return useQuery({
     queryKey: queryKeys.brands.detail(brandId),
     queryFn: () => getBrandDetails(brandId),
+    enabled: Boolean(brandId),
+    ...options,
+  });
+}
+
+/** GET /brands/profile-strength?brandId= — score, level, sections, badge blockers (#25j). */
+export function useProfileStrength(brandId, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.brands.view("profile-strength", { brandId }),
+    queryFn: () => getProfileStrength(brandId),
     enabled: Boolean(brandId),
     ...options,
   });

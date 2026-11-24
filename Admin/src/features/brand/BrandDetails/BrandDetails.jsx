@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Hash,
   CalendarDays,
+  ListChecks,
 } from "lucide-react";
 import { DETAIL_TABS } from "../data/BrandData";
 import {
@@ -54,6 +55,8 @@ import SettlementsTab from "./tabs/SettlementsTab";
 import VoucherTab from "./tabs/VoucherTab";
 import AccountDetailsTab from "./tabs/AccountDetailsTab";
 import SystemVerificationTab from "./tabs/SystemVerificationTab";
+import OnboardingTab from "../v2/OnboardingTab";
+import BrandV2HeaderChips from "../v2/BrandV2HeaderChips";
 
 const STATUS_ACCENTS = {
   Active: "from-emerald-400/25 via-emerald-400/0",
@@ -174,6 +177,7 @@ function DetailTabBar({ tabs, active, onChange }) {
 
 const TAB_ICONS = {
   Overview: Home,
+  "Onboarding & KYC": ListChecks,
   "Brand Info": IdCard,
   "Showcase Media": ImageIcon,
   "Listing Features": Sparkles,
@@ -243,6 +247,7 @@ export default function BrandDetails({
 
   const tabContent = {
     Overview: <OverviewTab brand={brand} readOnly={readOnly} onComingSoon={() => setShowComingSoonModal(true)} />,
+    "Onboarding & KYC": <OnboardingTab brand={brand} readOnly={readOnly} />,
     "Brand Info": <BrandInfoTab brand={brand} />,
     "Showcase Media": <AmbienceTab brand={brand} readOnly={readOnly} />,
     "Listing Features": <ListingFeaturesTab brand={brand} readOnly={readOnly} />,
@@ -476,6 +481,9 @@ export default function BrandDetails({
                     </span>
                   )}
                 </div>
+
+                {/* Onboarding v2 line — server's status + raw brand (guide §4) */}
+                {brand.id && <BrandV2HeaderChips brand={brand} />}
               </div>
             </div>
 

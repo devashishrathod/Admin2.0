@@ -129,15 +129,21 @@ export function ReviewScreen({ brandId, brand, status, eyebrow, onAdvance, onBac
 
 /* ---- After submit: UNDER_REVIEW / DASHBOARD ----------------------- */
 export function UnderReviewScreen({ status, onOpenBrand, onOpenWaiting }) {
-  const live = status.currentScreen === "DASHBOARD";
   const v = status.verification;
+  // Approved = verification.isApproved. The vendor's screen moves to
+  // DASHBOARD only when they acknowledge the approval on their first login,
+  // so an approved brand can still read UNDER_REVIEW here.
+  const live = status.currentScreen === "DASHBOARD" || Boolean(v.isApproved);
+  const awaitingVendor = live && status.currentScreen !== "DASHBOARD";
   return (
     <ScreenShell
       eyebrow={live ? "Onboarding complete" : "Submitted"}
       title={live ? "The brand is live" : "Submitted for review"}
       intro={
         live
-          ? "Verification is done and the brand is approved. Manage it from Live Brands."
+          ? awaitingVendor
+            ? "The brand is approved — manage it from Live Brands. The vendor sees the approval (and confirms an offline deed) on their first login; nothing to do here."
+            : "Verification is done and the brand is approved. Manage it from Live Brands."
           : "The brand is now with the verification team. It shows in Brand Waiting until it's approved or sent back for changes."
       }
       footer={

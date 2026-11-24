@@ -6,6 +6,8 @@ import BillingAddressCard from "./BillingAddressCard";
 import DeedCard from "./DeedCard";
 import BadgeCard from "./BadgeCard";
 import ReviewCard from "./ReviewCard";
+import LegalBasicsCard from "./LegalBasicsCard";
+import KycRecordsCard from "./KycRecordsCard";
 
 /* -------------------------------------------------------------------------
  * Brand detail → "Onboarding & KYC" tab (admin guide §4): one column of
@@ -19,6 +21,8 @@ export default function OnboardingTab({ brand, readOnly = false }) {
       <OnboardingSummaryCard brandId={brand.id} />
       <ReviewCard brandId={brand.id} readOnly={readOnly} />
       <SystemVerifyCard brandId={brand.id} />
+      <LegalBasicsCard brandId={brand.id} readOnly={readOnly} />
+      <KycRecordsCard brandId={brand.id} readOnly={readOnly} />
       <KycDocumentsCard brandId={brand.id} readOnly={readOnly} />
       <BillingAddressCard brandId={brand.id} readOnly={readOnly} />
       <DeedCard brandId={brand.id} readOnly={readOnly} />

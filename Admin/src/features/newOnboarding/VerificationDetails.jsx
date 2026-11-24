@@ -431,7 +431,7 @@ export default function VerificationDetails({
   onReject,
   onSetReviewed,
   onRevoke,
-  // reviewGate.useReviewGate: { approveBlocked, rejectBlocked, deedMissing }.
+  // reviewGate.useReviewGate: { approveBlocked, rejectBlocked, approveConfirm, deedMissing }.
   gate = null,
   busyAction,
   actionError,
@@ -460,13 +460,14 @@ export default function VerificationDetails({
 
   // The admin's decision is driven by the brand itself, not the system's
   // verdict (that's only advice — onboarding v2 guide §4). Approve / Reject
-  // only on a live (not rejected / revoked) attempt of a brand that isn't
-  // approved — a rejected attempt waits for the vendor's resubmit, there is
-  // no override approve (#24). The gate adds "submitted" and "deed accepted".
-  // An approved brand can be revoked.
+  // on any brand that isn't approved, after submit; Approve also needs the
+  // deed (gate). A rejected / revoked attempt can still be approved — the
+  // form then asks "approve anyway?" (gate.approveConfirm) — but a rejected
+  // one can't be rejected again (409). An approved brand can be revoked.
   const brandApproved = Boolean(verification.brand?.isApproved);
   const attemptClosed = verification.isRejected || verification.isRevoked;
-  const canReview = !readOnly && !brandApproved && !attemptClosed;
+  const canReview = !readOnly && !brandApproved;
+  const approveConfirm = gate?.approveConfirm || null;
   const canRevoke = !readOnly && brandApproved;
   const approveBlocked = gate?.approveBlocked || null;
   const rejectBlocked = gate?.rejectBlocked || null;
@@ -982,12 +983,14 @@ export default function VerificationDetails({
           </div>
         </div>
       )}
-      {attemptClosed && !readOnly && (
-        <p className="mb-3.5 text-[12px] text-neutral-500">Waiting for the vendor to fix the details and resubmit — a new attempt then comes back here.</p>
+      {attemptClosed && !readOnly && !brandApproved && (
+        <p className="mb-3.5 text-[12px] text-neutral-500">
+          Waiting for the vendor to fix the details and resubmit. You can still approve now — you'll be asked to confirm.
+        </p>
       )}
 
-      {/* Approve / Reject — only on a live attempt (no override approve on a
-          rejected one), after submit; Approve also needs the deed. */}
+      {/* Approve / Reject — after submit; Approve also needs the deed and, on
+          a rejected / revoked attempt, an "approve anyway" confirmation. */}
       {canReview && !showApproveBox && (
         <>
           <div className="flex gap-2.5">
@@ -1028,6 +1031,12 @@ export default function VerificationDetails({
 
       {canReview && showApproveBox && (
         <form onSubmit={handleApproveSubmit} className="space-y-3">
+          {approveConfirm && (
+            <p className="flex items-start gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] font-medium text-red-700 dark:text-red-300">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              {approveConfirm}
+            </p>
+          )}
           <label className="mb-1.5 block text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
             Note <span className="text-neutral-500">(optional — recorded in the history)</span>
           </label>
@@ -1058,7 +1067,7 @@ export default function VerificationDetails({
               className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {approveBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-              Confirm
+              {approveConfirm ? "Approve anyway" : "Confirm"}
             </button>
           </div>
         </form>

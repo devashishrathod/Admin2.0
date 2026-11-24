@@ -40,6 +40,7 @@ import { BrandAvatar } from "../brand/BrandShared";
 import { useTopBrands } from "../brand/queries/brandQueries";
 import { mapBrandListItem } from "../brand/brandMapper";
 import { useBrandStageList } from "../brand/queries/brandQueries";
+import { useBrandVerifications } from "../newOnboarding/queries/onboardingReviewQueries";
 import { StrengthChip, WaitingChip } from "../brand/BrandStageChips";
 import { useAllVoucherClaimPayments } from "../transaction/queries/transactionQueries";
 import { normalizeClaimPayment } from "../transaction/transactionUtils";
@@ -391,20 +392,26 @@ export default function Dashboard() {
   const totalVendors = brands.length;
   const activeVendors = brands.filter((b) => b.active).length;
 
-  // Brands awaiting a decision — the WAITING tab without rejected / revoked
-  // ones (admin guide §3). The count is the server's stageCounts.WAITING
-  // (stageCounts honour the other filters), the list its newest 5 rows.
-  // The auto-refresh menu (below) sets its polling interval; brand reviews
-  // refresh it too. A failed load shows as "no pending", not an error.
+  // "Pending review" (backend, Milestone A): the count is the live attempts
+  // still waiting for an admin — GET /brands/admin/verifications with
+  // isAdminApproved / isRejected / isRevoked / isSuperseded = false, limit 1,
+  // read `total`. The list shows the newest 5 WAITING brands that aren't
+  // rejected / revoked. (The Brand Waiting tab badge stays stageCounts.WAITING.)
+  // The auto-refresh menu (below) polls both; brand reviews refresh them too.
+  // A failed load shows as "no pending", not an error.
   const [refreshKey, setRefreshKey] = useState("off");
   const refreshOption = REFRESH_OPTIONS.find((o) => o.key === refreshKey) || REFRESH_OPTIONS[0];
   const pendingQuery = useBrandStageList(
     { onboardingStage: "WAITING", isRejected: false, isRevoked: false, page: 1, limit: 5 },
     { refetchInterval: refreshOption.ms || false }
   );
+  const pendingCountQuery = useBrandVerifications(
+    { isAdminApproved: false, isRejected: false, isRevoked: false, isSuperseded: false, page: 1, limit: 1 },
+    { refetchInterval: refreshOption.ms || false, select: (res) => res?.data?.total ?? 0 }
+  );
   const pending = pendingQuery.data?.rows ?? NO_ROWS;
-  const pendingCount = pendingQuery.data?.stageCounts?.WAITING ?? 0;
-  const pendingLoading = pendingQuery.isPending;
+  const pendingCount = pendingCountQuery.data ?? 0;
+  const pendingLoading = pendingQuery.isPending || pendingCountQuery.isPending;
   const [refreshSpinning, setRefreshSpinning] = useState(false);
 
   // Real curated "Top Brands" — GET /brands/admin/top-brands, the same
@@ -440,7 +447,7 @@ export default function Dashboard() {
 
   const handleManualRefresh = async () => {
     setRefreshSpinning(true);
-    await Promise.all([pendingQuery.refetch(), topBrandsQuery.refetch(), paymentsQuery.refetch()]);
+    await Promise.all([pendingQuery.refetch(), pendingCountQuery.refetch(), topBrandsQuery.refetch(), paymentsQuery.refetch()]);
     setTimeout(() => setRefreshSpinning(false), 500);
   };
 

@@ -49,6 +49,8 @@ function ImagePick({ label, current, file, onPick, required, wide }) {
 // changed. "Use the owner's WhatsApp" sends useWhatsappAsMobile instead of a
 // mobile — refused (422 OWNER_NUMBER_NOT_VERIFIED) while the owner has never
 // signed in, which is every admin-created vendor until their first login.
+// The admin's GET /brands/get carries user.isWhatsappVerified, so the option
+// is disabled up front when it's false; the 422 stays as the fallback.
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
 export function BrandBasicsScreen({ brandId, brand, eyebrow, onAdvance, onBack, isCurrent = true }) {
@@ -61,7 +63,8 @@ export function BrandBasicsScreen({ brandId, brand, eyebrow, onAdvance, onBack, 
   const [email, setEmail] = useState(savedEmail);
   const [mobile, setMobile] = useState(savedMobile);
   const [useWa, setUseWa] = useState(false);
-  const [waBlocked, setWaBlocked] = useState(false);
+  // false = owner never verified their WhatsApp (or the server said so).
+  const [waBlocked, setWaBlocked] = useState(() => brand?.user?.isWhatsappVerified === false);
   const { run, busy, error } = useStepAction(onAdvance);
 
   const hasLogo = Boolean(logo || brand?.logo);

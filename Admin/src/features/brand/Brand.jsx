@@ -148,13 +148,15 @@ async function fetchAllBrandRows(params) {
 // Which brands each list shows. LIVE = approved; dummy brands are never
 // approved, so D Brands sends no stage.
 const SCOPE_PARAMS = {
+  // Live = approved WITH a live plan; Expired = approved without one
+  // (backend, Milestone A) — so a brand is on exactly one of the two.
   // RD brands have their own page (Real Dummy Brands).
-  live: { onboardingStage: "LIVE", isDummy: false, isRealDummy: false },
+  live: { onboardingStage: "LIVE", isSubscribed: true, isDummy: false, isRealDummy: false },
   realDummy: { onboardingStage: "LIVE", isRealDummy: true },
   dummy: { isDummy: true },
-  // Approved brands with no live plan (`subscription` is null then, so the
-  // list can't tell "plan ran out" from "never had one").
-  expired: { onboardingStage: "LIVE", isDummy: false, isSubscribed: false },
+  // `subscription` is null with no live plan, so the list can't tell "plan
+  // ran out" from "never had one".
+  expired: { onboardingStage: "LIVE", isSubscribed: false, isDummy: false },
 };
 
 // Status tab → server filter. accountActive = the vendor account switch
@@ -1085,7 +1087,8 @@ export default function Brand({ scope = "live" }) {
   // Overview charts — server totals for the current status tab + filters
   // (the whole result, not just the visible page), so they always describe
   // the brands the list is showing. "Expired" = no live plan (isSubscribed
-  // false); Verified / Deactive split the brands that do have one.
+  // false); Active / Deactive split the brands that do have one. On Live
+  // (isSubscribed true) the no-plan counts clash and are 0 without a request.
   const verifiedMixTotal = useBrandTotal(narrowParams(viewParams, { accountActive: true, isSubscribed: true }));
   const deactiveMixTotal = useBrandTotal(narrowParams(viewParams, { accountActive: false, isSubscribed: true }));
   const noPlanTotal = useBrandTotal(narrowParams(viewParams, { isSubscribed: false }));

@@ -12,11 +12,10 @@ import { RejectReasonModal } from "../brand/BrandShared";
 import { PaginationBar } from "../category/CatalogShared";
 import { useDebouncedValue } from "../notification/hooks/useNotificationState";
 import { useBrandStageList } from "../brand/queries/brandQueries";
-import { WaitingChip } from "../brand/BrandStageChips";
 import { reviewBrandVerification } from "./services/NewOnboardingApi";
 import { mapVerification } from "./verificationData";
 import { useLatestVerification } from "./queries/onboardingReviewQueries";
-import { rowReviewBlock, useReviewGate, REVIEW_TEXT_MAX } from "./reviewGate";
+import { rowReviewState, useReviewGate, REVIEW_TEXT_MAX } from "./reviewGate";
 import OnboardingCard from "./OnboardingCard";
 import { onboardingTableColumns } from "./onboardingBrand";
 import VerificationDetails from "./VerificationDetails";
@@ -44,6 +43,12 @@ function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
         <p className="mt-1 text-[12.5px] text-neutral-500">
           <span className="font-medium text-neutral-700 dark:text-neutral-300">{brand.brandName}</span> will go live for customers.
         </p>
+        {gate.approveConfirm && !blocked && (
+          <p className="mt-3 flex items-start gap-2 rounded-xl bg-red-500/5 px-3.5 py-2.5 text-[12.5px] font-medium text-red-700 dark:text-red-300">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            {gate.approveConfirm}
+          </p>
+        )}
 
         <label htmlFor="approve-note" className="mb-1.5 mt-4 block text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
           Note <span className="text-neutral-500">(optional)</span>
@@ -96,7 +101,7 @@ function ApproveNoteModal({ brand, busy, error, onClose, onConfirm }) {
             className="flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2 text-[13px] font-semibold text-neutral-950 transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-950/30 border-t-neutral-950" /> : <Check size={14} />}
-            Approve
+            {gate.approveConfirm ? "Approve anyway" : "Approve"}
           </button>
         </div>
       </form>
@@ -226,36 +231,38 @@ export default function BrandWaiting() {
   const handleSetReviewed = (brandId, isReviewed) => handleReview(brandId, { action: "REVIEWED", isReviewed: Boolean(isReviewed) }, "reviewed");
   const handleRevoke = (brandId, revokeReason) => handleReview(brandId, { action: "REVOKED", revokeReason }, "revoke");
 
+  // Rejected / revoked rows keep Approve (the modal asks "approve anyway?");
+  // only a rejected row loses Reject (rejecting again is a 409).
   const isClosedRow = (row) => row.waitingChip === "REJECTED" || row.waitingChip === "REVOKED";
 
   const tableColumns = onboardingTableColumns({
     onOpen: setSelectedBrand,
     now: openedAt,
     dateField: "submitted",
-    renderStatus: (row) =>
-      isClosedRow(row) ? (
-        <WaitingChip chip={row.waitingChip} />
-      ) : (
+    renderStatus: (row) => {
+      const state = rowReviewState(row);
+      return (
         <StatusStepButton
-          label={row.waitingChip === "RESUBMITTED" ? "Resubmitted" : "Under review"}
-          tone="amber"
-          stepLabel={rowReviewBlock(row) || "Approve"}
-          disabled={Boolean(busyAction) || Boolean(rowReviewBlock(row))}
+          label={isClosedRow(row) ? (row.waitingChip === "REJECTED" ? "Rejected" : "Revoked") : row.waitingChip === "RESUBMITTED" ? "Resubmitted" : "Under review"}
+          tone={isClosedRow(row) ? "red" : "amber"}
+          stepLabel={state.approveBlocked || (state.approveConfirm ? "Approve anyway" : "Approve")}
+          disabled={Boolean(busyAction) || Boolean(state.approveBlocked)}
           onClick={() => {
             setActionError("");
             setApproveTarget(row);
           }}
         />
-      ),
+      );
+    },
     renderActions: (row) =>
-      !isClosedRow(row) && (
+      !rowReviewState(row).rejectBlocked && (
         <button
           onClick={() => {
             setActionError("");
             setRejectTarget(row);
           }}
-          disabled={Boolean(busyAction) || Boolean(rowReviewBlock(row))}
-          title={rowReviewBlock(row) || "Reject"}
+          disabled={Boolean(busyAction)}
+          title="Reject"
           aria-label={`Reject ${row.brandName}`}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:border-red-500/40 hover:text-red-600 disabled:cursor-wait disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-red-400"
         >
@@ -419,25 +426,22 @@ export default function BrandWaiting() {
                     onOpen={setSelectedBrand}
                     now={openedAt}
                     dateField="submitted"
-                    // Rejected / revoked rows wait for the vendor — no quick actions.
-                    actions={
-                      isClosedRow(row)
+                    // Deed + "approve anyway?" are checked in the Approve modal
+                    // (one status read); a rejected row has no Reject.
+                    actions={{
+                      busy: Boolean(busyAction),
+                      approveBlockedReason: rowReviewState(row).approveBlocked,
+                      onApprove: (r) => {
+                        setActionError("");
+                        setApproveTarget(r);
+                      },
+                      onReject: rowReviewState(row).rejectBlocked
                         ? undefined
-                        : {
-                            busy: Boolean(busyAction),
-                            // Deed is checked in the Approve modal (one status read).
-                            approveBlockedReason: rowReviewBlock(row),
-                            rejectBlockedReason: rowReviewBlock(row),
-                            onApprove: (r) => {
-                              setActionError("");
-                              setApproveTarget(r);
-                            },
-                            onReject: (r) => {
-                              setActionError("");
-                              setRejectTarget(r);
-                            },
-                          }
-                    }
+                        : (r) => {
+                            setActionError("");
+                            setRejectTarget(r);
+                          },
+                    }}
                   />
                 ))}
               </div>

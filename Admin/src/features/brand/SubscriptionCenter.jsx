@@ -28,6 +28,9 @@ import { CardHeader } from "./BrandDetails/components/Bento";
 import { glassClass, cardClass, heroClass, innerTile, tints } from "./BrandDetails/components/bentoStyles";
 import { usePlans } from "../plan/queries/planQueries";
 import { grantSubscription, cancelSubscription } from "./services/subscriptionApi";
+import { useBillingAddress } from "../onboarding/queries/onboardingQueries";
+import BillingAddressForm from "./v2/BillingAddressForm";
+import { v2ErrorText } from "./v2/util";
 import { useBrands } from "./BrandContext";
 import Loader from "../../components/common/Loader";
 import ValueOr from "../../components/common/ValueOr";
@@ -244,6 +247,16 @@ export function GrantSubscriptionModal({ brand, action, onClose, onSuccess }) {
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState(null); // server response after success
 
+  // A grant needs the brand's billing address (guide §9): check it first,
+  // and if the server still answers 422 BILLING_ADDRESS_REQUIRED, open the
+  // billing form prefilled from details.suggestedAddress. The typed grant
+  // fields are kept meanwhile.
+  const billingQuery = useBillingAddress(brand.id, { select: (res) => res?.data ?? null });
+  const billing = billingQuery.data;
+  const [billingSaved, setBillingSaved] = useState(false);
+  const [billingRequired, setBillingRequired] = useState(null); // { prefill } after a 422
+  const showBillingForm = Boolean(billingRequired) || (Boolean(billing) && !billing.billingAddress && !billingSaved);
+
   const isOffline = action === "offline";
   const selectedPlan = plans.find((p) => p.id === subscriptionId);
   const noteError = textError(note, "Note");
@@ -277,7 +290,12 @@ export function GrantSubscriptionModal({ brand, action, onClose, onSuccess }) {
     try {
       setResult(await grantSubscription(payload));
     } catch (err) {
-      setSubmitError(err.message);
+      if (err.code === "BILLING_ADDRESS_REQUIRED") {
+        setBillingRequired({ prefill: err.details?.suggestedAddress ?? null });
+        setSubmitError("");
+      } else {
+        setSubmitError(v2ErrorText(err));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -372,6 +390,31 @@ export function GrantSubscriptionModal({ brand, action, onClose, onSuccess }) {
           <WhatHappens points={meta.points} />
         </div>
 
+        {billingQuery.isPending ? (
+          <Loader variant="inline" className="mt-4" label="Checking the billing address…" />
+        ) : (
+          showBillingForm && (
+            <div className="mt-4 rounded-2xl bg-amber-400/[0.06] p-4 ring-1 ring-amber-400/40">
+              <p className="mb-3 flex items-start gap-2 text-[12.5px] font-medium text-amber-800 dark:text-amber-300">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                A plan needs the brand's billing address first. Check the prefilled address, add the coordinates and save — then grant.
+              </p>
+              <BillingAddressForm
+                brandId={brand.id}
+                initial={billingRequired?.prefill || billing?.billingAddress || billing?.suggestedAddress}
+                gstAddress={billing?.gstAddress}
+                gstin={billing?.gstin}
+                submitLabel="Save billing address"
+                onSaved={() => {
+                  setBillingSaved(true);
+                  setBillingRequired(null);
+                }}
+              />
+            </div>
+          )
+        )}
+
+        {!billingQuery.isPending && !showBillingForm && (
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <Field label={`Plan${action === "downgrade" ? " (lower tier)" : ""}`} required>
             {plansLoading ? (
@@ -483,6 +526,7 @@ export function GrantSubscriptionModal({ brand, action, onClose, onSuccess }) {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

@@ -55,6 +55,7 @@ import VoucherTab from "./tabs/VoucherTab";
 import AccountDetailsTab from "./tabs/AccountDetailsTab";
 import OnboardingTab from "../v2/OnboardingTab";
 import BrandV2HeaderChips from "../v2/BrandV2HeaderChips";
+import { fmtDateTime } from "../v2/util";
 
 const STATUS_ACCENTS = {
   Active: "from-emerald-400/25 via-emerald-400/0",
@@ -280,6 +281,8 @@ export default function BrandDetails({
   };
 
   const incomplete = brand.onboardingComplete === false;
+  // Latest deactivate / hide state from the list row (no history API yet).
+  const access = brand.accountAccess || null;
   const accent = STATUS_ACCENTS[brand.status] || "from-neutral-500/20 via-neutral-500/0";
   const headerCover = brand.coverImage || brand.ambiencePhotos?.[0];
   // Same outlet count the brand card shows.
@@ -401,7 +404,10 @@ export default function BrandDetails({
                 both work on dummy brands too (their two actions). */}
             <div className="absolute right-4 top-2.5 flex items-center gap-2">
               {onToggleHidden && (
-                <div className="flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur">
+                <div
+                  title={access?.visibilityUpdatedAt ? `Changed ${fmtDateTime(access.visibilityUpdatedAt)}` : undefined}
+                  className="flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur"
+                >
                   {brand.hiddenFromCustomers ? "Hidden from customers" : "Visible to customers"}
                   <ToggleSwitch
                     checked={Boolean(brand.hiddenFromCustomers)}
@@ -410,7 +416,14 @@ export default function BrandDetails({
                   />
                 </div>
               )}
-              <div className="flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur">
+              <div
+                title={
+                  !brand.active && access?.deactivatedAt
+                    ? `Deactivated ${fmtDateTime(access.deactivatedAt)}${access.deactivationReason ? ` — ${access.deactivationReason}` : ""}`
+                    : undefined
+                }
+                className="flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur"
+              >
                 {brand.active ? "Active" : "Deactive"}
                 <ToggleSwitch
                   checked={brand.active}

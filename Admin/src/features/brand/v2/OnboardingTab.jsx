@@ -6,6 +6,7 @@ import BillingAddressCard from "./BillingAddressCard";
 import DeedCard from "./DeedCard";
 import BadgeCard from "./BadgeCard";
 import ReviewCard from "./ReviewCard";
+import AccessStateCard from "./AccessStateCard";
 import LegalBasicsCard from "./LegalBasicsCard";
 import KycRecordsCard from "./KycRecordsCard";
 
@@ -20,6 +21,7 @@ export default function OnboardingTab({ brand, readOnly = false }) {
     <div className="space-y-4">
       <OnboardingSummaryCard brandId={brand.id} />
       <ReviewCard brandId={brand.id} readOnly={readOnly} />
+      <AccessStateCard brand={brand} />
       <SystemVerifyCard brandId={brand.id} />
       <LegalBasicsCard brandId={brand.id} readOnly={readOnly} />
       <KycRecordsCard brandId={brand.id} readOnly={readOnly} />

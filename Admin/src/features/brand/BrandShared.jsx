@@ -589,7 +589,9 @@ export function RejectReasonModal({ brand, onClose, onConfirm, busy = false, err
  * onConfirm(hideFromCustomers, reason). Activate ignores both.
  * ---------------------------------------------------------------------- */
 
-const DEACTIVATE_REASON_MAX = 500;
+// `reason` on PUT /brands/admin/:brandId/status — max 1000
+// (BRAND_STATUS_LIMITS.MAX_REASON_LENGTH, admin doc "Brands — status").
+const DEACTIVATE_REASON_MAX = 1000;
 
 export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfirm }) {
   // Starts from the brand's current visibility, so deactivating a hidden

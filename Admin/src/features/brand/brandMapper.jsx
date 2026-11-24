@@ -221,11 +221,14 @@ function deriveBrandStatus(raw) {
     (raw.subscribed?.endDate ? daysUntil(raw.subscribed.endDate) : null);
   if (endsInDays != null && endsInDays <= 0) return 'Expired';
 
-  if (
-    ['INACTIVE', 'DEACTIVE', 'DEACTIVATED'].includes(status) ||
-    raw.isAccountActive === false ||
-    raw.isActive === false
-  ) return 'Deactive';
+  // The VENDOR ACCOUNT switch. GET /brands/get carries it as `user.isActive`;
+  // its own `isActive` is the customer switch (hide), which never deactivates
+  // anyone (admin guide §13). List rows have `isAccountActive` and no `user`.
+  const accountOff =
+    raw.user && typeof raw.user.isActive === 'boolean'
+      ? raw.user.isActive === false
+      : raw.isAccountActive === false || raw.isActive === false;
+  if (['INACTIVE', 'DEACTIVE', 'DEACTIVATED'].includes(status) || accountOff) return 'Deactive';
   return 'Active';
 }
 
@@ -342,6 +345,18 @@ export function mapBrandListItem(raw) {
     // List payload sends isVisibleToCustomers; status PUT takes hideFromCustomers.
     hiddenFromCustomers:
       raw.isVisibleToCustomers != null ? !raw.isVisibleToCustomers : Boolean(raw.hideFromCustomers),
+    // Latest account / customer-switch state (admin doc #25a row) — only the
+    // list row has it; the status history has no read API yet. One object, so
+    // a refetch replaces it whole: mergeKnown skips nulls, and the server
+    // clears the deactivation date + reason when the account is re-activated.
+    accountAccess: {
+      isAccountActive: typeof raw.isAccountActive === 'boolean' ? raw.isAccountActive : null,
+      deactivatedAt: raw.accountDeactivatedAt || null,
+      deactivationReason: raw.accountDeactivationReason || null,
+      activatedAt: raw.accountActivatedAt || null,
+      isVisibleToCustomers: typeof raw.isVisibleToCustomers === 'boolean' ? raw.isVisibleToCustomers : null,
+      visibilityUpdatedAt: raw.customerVisibilityUpdatedAt || null,
+    },
     // Raw enum keys (e.g. "PRIVATE_LIMITED", "REGISTERED") for the card.
     entityTypeKey: raw.businessEntityType || null,
     registrationKey: raw.businessRegistrationStatus || null,
@@ -407,7 +422,9 @@ export function mapBrandDetail(raw) {
     category: raw.category?.name || raw.subCategory?.name || '—',
     liveSince: raw.joinedDate ? new Date(raw.joinedDate).getFullYear().toString() : '—',
     joinedDate: raw.joinedDate || null,
-    active: raw.isActive ?? status === 'Active',
+    // Vendor account switch = `user.isActive`. The brand's own `isActive` here
+    // is the customer switch (it feeds hiddenFromCustomers below).
+    active: typeof raw.user?.isActive === 'boolean' ? raw.user.isActive : raw.isActive ?? status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
     // Verified badge — a trust badge, separate from approval (§11).
@@ -555,9 +572,15 @@ export function mapBrandDetail(raw) {
     topOrder: raw.topOrder ?? 0,
     // null (not false) when missing, so mergeKnown keeps the list's value.
     isDummy: raw.isDummy ?? null,
-    // null (not false) when missing, so mergeKnown keeps the list's value.
+    // GET /brands/get has no isVisibleToCustomers — its `isActive` IS the
+    // customer switch (Brand.isActive). null when missing, so mergeKnown
+    // keeps the list's value.
     hiddenFromCustomers:
-      raw.isVisibleToCustomers != null ? !raw.isVisibleToCustomers : raw.hideFromCustomers ?? null,
+      raw.isVisibleToCustomers != null
+        ? !raw.isVisibleToCustomers
+        : typeof raw.isActive === 'boolean'
+        ? !raw.isActive
+        : raw.hideFromCustomers ?? null,
     dummyBatch: raw.dummyBatch || null,
   };
 }

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { throwApiError as handleError } from '../../../lib/apiError';
 
 // ── Base URL ────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -26,15 +27,6 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Normalize error responses so callers get a consistent shape
-function handleError(error) {
-    const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Something went wrong. Please try again.';
-    throw new Error(message);
-}
-
 /* -------------------------------------------------------------------------
  * GET {{base_url}}/brands/get?brandId=...
  * Matches the "getBrandDetails" Postman request — returns ONE brand with
@@ -55,14 +47,19 @@ export async function getBrandDetails(brandId) {
 export const getBrands = getBrandDetails;
 
 /* -------------------------------------------------------------------------
- * GET {{base_url}}/brands/admin/get-all
- * Paginated brand list for the admin panel (the "Brands" list page).
+ * GET {{base_url}}/brands/admin/get-all   (super admin API doc #25a)
+ * Paginated brand list. Every other key is passed through as a server
+ * filter (onboardingStage NEW / WAITING / LIVE, search, accountActive,
+ * isActive, isRejected, isRevoked, isTopBrand, isDummy, isRealDummy,
+ * isSubscribed …); empty values are left out. With `onboardingStage` an
+ * empty tab is 200 + data: [] and the response carries `stageCounts`.
  * ---------------------------------------------------------------------- */
-export async function getAllBrands({ page = 1, limit = 10, search = '', status } = {}) {
+export async function getAllBrands({ page = 1, limit = 10, ...filters } = {}) {
     try {
         const params = { page, limit };
-        if (search) params.search = search;
-        if (status) params.status = status;
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') params[key] = value;
+        });
         const { data } = await api.get('/brands/admin/get-all', { params });
         return data;
     } catch (error) {
@@ -71,37 +68,9 @@ export async function getAllBrands({ page = 1, limit = 10, search = '', status }
 }
 
 /* -------------------------------------------------------------------------
- * PUT {{base_url}}/brands/admin/:brandId/status
- * Used for approve / reject / activate / deactivate from the admin panel.
- * `reason` is only sent when present (e.g. rejection reason).
- *
- * Backend requires both:
- *   - isActive (boolean)         → derived from `status` unless passed explicitly
- *   - hideFromCustomers (boolean) → always sent, defaults to false
- * ---------------------------------------------------------------------- */
-export async function updateBrandStatus(brandId, status, reason = '', isActive, hideFromCustomers = false) {
-    try {
-        const resolvedIsActive =
-            isActive !== undefined
-                ? isActive
-                : ['ACTIVE', 'APPROVED'].includes(status);
-
-        const body = {
-            status,
-            isActive: resolvedIsActive,
-            hideFromCustomers,
-        };
-        if (reason) body.reason = reason;
-
-        const { data } = await api.put(`/brands/admin/${brandId}/status`, body);
-        return data;
-    } catch (error) {
-        handleError(error);
-    }
-}
-
-/* -------------------------------------------------------------------------
  * PUT {{base_url}}/brands/admin/:brandId/status — Active / Deactive / Hide.
+ * Never for approve / reject: those go only through
+ * PUT /brands/admin/verifications/:brandId/review (#24).
  * Body per the super admin API doc ("Brands — status aur curation"):
  *   { isActive, hideFromCustomers, reason? }
  * Two different switches: isActive:false shuts the vendor out;
@@ -113,6 +82,39 @@ export async function setBrandAccess(brandId, { isActive, hideFromCustomers, rea
         const body = { isActive: Boolean(isActive), hideFromCustomers: Boolean(hideFromCustomers) };
         if (!isActive && reason) body.reason = reason;
         const { data } = await api.put(`/brands/admin/${brandId}/status`, body);
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * GET {{base_url}}/brands/profile-strength?brandId=   (#25j → vendor #32c)
+ * → { brandId, isVerified, score, level, sections[{ key, items[{ key,
+ *     label, done, available, earned, max, points, action }] }],
+ *     badgeEligible, badgeBlockers[] }
+ * ---------------------------------------------------------------------- */
+export async function getProfileStrength(brandId) {
+    try {
+        const { data } = await api.get('/brands/profile-strength', { params: { brandId } });
+        return data;
+    } catch (error) {
+        handleError(error);
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * PUT {{base_url}}/brands/admin/:brandId/verified-badge   (#25i)
+ * body { isVerified: boolean, note? (≤ 1000) } → { brandId, isVerified,
+ * badgeGrantedAt, badgeGrantedByAdminId, profileStrength }.
+ * 409 BADGE_NOT_ELIGIBLE → details.badgeBlockers[], details.profileStrength.
+ * The badge is trust only — never approval.
+ * ---------------------------------------------------------------------- */
+export async function setVerifiedBadge(brandId, { isVerified, note } = {}) {
+    try {
+        const body = { isVerified: Boolean(isVerified) };
+        if (note && note.trim()) body.note = note.trim();
+        const { data } = await api.put(`/brands/admin/${brandId}/verified-badge`, body);
         return data;
     } catch (error) {
         handleError(error);
@@ -158,24 +160,6 @@ export async function updateTopBrand(brandId, { isTopBrand, topOrder }) {
     try {
         const body = { brandId, isTopBrand, topOrder };
         const { data } = await api.put(`/brands/admin/top-brands/${brandId}`, body);
-        return data;
-    } catch (error) {
-        handleError(error);
-    }
-}
-
-/* -------------------------------------------------------------------------
- * POST {{base_url}}/brands/admin/create
- * multipart/form-data: `data` (full brand body as a JSON string) + files
- * (logo, listingFeatures[i].icon, showcase[i].files) — see
- * buildBrandFormData in features/brand/add/brandFormConfig.js.
- * NOTE: path and file keys not confirmed yet — match them to the backend.
- * ---------------------------------------------------------------------- */
-export async function createBrand(formData) {
-    try {
-        const { data } = await api.post('/brands/admin/create', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
         return data;
     } catch (error) {
         handleError(error);
@@ -311,11 +295,9 @@ export async function verifyOutletOtp(whatsappNumber, otp) {
 }
 
 export default {
-    createBrand,
     getBrandDetails,
     getBrands,
     getAllBrands,
-    updateBrandStatus,
     getTopBrands,
     updateTopBrand,
     updateBrand,

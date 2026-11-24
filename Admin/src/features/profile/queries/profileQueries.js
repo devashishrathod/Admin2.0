@@ -39,5 +39,19 @@ export function useMyProfile(options = {}) {
 
 export const refreshMyProfile = () => queryClient.invalidateQueries({ queryKey: queryKeys.users.detail("me") });
 
-// The doc doesn't name the photo field — accept the usual spellings.
-export const profileImageOf = (p) => p?.image || p?.profileImage || p?.avatar || p?.photo || null;
+// The doc doesn't name the photo field — accept the usual spellings. Media
+// on this backend is usually an object ({ url, kind, provider, … }), not a
+// plain string, so unwrap it — an object in <img src> renders nothing.
+const mediaUrl = (m) => {
+  if (!m) return null;
+  if (typeof m === "string") return m;
+  return m.url || m.secure_url || m.secureUrl || m.location || null;
+};
+export const profileImageOf = (p) =>
+  mediaUrl(p?.image) ||
+  mediaUrl(p?.imageMedia) ||
+  mediaUrl(p?.profileImage) ||
+  mediaUrl(p?.profilePic) ||
+  mediaUrl(p?.avatar) ||
+  mediaUrl(p?.photo) ||
+  null;

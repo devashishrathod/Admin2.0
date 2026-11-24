@@ -5,10 +5,9 @@ import {
   getOnboardingBrand,
   getKycDocuments,
   getBillingAddress,
-  getProfileStrength,
   getBrandFeatures,
-  getOutlets,
 } from "../services/onboardingApi";
+import { getBrandOutlets, getLocation } from "../../brand/services/BrandApi";
 
 /* Admin onboarding (v2) reads, cached. Returns the raw API response;
  * `options` goes to useQuery. Almost every onboarding endpoint lives under
@@ -17,7 +16,7 @@ import {
  * /subBrands. Named views (not detail/list) because other screens read the
  * same URLs through other services and params. */
 
-/** Server-side progress: currentScreen, steps, kycPath, editMode, deed … */
+/** Server-side progress: currentScreen, groups, kycPath, editMode, deed, profileStrength … */
 export function useOnboardingStatus(brandId, options = {}) {
   return useQuery({
     queryKey: queryKeys.brands.view("onboarding-status", { brandId }),
@@ -55,15 +54,6 @@ export function useBillingAddress(brandId, options = {}) {
   });
 }
 
-export function useProfileStrength(brandId, options = {}) {
-  return useQuery({
-    queryKey: queryKeys.brands.view("profile-strength", { brandId }),
-    queryFn: () => getProfileStrength(brandId),
-    enabled: Boolean(brandId),
-    ...options,
-  });
-}
-
 export function useOnboardingFeatures(brandId, options = {}) {
   return useQuery({
     queryKey: queryKeys.brandFeatures.view("onboarding-features", { brandId }),
@@ -73,12 +63,26 @@ export function useOnboardingFeatures(brandId, options = {}) {
   });
 }
 
-/** The brand's outlets (first 50). */
+/** The brand's outlets as an array (GET /subBrands/get-all, every page, oldest
+ *  first). Rows are kept to this brand on the client, because the server
+ *  ignores the admin's brandId filter; 404 → []. Same key as the brand
+ *  detail's Outlets tab, so both share the cache. */
 export function useOnboardingOutlets(brandId, options = {}) {
   return useQuery({
-    queryKey: queryKeys.subBrands.view("onboarding-outlets", { brandId }),
-    queryFn: () => getOutlets(brandId),
+    queryKey: queryKeys.subBrands.list({ brandId }),
+    queryFn: () => getBrandOutlets(brandId),
     enabled: Boolean(brandId),
+    ...options,
+  });
+}
+
+/** One outlet's saved address (GET /locations/get/:id). Same key as the Outlets tab. */
+export function useOutletLocation(locationId, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.subBrands.view("location", { id: locationId }),
+    queryFn: () => getLocation(locationId),
+    enabled: Boolean(locationId),
+    staleTime: 5 * 60 * 1000,
     ...options,
   });
 }

@@ -59,10 +59,18 @@ export async function expireSession() {
   window.location.replace(`/?${params.toString()}`);
 }
 
+/** A 401 that means "your session is over". Only those carry `details.code`
+ *  (web panels guide §6). A 401 without it is a wrong / expired OTP or a
+ *  wrong current password — the caller shows the message; no logout. */
+export function isSessionEnded401(error) {
+  const res = error?.response;
+  return res?.status === 401 && Boolean(res?.data?.details?.code);
+}
+
 /** Adds the shared response handling to one axios instance:
  *  - success on a write (POST/PUT/PATCH/DELETE) → refresh the cached data
  *    it changed, on every screen (lib/query/invalidateAfterWrite.js),
- *  - 401 → logout and back to login. */
+ *  - 401 with `details.code` → logout and back to login. */
 export function attachSessionHandling(api) {
   api.interceptors.response.use(
     (response) => {
@@ -70,8 +78,9 @@ export function attachSessionHandling(api) {
       return response;
     },
     (error) => {
-      // 401 = not authenticated / session expired (permission problems are 403).
-      if (error?.response?.status === 401) expireSession();
+      // Token expiry is also caught locally (Layout's timer), so this is
+      // only for sessions the server ended.
+      if (isSessionEnded401(error)) expireSession();
       return Promise.reject(error);
     }
   );

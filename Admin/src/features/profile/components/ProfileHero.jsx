@@ -1,4 +1,4 @@
-import { BadgeCheck, CalendarDays, KeyRound, Mail, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CalendarDays, Mail, Phone, ShieldCheck } from "lucide-react";
 import { ROLE_LABELS, formatDate, initialsOf } from "../profileUtils";
 import { profileImageOf } from "../queries/profileQueries";
 
@@ -72,10 +72,10 @@ export default function ProfileHero({ profile }) {
           good={Boolean(profile.isEmailVerified)}
         />
         <Fact
-          icon={KeyRound}
-          label="Password"
-          value={profile.passwordSetAt ? `Set on ${formatDate(profile.passwordSetAt)}` : "Not set"}
-          good={Boolean(profile.passwordSetAt)}
+          icon={Phone}
+          label="Contact number"
+          value={profile.isMobileVerified ? "Verified" : profile.mobile ? "Not verified" : "Not added"}
+          good={Boolean(profile.isMobileVerified)}
         />
         <Fact icon={BadgeCheck} label="Signs in with" value={profile.loginType ? profile.loginType.toLowerCase() : "WhatsApp"} />
       </div>

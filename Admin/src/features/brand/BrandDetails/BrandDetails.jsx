@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   MapPin,
-  ShieldCheck,
   ArrowLeft,
   Image as ImageIcon,
   Store,
@@ -22,6 +21,7 @@ import {
   ChevronRight,
   Hash,
   CalendarDays,
+  ListChecks,
 } from "lucide-react";
 import { DETAIL_TABS } from "../data/BrandData";
 import {
@@ -29,7 +29,6 @@ import {
   ToggleSwitch,
   ToggleActiveConfirmModal,
   OnboardingBadge,
-  ApprovalDropdown,
   StatusBadge,
 } from "../BrandShared";
 import { compactCount, brandCardFacts } from "../brandCardUtils";
@@ -38,7 +37,7 @@ import { TransactionsTab, RefundsTab } from "../BrandMoneyTabs";
 import { formatBatch, isMissing, MISSING } from "../../../utils/helpers";
 import ValueOr from "../../../components/common/ValueOr";
 import ListingFeaturesTab from "../ListingFeaturesTab";
-import { VerificationHistory, LiveSubscriptionPanel } from "../BrandAdminExtras";
+import { LiveSubscriptionPanel, Modal, ModalActions } from "../BrandAdminExtras";
 import { BrandDebtSection } from "../../settlement/Settlement";
 import { useBrands } from "../BrandContext";
 import ComingSoonModal from "../ComingSoonModal";
@@ -54,7 +53,9 @@ import ListingsTab from "./tabs/ListingsTab";
 import SettlementsTab from "./tabs/SettlementsTab";
 import VoucherTab from "./tabs/VoucherTab";
 import AccountDetailsTab from "./tabs/AccountDetailsTab";
-import SystemVerificationTab from "./tabs/SystemVerificationTab";
+import OnboardingTab from "../v2/OnboardingTab";
+import BrandV2HeaderChips from "../v2/BrandV2HeaderChips";
+import { fmtDateTime } from "../v2/util";
 
 const STATUS_ACCENTS = {
   Active: "from-emerald-400/25 via-emerald-400/0",
@@ -175,6 +176,7 @@ function DetailTabBar({ tabs, active, onChange }) {
 
 const TAB_ICONS = {
   Overview: Home,
+  "Onboarding & KYC": ListChecks,
   "Brand Info": IdCard,
   "Showcase Media": ImageIcon,
   "Listing Features": Sparkles,
@@ -185,7 +187,6 @@ const TAB_ICONS = {
   Refunds: Undo2,
   Voucher: Ticket,
   Subscription: Repeat,
-  "System Verification": ShieldCheck,
   "Account Details": UserCog,
 };
 
@@ -195,14 +196,19 @@ const TAB_ICONS = {
  * Props:
  *  - brand           : the brand object to display
  *  - onBack()         : go back to the list page
- *  - onToggleActive(brand)
- *        → calls BrandContext.toggleActive(brand), which sends
- *          { status, isActive, hideFromCustomers: false } to the backend
+ *  - onToggleActive(brand, hideFromCustomers, reason)
+ *        → BrandContext.toggleActive → PUT /brands/admin/:brandId/status
+ *          { isActive, hideFromCustomers, reason (deactivate only) }
+ *  - onToggleHidden(brand, hide) → BrandContext.setHiddenFromCustomers
+ *          (same PUT, current isActive) — a separate switch (guide §13)
  *  - onDelete(brand)
  *  - onUpdate(id, updates)               : save edits from "Edit Brand Details"
- *  - onDecision(brand, status, reason)   : approve/reject a Pending brand
  *  - onSetTopBrand(brand, { isTopBrand, topOrder })
- *        : PUT /brands/admin/top-brands/:brandId
+ *
+ * Decisions only go through PUT /brands/admin/verifications/:brandId/review:
+ * first decisions on Brand Waiting; revoke and approve-after-reject also on
+ * the "Onboarding & KYC" tab (v2/ReviewCard).
+ *  - onSetTopBrand → PUT /brands/admin/top-brands/:brandId
  *          body -> { brandId, isTopBrand, topOrder }
  * ---------------------------------------------------------------------- */
 
@@ -212,8 +218,8 @@ export default function BrandDetails({
   brand,
   onBack,
   onToggleActive,
+  onToggleHidden,
   onUpdate,
-  onDecision,
   onSetTopBrand,
 }) {
   // The open tab lives in the URL (?tab=Voucher), so it survives a page
@@ -236,6 +242,7 @@ export default function BrandDetails({
   const readOnly = Boolean(brand.isDummy);
   const [showEditModal, setShowEditModal] = useState(!readOnly && Boolean(location.state?.openEdit));
   const [showToggleConfirm, setShowToggleConfirm] = useState(false);
+  const [showHideConfirm, setShowHideConfirm] = useState(false);
   const [showTopBrandModal, setShowTopBrandModal] = useState(false);
   // "Coming soon" on/off — its own modal (ComingSoonModal).
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
@@ -243,6 +250,7 @@ export default function BrandDetails({
 
   const tabContent = {
     Overview: <OverviewTab brand={brand} readOnly={readOnly} onComingSoon={() => setShowComingSoonModal(true)} />,
+    "Onboarding & KYC": <OnboardingTab brand={brand} readOnly={readOnly} />,
     "Brand Info": <BrandInfoTab brand={brand} />,
     "Showcase Media": <AmbienceTab brand={brand} readOnly={readOnly} />,
     "Listing Features": <ListingFeaturesTab brand={brand} readOnly={readOnly} />,
@@ -269,16 +277,12 @@ export default function BrandDetails({
         <LiveSubscriptionPanel brandId={brand.id} readOnly={readOnly} />
       </>
     ),
-    "System Verification": (
-      <>
-        <SystemVerificationTab brand={brand} />
-        <VerificationHistory brandId={brand.id} />
-      </>
-    ),
     "Account Details": <AccountDetailsTab brand={brand} />,
   };
 
   const incomplete = brand.onboardingComplete === false;
+  // Latest deactivate / hide state from the list row (no history API yet).
+  const access = brand.accountAccess || null;
   const accent = STATUS_ACCENTS[brand.status] || "from-neutral-500/20 via-neutral-500/0";
   const headerCover = brand.coverImage || brand.ambiencePhotos?.[0];
   // Same outlet count the brand card shows.
@@ -396,14 +400,37 @@ export default function BrandDetails({
               </span>
             )}
 
-            {/* Active/Inactive works on dummy brands too (one of their two actions). */}
-            <div className="absolute right-4 top-2.5 flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur">
-              {brand.active ? "Active" : "Deactive"}
-              <ToggleSwitch
-                checked={brand.active}
-                onChange={() => setShowToggleConfirm(true)}
-                title={brand.active ? "Deactivate" : "Activate"}
-              />
+            {/* Active/Inactive and Hidden — two separate switches (guide §13);
+                both work on dummy brands too (their two actions). */}
+            <div className="absolute right-4 top-2.5 flex items-center gap-2">
+              {onToggleHidden && (
+                <div
+                  title={access?.visibilityUpdatedAt ? `Changed ${fmtDateTime(access.visibilityUpdatedAt)}` : undefined}
+                  className="flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur"
+                >
+                  {brand.hiddenFromCustomers ? "Hidden from customers" : "Visible to customers"}
+                  <ToggleSwitch
+                    checked={Boolean(brand.hiddenFromCustomers)}
+                    onChange={() => setShowHideConfirm(true)}
+                    title={brand.hiddenFromCustomers ? "Show to customers" : "Hide from customers"}
+                  />
+                </div>
+              )}
+              <div
+                title={
+                  !brand.active && access?.deactivatedAt
+                    ? `Deactivated ${fmtDateTime(access.deactivatedAt)}${access.deactivationReason ? ` — ${access.deactivationReason}` : ""}`
+                    : undefined
+                }
+                className="flex items-center gap-2 rounded-full bg-black/30 py-0.5 pl-2.5 pr-0.5 text-[11px] font-medium text-white backdrop-blur"
+              >
+                {brand.active ? "Active" : "Deactive"}
+                <ToggleSwitch
+                  checked={brand.active}
+                  onChange={() => setShowToggleConfirm(true)}
+                  title={brand.active ? "Deactivate" : "Activate"}
+                />
+              </div>
             </div>
           </div>
 
@@ -418,8 +445,14 @@ export default function BrandDetails({
                   <h1 className="text-[17px] font-semibold capitalize leading-tight text-neutral-900 dark:text-neutral-50">{brand.brandName}</h1>
                   {incomplete ? (
                     <OnboardingBadge brand={brand} />
-                  ) : brand.status === "Pending" && onDecision && !readOnly ? (
-                    <ApprovalDropdown brand={brand} onDecision={onDecision} size="sm" />
+                  ) : brand.status === "Pending" && !readOnly ? (
+                    // The decision is made on Brand Waiting (review endpoint #24), never here.
+                    <Link
+                      to="/brand-waiting"
+                      className="rounded-full bg-amber-400/10 px-2.5 py-1 text-[11.5px] font-semibold text-amber-600 transition-colors hover:bg-amber-400/20 dark:text-amber-400"
+                    >
+                      Awaiting review · open Brand Waiting
+                    </Link>
                   ) : (
                     <StatusBadge status={brand.status} activeLabel="Active" />
                   )}
@@ -470,6 +503,9 @@ export default function BrandDetails({
                     </span>
                   )}
                 </div>
+
+                {/* Onboarding v2 line — server's status + raw brand (guide §4) */}
+                {brand.id && <BrandV2HeaderChips brand={brand} />}
               </div>
             </div>
 
@@ -519,12 +555,41 @@ export default function BrandDetails({
           brand={brand}
           willActivate={!brand.active}
           onClose={() => setShowToggleConfirm(false)}
-          onConfirm={(hideFromCustomers) => {
-            // Pass the modal's "Also hide from customers" choice through.
-            onToggleActive(brand, hideFromCustomers);
+          onConfirm={(hideFromCustomers, reason) => {
+            // The modal's "Also hide from customers" choice + deactivate reason.
+            onToggleActive(brand, hideFromCustomers, reason);
             setShowToggleConfirm(false);
           }}
         />
+      )}
+
+      {showHideConfirm && onToggleHidden && (
+        <Modal
+          title={brand.hiddenFromCustomers ? "Show to customers again?" : "Hide from customers?"}
+          subtitle={brand.brandName}
+          onClose={() => setShowHideConfirm(false)}
+        >
+          <ul className="space-y-1 text-[12.5px] text-neutral-600 dark:text-neutral-400">
+            {brand.hiddenFromCustomers ? (
+              <li>• Customers can find the brand and its vouchers again (if it's otherwise live).</li>
+            ) : (
+              <>
+                <li>• Customers stop seeing the brand and its vouchers — no new claims.</li>
+                <li>• The vendor panel works as normal, sign-in too.</li>
+                <li>• Outlet staff keep working; paid claims and settlements carry on.</li>
+                <li>• Not deactivate, not revoke — approval stays as it is.</li>
+              </>
+            )}
+          </ul>
+          <ModalActions
+            onCancel={() => setShowHideConfirm(false)}
+            onConfirm={() => {
+              onToggleHidden(brand, !brand.hiddenFromCustomers);
+              setShowHideConfirm(false);
+            }}
+            label={brand.hiddenFromCustomers ? "Show to customers" : "Hide from customers"}
+          />
+        </Modal>
       )}
 
       {showComingSoonModal && !readOnly && (

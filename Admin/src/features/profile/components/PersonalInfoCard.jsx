@@ -9,7 +9,8 @@ const MAX_IMAGE_MB = 5;
 
 /* Name, date of birth and photo → PUT /users/update (doc #14). Email is
  * changed in "Contact & verification" instead, so it gets verified; mobile
- * and WhatsApp can't be written here at all. Only changed fields are sent.
+ * and WhatsApp can't be written here at all. Name and dob are always sent,
+ * plus the photo's uploadId when one was picked.
  * A fresh profile from the server resets the form (but keeps the status
  * message, so "Profile updated" stays visible after the refetch). */
 export default function PersonalInfoCard({ profile }) {
@@ -38,7 +39,7 @@ export default function PersonalInfoCard({ profile }) {
 
   const pickImage = (file) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) return setStatus({ tone: "error", text: "Pick an image file (JPG, PNG or WebP)." });
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return setStatus({ tone: "error", text: "Pick an image file (JPG, PNG or WebP)." });
     if (file.size > MAX_IMAGE_MB * 1024 * 1024) return setStatus({ tone: "error", text: `The photo must be under ${MAX_IMAGE_MB} MB.` });
     setStatus(null);
     setImage(file);
@@ -55,9 +56,11 @@ export default function PersonalInfoCard({ profile }) {
     setSaving(true);
     setStatus(null);
     try {
+      // Always send the full profile (name + dob) with the save — together
+      // with the photo's uploadId when a new photo was picked.
       const res = await updateMyProfile({
-        ...(name !== initial.fullName.trim() ? { fullName: name } : {}),
-        ...(form.dob !== initial.dob ? { dob: form.dob } : {}),
+        fullName: name,
+        ...(form.dob ? { dob: form.dob } : {}),
         ...(image ? { image } : {}),
       });
       setImage(null);
@@ -91,15 +94,32 @@ export default function PersonalInfoCard({ profile }) {
             <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/45 text-[10.5px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
               <Camera size={16} /> Change
             </span>
+            {/* Always-visible hint — hover alone isn't discoverable (or usable on touch). */}
+            <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md ring-2 ring-white dark:ring-neutral-900">
+              <Camera size={13} />
+            </span>
           </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => pickImage(e.target.files?.[0])} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              pickImage(e.target.files?.[0]);
+              e.target.value = ""; // allow re-picking the same file
+            }}
+          />
+          <Button size="sm" icon={Camera} onClick={() => fileRef.current?.click()} disabled={saving}>
+            {currentImage ? "Change photo" : "Upload photo"}
+          </Button>
           {image ? (
             <button type="button" onClick={() => setImage(null)} className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-red-500">
               <Trash2 size={11} /> Remove new photo
             </button>
           ) : (
-            <span className="text-[10.5px] normal-case text-neutral-400">JPG, PNG · max {MAX_IMAGE_MB} MB</span>
+            <span className="text-[10.5px] normal-case text-neutral-400">JPG, PNG, WebP · max {MAX_IMAGE_MB} MB</span>
           )}
+          {image && <span className="text-[10.5px] normal-case text-amber-600 dark:text-amber-400">Click "Save changes" to upload</span>}
         </div>
 
         {/* Fields */}

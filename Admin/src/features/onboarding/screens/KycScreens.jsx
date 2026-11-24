@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Upload, FileText, CheckCircle2, XCircle, Loader2, ExternalLink } from "lucide-react";
-import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Field, Note, KeyValue, inputCls } from "../ui";
+import { FileText, CheckCircle2, XCircle, Loader2, ExternalLink, Trash2, RefreshCw, Plus } from "lucide-react";
+import { ScreenShell, StepFooter, PrimaryButton, SecondaryButton, Field, Note, KeyValue, RadioCard, Section, StatusBadge, ChoiceChip, FileDrop, tileCls, inputCls } from "../ui";
 import { useStepAction } from "../useStepAction";
 import { useKycDocuments } from "../queries/onboardingQueries";
 import {
-  uploadKycDocument,
+  addKycDocument,
+  updateKycDocument,
+  deleteKycDocument,
   reviewKycDocument,
   continueOnboarding,
   skipOnboardingScreen,
@@ -14,151 +16,264 @@ import {
   saveGst,
   verifyBank,
   saveBank,
+  saveOwnerPan,
+  saveOwnerIdDocument,
 } from "../services/onboardingApi";
-import { DOC_SLOTS, PAN_RE, GST_RE, IFSC_RE, ACCOUNT_RE, errorText } from "../onboardingFlow";
+import {
+  DOC_TYPE_LABELS,
+  DOCUMENT_RULES,
+  OWNER_ID_TYPES,
+  BANK_ACCOUNT_TYPES,
+  PAN_RE,
+  GST_RE,
+  IFSC_RE,
+  ACCOUNT_RE,
+  docTypeLabel,
+  entityLabel,
+  errorText,
+} from "../onboardingFlow";
 import Loader from "../../../components/common/Loader";
 
 const payload = (res) => res?.data ?? res ?? {};
 
-/* ---- 06 · KYC_DOCUMENTS (unregistered lane) ----------------------- */
-// Up to 3 documents, one per slot; uploading into a filled slot replaces it.
-// ≥1 document → continue; 0 → skip. The admin can also accept / reject each.
-const MAX_BYTES = 5 * 1024 * 1024;
+/** Client-side file check (the server checks again). "" when fine. */
+function fileProblem(file) {
+  if (!file) return "Choose a file.";
+  if (file.size > DOCUMENT_RULES.maxSizeBytes) return "Max 5 MB per file.";
+  if (!DOCUMENT_RULES.types.test(file.type)) return "PDF, JPG or PNG only.";
+  return "";
+}
 
-// Uploads and reviews are writes under /brands, so the document list
-// refreshes itself afterwards (shared interceptor).
-function DocSlot({ brandId, slotDef, doc, hint }) {
-  const [docType, setDocType] = useState(doc?.docType || slotDef.types[0][0]);
+/* ---- KYC_DOCUMENTS ------------------------------------------------- */
+// A list of business documents (up to `limit`), each with a title, an
+// optional docType (from the category's hints) and a file. ≥1 → continue;
+// none → skip. The admin can also accept / reject each one.
+const REVIEW_BADGE = {
+  ACCEPTED: { tone: "ok", label: "Accepted" },
+  REJECTED: { tone: "error", label: "Rejected" },
+  UPLOADED: { tone: "info", label: "Waiting for review" },
+};
+
+// Small action button used on the document rows.
+const rowBtn =
+  "inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
+
+/** A field + its verify button, the button lined up with the input. */
+function VerifyRow({ children, button }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+      {children}
+      <div className="sm:mt-[26px]">{button}</div>
+    </div>
+  );
+}
+
+// Uploads, replaces, deletes and reviews are writes under /brands, so the
+// list refreshes itself afterwards (shared interceptor).
+function DocumentRow({ brandId, doc }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
 
-  const upload = async (e) => {
+  const act = async (key, fn) => {
+    setBusy(key);
+    setError("");
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      setError(errorText(err));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const replace = (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (file.size > MAX_BYTES) return setError("Max 5 MB per file.");
-    if (!/pdf|jpe?g|png/i.test(file.type)) return setError("PDF, JPG or PNG only.");
-    setBusy("upload");
-    setError("");
-    try {
-      await uploadKycDocument(brandId, { file, slot: slotDef.slot, docType });
-    } catch (err) {
-      setError(errorText(err));
-    } finally {
-      setBusy(null);
-    }
+    const problem = fileProblem(file);
+    if (problem) return setError(problem);
+    act("replace", () => updateKycDocument(brandId, doc._id, { file }));
   };
-
-  const review = async (statusValue) => {
-    if (statusValue === "REJECTED" && !reason.trim()) return setError("A reason is required to reject.");
-    setBusy(statusValue);
-    setError("");
-    try {
-      await reviewKycDocument(doc._id || doc.id, statusValue === "REJECTED" ? { status: statusValue, reason: reason.trim() } : { status: statusValue });
+  const remove = () => {
+    if (window.confirm(`Delete “${doc.title}”?`)) act("delete", () => deleteKycDocument(brandId, doc._id));
+  };
+  const review = async (value) => {
+    if (value === "REJECTED" && !reason.trim()) return setError("A reason is required to reject.");
+    const ok = await act(value, () => reviewKycDocument(doc._id, value === "REJECTED" ? { status: value, reason: reason.trim() } : { status: value }));
+    if (ok) {
       setRejecting(false);
       setReason("");
-    } catch (err) {
-      setError(errorText(err));
-    } finally {
-      setBusy(null);
     }
   };
 
-  const reviewTone = { ACCEPTED: "text-[#08513F] bg-[#E3F1EC]", REJECTED: "text-[#7F1D14] bg-[#FDECEA]", UPLOADED: "text-[#1F4FB8] bg-[#E8EEFB]" }[doc?.status] || "text-[#1F4FB8] bg-[#E8EEFB]";
+  const badge = REVIEW_BADGE[doc.status] || REVIEW_BADGE.UPLOADED;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[#E2E3DE] p-4 dark:border-neutral-800">
+    <li className={`${tileCls} flex flex-col gap-3 p-4`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="m-0 text-[15px] font-semibold text-[#15171C] dark:text-neutral-50">{slotDef.title}</p>
-          <p className="m-0 mt-0.5 text-[13px] text-[#5B616E]">{slotDef.hint}</p>
-          {hint && <p className="m-0 mt-1 text-[12.5px] font-medium text-[#1F4FB8]">Suggested: {hint}</p>}
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-400/10 dark:text-sky-300">
+            <FileText size={18} />
+          </span>
+          <div className="min-w-0">
+            <p className="m-0 truncate text-[14.5px] font-semibold text-neutral-900 dark:text-neutral-50">{doc.title}</p>
+            <p className="m-0 mt-0.5 truncate text-[12.5px] text-neutral-500 dark:text-neutral-400">
+              {[docTypeLabel(doc.docType), doc.file?.originalName, doc.uploadedByType ? `by ${doc.uploadedByType.toLowerCase()}` : ""].filter(Boolean).join(" · ")}
+            </p>
+          </div>
         </div>
-        {doc && <span className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${reviewTone}`}>{doc.status || "Uploaded"}</span>}
+        <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
       </div>
+      {doc.status === "REJECTED" && doc.reason && <Note tone="error">Rejected: {doc.reason}</Note>}
 
-      {doc && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-[#F7F9F8] px-3 py-2 text-[13px] dark:bg-neutral-950">
-          <FileText size={15} className="text-[#5B616E]" />
-          <span className="min-w-0 flex-1 truncate">{doc.originalName || doc.fileName || doc.docType}</span>
-          {doc.fileUrl && (
-            <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-[#0B6E5A]">
-              Open <ExternalLink size={12} />
-            </a>
-          )}
-        </div>
-      )}
-      {doc?.status === "REJECTED" && doc.reason && <Note tone="error">Rejected: {doc.reason}</Note>}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <select className={`${inputCls} h-10 w-auto min-w-48`} value={docType} onChange={(e) => setDocType(e.target.value)} aria-label={`${slotDef.title} document type`}>
-          {slotDef.types.map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
-        <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-[#CFD1CA] px-3 text-[13.5px] font-medium hover:bg-[#F5F5F2] dark:border-neutral-700">
-          {busy === "upload" ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-          {doc ? "Replace" : "Upload"}
-          <input type="file" accept=".pdf,image/jpeg,image/png" onChange={upload} className="hidden" disabled={Boolean(busy)} />
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-3 dark:border-white/5">
+        {doc.fileUrl && (
+          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className={`${rowBtn} text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-400/10`}>
+            <ExternalLink size={13} /> Open
+          </a>
+        )}
+        <label className={`${rowBtn} cursor-pointer text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800`}>
+          {busy === "replace" ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Replace
+          <input type="file" accept={DOCUMENT_RULES.accept} onChange={replace} className="sr-only" disabled={Boolean(busy)} />
         </label>
-        {doc && doc.status !== "ACCEPTED" && (
-          <button type="button" onClick={() => review("ACCEPTED")} disabled={Boolean(busy)} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[#E3F1EC] px-3 text-[13px] font-semibold text-[#08513F] disabled:opacity-50">
+        <button type="button" onClick={remove} disabled={Boolean(busy)} className={`${rowBtn} text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10`}>
+          {busy === "delete" ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete
+        </button>
+        <span className="flex-1" />
+        {doc.status !== "ACCEPTED" && (
+          <button type="button" onClick={() => review("ACCEPTED")} disabled={Boolean(busy)} className={`${rowBtn} bg-emerald-50 font-semibold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-300`}>
             {busy === "ACCEPTED" ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Accept
           </button>
         )}
-        {doc && doc.status !== "REJECTED" && !rejecting && (
-          <button type="button" onClick={() => setRejecting(true)} disabled={Boolean(busy)} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[#FDECEA] px-3 text-[13px] font-semibold text-[#7F1D14] disabled:opacity-50">
+        {doc.status !== "REJECTED" && !rejecting && (
+          <button type="button" onClick={() => setRejecting(true)} disabled={Boolean(busy)} className={`${rowBtn} bg-red-50 font-semibold text-red-700 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300`}>
             <XCircle size={13} /> Reject
           </button>
         )}
       </div>
       {rejecting && (
         <div className="flex flex-wrap items-center gap-2">
-          <input className={`${inputCls} h-10 min-w-0 flex-1`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. Photo saaf nahi hai" />
+          <input className={`${inputCls} min-w-0 flex-1`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. Photo is not clear" autoFocus />
           <SecondaryButton onClick={() => setRejecting(false)}>Cancel</SecondaryButton>
           <PrimaryButton tone="dark" busy={busy === "REJECTED"} onClick={() => review("REJECTED")}>Reject</PrimaryButton>
         </div>
       )}
-      {error && <p className="m-0 text-[12.5px] text-red-600">{error}</p>}
-    </div>
+      {error && <Note tone="error">{error}</Note>}
+    </li>
   );
 }
 
-export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
-  // A failed load just shows empty slots (no error), as before.
+function AddDocumentForm({ brandId, hints }) {
+  // docType = a hint code, or "" for a custom title (stored as OTHER).
+  const [docType, setDocType] = useState(hints[0] || "");
+  const [title, setTitle] = useState(hints[0] ? docTypeLabel(hints[0]) : "");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const titleLen = title.trim().length;
+  const titleOk = titleLen >= DOCUMENT_RULES.minTitle && titleLen <= DOCUMENT_RULES.maxTitle;
+
+  const pickType = (code) => {
+    setDocType(code);
+    setTitle(code ? docTypeLabel(code) : "");
+  };
+  const add = async () => {
+    const problem = fileProblem(file);
+    if (problem) return setError(problem);
+    setBusy(true);
+    setError("");
+    try {
+      await addKycDocument(brandId, { file, title: title.trim(), docType: docType || undefined });
+      setFile(null);
+      pickType("");
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section dashed title="Add a document" description="Pick a suggested type or write your own title, then choose the file.">
+      <div className="flex flex-wrap gap-2">
+        {hints.map((code) => (
+          <ChoiceChip key={code} active={docType === code} onClick={() => pickType(code)}>
+            {docTypeLabel(code)}
+          </ChoiceChip>
+        ))}
+        <ChoiceChip active={!docType} onClick={() => pickType("")}>
+          Something else
+        </ChoiceChip>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Title" hint={`${DOCUMENT_RULES.minTitle}–${DOCUMENT_RULES.maxTitle} characters`} error={title && !titleOk ? `${DOCUMENT_RULES.minTitle}–${DOCUMENT_RULES.maxTitle} characters` : ""}>
+          <input className={inputCls} value={title} maxLength={DOCUMENT_RULES.maxTitle} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. GST certificate" />
+        </Field>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">File</span>
+          <FileDrop file={file} onPick={setFile} accept={DOCUMENT_RULES.accept} label="Choose the document" hint="PDF, JPG or PNG · max 5 MB" />
+        </div>
+      </div>
+      {error && <Note tone="error">{error}</Note>}
+      <div>
+        <PrimaryButton tone="dark" busy={busy} disabled={!titleOk || !file} onClick={add}>
+          {!busy && <Plus size={15} />} Upload document
+        </PrimaryButton>
+      </div>
+    </Section>
+  );
+}
+
+// Skip / continue move the vendor's screen, so they're offered only on the
+// vendor's CURRENT screen; on a back-edit each upload / replace / delete
+// already saves by itself.
+export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  // A failed load just shows an empty list (no error).
   const { data: docsRes, isPending: loading } = useKycDocuments(brandId);
   const docsData = docsRes ? payload(docsRes) : {};
-  const docs = docsData.documents || [];
-  const slotHint = docsData.slotHint || null;
+  const docs = (docsData.documents || []).filter((d) => d.purpose !== "OWNER_ID");
+  const hints = (docsData.hints || []).filter((h) => DOC_TYPE_LABELS[h] && h !== "OTHER");
+  const limit = docsData.limit ?? 10;
   const { run, busy, error } = useStepAction(onAdvance);
-
-  const bySlot = (slot) => docs.filter((d) => d.slot === slot && !d.isReplaced).slice(-1)[0];
-  const isFood = /food|cafe|restaurant|bakery|sweet/i.test(`${brand?.category?.name || ""} ${brand?.subCategory?.name || ""}`);
-  const licenceHint = typeof slotHint === "string" ? slotHint : slotHint?.BUSINESS_LICENSE || slotHint?.label || null;
+  const isFood = /food|cafe|restaurant|bakery|sweet/i.test(`${brand?.category?.name || ""} ${brand?.categoryName || ""}`);
 
   return (
     <ScreenShell
       eyebrow={eyebrow}
-      title="Help us verify the shop"
-      intro="Upload up to 3 documents, one in each box. More documents mean faster approval and a stronger profile. This step can be skipped and filled later."
+      title="Business documents"
+      intro={
+        isCurrent
+          ? "Licences or shop proof help the verification team approve faster. This step can be skipped and filled later."
+          : "Each upload, replace or delete saves straight away."
+      }
       error={error}
       footer={
         <StepFooter
           onBack={onBack}
-          onSkip={() => run("skip", () => skipOnboardingScreen(brandId, "KYC_DOCUMENTS"))}
+          onSkip={isCurrent ? () => run("skip", () => skipOnboardingScreen(brandId, "KYC_DOCUMENTS")) : undefined}
           skipBusy={busy === "skip"}
-          primary={<PrimaryButton busy={busy === "continue"} disabled={!docs.length} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue</PrimaryButton>}
+          primary={
+            isCurrent ? (
+              <PrimaryButton busy={busy === "continue"} disabled={!docs.length} onClick={() => run("continue", () => continueOnboarding(brandId))}>Continue</PrimaryButton>
+            ) : null
+          }
         />
       }
     >
       {loading ? (
         <Loader variant="inline" label="Loading documents…" />
       ) : (
-        DOC_SLOTS.map((s) => (
-          <DocSlot key={s.slot} brandId={brandId} slotDef={s} doc={bySlot(s.slot)} hint={s.slot === "BUSINESS_LICENSE" ? licenceHint : null} />
-        ))
+        <>
+          {docs.length > 0 && (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {docs.map((d) => <DocumentRow key={d._id} brandId={brandId} doc={d} />)}
+            </ul>
+          )}
+          {docs.length < limit ? <AddDocumentForm brandId={brandId} hints={hints} /> : <Note tone="muted">The limit of {limit} documents is reached.</Note>}
+        </>
       )}
       <Note tone="muted">PDF works best. JPG or PNG must be clear (at least 800 px on the short side). Up to 5 MB each.</Note>
       {isFood && <Note tone="warn">Food businesses are required by law to hold an FSSAI registration. Onboarding can continue without it, but add it soon.</Note>}
@@ -167,129 +282,259 @@ export function KycDocumentsScreen({ brandId, brand, eyebrow, onAdvance, onBack 
 }
 
 /* ---- Shared verify-then-save pattern (PAN / GST / bank) ------------ */
+// verify-* is paid: only on an explicit press, never retried automatically.
+// `verifyErrorInfo` keeps the ApiError for its details (PAN_NOT_IN_GSTIN …).
 function useVerify() {
   const [result, setResult] = useState(null);
   const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState("");
+  const [errorInfo, setErrorInfo] = useState(null);
   const verify = async (fn) => {
     setVerifying(true);
-    setError("");
+    setErrorInfo(null);
     setResult(null);
     try {
       setResult(payload(await fn()));
     } catch (err) {
-      setError(errorText(err));
+      setErrorInfo(err);
     } finally {
       setVerifying(false);
     }
   };
-  return { result, verifying, verifyError: error, verify, reset: () => setResult(null) };
+  return {
+    result,
+    verifying,
+    verifyError: errorInfo ? errorText(errorInfo) : "",
+    verifyErrorInfo: errorInfo,
+    verify,
+    reset: () => setResult(null),
+  };
 }
 
-/* ---- 07 · PAN_VERIFICATION ---------------------------------------- */
-export function PanScreen({ brandId, brand, status, eyebrow, onAdvance, onBack, onGoTo }) {
-  const [pan, setPan] = useState(brand?.pan?.pan || "");
-  const { result, verifying, verifyError, verify, reset } = useVerify();
-  const { run, busy, error } = useStepAction(onAdvance);
-  const valid = PAN_RE.test(pan);
-  const unregistered = status.kycPath === "UNREGISTERED";
-  const mismatch = (result?.warnings || []).some((w) => (w.code || w) === "PAN_ENTITY_MISMATCH");
+/** details.<key> of whichever error carries `code` (verify or save). */
+const detailOf = (code, key, ...errors) => errors.find((e) => e?.code === code && e.details?.[key])?.details[key] || null;
 
+/** Result box under a verify button. */
+function VerifyResult({ result, children }) {
+  if (!result) return null;
   return (
-    <ScreenShell
-      eyebrow={eyebrow}
-      title="Verify the PAN"
-      intro={unregistered ? "Not registered? Use the owner's personal PAN — that's fine." : "We check the PAN with the income-tax records."}
-      error={error || verifyError}
-      footer={
-        <StepFooter
-          onBack={onBack}
-          onSkip={() => run("skip", () => skipOnboardingScreen(brandId, "PAN_VERIFICATION"))}
-          skipBusy={busy === "skip"}
-          primary={<PrimaryButton busy={busy === "save"} disabled={!result?.verificationId} onClick={() => run("save", () => savePan(brandId, result.verificationId))}>Save & continue</PrimaryButton>}
-        />
+    <Section
+      title={result.isVerified ? "Verified" : "Not verified"}
+      description={[result.message, result.reused ? "Reused an earlier check, no charge" : ""].filter(Boolean).join(" · ") || undefined}
+      badge={
+        result.isVerified ? (
+          <StatusBadge tone="ok" icon={CheckCircle2}>Ready to save</StatusBadge>
+        ) : (
+          <StatusBadge tone="warn" icon={XCircle}>Check the number</StatusBadge>
+        )
       }
     >
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <Field label="PAN number" error={pan && !valid ? "Format: ABCDE1234F" : ""}>
-            <input className={`${inputCls} font-mono uppercase`} value={pan} maxLength={10} onChange={(e) => { setPan(e.target.value.toUpperCase().trim()); reset(); }} placeholder="ABCDE1234F" />
-          </Field>
-        </div>
-        <PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyPan(brandId, pan))}>Verify PAN</PrimaryButton>
-      </div>
-      {result && (
-        <div className="grid gap-4 rounded-xl border border-[#E2E3DE] p-4 sm:grid-cols-2 dark:border-neutral-800">
-          <KeyValue label="Name on PAN" value={result.nameOnRecord} />
-          <KeyValue label="PAN type" value={result.panType} />
-          <KeyValue label="Result" value={result.isVerified ? "Verified" : "Not verified"} />
-        </div>
-      )}
-      {mismatch && (
-        <Note tone="warn">
-          <p className="m-0">This PAN's type doesn't match the selected entity type. It won't block onboarding.</p>
-          <div className="mt-2 flex gap-3">
-            <button type="button" onClick={() => onGoTo("REGISTRATION_ENTITY_TYPE")} className="font-semibold underline">Change entity type</button>
-            <span>or save to continue anyway</span>
-          </div>
-        </Note>
-      )}
-      <Note tone="muted">If this PAN is already used by another brand on Trydood, verification stops with a clear message.</Note>
-    </ScreenShell>
+      <div className="grid gap-4 border-t border-neutral-100 pt-4 sm:grid-cols-2 dark:border-white/5">{children}</div>
+    </Section>
   );
 }
 
-/* ---- 08 · GST_VERIFICATION (registered lane) ---------------------- */
-export function GstScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
-  const [gst, setGst] = useState(brand?.gst?.gstNumber || "");
-  const { result, verifying, verifyError, verify, reset } = useVerify();
-  const { run, busy, error } = useStepAction(onAdvance);
+const PAID_NOTE = "Each check is a paid provider call — verify once, after the number is final.";
+
+/* ---- GST_VERIFICATION (GST path) ---------------------------------- */
+export function GstScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  const [gst, setGst] = useState("");
+  const { result, verifying, verifyError, verifyErrorInfo, verify, reset } = useVerify();
+  const { run, busy, error, errorInfo } = useStepAction(onAdvance);
   const valid = GST_RE.test(gst);
-  const addr = result?.addressOnRecord;
+  const addr = result?.addressOnRecord || result?.details?.address;
   const addrText = typeof addr === "string" ? addr : addr ? [addr.location, addr.city, addr.state, addr.pin].filter(Boolean).join(", ") : "";
+  // verify-gst / add-gst-details: the GSTIN isn't the brand's saved PAN (no charge).
+  const panOnBrand = detailOf("PAN_NOT_IN_GSTIN", "panOnBrand", verifyErrorInfo, errorInfo);
 
   return (
     <ScreenShell
       eyebrow={eyebrow}
       title="Verify the GST number"
-      intro="The GSTIN decides the tax on Trydood invoices. It can be skipped and added later from the profile."
+      intro="The GSTIN fills the legal name and decides the tax on Trydood invoices."
       error={error || verifyError}
       footer={
         <StepFooter
           onBack={onBack}
-          onSkip={() => run("skip", () => skipOnboardingScreen(brandId, "GST_VERIFICATION"))}
-          skipBusy={busy === "skip"}
-          primary={<PrimaryButton busy={busy === "save"} disabled={!result?.verificationId} onClick={() => run("save", () => saveGst(brandId, result.verificationId))}>Save & continue</PrimaryButton>}
+          primary={
+            <PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => saveGst(brandId, result.verificationId))}>
+              {isCurrent ? "Save & continue" : "Save GSTIN"}
+            </PrimaryButton>
+          }
         />
       }
     >
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <Field label="GSTIN" error={gst && !valid ? "15-character GSTIN, e.g. 27AABCM1234K1Z5" : ""}>
-            <input className={`${inputCls} font-mono uppercase`} value={gst} maxLength={15} onChange={(e) => { setGst(e.target.value.toUpperCase().trim()); reset(); }} placeholder="27AABCM1234K1Z5" />
-          </Field>
-        </div>
-        <PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyGst(brandId, gst))}>Verify GST</PrimaryButton>
-      </div>
-      {result && (
-        <div className="grid gap-4 rounded-xl border border-[#E2E3DE] p-4 sm:grid-cols-2 dark:border-neutral-800">
-          <KeyValue label="Legal name" value={result.nameOnRecord || result.legalName} />
-          <KeyValue label="Trade name" value={result.tradeName} />
-          <KeyValue label="Constitution" value={result.constitutionOfBusiness} />
-          <KeyValue label="State" value={result.state || (gst ? `State code ${gst.slice(0, 2)}` : "")} />
-          <div className="sm:col-span-2"><KeyValue label="Registered address" value={addrText} /></div>
-        </div>
-      )}
-      {valid && <Note tone="info">The billing address (next steps) must be in the same state as this GSTIN (state code {gst.slice(0, 2)}).</Note>}
+      {panOnBrand && <Note tone="warn">The brand's saved PAN is {panOnBrand} — the GSTIN must contain it.</Note>}
+      <VerifyRow button={<PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyGst(brandId, gst))}>Verify GST</PrimaryButton>}>
+        <Field label="GSTIN" error={gst && !valid ? "15-character GSTIN, e.g. 27AABCM1234K1Z5" : ""}>
+          <input className={`${inputCls} font-mono uppercase tracking-wider`} value={gst} maxLength={15} onChange={(e) => { setGst(e.target.value.toUpperCase().trim()); reset(); }} placeholder="27AABCM1234K1Z5" />
+        </Field>
+      </VerifyRow>
+      <VerifyResult result={result}>
+        <KeyValue label="Legal name" value={result?.nameOnRecord || result?.details?.legalName} />
+        <KeyValue label="Trade name" value={result?.details?.tradeName} />
+        <KeyValue label="Constitution" value={result?.constitution} />
+        <KeyValue label="Suggested business type" value={entityLabel(result?.suggestedEntity)} />
+        <KeyValue label="GST status" value={result?.isActive === false ? "Inactive" : result?.isActive ? "Active" : ""} />
+        <KeyValue label="State code" value={result?.gstStateCode || (gst ? gst.slice(0, 2) : "")} />
+        <div className="sm:col-span-2"><KeyValue label="Registered address" value={addrText} /></div>
+      </VerifyResult>
+      <Note tone="muted">{PAID_NOTE} The PAN on the next step must be the one inside this GSTIN.</Note>
     </ScreenShell>
   );
 }
 
-/* ---- 09 · BANK_VERIFICATION --------------------------------------- */
-export function BankScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
-  const [holder, setHolder] = useState(brand?.bank?.accountHolderName || brand?.legalBusinessName || "");
+/* ---- PAN_VERIFICATION (GST / NO_GST paths) ------------------------ */
+export function PanScreen({ brandId, status, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  const [pan, setPan] = useState("");
+  const { result, verifying, verifyError, verifyErrorInfo, verify, reset } = useVerify();
+  const { run, busy, error, errorInfo } = useStepAction(onAdvance);
+  const valid = PAN_RE.test(pan);
+  const gstPath = status.kycPath === "GST";
+  // GST path: the PAN must be the one inside the GSTIN (verify-pan refuses
+  // before the paid call; add-pan-details too) → details.panFromGstin.
+  const panFromGstin = detailOf("PAN_NOT_IN_GSTIN", "panFromGstin", verifyErrorInfo, errorInfo);
+
+  return (
+    <ScreenShell
+      eyebrow={eyebrow}
+      title="Verify the PAN"
+      intro={gstPath ? "Use the PAN inside the GSTIN (characters 3–12)." : "The business PAN, checked with the income-tax records. It fills the legal name."}
+      error={error || verifyError}
+      footer={
+        <StepFooter
+          onBack={onBack}
+          primary={
+            <PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => savePan(brandId, result.verificationId))}>
+              {isCurrent ? "Save & continue" : "Save PAN"}
+            </PrimaryButton>
+          }
+        />
+      }
+    >
+      {panFromGstin && (
+        <Note tone="warn">
+          The PAN inside the GSTIN is <span className="font-mono font-semibold">{panFromGstin}</span>.{" "}
+          {pan !== panFromGstin && (
+            <button type="button" className="font-semibold underline" onClick={() => { setPan(panFromGstin); reset(); }}>
+              Use it
+            </button>
+          )}
+        </Note>
+      )}
+      <VerifyRow button={<PrimaryButton tone="dark" busy={verifying} disabled={!valid} onClick={() => verify(() => verifyPan(brandId, pan))}>Verify PAN</PrimaryButton>}>
+        <Field label="PAN number" error={pan && !valid ? "Format: ABCDE1234F" : ""}>
+          <input className={`${inputCls} font-mono uppercase tracking-wider`} value={pan} maxLength={10} onChange={(e) => { setPan(e.target.value.toUpperCase().trim()); reset(); }} placeholder="ABCDE1234F" />
+        </Field>
+      </VerifyRow>
+      <VerifyResult result={result}>
+        <KeyValue label="Name on PAN" value={result?.nameOnRecord} />
+        <KeyValue label="PAN type" value={result?.panType} />
+        <KeyValue label="Suggested business type" value={entityLabel(result?.suggestedEntity)} />
+      </VerifyResult>
+      <Note tone="muted">{PAID_NOTE} A PAN already used by another brand stops with a clear message.</Note>
+    </ScreenShell>
+  );
+}
+
+/* ---- OWNER_VERIFICATION (not-registered path) --------------------- */
+// The owner's personal PAN (verify, then save) or an ID document upload.
+// The owner's ID document is reviewed (accept / reject) only on the brand's
+// detail page (Q5); this screen just shows where that review stands.
+const OWNER_ID_STATUS = {
+  UPLOADED: { tone: "info", text: "Uploaded — waiting for review on the brand page." },
+  ACCEPTED: { tone: "ok", text: "Accepted by the verification team." },
+  REJECTED: { tone: "error", text: "Rejected" },
+};
+
+function OwnerIdStatus({ brandId }) {
+  const { data } = useKycDocuments(brandId);
+  const doc = (payload(data).documents || []).find((d) => d.purpose === "OWNER_ID");
+  if (!doc) return null;
+  const s = OWNER_ID_STATUS[doc.status] || OWNER_ID_STATUS.UPLOADED;
+  return (
+    <Note tone={s.tone}>
+      Owner ID ({OWNER_ID_TYPES.find((t) => t.value === doc.idType)?.label || doc.title || "document"}): {s.text}
+      {doc.status === "REJECTED" && doc.reason ? ` — ${doc.reason}. Upload a new one below.` : ""}
+      {doc.fileUrl ? (
+        <>
+          {" "}
+          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="font-semibold underline">Open</a>
+        </>
+      ) : null}
+    </Note>
+  );
+}
+
+export function OwnerVerificationScreen({ brandId, status, eyebrow, onAdvance, onBack, isCurrent = true }) {
+  const [method, setMethod] = useState(status.items.ownerVerificationMethod || "PAN");
+  const [pan, setPan] = useState("");
+  const [idType, setIdType] = useState(OWNER_ID_TYPES[0].value);
+  const [file, setFile] = useState(null);
+  const { result, verifying, verifyError, verify, reset } = useVerify();
+  const { run, busy, error } = useStepAction(onAdvance);
+  const panValid = PAN_RE.test(pan);
+  const fileError = file ? fileProblem(file) : "";
+
+  const save = () =>
+    method === "PAN"
+      ? run("save", () => saveOwnerPan(brandId, result.verificationId))
+      : run("save", () => saveOwnerIdDocument(brandId, { idType, file }));
+  const ready = method === "PAN" ? Boolean(result?.isVerified && result?.verificationId) : Boolean(file && !fileError);
+
+  return (
+    <ScreenShell
+      eyebrow={eyebrow}
+      title="Verify the owner"
+      intro="Not registered is fine — we only need to know who runs the shop. The owner's name becomes the legal name."
+      error={error || verifyError}
+      footer={<StepFooter onBack={onBack} primary={<PrimaryButton busy={busy === "save"} disabled={!ready} onClick={save}>{isCurrent ? "Save & continue" : "Save & replace"}</PrimaryButton>} />}
+    >
+      {status.items.ownerVerification === "PROVIDED" && (
+        <Note tone="ok">Already verified by {String(status.items.ownerVerificationMethod || "").replace("_", " ").toLowerCase() || "the owner"}. Saving again replaces it.</Note>
+      )}
+      {status.items.ownerVerificationMethod === "ID_DOCUMENT" && <OwnerIdStatus brandId={brandId} />}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <RadioCard name="ownerMethod" checked={method === "PAN"} onChange={() => setMethod("PAN")} title="Personal PAN" description="Checked with the income-tax records. Fastest." />
+        <RadioCard name="ownerMethod" checked={method === "ID_DOCUMENT"} onChange={() => setMethod("ID_DOCUMENT")} title="Upload an ID" description="Aadhaar (masked), driving licence, passport or voter ID." />
+      </div>
+
+      {method === "PAN" ? (
+        <>
+          <VerifyRow button={<PrimaryButton tone="dark" busy={verifying} disabled={!panValid} onClick={() => verify(() => verifyPan(brandId, pan))}>Verify PAN</PrimaryButton>}>
+            <Field label="Owner's PAN" error={pan && !panValid ? "Format: ABCDE1234F" : ""}>
+              <input className={`${inputCls} font-mono uppercase tracking-wider`} value={pan} maxLength={10} onChange={(e) => { setPan(e.target.value.toUpperCase().trim()); reset(); }} placeholder="ABCDE1234F" />
+            </Field>
+          </VerifyRow>
+          <VerifyResult result={result}>
+            <KeyValue label="Name on PAN" value={result?.nameOnRecord} />
+            <KeyValue label="PAN type" value={result?.panType} />
+          </VerifyResult>
+          <Note tone="muted">{PAID_NOTE}</Note>
+        </>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="ID type">
+            <select className={inputCls} value={idType} onChange={(e) => setIdType(e.target.value)}>
+              {OWNER_ID_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </Field>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13.5px] font-semibold text-neutral-800 dark:text-neutral-200">ID file</span>
+            <FileDrop file={file} onPick={setFile} accept={DOCUMENT_RULES.accept} label="Choose the ID" hint="PDF, or a clear JPG / PNG · max 5 MB" />
+            {fileError && <span className="text-[12.5px] font-medium text-red-600 dark:text-red-400">{fileError}</span>}
+          </div>
+          {idType === "AADHAAR" && <div className="sm:col-span-2"><Note tone="warn">Only a masked Aadhaar — just the last 4 digits visible.</Note></div>}
+        </div>
+      )}
+    </ScreenShell>
+  );
+}
+
+/* ---- BANK_VERIFICATION (skippable) -------------------------------- */
+export function BankScreen({ brandId, eyebrow, onAdvance, onBack, isCurrent = true }) {
   const [account, setAccount] = useState("");
   const [ifsc, setIfsc] = useState("");
+  const [accountType, setAccountType] = useState("CURRENT");
   const { result, verifying, verifyError, verify, reset } = useVerify();
   const { run, busy, error } = useStepAction(onAdvance);
   const accountOk = ACCOUNT_RE.test(account);
@@ -299,43 +544,45 @@ export function BankScreen({ brandId, brand, eyebrow, onAdvance, onBack }) {
     <ScreenShell
       eyebrow={eyebrow}
       title="Where should we send the money?"
-      intro="We send ₹1 to check the account belongs to the business. Customer payments for vouchers are settled here."
+      intro="We send ₹1 to check the account. Customer payments for vouchers are settled here. The name at the bank is matched with the legal name automatically."
       error={error || verifyError}
       footer={
         <StepFooter
           onBack={onBack}
-          onSkip={() => run("skip", () => skipOnboardingScreen(brandId, "BANK_VERIFICATION"))}
+          onSkip={isCurrent ? () => run("skip", () => skipOnboardingScreen(brandId, "BANK_VERIFICATION")) : undefined}
           skipBusy={busy === "skip"}
-          primary={<PrimaryButton busy={busy === "save"} disabled={!result?.verificationId} onClick={() => run("save", () => saveBank(brandId, result.verificationId))}>Save & continue</PrimaryButton>}
+          primary={
+            <PrimaryButton busy={busy === "save"} disabled={!result?.isVerified || !result?.verificationId} onClick={() => run("save", () => saveBank(brandId, { verificationId: result.verificationId, accountType }))}>
+              {isCurrent ? "Save & continue" : "Save bank account"}
+            </PrimaryButton>
+          }
         />
       }
     >
-      <Field label="Account holder name" hint="Used for the name match">
-        <input className={inputCls} value={holder} onChange={(e) => { setHolder(e.target.value); reset(); }} />
-      </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Account number" error={account && !accountOk ? "9–18 digits" : ""}>
           <input className={`${inputCls} font-mono`} inputMode="numeric" value={account} onChange={(e) => { setAccount(e.target.value.replace(/\D/g, "")); reset(); }} />
         </Field>
         <Field label="IFSC" error={ifsc && !ifscOk ? "Format: HDFC0001234" : ""}>
           <input className={`${inputCls} font-mono uppercase`} maxLength={11} value={ifsc} onChange={(e) => { setIfsc(e.target.value.toUpperCase().trim()); reset(); }} />
         </Field>
+        <Field label="Account type">
+          <select className={inputCls} value={accountType} onChange={(e) => setAccountType(e.target.value)}>
+            {BANK_ACCOUNT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </Field>
       </div>
-      <div>
-        <PrimaryButton
-          tone="dark"
-          busy={verifying}
-          disabled={!accountOk || !ifscOk}
-          onClick={() => verify(() => verifyBank(brandId, { accountNumber: account, ifscCode: ifsc, beneficiaryName: holder.trim().length >= 3 ? holder.trim() : undefined }))}
-        >
+      <div className="flex flex-wrap items-center gap-3">
+        <PrimaryButton tone="dark" busy={verifying} disabled={!accountOk || !ifscOk} onClick={() => verify(() => verifyBank(brandId, { accountNumber: account, ifscCode: ifsc }))}>
           Verify account (₹1 test)
         </PrimaryButton>
+        <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">{PAID_NOTE}</span>
       </div>
-      {result && (
-        <Note tone={result.isVerified ? "ok" : "warn"}>
-          {result.isVerified ? "Account verified." : "Account could not be verified."} Name at bank: <strong>{result.nameOnRecord || "Not available"}</strong>
-        </Note>
-      )}
+      <VerifyResult result={result}>
+        <KeyValue label="Name at bank" value={result?.nameOnRecord} />
+        <KeyValue label="Account" value={result?.details?.maskedAccountNumber} mono />
+        <KeyValue label="Bank" value={[result?.bankName, result?.branchName].filter(Boolean).join(" · ")} />
+      </VerifyResult>
       <Note tone="warn">If skipped, onboarding can still finish, but the brand can't publish vouchers until a verified bank account is added.</Note>
     </ScreenShell>
   );

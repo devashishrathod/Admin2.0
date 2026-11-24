@@ -16,7 +16,7 @@ export default function BrandDetailsPage() {
     error,
     refreshBrandDetail,
     toggleActive,
-    handleApprovalDecision,
+    setHiddenFromCustomers,
     updateBrandDetails,
     deleteBrandById,
     setTopBrand,
@@ -67,8 +67,8 @@ export default function BrandDetailsPage() {
 
   return (
     <>
-      {/* Failed actions (activate/deactivate, hide, approve) roll back the
-          switch — say why, instead of it just snapping back. */}
+      {/* Failed actions (activate/deactivate, hide) roll back the switch —
+          say why, instead of it just snapping back. */}
       {error && (
         <div className="mx-auto mt-4 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 rounded-2xl bg-red-500/[0.06] px-4 py-3 text-[12.5px] text-red-600 dark:text-red-400">
@@ -81,9 +81,9 @@ export default function BrandDetailsPage() {
         brand={brand}
         onBack={goBack}
         onToggleActive={toggleActive}
+        onToggleHidden={setHiddenFromCustomers}
         onDelete={deleteBrand}
         onUpdate={updateBrandDetails}
-        onDecision={handleApprovalDecision}
         onSetTopBrand={setTopBrand}
       />
     </>

@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAllBrands,
   getBrandDetails,
-  updateBrandStatus,
   setBrandAccess,
   setBrandComingSoon,
   updateTopBrand,
@@ -17,9 +16,11 @@ import { queryKeys } from "../../lib/query";
 /* -------------------------------------------------------------------------
  * BrandContext.jsx
  * Backed by the real admin API, cached with TanStack Query. Public
- * interface (brands, toggleActive, handleApprovalDecision,
- * updateBrandDetails, deleteBrandById, addBrand, …) is unchanged so
- * BrandDetailsPage / any other consumer doesn't need edits.
+ * interface (brands, toggleActive, setHiddenFromCustomers,
+ * updateBrandDetails, deleteBrandById, …) is unchanged so
+ * BrandDetailsPage / any other consumer doesn't need edits. Approve /
+ * reject / revoke never go through here — only the review endpoint
+ * (Brand Waiting) decides a brand.
  *
  * The full brand list (every page, mapped through mapBrandListItem) lives
  * in the query cache under ALL_BRANDS_KEY. Any successful /brands write
@@ -38,14 +39,11 @@ const PAGE_LIMIT = 50;
 const MAX_CONCURRENT_PAGES = 5;
 const NO_BRANDS = [];
 
-const UNAPPROVED_STATUSES = new Set(["Pending", "Rejected", "Revoked"]);
-
-// Live = approved by an admin. Approval wins over the vendor's onboarding
-// flag — some approved brands still have vendor.isOnBoardingCompleted false.
-// Pending brands live on Brand Waiting / New Onboarding, rejected ones on
-// New Onboarding. Dummy (isDummy) brands never go live — they only show
-// on the Dummy Brands page.
-const isLiveBrand = (b) => !b.isDummy && !UNAPPROVED_STATUSES.has(b.status);
+// The app-wide cache (dashboard charts, analytics, notification audience,
+// brand detail) — NOT the tab lists: New / Waiting / Live pages query
+// ?onboardingStage= themselves (useBrandStageList). Live = the server's
+// LIVE stage rule, isApproved (admin guide §3); dummy brands never count.
+const isLiveBrand = (b) => !b.isDummy && b.isApproved;
 
 // Merges a freshly fetched brand over the loaded one. List and detail
 // payloads each leave some fields empty ("—", null, []) that the other one
@@ -227,7 +225,8 @@ export function BrandProvider({ children }) {
      choice. An expired brand stays "Expired" — the plan, not this switch,
      decides that. Waits for the refresh so every screen ends on the
      server's values. */
-  const toggleActive = useCallback(async (brand, hideFromCustomers) => {
+  // `reason` is sent only on deactivate (the API refuses it on activate).
+  const toggleActive = useCallback(async (brand, hideFromCustomers, reason) => {
     // Allowed on dummy brands too — Active/Inactive is one of their two actions.
     const nextActive = !brand.active;
     const nextHidden = nextActive ? Boolean(brand.hiddenFromCustomers) : Boolean(hideFromCustomers);
@@ -237,7 +236,7 @@ export function BrandProvider({ children }) {
     // optimistic update — `status` too, so the status badge flips at once
     patchBrand(brand.id, { active: nextActive, status: nextStatus, hiddenFromCustomers: nextHidden });
     try {
-      const res = await setBrandAccess(brand.id, { isActive: nextActive, hideFromCustomers: nextHidden });
+      const res = await setBrandAccess(brand.id, { isActive: nextActive, hideFromCustomers: nextHidden, reason: nextActive ? undefined : reason });
       const saved = savedAccess(res);
       if (Object.keys(saved).length) patchBrand(brand.id, saved);
       await syncAfterUpdate(brand.id);
@@ -263,45 +262,6 @@ export function BrandProvider({ children }) {
     } catch (err) {
       patchBrand(brand.id, { hiddenFromCustomers: brand.hiddenFromCustomers });
       setActionError(err.message);
-    }
-  }, [patchBrand, syncAfterUpdate]);
-
-  /* Approve -> status: "Active", active: true, rejectionReason cleared.
-     Reject  -> status: "Rejected", active: false, rejectionReason stored.
-     Untouched — updateBrandStatus derives `isActive` from `apiStatus`
-     internally and always sends `hideFromCustomers: false` by default. */
-  const handleApprovalDecision = useCallback(async (brand, newStatus, reason = "") => {
-    if (brand?.isDummy) return; // dummy brands are view-only
-    const apiStatus = newStatus === "Active" ? "APPROVED" : "REJECTED";
-    patchBrand(brand.id, {
-      status: newStatus,
-      active: newStatus === "Active",
-      rejectionReason: newStatus === "Rejected" ? reason : "",
-    });
-    // "Already in the requested state" means the backend already has this
-    // decision — that's the outcome we wanted, so it counts as success
-    // whether it comes back as a 200 body or as an error response.
-    const alreadyDone = (message) => /already in the requested state/i.test(message || "");
-    try {
-      let response;
-      try {
-        response = await updateBrandStatus(brand.id, apiStatus, reason);
-      } catch (err) {
-        if (!alreadyDone(err.message)) throw err;
-      }
-      const result = response?.data ?? response;
-      if (result?.success === false && !alreadyDone(result.message)) {
-        throw new Error(result.message || "Unable to update brand approval status.");
-      }
-      // Also covers the "already done" error path, which the interceptor
-      // never sees as a successful write.
-      await syncAfterUpdate(brand.id);
-      return true;
-    } catch (err) {
-      // roll back on failure
-      patchBrand(brand.id, { status: brand.status, active: brand.active, rejectionReason: brand.rejectionReason });
-      setActionError(err.message);
-      return false;
     }
   }, [patchBrand, syncAfterUpdate]);
 
@@ -360,10 +320,6 @@ export function BrandProvider({ children }) {
     patchBrands((prev) => prev.filter((b) => b.id !== brand.id));
   }, [patchBrands]);
 
-  const addBrand = useCallback((newBrand) => {
-    queryClient.setQueryData(ALL_BRANDS_KEY, (prev = []) => [newBrand, ...prev]);
-  }, [queryClient]);
-
   const value = {
     brands,
     allBrands,
@@ -376,12 +332,10 @@ export function BrandProvider({ children }) {
     syncAfterUpdate,
     toggleActive,
     setHiddenFromCustomers,
-    handleApprovalDecision,
     updateBrandDetails,
     setTopBrand,
     setComingSoon,
     deleteBrandById,
-    addBrand,
   };
 
   return <BrandContext.Provider value={value}>{children}</BrandContext.Provider>;

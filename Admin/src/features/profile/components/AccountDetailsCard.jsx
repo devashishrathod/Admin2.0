@@ -45,7 +45,6 @@ export default function AccountDetailsCard({ profile }) {
       <div className={`divide-y divide-neutral-200/70 rounded-2xl px-3 dark:divide-neutral-800 ${innerTile}`}>
         <CopyRow label="User ID" value={profile.uniqueId} mono />
         <CopyRow label="Username" value={profile.username} mono />
-        <CopyRow label="Referral code" value={profile.referralCode} mono />
         <CopyRow label="Role" value={ROLE_LABELS[profile.role] || profile.role} />
         <CopyRow label="Signs in with" value={profile.loginType ? profile.loginType.toLowerCase() : ""} />
         <CopyRow label="Joined" value={formatDate(profile.createdAt, true)} />

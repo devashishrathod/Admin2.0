@@ -14,9 +14,11 @@ import AccountDetailsCard from "./components/AccountDetailsCard";
 
 /* -------------------------------------------------------------------------
  * My profile — the signed-in admin's own account.
- *   Personal info          PUT  /users/update        (doc #14)
- *   Contact & verification POST /auth/{email,mobile,whatsapp}/… (doc #12a–f)
- *   Security               POST /auth/set-password, /auth/logout (doc #9, #12)
+ *   Personal info          PUT  /users/update        (doc #14) — name, dob, photo
+ *   Contact & verification POST /auth/{email,mobile}/… (doc #12a–d); WhatsApp
+ *                          (the sign-in number) is read-only
+ *   Security               POST /auth/logout { allDevices } (doc #12) — no
+ *                          password change for admins
  * Read from GET /users/get (doc #13); every save refreshes it and the
  * header's name/email follow through the auth store.
  * ---------------------------------------------------------------------- */
@@ -71,7 +73,7 @@ export default function Profile() {
             <div className="lg:col-span-8">
               {tab === "personal" && <PersonalInfoCard profile={profile} />}
               {tab === "contact" && <ContactCard profile={profile} onSignedOut={handleSignedOut} />}
-              {tab === "security" && <SecurityCard profile={profile} onSignedOut={handleSignedOut} />}
+              {tab === "security" && <SecurityCard onSignedOut={handleSignedOut} />}
             </div>
             <div className="lg:col-span-4">
               <AccountDetailsCard profile={profile} />

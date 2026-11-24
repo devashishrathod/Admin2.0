@@ -1,23 +1,15 @@
-import { getBrandVerifications } from "./services/NewOnboardingApi";
-
 /* -------------------------------------------------------------------------
  * Maps one API brand-verification record into the flat shape this page's
- * UI uses. `derivedStatus` is computed from the confirmed boolean flags
- * (isAdminApproved/isRejected/isRevoked) rather than the raw `status`
- * enum, since only "MANUAL_REVIEW" has been confirmed as a possible value
- * for that field so far.
+ * UI uses. No status is derived here: the admin's decision is read from
+ * GET /brands/onboarding/status → verification, and the system's verdict
+ * (`latestStatus` / `status`) is advice only (guide §4, D81).
  * ---------------------------------------------------------------------- */
-export function deriveStatus(raw) {
-  const status = String(raw.status || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
-  if (raw.isRevoked) return "REVOKED";
-  if (raw.isRejected) return "REJECTED";
-  if (raw.isAdminApproved || status === "APPROVED") return "APPROVED";
-  if (status === "MANUAL_REVIEW") return "MANUAL_REVIEW";
-  if (["PENDING", "PENDING_APPROVAL", "WAITING", "UNDER_REVIEW", "IN_REVIEW"].includes(status)) {
-    return "PENDING";
-  }
-  return status || "PENDING";
-}
+
+// UNREGISTERED owner verified by an uploaded ID: the system can't read the
+// ID, so PAN_VERIFIED fails by design and the attempt carries the remark
+// code OWNER_ID_MANUAL (backend, Milestone A). Shown next to "PAN not verified".
+export const OWNER_ID_MANUAL_NOTE = "The owner gave an ID — check it by hand.";
+export const ownerIdManual = (remarkCodes) => Array.isArray(remarkCodes) && remarkCodes.includes("OWNER_ID_MANUAL");
 
 export function mapVerification(raw) {
   const brand = raw.brand || {};
@@ -28,13 +20,21 @@ export function mapVerification(raw) {
     attemptNumber: raw.attemptNumber,
     score: raw.score ?? 0,
     status: raw.status,
-    derivedStatus: deriveStatus(raw),
     flags: raw.flags || {},
     nameMatch: raw.nameMatch || {},
     bankNameMatch: raw.bankNameMatch || {},
     entityMatch: raw.entityMatch || {},
     duplicateDetails: raw.duplicateDetails || {},
     remarks: Array.isArray(raw.remarks) ? raw.remarks : [],
+    // Onboarding v2 (#23 note 6): path-wise checks, what the vendor skipped,
+    // remark codes and the re-score after a post-submit add. Advisory only.
+    kycPath: raw.kycPath || null,
+    checks: Array.isArray(raw.checks) ? raw.checks : [],
+    skippedItems: Array.isArray(raw.skippedItems) ? raw.skippedItems : [],
+    remarkCodes: Array.isArray(raw.remarkCodes) ? raw.remarkCodes : [],
+    latestScore: raw.latestScore ?? null,
+    latestStatus: raw.latestStatus || null,
+    latestScoredAt: raw.latestScoredAt || null,
     verifiedAt: raw.verifiedAt,
     verifiedBy: raw.verifiedBy,
     rejectedAt: raw.rejectedAt,
@@ -98,39 +98,3 @@ export function mapVerification(raw) {
   };
 }
 
-/* -------------------------------------------------------------------------
- * The list endpoint only takes page/limit/search — it can't filter by
- * status or brand — so every server page is loaded and mapped here.
- * ---------------------------------------------------------------------- */
-export async function fetchAllVerifications(search = "") {
-  const PAGE = 100;
-  const first = await getBrandVerifications({ page: 1, limit: PAGE, search });
-  const payload = first?.data ?? {};
-  const rows = [...(payload.data ?? [])];
-  const rowTotal = payload.total ?? payload.totalCount ?? payload.count;
-  const serverPages = payload.totalPages ?? payload.pages ?? (rowTotal ? Math.ceil(rowTotal / PAGE) : 1);
-  if (serverPages > 1) {
-    const rest = await Promise.all(
-      Array.from({ length: serverPages - 1 }, (_, i) => getBrandVerifications({ page: i + 2, limit: PAGE, search }))
-    );
-    rest.forEach((r) => rows.push(...(r?.data?.data ?? [])));
-  }
-  return rows.map(mapVerification);
-}
-
-// One verification per brand — its latest attempt (highest attemptNumber,
-// newest createdAt on a tie). Returns a Map keyed by brand id.
-export function latestByBrand(verifications) {
-  const byBrand = new Map();
-  verifications.forEach((v) => {
-    const key = v.brandId || v.brand?.id || v.id;
-    const prev = byBrand.get(key);
-    const newer =
-      !prev ||
-      (v.attemptNumber ?? 0) > (prev.attemptNumber ?? 0) ||
-      ((v.attemptNumber ?? 0) === (prev.attemptNumber ?? 0) &&
-        new Date(v.createdAt || 0).getTime() > new Date(prev.createdAt || 0).getTime());
-    if (newer) byBrand.set(key, v);
-  });
-  return byBrand;
-}

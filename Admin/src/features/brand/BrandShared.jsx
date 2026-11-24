@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import {
-  Check,
   X,
-  ChevronRight,
   ChevronDown,
   AlertTriangle,
   MessageSquareWarning,
@@ -474,7 +472,13 @@ export function RingStat({ pct, label, caption, tint = "emerald" }) {
  * captured. Offers a quick-pick list plus an optional free-text note.
  * ---------------------------------------------------------------------- */
 
-export function RejectReasonModal({ brand, onClose, onConfirm }) {
+// rejectionReason max (PUT /brands/admin/verifications/:brandId/review, #24).
+const REJECT_REASON_MAX = 1000;
+
+/* The modal stays open while the request runs (`busy`) and after a failure
+   (`error`), so the typed reason is never lost — the parent closes it on
+   success. */
+export function RejectReasonModal({ brand, onClose, onConfirm, busy = false, error = "" }) {
   const [reasonChoice, setReasonChoice] = useState(REJECTION_REASONS[0]);
   const [note, setNote] = useState("");
 
@@ -485,7 +489,8 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
       ? `${reasonChoice} — ${note.trim()}`
       : reasonChoice;
 
-  const canSubmit = reasonChoice !== "Other" || note.trim().length > 0;
+  const tooLong = finalReason.length > REJECT_REASON_MAX;
+  const canSubmit = !busy && !tooLong && (reasonChoice !== "Other" || note.trim().length > 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -501,8 +506,9 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
           </div>
           <button
             onClick={onClose}
+            disabled={busy}
             aria-label="Close"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             <X size={15} />
           </button>
@@ -513,6 +519,7 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
             <select
               value={reasonChoice}
               onChange={(e) => setReasonChoice(e.target.value)}
+              disabled={busy}
               className={inputClass}
             >
               {REJECTION_REASONS.map((r) => (
@@ -528,17 +535,28 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
+              disabled={busy}
               placeholder="Add specific details to help the owner fix the issue..."
               className={inputClass}
             />
           </Field>
+          <p className={`text-right text-[11px] ${tooLong ? "text-red-600 dark:text-red-400" : "text-neutral-400"}`}>
+            {finalReason.length}/{REJECT_REASON_MAX}
+            {tooLong ? " — shorten the reason" : ""}
+          </p>
+          {error && (
+            <p className="flex items-start gap-1.5 rounded-xl bg-red-500/5 px-3 py-2 text-[12px] text-red-600 dark:text-red-400">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {error}
+            </p>
+          )}
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
+            disabled={busy}
+            className="rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-200"
           >
             Cancel
           </button>
@@ -548,84 +566,10 @@ export function RejectReasonModal({ brand, onClose, onConfirm }) {
             onClick={() => onConfirm(finalReason)}
             className="rounded-xl bg-red-500 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Confirm Rejection
+            {busy ? "Rejecting…" : "Confirm Rejection"}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------
- * Approve / Reject dropdown shown for brands that finished onboarding and
- * are waiting for super admin approval (the "Complete Listing" tab).
- *
- * onDecision(brand, newStatus, reason) is called with:
- *   - newStatus = "Active"   and reason = ""             on approve
- *   - newStatus = "Rejected" and reason = "<typed text>"  on reject
- * ---------------------------------------------------------------------- */
-
-export function ApprovalDropdown({ brand, onDecision, size = "md" }) {
-  const [open, setOpen] = useState(false);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-
-  const isPending = brand.status === "Pending";
-  const pad = size === "sm" ? "px-2.5 py-1 text-[11.5px]" : "px-3 py-1.5 text-[12.5px]";
-
-  return (
-    <div className="relative inline-block" onClick={(e) => e.stopPropagation()}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 rounded-full font-semibold transition-colors ${pad} ${
-          isPending
-            ? "bg-amber-400/10 text-amber-600 hover:bg-amber-400/20 dark:text-amber-400"
-            : brand.status === "Active"
-            ? "bg-emerald-400/10 text-emerald-600 hover:bg-emerald-400/20 dark:text-emerald-400"
-            : "bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
-        }`}
-      >
-        {isPending ? "Awaiting Approval" : brand.status}
-        <ChevronRight size={11} className={`transition-transform ${open ? "rotate-90" : ""}`} />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-20 mt-2 w-44 overflow-hidden rounded-xl bg-white shadow-xl shadow-black/10 dark:bg-neutral-900 dark:shadow-black/40">
-            <button
-              onClick={() => {
-                onDecision(brand, "Active", "");
-                setOpen(false);
-              }}
-              className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-emerald-600 transition-colors hover:bg-neutral-100 dark:text-emerald-400 dark:hover:bg-neutral-800"
-            >
-              <Check size={13} />
-              Approve
-            </button>
-            <button
-              onClick={() => {
-                setOpen(false);
-                setShowRejectModal(true);
-              }}
-              className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[12.5px] font-medium text-red-600 transition-colors hover:bg-neutral-100 dark:text-red-400 dark:hover:bg-neutral-800"
-            >
-              <X size={13} />
-              Reject
-            </button>
-          </div>
-        </>
-      )}
-
-      {showRejectModal && (
-        <RejectReasonModal
-          brand={brand}
-          onClose={() => setShowRejectModal(false)}
-          onConfirm={(reason) => {
-            onDecision(brand, "Rejected", reason);
-            setShowRejectModal(false);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -635,19 +579,27 @@ export function ApprovalDropdown({ brand, onDecision, size = "md" }) {
  * Shown before flipping a brand's active state, so a super admin sees the
  * consequence before committing.
  *
- * On deactivate, a "Hide from Customers" checkbox lets the admin choose:
- *   - unchecked (default): brand is deactivated in the admin panel, but its
- *     existing listings/vouchers keep showing on the customer-facing app.
- *   - checked: brand is also hidden from customers entirely.
+ * What deactivate really does (admin guide §13, PUT
+ * /brands/admin/:brandId/status { isActive: false, reason }): the VENDOR
+ * PANEL is locked (401, logged out); outlet staff keep working; customers
+ * still see the brand and its vouchers unless it's also hidden — hide is a
+ * separate switch. A reason is required here (the server keeps it; it's
+ * only accepted on deactivate — never sent on activate).
  *
- * onConfirm(hideFromCustomers) is called with that boolean. It's ignored
- * for the activate path since only deactivate exposes this choice.
+ * onConfirm(hideFromCustomers, reason). Activate ignores both.
  * ---------------------------------------------------------------------- */
+
+// `reason` on PUT /brands/admin/:brandId/status — max 1000
+// (BRAND_STATUS_LIMITS.MAX_REASON_LENGTH, admin doc "Brands — status").
+const DEACTIVATE_REASON_MAX = 1000;
 
 export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfirm }) {
   // Starts from the brand's current visibility, so deactivating a hidden
   // brand doesn't quietly make it visible again.
   const [hideFromCustomers, setHideFromCustomers] = useState(Boolean(brand.hiddenFromCustomers));
+  const [reason, setReason] = useState("");
+  const reasonText = reason.trim();
+  const reasonBad = !willActivate && (!reasonText || reasonText.length > DEACTIVATE_REASON_MAX);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -667,21 +619,45 @@ export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfi
             <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
               {willActivate ? (
                 <>
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> will regain
-                  full access and be able to perform actions in the admin panel again.
+                  The vendor of <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> can
+                  sign in to the vendor panel again. Whether customers see the brand stays as it is.
                 </>
               ) : (
                 <>
-                  While deactivated,{" "}
-                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> won't be able
-                  to perform any actions in the admin panel — no new listings, updates, or transactions.
-                  By default, its existing content, including vouchers and offers, will keep showing
-                  exactly as it is on the customer-facing app.
+                  The vendor panel of{" "}
+                  <span className="font-medium text-neutral-800 dark:text-neutral-200">{brand.brandName}</span> is locked — the
+                  vendor is signed out and can't sign in until you activate it again.
                 </>
               )}
             </p>
+            {!willActivate && (
+              <ul className="mt-2 space-y-1 text-[12px] text-neutral-500 dark:text-neutral-400">
+                <li>• Outlet staff keep working — redemptions don't stop.</li>
+                <li>• Customers still see the brand and its vouchers, unless you also hide it below.</li>
+                <li>• Paid claims and settlements carry on.</li>
+                <li>• Not the same as revoke — approval stays as it is.</li>
+              </ul>
+            )}
           </div>
         </div>
+
+        {!willActivate && (
+          <label className="mt-4 block">
+            <span className="mb-1.5 block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+              Reason <span className="text-red-600 dark:text-red-400">*</span>
+            </span>
+            <textarea
+              rows={2}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Payment dispute — account on hold until resolved"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[13px] text-neutral-800 outline-none focus:border-amber-400/60 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200"
+            />
+            <span className={`mt-0.5 block text-right text-[10.5px] tabular-nums ${reasonText.length > DEACTIVATE_REASON_MAX ? "text-red-500" : "text-neutral-400"}`}>
+              {reasonText.length}/{DEACTIVATE_REASON_MAX}
+            </span>
+          </label>
+        )}
 
         {!willActivate && (
           <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
@@ -696,8 +672,8 @@ export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfi
                 Also hide from customers
               </span>
               <span className="mt-0.5 block text-[11.5px] text-neutral-500">
-                Removes {brand.brandName} entirely from the customer-facing app — its listings and
-                offers won't be visible until it's re-activated.
+                A separate switch: customers stop seeing {brand.brandName} and its vouchers, and it stays
+                hidden after you activate it again — unhide it with the "Hidden from customers" switch.
               </span>
             </span>
           </label>
@@ -713,8 +689,9 @@ export function ToggleActiveConfirmModal({ brand, willActivate, onClose, onConfi
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(willActivate ? false : hideFromCustomers)}
-            className={`rounded-xl px-4 py-2 text-[13px] font-semibold transition-colors ${
+            onClick={() => (willActivate ? onConfirm(false) : !reasonBad && onConfirm(hideFromCustomers, reasonText))}
+            disabled={reasonBad}
+            className={`rounded-xl px-4 py-2 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               willActivate
                 ? "bg-emerald-400 text-neutral-950 hover:bg-emerald-300"
                 : "bg-amber-400 text-neutral-950 hover:bg-amber-300"

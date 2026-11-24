@@ -24,7 +24,7 @@ import { ONBOARDING_STEPS } from "../../data/BrandData";
 import { UsageBar, VerifiedMark } from "../../BrandShared";
 import { ONBOARDING_FLAG_LABELS, brandCardFacts } from "../../brandCardUtils";
 import { CardHeader, CopyButton } from "../components/Bento";
-import { VerificationHistory } from "../../BrandAdminExtras";
+import VerificationTimeline from "../../v2/VerificationTimeline";
 import { cardClass, heroClass, innerTile, tints, has } from "../components/bentoStyles";
 import ValueOr from "../../../../components/common/ValueOr";
 import { MISSING, orText } from "../../../../utils/helpers";
@@ -515,11 +515,8 @@ export default function OverviewTab({ brand, readOnly = false, onComingSoon }) {
         </div>
       </div>
 
-      {/* Row 3 — verification event log (VerificationHistory brings its
-          own top margin; space-y already spaces it). */}
-      <div className="[&>div]:!mt-0">
-        <VerificationHistory brandId={brand.id} />
-      </div>
+      {/* Row 3 — verification timeline (GET /brands/verifications/history) */}
+      {brand.id && <VerificationTimeline brandId={brand.id} />}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { throwApiError as handleError } from '../../../lib/apiError';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{TryDood2.0BaseUrl}}
@@ -24,15 +25,6 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Normalize error responses so callers get a consistent shape
-function handleError(error) {
-    const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Something went wrong. Please try again.';
-    throw new Error(message);
-}
-
 /* -------------------------------------------------------------------------
  * Response shape (confirmed from Postman)
  *
@@ -67,18 +59,19 @@ function handleError(error) {
  * ---------------------------------------------------------------------- */
 
 // ── List Brand Verifications ──────────────────────────────────
-// GET {{TryDood2.0BaseUrl}}/brands/admin/verifications?page=&limit=&search=
-// Confirmed from Postman. Query params:
-//   page   — number ≥ 1, default 1
-//   limit  — number 1-100, default 10
-//   search — regex across brand.brandName, brand.legalBusinessName (and
-//            possibly more fields — the Postman param description was cut
-//            off after "legalB...", so there may be additional fields
-//            matched server-side).
-export async function getBrandVerifications({ page = 1, limit = 10, search = '' } = {}) {
+// GET /brands/admin/verifications (super admin API doc #23). Every key
+// besides page / limit is a server filter, passed through when set:
+// search, brandId, status, isReviewed, isRejected, isRevoked,
+// isAdminApproved, isSuperseded, minScore / maxScore, attemptNumber,
+// reviewedByAdminId, fromDate / toDate, sortBy NEWEST|OLDEST|SCORE,
+// sortOrder ASC|DESC (uppercase). Superseded attempts are hidden unless
+// isSuperseded=true, so `brandId` alone gives the brand's current attempt.
+export async function getBrandVerifications({ page = 1, limit = 10, ...filters } = {}) {
     try {
         const params = { page, limit };
-        if (search) params.search = search;
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') params[key] = value;
+        });
         const { data } = await api.get('/brands/admin/verifications', { params });
         return data;
     } catch (error) {
@@ -87,14 +80,13 @@ export async function getBrandVerifications({ page = 1, limit = 10, search = '' 
 }
 
 // ── Review a brand verification (approve / reject / reviewed flag / revoke) ──
-// PUT {{TryDood2.0BaseUrl}}/brands/admin/verifications/:brandId/review
-// Confirmed from Postman for five actions:
-//   { action: "APPROVED" }                          — Case A: system already APPROVED
-//   { action: "APPROVED", note }                     — Case B: manual override, note optional
-//   { action: "REJECTED", rejectionReason }          — Case C: rejectionReason required
-//   { action: "REVIEWED" }                           — Case D: toggles the isReviewed flag
-//   { action: "REVIEWED", isReviewed }                — Case D2: force the isReviewed flag to true/false
-//   { action: "REVOKED", revokeReason }               — Case E: revoke a previously approved verification
+// PUT /brands/admin/verifications/:brandId/review (#24). The validator is
+// strict — send only the fields of the action:
+//   { action: "APPROVED", note? }                 — 409 SUBMIT_REQUIRED / DEED_NOT_ACCEPTED
+//   { action: "REJECTED", rejectionReason, note? } — reason ≤ 1000, shown to the vendor
+//   { action: "REVIEWED", isReviewed }             — always an explicit boolean (omitted = toggle)
+//   { action: "REVOKED", revokeReason, note? }     — only on an approved brand
+// 409 also = superseded attempt / another admin acted first → re-read and retry.
 export async function reviewBrandVerification(
     brandId,
     { action, note, rejectionReason, isReviewed, revokeReason } = {}
@@ -114,20 +106,6 @@ export async function reviewBrandVerification(
     }
 }
 
-// ── Force the isReviewed flag to an explicit true/false ──────────
-// Convenience wrapper over Case D2 — used by a real two-way toggle in the UI
-// (plain Case D only ever sets the flag on, it can't turn it back off).
-export async function forceReviewedFlag(brandId, isReviewed) {
-    return reviewBrandVerification(brandId, { action: 'REVIEWED', isReviewed: Boolean(isReviewed) });
-}
-
-// ── Revoke a previously approved verification ─────────────────────
-// Convenience wrapper over Case E.
-export async function revokeVerification(brandId, revokeReason) {
-    if (!revokeReason) throw new Error('revokeReason is required');
-    return reviewBrandVerification(brandId, { action: 'REVOKED', revokeReason });
-}
-
 // ── Get Verification History (audit trail) ──────────────────────
 // GET {{base_url}}/brands/verifications/history?page=&limit=&brandId=&performedByType=&attemptNumber=
 // Confirmed from Postman. Query params:
@@ -135,25 +113,31 @@ export async function revokeVerification(brandId, revokeReason) {
 //   page, limit     — pagination, defaults 1 / 20.
 //   performedByType — optional filter: "SYSTEM" | "ADMIN" | "VENDOR".
 //   attemptNumber   — optional filter, number ≥ 1.
+//   systemVerifyId  — optional: one attempt's events only.
+//   sortOrder       — "ASC" | "DESC" (uppercase; server default DESC).
 //
 // Response: { success, message, data: { total, totalPages, page, limit, data: [
 //   { _id, brandId, systemVerifyId, action, performedByType, performedBy,
-//     attemptNumber, brandUniqueId, merchantId, score, previousStatus,
-//     newStatus, reason, metadata, createdAt, updatedAt,
-//     brand: { _id, brandName, legalBusinessName, uniqueId, merchantId, logo } }
-// ] } }
+//     performedByUser { _id, name, email, mobile, role } (admin only; not on
+//     SYSTEM rows), attemptNumber, brandUniqueId, merchantId, score,
+//     previousStatus, newStatus, reason (note / reject / revoke reason),
+//     metadata, createdAt, updatedAt, brand } ] } }   — #25 note 0
 export async function getVerificationHistory({
     brandId,
     page = 1,
     limit = 20,
     performedByType = '',
     attemptNumber = '',
+    systemVerifyId = '',
+    sortOrder = '',
 } = {}) {
     try {
         if (!brandId) throw new Error('brandId is required');
         const params = { page, limit, brandId };
         if (performedByType) params.performedByType = performedByType;
         if (attemptNumber) params.attemptNumber = attemptNumber;
+        if (systemVerifyId) params.systemVerifyId = systemVerifyId;
+        if (sortOrder) params.sortOrder = sortOrder;
         const { data } = await api.get('/brands/verifications/history', { params });
         return data;
     } catch (error) {
@@ -164,7 +148,5 @@ export async function getVerificationHistory({
 export default {
     getBrandVerifications,
     reviewBrandVerification,
-    forceReviewedFlag,
-    revokeVerification,
     getVerificationHistory,
 };

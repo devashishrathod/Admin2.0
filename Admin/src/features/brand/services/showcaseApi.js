@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
 import { presignUploadAndConfirm } from '../../banner/services/BannerApi';
+import { throwApiError as handleError } from '../../../lib/apiError';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{TryDood2.0BaseUrl}}
@@ -25,15 +26,6 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Normalize error responses so callers get a consistent shape
-function handleError(error) {
-    const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Something went wrong. Please try again.';
-    throw new Error(message);
-}
-
 // ── Section Types ─────────────────────────────────────────────
 // "CUSTOM" is the only value confirmed from the Postman example — add any
 // other sectionType values your backend supports here.

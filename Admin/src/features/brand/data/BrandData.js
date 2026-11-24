@@ -448,6 +448,8 @@ export const PAYMENT_METHODS = ["UPI", "Bank Transfer", "Trydood Account", "Othe
 
 export const DETAIL_TABS = [
   "Overview",
+  // Onboarding v2 (admin guide §4–§13): steps, KYC, review, deed, badge …
+  "Onboarding & KYC",
   "Brand Info",
   "Showcase Media",
   "Listing Features",
@@ -458,7 +460,6 @@ export const DETAIL_TABS = [
   "Refunds",
   "Voucher",
   "Subscription",
-  "System Verification",
   "Account Details",
 ];
 

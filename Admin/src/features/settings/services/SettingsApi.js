@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { throwApiError as handleError } from '../../../lib/apiError';
 
 // ── Base URL ────────────────────────────────────────────────
 // Matches the Postman env variable {{TryDood2.0ServerUrl}} for this
@@ -25,15 +26,6 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Normalize error responses so callers get a consistent shape
-function handleError(error) {
-    const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Something went wrong. Please try again.';
-    throw new Error(message);
-}
-
 /* -------------------------------------------------------------------------
  * Payload shape returned by / sent to the API — confirmed real document:
  *

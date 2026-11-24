@@ -3,12 +3,14 @@
  * both show exactly the same facts the same way.
  * ---------------------------------------------------------------------- */
 
+// Raw `onboarding` facts of the get-all row (#25a). v2: hasBillingAddress
+// replaces hasLocation (same fact, kept by the server for old panels) and
+// hasWorkHours is gone — brand-level hours aren't collected any more (D38).
 export const ONBOARDING_FLAG_LABELS = [
   ["hasPan", "PAN"],
   ["hasGst", "GST"],
   ["hasBank", "Bank"],
-  ["hasLocation", "Location"],
-  ["hasWorkHours", "Work hours"],
+  ["hasBillingAddress", "Billing address"],
   ["hasFirstOutlet", "First outlet"],
   ["hasSystemVerification", "System verification"],
   ["hasAcceptedPartnershipDeed", "Partnership deed"],

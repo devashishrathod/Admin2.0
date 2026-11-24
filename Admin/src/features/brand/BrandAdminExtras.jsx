@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { History, RefreshCw, Loader2, AlertTriangle, CheckCircle2, X, Layers, ChevronDown, Receipt, ShieldCheck } from "lucide-react";
-import { SectionCard, CollapsibleSectionCard, EmptyState, Field, inputClass } from "./BrandShared";
+import { CollapsibleSectionCard, EmptyState, Field, inputClass } from "./BrandShared";
 import { updateOutlet, updateOutletWhatsapp } from "./services/BrandApi";
 import { getBrandSubscription, getBrandSubscriptionHistory, resyncBrandSubscription } from "./services/subscriptionApi";
-import { getVerificationHistory } from "../newOnboarding/services/NewOnboardingApi";
 import { queryKeys } from "../../lib/query";
 import { isNotFoundMessage, MISSING } from "../../utils/helpers";
 import Loader from "../../components/common/Loader";
@@ -16,7 +15,6 @@ import useBackLayer from "../../lib/useBackLayer";
  * content as it was:
  *   - Outlet modals         → #30 edit, #28a change number (used by the
  *                             Sub-Brand tab, BrandDetails/tabs/SubBrandTab)
- *   - VerificationHistory   → GET /brands/verifications/history (#25)
  *   - LiveSubscriptionPanel → GET /subscribeds/get (#82), /history (#83), resync (#81)
  * ---------------------------------------------------------------------- */
 
@@ -218,60 +216,6 @@ export function ChangeNumberModal({ outlet, onClose, onSaved }) {
       {error && <Notice tone="error">{error}</Notice>}
       <ModalActions onCancel={onClose} onConfirm={save} disabled={!valid} submitting={submitting} label="Change Number" />
     </Modal>
-  );
-}
-
-/* ---- Verification history -------------------------------------------- */
-
-export function VerificationHistory({ brandId }) {
-  const query = useQuery({
-    queryKey: queryKeys.brands.view("verification-history", { brandId }),
-    queryFn: () => getVerificationHistory({ brandId, limit: 50 }),
-    enabled: Boolean(brandId),
-  });
-  const rows = query.data?.data?.data ?? [];
-  const notFound = isNotFoundMessage(query.error?.message ?? "");
-
-  return (
-    <div className="mt-4">
-      <SectionCard title="Verification history" icon={History} tint="violet">
-        {query.isPending ? (
-          <Loader label="Loading history…" />
-        ) : query.error && !notFound ? (
-          <Notice tone="error">{query.error.message}</Notice>
-        ) : rows.length === 0 ? (
-          <EmptyState label="No verification events yet." />
-        ) : (
-          <ol className="relative space-y-3 pl-5 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-px before:bg-neutral-200 dark:before:bg-neutral-800">
-            {rows.map((ev) => {
-              const action = String(ev.action || "").toUpperCase();
-              const dot = /REJECT|REVOK|FAIL/.test(action) ? "bg-red-500" : /APPROV|VERIF/.test(action) ? "bg-emerald-500" : /REVIEW/.test(action) ? "bg-sky-500" : "bg-neutral-400";
-              return (
-                <li key={ev._id} className="relative">
-                  <span className={`absolute -left-5 top-3 h-3.5 w-3.5 rounded-full ring-4 ring-white dark:ring-neutral-900 ${dot}`} />
-                  <div className="rounded-2xl bg-white/70 px-3.5 py-2.5 ring-1 ring-neutral-200/60 dark:bg-neutral-950/50 dark:ring-white/5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">{humanize(ev.action)}</span>
-                      <Pill>{humanize(ev.performedByType)}</Pill>
-                      {ev.attemptNumber != null && <Pill tone="sky">Attempt #{ev.attemptNumber}</Pill>}
-                      {ev.score != null && <Pill tone="emerald">Score {ev.score}</Pill>}
-                      <span className="ml-auto text-[11px] text-neutral-400">{fmtDateTime(ev.createdAt)}</span>
-                    </div>
-                    {(ev.previousStatus || ev.newStatus || ev.performedBy?.name) && (
-                      <p className="mt-1 text-[11.5px] text-neutral-500">
-                        {ev.previousStatus || ev.newStatus ? `${humanize(ev.previousStatus)} → ${humanize(ev.newStatus)}` : ""}
-                        {ev.performedBy?.name ? ` · by ${ev.performedBy.name}` : ""}
-                      </p>
-                    )}
-                    {ev.reason && <p className="mt-1.5 rounded-xl bg-neutral-100/80 px-2.5 py-1.5 text-[12px] normal-case text-neutral-600 dark:bg-neutral-800/60 dark:text-neutral-300">“{ev.reason}”</p>}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </SectionCard>
-    </div>
   );
 }
 

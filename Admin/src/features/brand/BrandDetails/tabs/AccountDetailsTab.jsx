@@ -26,7 +26,9 @@ import OverviewStat from "../components/OverviewStat";
 import ValueOr from "../../../../components/common/ValueOr";
 import { isMissing, MISSING } from "../../../../utils/helpers";
 
-export default function AccountDetailsTab({ brand }) {
+// `defaultOpen` expands the PAN / GST / Bank cards up front (New Onboarding
+// details page); Live Brand keeps them collapsed.
+export default function AccountDetailsTab({ brand, defaultOpen = false }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:grid-rows-2">
@@ -89,7 +91,7 @@ export default function AccountDetailsTab({ brand }) {
       </SectionCard>
 
       {brand.panNumber && brand.panNumber !== "—" && (
-        <CollapsibleSectionCard title="PAN Details" defaultOpen={false}>
+        <CollapsibleSectionCard title="PAN Details" defaultOpen={defaultOpen}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <DetailTile icon={BadgeCheck} label="PAN Number" value={brand.panNumber} />
             <DetailTile icon={Tag} label="PAN Type" value={brand.panType} />
@@ -103,7 +105,7 @@ export default function AccountDetailsTab({ brand }) {
       )}
 
       {brand.gstNumber && brand.gstNumber !== "—" && (
-        <CollapsibleSectionCard title="GST Details" defaultOpen={false}>
+        <CollapsibleSectionCard title="GST Details" defaultOpen={defaultOpen}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <DetailTile icon={ShieldCheck} label="GST Number" value={brand.gstNumber} />
             <DetailTile icon={Tag} label="Legal Name" value={brand.gstLegalName} />
@@ -130,7 +132,7 @@ export default function AccountDetailsTab({ brand }) {
       )}
 
       {brand.bankName && brand.bankName !== "—" && (
-        <CollapsibleSectionCard title="Bank Details" defaultOpen={false}>
+        <CollapsibleSectionCard title="Bank Details" defaultOpen={defaultOpen}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <DetailTile icon={Landmark} label="Bank Name" value={brand.bankName} />
             <DetailTile icon={Users} label="Account Holder" value={brand.accountHolder} />

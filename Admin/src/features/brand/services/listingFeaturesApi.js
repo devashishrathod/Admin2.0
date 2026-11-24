@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { attachSessionHandling } from '../../auth/session';
+import { throwApiError as handleError } from '../../../lib/apiError';
 
 // ── Listing Features (a.k.a. Brand Features) ─────────────────────
 // Same endpoints the VenderPanel's Listing Features tab uses; here the
@@ -21,15 +22,6 @@ api.interceptors.request.use(async (config) => {
     }
     return config;
 });
-
-function handleError(error) {
-    const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Something went wrong. Please try again.';
-    throw new Error(message);
-}
 
 export const LISTING_FEATURE_LIMITS = { title: 20, description: 300 };
 

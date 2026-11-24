@@ -19,6 +19,7 @@ import {
   Hourglass,
   Check,
   X,
+  BadgeCheck,
 } from "lucide-react";
 import { VerifiedMark } from "../../BrandShared";
 import { brandCardFacts } from "../../brandCardUtils";
@@ -123,18 +124,27 @@ function StatusTile({ icon: Icon, label, value, tint }) {
 function StatusCard({ brand }) {
   const { onboardingDone, onboardingMissing } = brandCardFacts(brand);
   const total = onboardingDone + onboardingMissing || 1;
+  // Approval and the verified badge are separate things (§11): an approved
+  // brand is "Approved"; "Verified" is only the badge (isVerified).
   const approval =
     brand.status === "Active" || brand.status === "Deactive"
-      ? { value: "Verified", tint: "emerald" }
+      ? { value: "Approved", tint: "emerald" }
       : brand.status === "Rejected" || brand.status === "Revoked"
       ? { value: brand.status, tint: "red" }
       : { value: orText(brand.status, "Unknown"), tint: "amber" };
+  const badge = brand.isVerified
+    ? {
+        value: `Verified${brand.badgeGrantedAt ? ` · ${new Date(brand.badgeGrantedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : ""}${brand.badgeAtRisk ? " · at risk" : ""}`,
+        tint: brand.badgeAtRisk ? "amber" : "sky",
+      }
+    : { value: "No badge", tint: "neutral" };
 
   return (
     <div className={cardClass}>
       <CardHeader icon={ShieldCheck} tint="sky" title="Status & visibility" subtitle="How the brand appears right now" />
       <div className="grid grid-cols-2 gap-2">
         <StatusTile icon={ShieldCheck} label="Approval" value={approval.value} tint={approval.tint} />
+        <StatusTile icon={BadgeCheck} label="Verified badge" value={badge.value} tint={badge.tint} />
         {/* (Active/Inactive is the header switch — not repeated here.) */}
         <StatusTile
           icon={Hourglass}
@@ -261,103 +271,6 @@ function ContactCard({ brand }) {
   );
 }
 
-/* ---------------------------- Row 3 ------------------------------------ */
-
-const humanizeStatus = (v) =>
-  String(v || "")
-    .toLowerCase()
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-
-// System verification (brand.systemVerify, from the detail payload): the
-// automated check's status, score and attempt, the admin review flags and
-// any rejection / revoke reason. The event-by-event log sits below it.
-function VerificationStatusCard({ brand }) {
-  const sv = brand.systemVerify;
-  if (!sv) {
-    return (
-      <div className={cardClass}>
-        <CardHeader icon={ShieldCheck} tint="sky" title="Verification status" subtitle="System verification" />
-        <p className="mt-auto text-[12px] text-neutral-400">No system verification has run for this brand yet.</p>
-      </div>
-    );
-  }
-
-  const status = String(sv.status || "").toUpperCase();
-  const tone =
-    sv.isRevoked || sv.isRejected || /REJECT|REVOK|FAIL/.test(status)
-      ? "red"
-      : sv.isAdminApproved || /APPROV|VERIFIED|PASS/.test(status)
-      ? "emerald"
-      : /REVIEW|PENDING/.test(status)
-      ? "amber"
-      : "sky";
-  const flags = [
-    ["Admin approved", sv.isAdminApproved, sv.adminApprovedAtDisplay],
-    ["Reviewed", sv.isReviewed, sv.reviewedAtDisplay],
-  ];
-  const reason = sv.revokeReason || sv.rejectionReason;
-
-  return (
-    <div className={cardClass}>
-      <CardHeader
-        icon={ShieldCheck}
-        tint={tone}
-        title="Verification status"
-        subtitle="System verification"
-        action={
-          has(sv.status) && (
-            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-bold tracking-wider ${tints[tone]}`}>
-              {humanizeStatus(sv.status)}
-            </span>
-          )
-        }
-      />
-
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          ["Score", sv.score != null ? sv.score : "—"],
-          ["Attempt", has(sv.attemptNumber) ? `#${sv.attemptNumber}` : "—"],
-          ["Verified by", has(sv.verifiedBy) ? humanizeStatus(sv.verifiedBy) : "—"],
-        ].map(([label, value]) => (
-          <div key={label} className={`${innerTile} min-w-0 px-3 py-2`}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{label}</p>
-            <p className="truncate text-[14px] font-bold tabular-nums text-neutral-900 dark:text-neutral-100">{value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-1.5">
-        {flags.map(([label, on, at, bad]) => (
-          <div
-            key={label}
-            title={on && at ? at : undefined}
-            className={`flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-[11px] font-semibold ${
-              on ? (bad ? tints.red : tints.emerald) : tints.neutral
-            }`}
-          >
-            {on ? <Check size={11} className="shrink-0" /> : <X size={11} className="shrink-0" />}
-            <span className="truncate">{label}</span>
-            {on && at && <span className="ml-auto truncate text-[10px] font-medium opacity-70">{at.split(",")[0]}</span>}
-          </div>
-        ))}
-      </div>
-
-      {reason && (
-        <div className="mt-3 flex items-start gap-2 rounded-2xl bg-red-500/[0.06] px-3 py-2.5 ring-1 ring-red-500/20">
-          <MessageSquareWarning size={14} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
-          <p className="text-[12px] normal-case text-red-700 dark:text-red-300">{reason}</p>
-        </div>
-      )}
-
-      {has(sv.verifiedAtDisplay) && (
-        <p className="mt-auto pt-3 text-[11px] text-neutral-400">Last checked {sv.verifiedAtDisplay}</p>
-      )}
-    </div>
-  );
-}
-
 /* ---------------------------- Tab -------------------------------------- */
 
 export default function BrandInfoTab({ brand }) {
@@ -378,9 +291,7 @@ export default function BrandInfoTab({ brand }) {
         <BusinessCard brand={brand} />
         <ContactCard brand={brand} />
       </div>
-
-      {/* Row 3 — verification status (the event history is on Overview) */}
-      <VerificationStatusCard brand={brand} />
+      {/* The system check, review state and history live on "Onboarding & KYC". */}
     </div>
   );
 }

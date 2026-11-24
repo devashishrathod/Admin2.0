@@ -190,37 +190,6 @@ function mapSubscriptionDetail(subscribed) {
   };
 }
 
-/* Full raw system-verification record — powers the dedicated "System
-   Verification" tab. */
-function mapSystemVerify(sv) {
-  if (!sv) return null;
-  return {
-    attemptNumber: sv.attemptNumber ?? '—',
-    score: sv.score ?? null,
-    status: sv.status || '—',
-    flags: sv.flags || {},
-    nameMatch: sv.nameMatch || null,
-    bankNameMatch: sv.bankNameMatch || null,
-    entityMatch: sv.entityMatch || null,
-    remarks: sv.remarks || [],
-    verifiedBy: sv.verifiedBy || '—',
-    verifiedAtDisplay: formatDateTime(sv.verifiedAt),
-    isRevoked: Boolean(sv.isRevoked),
-    isRejected: Boolean(sv.isRejected),
-    isReviewed: Boolean(sv.isReviewed),
-    isAdminApproved: Boolean(sv.isAdminApproved),
-    isSuperseded: Boolean(sv.isSuperseded),
-    createdAtDisplay: formatDateTime(sv.createdAt),
-    updatedAtDisplay: formatDateTime(sv.updatedAt),
-    adminApprovedAtDisplay: sv.adminApprovedAt ? formatDateTime(sv.adminApprovedAt) : null,
-    reviewedAtDisplay: sv.reviewedAt ? formatDateTime(sv.reviewedAt) : null,
-    rejectedAtDisplay: sv.rejectedAt ? formatDateTime(sv.rejectedAt) : null,
-    rejectionReason: sv.rejectionReason || null,
-    revokedAtDisplay: sv.revokedAt ? formatDateTime(sv.revokedAt) : null,
-    revokeReason: sv.revokeReason || null,
-  };
-}
-
 function computeRemainderPercentFromDates(startDate, endDate) {
   if (!startDate || !endDate) return 0;
   const start = new Date(startDate).getTime();
@@ -252,11 +221,14 @@ function deriveBrandStatus(raw) {
     (raw.subscribed?.endDate ? daysUntil(raw.subscribed.endDate) : null);
   if (endsInDays != null && endsInDays <= 0) return 'Expired';
 
-  if (
-    ['INACTIVE', 'DEACTIVE', 'DEACTIVATED'].includes(status) ||
-    raw.isAccountActive === false ||
-    raw.isActive === false
-  ) return 'Deactive';
+  // The VENDOR ACCOUNT switch. GET /brands/get carries it as `user.isActive`;
+  // its own `isActive` is the customer switch (hide), which never deactivates
+  // anyone (admin guide §13). List rows have `isAccountActive` and no `user`.
+  const accountOff =
+    raw.user && typeof raw.user.isActive === 'boolean'
+      ? raw.user.isActive === false
+      : raw.isAccountActive === false || raw.isActive === false;
+  if (['INACTIVE', 'DEACTIVE', 'DEACTIVATED'].includes(status) || accountOff) return 'Deactive';
   return 'Active';
 }
 
@@ -311,20 +283,29 @@ export function mapBrandListItem(raw) {
         : status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
-    // The API field reports whether onboarding is completed. New Onboarding
-    // shows only brands where this flag is explicitly false.
-    isOnboarding:
-      raw.isOnboarding ??
-      raw.vendor?.isOnBoardingCompleted,
-    // Per-step checklist (hasPan, hasGst, hasBank, hasLocation, ...) —
-    // New Onboarding shows which steps are still missing.
+    // Onboarding v2 (admin guide §3, API #25a). The tab a brand belongs to
+    // is the server's `onboardingStage` — never worked out in the browser.
+    onboardingStage: raw.onboardingStage || null, // NEW · WAITING · LIVE
+    waitingChip: raw.waitingChip || null, // UNDER_REVIEW · REJECTED · REVOKED · RESUBMITTED (WAITING only)
+    kycPath: raw.onboarding?.kycPath || null, // GST · NO_GST · UNREGISTERED
+    submittedAt: raw.onboarding?.submittedAt || null, // FIRST submit; never moves on resubmit
+    profileStrength: raw.profileStrength || null, // { score, level }
+    isApproved: Boolean(raw.isApproved),
+    isVerified: Boolean(raw.isVerified), // verified badge — separate from approval (§11)
+    badgeGrantedAt: raw.badgeGrantedAt || null,
+    badgeAtRisk: Boolean(raw.badgeAtRisk),
+    accountState: raw.vendor?.accountState || null,
+    // Raw `has*` facts from the list (hasPan, hasBillingAddress …) — only
+    // facts, not onboarding steps; steps come from status.groups.
     onboardingFlags: raw.onboarding || {},
     // Screen the vendor is on in the onboarding flow, e.g. "PAN_VERIFICATION".
-    onboardingScreen: raw.currentScreen || raw.vendor?.currentScreen || '',
+    onboardingScreen: raw.vendor?.currentScreen || raw.currentScreen || '',
     // Keep the API workflow status distinct from the derived brand status.
     onboardingStatus: raw.status || raw.vendor?.status || '',
-    // Extra list fields for the Live Brand table.
-    subCategory: raw.subCategory?.name || '',
+    // Extra list fields for the Live Brand table. `subCategories` = every
+    // subcategory in the brand's order; `subCategory` = the first one.
+    subCategories: (raw.subCategories || []).map((s) => s?.name).filter(Boolean),
+    subCategory: raw.subCategories?.[0]?.name || raw.subCategory?.name || '',
     // Plan usage: { subBrands, franchises, vouchers, showcase } → { used, limit, isUnlimited }.
     usage: raw.usage || null,
     planEndDate: raw.subscription?.endDate || null,
@@ -364,6 +345,18 @@ export function mapBrandListItem(raw) {
     // List payload sends isVisibleToCustomers; status PUT takes hideFromCustomers.
     hiddenFromCustomers:
       raw.isVisibleToCustomers != null ? !raw.isVisibleToCustomers : Boolean(raw.hideFromCustomers),
+    // Latest account / customer-switch state (admin doc #25a row) — only the
+    // list row has it; the status history has no read API yet. One object, so
+    // a refetch replaces it whole: mergeKnown skips nulls, and the server
+    // clears the deactivation date + reason when the account is re-activated.
+    accountAccess: {
+      isAccountActive: typeof raw.isAccountActive === 'boolean' ? raw.isAccountActive : null,
+      deactivatedAt: raw.accountDeactivatedAt || null,
+      deactivationReason: raw.accountDeactivationReason || null,
+      activatedAt: raw.accountActivatedAt || null,
+      isVisibleToCustomers: typeof raw.isVisibleToCustomers === 'boolean' ? raw.isVisibleToCustomers : null,
+      visibilityUpdatedAt: raw.customerVisibilityUpdatedAt || null,
+    },
     // Raw enum keys (e.g. "PRIVATE_LIMITED", "REGISTERED") for the card.
     entityTypeKey: raw.businessEntityType || null,
     registrationKey: raw.businessRegistrationStatus || null,
@@ -429,9 +422,15 @@ export function mapBrandDetail(raw) {
     category: raw.category?.name || raw.subCategory?.name || '—',
     liveSince: raw.joinedDate ? new Date(raw.joinedDate).getFullYear().toString() : '—',
     joinedDate: raw.joinedDate || null,
-    active: raw.isActive ?? status === 'Active',
+    // Vendor account switch = `user.isActive`. The brand's own `isActive` here
+    // is the customer switch (it feeds hiddenFromCustomers below).
+    active: typeof raw.user?.isActive === 'boolean' ? raw.user.isActive : raw.isActive ?? status === 'Active',
     status,
     rejectionReason: raw.rejectionReason || '',
+    // Verified badge — a trust badge, separate from approval (§11).
+    isVerified: Boolean(raw.isVerified),
+    badgeGrantedAt: raw.badgeGrantedAt || null,
+    badgeAtRisk: Boolean(raw.badgeAtRisk),
 
     // The detail payload only carries the first outlet, so it can't count
     // them — null keeps the list's real "used/limit" (mergeKnown).
@@ -551,9 +550,6 @@ export function mapBrandDetail(raw) {
     bankVerificationProvider: raw.bank?.verificationProvider || '—',
     bankVerifiedAtDisplay: raw.bank?.verifiedAt ? formatDateTime(raw.bank.verifiedAt) : '—',
 
-    // Dedicated "System Verification" tab
-    systemVerify: mapSystemVerify(raw.systemVerify),
-
     // Dedicated "Subscription Details" card on the Subscription tab
     subscriptionDetail: mapSubscriptionDetail(subscribed),
 
@@ -576,9 +572,15 @@ export function mapBrandDetail(raw) {
     topOrder: raw.topOrder ?? 0,
     // null (not false) when missing, so mergeKnown keeps the list's value.
     isDummy: raw.isDummy ?? null,
-    // null (not false) when missing, so mergeKnown keeps the list's value.
+    // GET /brands/get has no isVisibleToCustomers — its `isActive` IS the
+    // customer switch (Brand.isActive). null when missing, so mergeKnown
+    // keeps the list's value.
     hiddenFromCustomers:
-      raw.isVisibleToCustomers != null ? !raw.isVisibleToCustomers : raw.hideFromCustomers ?? null,
+      raw.isVisibleToCustomers != null
+        ? !raw.isVisibleToCustomers
+        : typeof raw.isActive === 'boolean'
+        ? !raw.isActive
+        : raw.hideFromCustomers ?? null,
     dummyBatch: raw.dummyBatch || null,
   };
 }

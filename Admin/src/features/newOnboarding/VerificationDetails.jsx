@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { keepPreviousData } from "@tanstack/react-query";
 import {
   Info,
   ArrowLeft,
@@ -13,7 +12,6 @@ import {
   Hash,
   AlertTriangle,
   Clock,
-  FileText,
   RotateCcw,
   BadgeCheck,
   Loader2,
@@ -22,7 +20,6 @@ import {
   Tag,
   Calendar,
   X,
-  ChevronDown,
   ChevronRight,
   RefreshCw,
   LayoutDashboard,
@@ -36,12 +33,12 @@ import { REJECTION_REASONS } from "../brand/data/BrandData";
 import { useBrandDetails } from "../brand/queries/brandQueries";
 import { mapBrandDetail } from "../brand/brandMapper";
 import { useVouchers } from "../voucher/queries/voucherQueries";
-import { useVerificationHistory } from "./queries/onboardingReviewQueries";
 import ShowcaseAlbums from "../brand/ShowcaseAlbums";
 import AccountDetailsTab from "../brand/BrandDetails/tabs/AccountDetailsTab";
 import SubmittedDetails from "./SubmittedDetails";
 import { REVIEW_TEXT_MAX } from "./reviewGate";
 import SystemVerifyCard from "../brand/v2/SystemVerifyCard";
+import VerificationTimeline from "../brand/v2/VerificationTimeline";
 import { useStatusRaw } from "../brand/v2/hooks";
 import { approvalState } from "../brand/v2/util";
 import { isNotFoundMessage, MISSING, orText } from "../../utils/helpers";
@@ -124,175 +121,6 @@ function MetaPill({ icon: Icon, children, className = "" }) {
       {Icon && <Icon size={12} className="shrink-0" />}
       {children}
     </span>
-  );
-}
-
-// "APPROVAL_ACKNOWLEDGED" -> "Approval Acknowledged"
-function formatAction(action) {
-  if (!action) return "Unknown action";
-  return action
-    .toLowerCase()
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function colorForActor(performedByType = "") {
-  if (performedByType === "ADMIN") return "text-sky-600 bg-sky-400/10 dark:text-sky-400";
-  if (performedByType === "VENDOR") return "text-amber-600 bg-amber-400/10 dark:text-amber-400";
-  if (performedByType === "SYSTEM")
-    return "text-neutral-500 bg-neutral-200 dark:text-neutral-400 dark:bg-neutral-700/40";
-  return "text-neutral-500 bg-neutral-200 dark:text-neutral-400 dark:bg-neutral-700/40";
-}
-
-// Flattens an audit-trail entry's `metadata` into a short human-readable line.
-function summarizeMetadata(entry) {
-  if (entry.reason) return entry.reason;
-  const meta = entry.metadata;
-  if (!meta || typeof meta !== "object") return null;
-  const parts = [];
-  if (meta.previousScreen || meta.newScreen) {
-    parts.push(`${meta.previousScreen || "None"} → ${meta.newScreen || "None"}`);
-  }
-  return parts.length ? parts.join(", ") : null;
-}
-
-// Per-action visual identity + plain-English copy, matched to the real
-// action strings the audit-trail API sends.
-const ACTION_META = {
-  APPROVED: {
-    icon: CheckCircle2,
-    tint: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    title: "Verification approved",
-    desc: "All verification checks passed successfully.",
-  },
-  REJECTED: {
-    icon: XCircle,
-    tint: "bg-red-500/10 text-red-600 dark:text-red-400",
-    title: "Verification rejected",
-    desc: "The verification did not pass and was rejected.",
-  },
-  REVOKED: {
-    icon: XCircle,
-    tint: "bg-red-500/10 text-red-600 dark:text-red-400",
-    title: "Verification revoked",
-    desc: "A previously approved verification was revoked.",
-  },
-  RESUBMITTED: {
-    icon: RotateCcw,
-    tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-    title: "Verification resubmitted",
-    desc: "Vendor has updated the details and resubmitted for review.",
-  },
-  REMEDIATION_UPDATED: {
-    icon: FileText,
-    tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-    title: "Details updated",
-    desc: "Vendor updated their submitted details.",
-  },
-  SYSTEM_VERIFIED: {
-    icon: ShieldCheck,
-    tint: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-    title: "Verification submitted",
-    desc: "Vendor has submitted the verification details.",
-  },
-  REVIEWED: {
-    icon: BadgeCheck,
-    tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-    title: "Marked as reviewed",
-    desc: "Admin marked this verification as reviewed.",
-  },
-  UNREVIEWED: {
-    icon: BadgeCheck,
-    tint: "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400",
-    title: "Marked as unreviewed",
-    desc: "Admin cleared the reviewed flag.",
-  },
-};
-const DEFAULT_ACTION_META = {
-  icon: ShieldCheck,
-  tint: "bg-neutral-200 text-neutral-500 dark:bg-neutral-700/40 dark:text-neutral-400",
-  title: null,
-  desc: null,
-};
-
-function reasonBoxClass(action = "") {
-  if (action.includes("REJECT") || action.includes("REVOK")) {
-    return "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400";
-  }
-  if (action.includes("APPROV")) {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/5 dark:text-emerald-400";
-  }
-  return "border-neutral-200 bg-neutral-50 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300";
-}
-
-// One node in the real audit-trail history — a connected timeline (dot +
-// line down the left), colored and captioned per action type, with the
-// reason (if any) always visible and a "View Details" toggle for the rest.
-function TimelineEntry({ entry, isLast }) {
-  const [open, setOpen] = useState(false);
-  const meta = ACTION_META[entry.action] || DEFAULT_ACTION_META;
-  const Icon = meta.icon;
-  const title = meta.title || formatAction(entry.action);
-  const desc = meta.desc || summarizeMetadata(entry);
-  const performedBy =
-    entry.performedByUser?.name ||
-    entry.performedByUser?.uniqueId ||
-    (entry.performedByType === "SYSTEM" ? "System" : entry.performedByType) ||
-    "Unknown";
-
-  return (
-    <div className={`relative flex gap-3 ${isLast ? "" : "pb-5"}`}>
-      {!isLast && <span className="absolute bottom-0 left-3.25 top-7 w-px bg-neutral-200 dark:bg-neutral-800" />}
-
-      <span className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-4 ring-white dark:ring-neutral-900 ${meta.tint}`}>
-        <Icon size={13} />
-      </span>
-
-      <div className="min-w-0 flex-1 pt-0.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <p className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">{title}</p>
-              <span className={`rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide ${colorForActor(entry.performedByType)}`}>
-                {entry.action}
-              </span>
-            </div>
-            <p className="mt-0.5 text-[11px] text-neutral-500">
-              by <span className="font-medium text-neutral-700 dark:text-neutral-300">{performedBy}</span> ·{" "}
-              {formatDateTime(entry.createdAt)}
-            </p>
-            {desc && !entry.reason && (
-              <p className="mt-1 text-[12px] text-neutral-600 dark:text-neutral-400">{desc}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            aria-expanded={open}
-            className="flex shrink-0 items-center gap-1 text-[11.5px] font-semibold text-emerald-600 transition-colors hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
-          >
-            View Details
-            <ChevronDown size={13} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-          </button>
-        </div>
-
-        {entry.reason && (
-          <div className={`mt-2 rounded-xl border px-3 py-2 ${reasonBoxClass(entry.action)}`}>
-            <p className="text-[11.5px] font-semibold">Reason</p>
-            <p className="mt-0.5 text-[12px] leading-relaxed opacity-90">{entry.reason}</p>
-          </div>
-        )}
-
-        {open && (entry.previousStatus || entry.newStatus) && (
-          <div className="mt-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
-            <p className="text-[12px] text-neutral-600 dark:text-neutral-400">
-              Status: {entry.previousStatus || "None"} → {entry.newStatus || "None"}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -433,26 +261,6 @@ export default function VerificationDetails({
   const reviewedBusy = busyAction === "reviewed";
   const revokeBusy = busyAction === "revoke";
 
-  // Real audit trail — GET /brands/verifications/history?brandId=...
-  // Review actions are PUTs under /brands, so the interceptor refreshes this
-  // and the brand snapshot below on its own.
-  const [historyPage, setHistoryPage] = useState(1);
-  const historyQuery = useVerificationHistory(
-    { brandId, page: historyPage, limit: 20 },
-    { placeholderData: keepPreviousData }
-  );
-  const history = historyQuery.data?.data?.data ?? [];
-  const historyTotalPages = historyQuery.data?.data?.totalPages ?? 1;
-  // isLoading (not isPending): with no brandId the query never runs, and the
-  // timeline should show its empty state rather than a spinner.
-  const historyLoading = historyQuery.isLoading;
-  const historyError = historyQuery.error?.message ?? "";
-
-  // The brand's full history can span several past attempts — only show
-  // the ones belonging to this attempt (the "parent" being reviewed here),
-  // not every attempt's events mixed together.
-  const currentAttemptHistory = history.filter((h) => h.systemVerifyId === verification.id);
-
   // Account details + Plan / Subscription — GET /brands/get?brandId=...
   // (same fully-populated payload the Brand folder's detail page uses).
   const brandDetailQuery = useBrandDetails(brandId, { select: selectBrandDetail });
@@ -542,7 +350,7 @@ export default function VerificationDetails({
     { key: "business", label: "Business Details", icon: Store },
     { key: "account", label: "Account Details", icon: Landmark },
     { key: "listings", label: "Listings & Showcase", icon: Tag, count: vouchers.length },
-    { key: "timeline", label: "Timeline", icon: History, count: currentAttemptHistory.length },
+    { key: "timeline", label: "Timeline", icon: History },
   ];
 
   /* ---------------------------------------------------------------- tabs */
@@ -644,55 +452,9 @@ export default function VerificationDetails({
     </div>
   );
 
-  // The real audit trail, GET /brands/verifications/history?brandId=...,
-  // so dates always match what actually happened.
-  const timelineTab = (
-    <SectionCard title="Review Timeline">
-      {historyLoading ? (
-        <Loader variant="inline" center className="py-8" label="Loading timeline…" />
-      ) : historyError ? (
-        <CommonEmptyState
-          variant="compact"
-          tone="error"
-          icon="error"
-          title="Couldn't load timeline"
-          description={historyError}
-          action={{ label: "Try again", icon: RefreshCw, onClick: () => historyQuery.refetch() }}
-        />
-      ) : currentAttemptHistory.length ? (
-        <>
-          <div className="px-1">
-            {currentAttemptHistory.map((h, i) => (
-              <TimelineEntry key={h._id} entry={h} isLast={i === currentAttemptHistory.length - 1} />
-            ))}
-          </div>
-          {historyTotalPages > 1 && (
-            <div className="mt-4 flex items-center justify-center gap-2 border-t border-neutral-200/70 pt-4 dark:border-neutral-800">
-              <button
-                onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                disabled={historyPage === 1}
-                className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-              >
-                Prev
-              </button>
-              <span className="text-[12px] text-neutral-500">
-                Page {historyPage} of {historyTotalPages}
-              </span>
-              <button
-                onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-                disabled={historyPage === historyTotalPages}
-                className="rounded-lg border border-neutral-200 px-3 py-1.5 text-[12px] text-neutral-700 disabled:opacity-40 dark:border-neutral-800 dark:text-neutral-300"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
-      ) : (
-        <EmptyState label="No timeline events recorded yet." />
-      )}
-    </SectionCard>
-  );
+  // GET /brands/verifications/history?brandId= — every §4 action; the
+  // admin can narrow it to this attempt (server filter).
+  const timelineTab = <VerificationTimeline brandId={brandId} systemVerifyId={verification.id || null} />;
 
   const tabContent = {
     overview: overviewTab,

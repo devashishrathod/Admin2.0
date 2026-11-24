@@ -113,25 +113,31 @@ export async function reviewBrandVerification(
 //   page, limit     — pagination, defaults 1 / 20.
 //   performedByType — optional filter: "SYSTEM" | "ADMIN" | "VENDOR".
 //   attemptNumber   — optional filter, number ≥ 1.
+//   systemVerifyId  — optional: one attempt's events only.
+//   sortOrder       — "ASC" | "DESC" (uppercase; server default DESC).
 //
 // Response: { success, message, data: { total, totalPages, page, limit, data: [
 //   { _id, brandId, systemVerifyId, action, performedByType, performedBy,
-//     attemptNumber, brandUniqueId, merchantId, score, previousStatus,
-//     newStatus, reason, metadata, createdAt, updatedAt,
-//     brand: { _id, brandName, legalBusinessName, uniqueId, merchantId, logo } }
-// ] } }
+//     performedByUser { _id, name, email, mobile, role } (admin only; not on
+//     SYSTEM rows), attemptNumber, brandUniqueId, merchantId, score,
+//     previousStatus, newStatus, reason (note / reject / revoke reason),
+//     metadata, createdAt, updatedAt, brand } ] } }   — #25 note 0
 export async function getVerificationHistory({
     brandId,
     page = 1,
     limit = 20,
     performedByType = '',
     attemptNumber = '',
+    systemVerifyId = '',
+    sortOrder = '',
 } = {}) {
     try {
         if (!brandId) throw new Error('brandId is required');
         const params = { page, limit, brandId };
         if (performedByType) params.performedByType = performedByType;
         if (attemptNumber) params.attemptNumber = attemptNumber;
+        if (systemVerifyId) params.systemVerifyId = systemVerifyId;
+        if (sortOrder) params.sortOrder = sortOrder;
         const { data } = await api.get('/brands/verifications/history', { params });
         return data;
     } catch (error) {
